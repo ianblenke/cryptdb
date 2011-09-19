@@ -153,6 +153,112 @@ createAll(Connect * conn)
    }
  */
 
+void EDBProxy::readMetaInfo( ) {
+    DBResult* reply;
+    conn->execute( "SELECT id, name, anon_name, salt_name, auto_inc_value FROM table_info", reply );
+
+    ResType res_type = reply->unpack();
+
+    for (auto table_it = res_type.rows.begin(); table_it != res_type.rows.end(); ++table_it) {
+        TableMetadata* tm = new TableMetadata();
+        auto table_info = *table_it;
+
+        auto field_it = table_info.begin();
+
+        tm->tableNo       = atoi((*field_it++).to_string().c_str());
+        string table_name =      (*field_it++).to_string();
+        tm->anonTableName =      (*field_it++).to_string();
+        tm->salt_name     =      (*field_it++).to_string();
+        tm->ai.incvalue   = atoi((*field_it++).to_string().c_str());
+        // what about ai.field?
+        tm->hasEncrypted  = false;
+        tm->hasSensitive  = false;
+
+        tableMetaMap[table_name] = tm;
+    }
+
+    map<string,SECLEVEL> seclevel_map = {
+        {"INVALID", SECLEVEL::INVALID}, 
+        {"PLAIN", SECLEVEL::PLAIN}, 
+        {"PLAIN_DET", SECLEVEL::PLAIN_DET},
+        {"DETJOIN", SECLEVEL::DETJOIN}, 
+        {"DET", SECLEVEL::DET}, 
+        {"SEMANTIC_DET", SECLEVEL::SEMANTIC_DET}, 
+        {"PLAIN_OPE", SECLEVEL::PLAIN_OPE}, 
+        {"OPEJOIN", SECLEVEL::OPEJOIN}, 
+        {"OPE", SECLEVEL::OPE}, 
+        {"SEMANTIC_OPE", SECLEVEL::SEMANTIC_OPE}, 
+        {"PLAIN_AGG", SECLEVEL::PLAIN_AGG}, 
+        {"SEMANTIC_AGG", SECLEVEL::SEMANTIC_AGG}, 
+        {"PLAIN_SWP", SECLEVEL::PLAIN_SWP}, 
+        {"SWP", SECLEVEL::SWP}, 
+        {"SEMANTIC_VAL", SECLEVEL::SEMANTIC_VAL}, 
+        {"SECLEVEL_LAST", SECLEVEL::SECLEVEL_LAST}
+    };
+
+    for (auto tm_it = tableMetaMap.begin(); tm_it != tableMetaMap.end(); ++tm_it) {
+        TableMetadata* tm = tm_it->second;
+
+        char buf[16];
+        snprintf( buf, 15, "%d", tm->tableNo );
+        string table_id( buf );
+
+        conn->execute( "SELECT field_type, mysql_field_type, name, anon_det_name, anon_ope_name, anon_agg_name, anon_swp_name,"
+                       "       salt_name, is_encrypted, can_be_null, has_ope, has_agg, has_search, has_salt,"
+                       "       ope_used, agg_used, search_used, update_set_performed, sec_level_ope, sec_level_det "
+                       "FROM column_info "
+                       "WHERE table_id=" + table_id, reply ); 
+
+        res_type = reply->unpack();
+
+        SqlItem si;
+        for (auto column_it = res_type.rows.begin(); column_it != res_type.rows.end(); ++column_it) {
+            FieldMetadata* fm = new FieldMetadata();
+            auto column_info = *column_it;
+
+            auto field_it = column_info.begin();
+
+            fm->type                 = (fieldType)atoi( (*field_it++).to_string().c_str() );
+            fm->mysql_type           = (enum_field_types)atoi( (*field_it++).to_string().c_str() );
+
+            string col_name          = (*field_it++).to_string();
+            fm->anonFieldNameDET     = (*field_it++).to_string();
+            fm->anonFieldNameOPE     = (*field_it++).to_string();
+            fm->anonFieldNameAGG     = (*field_it++).to_string();
+            fm->anonFieldNameSWP     = (*field_it++).to_string();
+            fm->salt_name            = (*field_it++).to_string();
+            fm->isEncrypted          = (*field_it++).to_string().compare( "1" ) == 0;
+            fm->can_be_null          = (*field_it++).to_string().compare( "1" ) == 0;
+            fm->has_ope              = (*field_it++).to_string().compare( "1" ) == 0;
+            fm->has_agg              = (*field_it++).to_string().compare( "1" ) == 0;
+            fm->has_search           = (*field_it++).to_string().compare( "1" ) == 0;
+            fm->has_salt             = (*field_it++).to_string().compare( "1" ) == 0;
+            fm->ope_used             = (*field_it++).to_string().compare( "1" ) == 0;
+            fm->agg_used             = (*field_it++).to_string().compare( "1" ) == 0;
+            fm->search_used          = (*field_it++).to_string().compare( "1" ) == 0;
+            fm->update_set_performed = (*field_it++).to_string().compare( "1" ) == 0;
+
+            fm->secLevelOPE          = seclevel_map[(*field_it++).to_string()];
+            fm->secLevelDET          = seclevel_map[(*field_it++).to_string()];
+
+            tm->fieldNameMap[fm->anonFieldNameDET] = col_name;
+            tm->fieldNameMap[fm->anonFieldNameOPE] = col_name;
+            tm->fieldNameMap[fm->anonFieldNameAGG] = col_name;
+            tm->fieldNameMap[fm->anonFieldNameSWP] = col_name;
+            tm->fieldMetaMap[col_name] = fm;
+
+            if (col_name.compare( tm->salt_name ))
+                // don't add the fmsalt field to fieldNames
+                // the insert pathway counts on it NOT being there
+                tm->fieldNames.push_back( col_name );
+
+
+            if (fm->isEncrypted) tm->hasEncrypted = true;
+            // FIXME!  what to do about tm->hasSensitive / multi-princ?
+        }
+    }
+}
+
 //============== CONSTRUCTORS ==================================//
 
 EDBProxy::EDBProxy(string server, string user, string psswd, string dbname,
@@ -164,6 +270,9 @@ EDBProxy::EDBProxy(string server, string user, string psswd, string dbname,
 
     /* Make a connection to the database */
     conn = new Connect(server, user, psswd, dbname, port);
+
+    /* read the meta information */
+    this->readMetaInfo( );
 
     dropAll(conn);
     createAll(conn);
@@ -635,6 +744,60 @@ throw (CryptDBError)
         fmsalt->fieldName = tm->salt_name;
         tm->fieldMetaMap[fmsalt->fieldName] = fmsalt;
     }
+
+    conn->execute( "BEGIN;" );
+
+    string insert_into( "INSERT INTO" );
+
+    conn->execute( insert_into + " table_info VALUES "
+                  + "( " + "0"               // the auto-incremented ID for this record
+                  + ", '" + tableName + "'"
+                  + ", '" + tm->anonTableName + "'"
+                  + ", '" + tm->salt_name + "'"
+                  + ", " + "0"               // the auto_inc_value for the TableMetadata
+                  + ");" );
+
+    char table_id[16];
+    sprintf( table_id, "%lld", conn->last_insert_id() );
+    
+
+    for (map<string, FieldMetadata*>::iterator it = tm->fieldMetaMap.begin(); it != tm->fieldMetaMap.end(); ++it) {
+        string col_name   = it->first;
+        FieldMetadata* fm = it->second;
+
+        char ftype[16];
+        char mtype[16];
+
+        snprintf( ftype, 15, "%d", fm->type );
+        snprintf( mtype, 15, "%d", fm->mysql_type );
+
+        conn->execute( insert_into + " column_info VALUES "
+                  + "( " + "0"               // the auto-incremented ID for this record
+                  + ", " + table_id
+                  + ", " + ftype
+                  + ", " + mtype
+                  + ", " + "'" + col_name + "'"
+                  + ", " + (fm->anonFieldNameDET.empty() ? "null" : "'" + fm->anonFieldNameDET + "'" )
+                  + ", " + (fm->anonFieldNameOPE.empty() ? "null" : "'" + fm->anonFieldNameOPE + "'" )
+                  + ", " + (fm->anonFieldNameAGG.empty() ? "null" : "'" + fm->anonFieldNameAGG + "'" )
+                  + ", " + (fm->anonFieldNameSWP.empty() ? "null" : "'" + fm->anonFieldNameSWP + "'" )
+                  + ", " + (fm->salt_name.empty()        ? "null" : "'" + fm->salt_name + "'" )
+                  + ", " + (fm->isEncrypted ? "1" : "0")
+                  + ", " + (fm->can_be_null ? "1" : "0")
+                  + ", " + (fm->has_ope     ? "1" : "0")
+                  + ", " + (fm->has_agg     ? "1" : "0")
+                  + ", " + (fm->has_search  ? "1" : "0")
+                  + ", " + (fm->has_salt    ? "1" : "0")
+                  + ", " + (fm->ope_used    ? "1" : "0")
+                  + ", " + (fm->agg_used    ? "1" : "0")
+                  + ", " + (fm->search_used ? "1" : "0")
+                  + ", " + (fm->update_set_performed ? "1" : "0")
+                  + ", " + "'" + levelnames[(int)fm->secLevelOPE] + "'"
+                  + ", " + "'" + levelnames[(int)fm->secLevelDET] + "'"
+                  + ");" );
+    }
+
+    conn->execute( "COMMIT;" );
 
 
     resultQuery += fieldSeq;
@@ -2550,6 +2713,17 @@ throw (CryptDBError)
     tableMetaMap.erase(tableName);
 
     tableNameMap.erase(anonTableName);
+
+    conn->execute( "BEGIN;" );
+
+    string delete_from_table_info( "DELETE FROM table_info WHERE " );
+
+    conn->execute( delete_from_table_info
+                  + "name='"      + tableName     + "' AND "
+                  + "anon_name='" + anonTableName + "'"
+                  + ";" );
+
+    conn->execute( "COMMIT;" );
 
     list<string> resultList;
     resultList.push_back(result);

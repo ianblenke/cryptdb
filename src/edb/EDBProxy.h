@@ -213,6 +213,8 @@ class EDBProxy {
     //syntax: train are_all_fields_encrypted createsfile indexfile queryfile
     list<string> rewriteEncryptTrain(const string & query);
 
+    void readMetaInfo( );
+
  protected:
     //these are protected mostly for testing purposes
 };
