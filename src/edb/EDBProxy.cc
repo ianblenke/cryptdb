@@ -155,7 +155,7 @@ createAll(Connect * conn)
 
 void EDBProxy::readMetaInfo( ) {
     DBResult* reply;
-    conn->execute( "SELECT id, name, anon_name, salt_name, auto_inc_value FROM table_info", reply );
+    conn->execute( "SELECT id, name, anon_name, salt_name, auto_inc_field, auto_inc_value FROM table_info", reply );
 
     ResType res_type = reply->unpack();
 
@@ -169,12 +169,14 @@ void EDBProxy::readMetaInfo( ) {
         string table_name =      (*field_it++).to_string();
         tm->anonTableName =      (*field_it++).to_string();
         tm->salt_name     =      (*field_it++).to_string();
+        tm->ai.field      =      (*field_it++).to_string();
         tm->ai.incvalue   = atoi((*field_it++).to_string().c_str());
-        // what about ai.field?
         tm->hasEncrypted  = false;
         tm->hasSensitive  = false;
 
         tableMetaMap[table_name] = tm;
+
+        this->totalTables = tm->tableNo;
     }
 
     map<string,SECLEVEL> seclevel_map = {
@@ -271,15 +273,15 @@ EDBProxy::EDBProxy(string server, string user, string psswd, string dbname,
     /* Make a connection to the database */
     conn = new Connect(server, user, psswd, dbname, port);
 
-    /* read the meta information */
-    this->readMetaInfo( );
-
     dropAll(conn);
     createAll(conn);
     LOG(edb_v) << "UDFs loaded successfully";
 
     totalTables = 0;
     totalIndexes = 0;
+
+    /* read the meta information */
+    this->readMetaInfo( );
 
     if (multiPrinc) {
         LOG(edb_v) << "multiprinc mode";
@@ -754,6 +756,7 @@ throw (CryptDBError)
                   + ", '" + tableName + "'"
                   + ", '" + tm->anonTableName + "'"
                   + ", '" + tm->salt_name + "'"
+                  + ", '" + tm->ai.field + "'"
                   + ", " + "0"               // the auto_inc_value for the TableMetadata
                   + ");" );
 

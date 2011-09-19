@@ -13,6 +13,7 @@ CREATE TABLE table_info
    , name varchar(64) NOT NULL
    , anon_name varchar(64) NOT NULL
    , salt_name varchar(4096) NOT NULL
+   , auto_inc_field varchar(64)
    , auto_inc_value bigint
 
    , UNIQUE INDEX idx_table_name( name )

@@ -100,6 +100,13 @@ class EDBProxy {
                                           // table name
     map<string, TableMetadata *> tableMetaMap;     //map of table name to
                                                    // table metadata
+
+    // the following are used for anonymization only,
+    // they are the max#tables/indexes EVER created
+    // may NOT not equal tableMetaMap.size() due to drop table
+    // they should either be renamed as maxTableNo / maxIndexNo
+    // or elimated (retrieves table_info.id during anonymization)
+    //
     unsigned int totalTables;
     unsigned int totalIndexes;
 
