@@ -10,7 +10,7 @@ fi
 # localhost, and assumes running in the `dbgen` directory
 
 MYSQL_ROOT_USER=root
-MYSQL_ROOT_PASS=twn9356x!  # fill me in
+MYSQL_ROOT_PASS=letmein  # fill me in
 
 TPCH_USER=tpch
 TPCH_PASS=password # can change if desired
