@@ -18,9 +18,6 @@
 #include <parser/embedmysql.hh>
 #include <parser/stringify.hh>
 
-#include <parser/embedmysql.hh>
-#include <parser/stringify.hh>
-
 #include <util/errstream.hh>
 #include <util/cleanup.hh>
 #include <util/rob.hh>
