@@ -18,6 +18,9 @@
 #include <parser/embedmysql.hh>
 #include <parser/stringify.hh>
 
+#include <parser/embedmysql.hh>
+#include <parser/stringify.hh>
+
 #include <util/errstream.hh>
 #include <util/cleanup.hh>
 #include <util/rob.hh>
@@ -860,6 +863,13 @@ query_analyze(const std::string &db, const std::string &q)
             analyze(item, cipher_type_reason(cipher_type::any, "update", item, 0, false));
         }
     }
+  }
+};
+static AnalyzeQueryCallback s_callback;
+
+inline static void
+query_analyze(const std::string &db, const std::string &q) {
+  do_query_analyze(db, q, s_callback);
 }
 
 static string
