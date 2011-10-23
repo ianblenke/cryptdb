@@ -24,7 +24,7 @@ static Timer t;
 static EDBProxy * cl = NULL;
 static pthread_mutex_t big_lock;
 
-static bool DO_CRYPT = false;
+static bool DO_CRYPT = true;
 
 static bool EXECUTE_QUERIES = true;
 

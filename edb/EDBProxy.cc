@@ -12,7 +12,6 @@
 
 #include <edb/EDBProxy.hh>
 
-
 using namespace std;
 
 #if MYSQL_S
@@ -160,13 +159,13 @@ createAll(Connect * conn)
    }
  */
 
+#if NOTDEMO
 static void sCreateMetaSchema( Connect& pconn ) {
 
     DBResult* reply;
 
     // Create persistent representation for TabledMetadata in edb/util.h
-    //
-    pconn.execute( "CREATE TABLE table_info"
+    //    pconn.execute( "CREATE TABLE table_info"
                    "( id bigint NOT NULL auto_increment PRIMARY KEY"
                    ", name varchar(64) NOT NULL"
                    ", anon_name varchar(64) NOT NULL"
@@ -410,6 +409,7 @@ static string sGetProxyDirectory( const string& proxy_directory, const string& d
 
     return result;
 }
+#endif
 
 //============== Constructors ==================================//
 
@@ -425,7 +425,9 @@ EDBProxy::EDBProxy(const string& server
     , dropOnExit( false )
     , isSecure( false )
     , allDefaultEncrypted( defaultEnc )
+#if NOTDEMO
     , meta_db( sGetProxyDirectory(proxy_directory, dbname) )
+#endif
     , conn( new Connect(server, user, psswd, dbname, port) )
     , pm( nullptr )
     , mp( multiPrinc ? new MultiPrinc(conn) : nullptr )
@@ -441,8 +443,11 @@ EDBProxy::EDBProxy(const string& server
 
     assert_s (!(multiPrinc && defaultEnc), "cannot have fields encrypted by default in multiprinc because we need to know encfor princ");
 
+#if NOTDEMO
     this->readMetaInfo( );
+#endif
 }
+
 
 void
 EDBProxy::setMasterKey(const string &mkey)
@@ -656,11 +661,9 @@ processAnnotation(MultiPrinc * mp, list<string>::iterator & wordsIt,
     }
 
     fm->isEncrypted = defaultEnc;
-
     while (annotations.find(*wordsIt) != annotations.end()) {
         string annot = toLowerCase(*wordsIt);
 
-       // cerr << "current ann " << annot << "\n";
         if (annot == "enc") {
             fm->isEncrypted = true;
 
@@ -673,7 +676,6 @@ processAnnotation(MultiPrinc * mp, list<string>::iterator & wordsIt,
             wordsIt++;
             continue;
         }
-
         // MULTI-PRINC annotations
         if (mp) {
             if (annot == "encfor") {
@@ -695,6 +697,7 @@ processPostAnnotations(TableMetadata * tm, FieldMetadata * fm, string field, lis
     string res = "";
     /* This function is implemented ad-hoc.. the generic parser will fix this. */
     while ((wordsIt != words.end()) && (*wordsIt != ")") && (*wordsIt != ",")) {
+        //cerr << "post annotate: " << *wordsIt << endl;
         if (equalsIgnoreCase(*wordsIt, "(")) {
             processParen(wordsIt, words);
             continue;
@@ -723,7 +726,7 @@ processPostAnnotations(TableMetadata * tm, FieldMetadata * fm, string field, lis
         }
         wordsIt++;
     }
-
+    //cerr << "arg2 " << *wordsIt << endl;
     return;
 
 }
@@ -857,6 +860,7 @@ throw (CryptDBError)
             LOG(edb_v) << "not enc " << fieldName;
             //record auto increments:
             processPostAnnotations(tm, fm, fieldName, wordsIt, words);
+            //cerr << "arg " << *wordsIt << endl;
             fieldSeq = fieldSeq + fieldName + " " + mirrorUntilTerm(wordsIt, words, {","}, 1, 1);
             continue;
         }
@@ -895,7 +899,7 @@ throw (CryptDBError)
 
 
     /* begin update persistent meta information in proxy_db */
-
+#if NOTDEMO
     Connect pconn( meta_db.conn() );
 
     pconn.execute( "BEGIN;" );
@@ -952,7 +956,7 @@ throw (CryptDBError)
     }
 
     pconn.execute( "COMMIT;" );
-
+#endif
     /* end update persistent meta information in proxy_db */
 
     resultQuery += fieldSeq;
@@ -2461,32 +2465,6 @@ getResMeta(list<string> words, const ResType &vals, QueryMeta & qm,
     return rm;
 }
 
-static void
-printRes(const ResType &r)
-{
-    if (!cryptdb_logger::enabled(log_group::log_edb_v))
-        return;
-
-    stringstream ssn;
-    for (unsigned int i = 0; i < r.names.size(); i++) {
-        char buf[400];
-        snprintf(buf, sizeof(buf), "%-20s", r.names[i].c_str());
-        ssn << buf;
-    }
-    LOG(edb_v) << ssn.str();
-
-    /* next, print out the rows */
-    for (unsigned int i = 0; i < r.rows.size(); i++) {
-        stringstream ss;
-        for (unsigned int j = 0; j < r.rows[i].size(); j++) {
-            char buf[400];
-            snprintf(buf, sizeof(buf), "%-20s", r.rows[i][j].to_string().c_str());
-            ss << buf;
-        }
-        LOG(edb_v) << ss.str();
-    }
-}
-
 ResType
 EDBProxy::rewriteDecryptSelect(const string &query, const ResType &dbAnswer)
 {
@@ -2502,6 +2480,7 @@ EDBProxy::rewriteDecryptSelect(const string &query, const ResType &dbAnswer)
     auto ANON = cleanup([&qm]() { qm.cleanup(); });
 
     expandWildCard(words, qm, tableMetaMap);
+
 
     if (VERBOSE) {
         LOG(edb) << "Raw results from the server to decrypt:";
@@ -2868,7 +2847,7 @@ throw (CryptDBError)
     tableMetaMap.erase(tableName);
 
     tableNameMap.erase(anonTableName);
-
+#if NOTDEMO
     Connect pconn( meta_db.conn() );
     pconn.execute( "BEGIN;" );
 
@@ -2880,7 +2859,7 @@ throw (CryptDBError)
                   + ";" );
 
     pconn.execute( "COMMIT;" );
-
+#endif
     list<string> resultList;
     resultList.push_back(result);
     return resultList;
@@ -3293,7 +3272,7 @@ throw (CryptDBError)
                     queries.push_back(insid_query);
                 }
             }
-            //insert any new hasaccessto instances
+            //insert any new speaksfor instances
             LOG(edb_v) << "before insert relations";
             mp->insertRelations(valnulls, table, fields, tmkm);
         }

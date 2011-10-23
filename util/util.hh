@@ -21,6 +21,7 @@
 #include <sstream>
 #include <NTL/ZZ.h>
 
+#include <util/errstream.hh>
 #include <util/onions.hh>
 #include <util/params.hh>
 
@@ -84,7 +85,7 @@ const std::string PWD_TABLE_PREFIX = "pwdcryptdb__";
 //maps the name of an annotation we want to process to the number of fields
 // after this annotation relevant to it
 const std::set<std::string> annotations =
-{"enc", "search", "encfor", "equals", "givespsswd", "hasaccessto"};
+{"enc", "search", "encfor", "equals", "givespsswd", "speaksfor"};
 
 // ============= DATA STRUCTURES ===================================//
 
@@ -115,13 +116,9 @@ class ResType {
     AutoInc ai;
 };
 
-typedef struct CryptDBError {
- public:
-    CryptDBError(const std::string &m) : msg(m)
-    {
-    }
-    std::string msg;
-} CryptDBError;
+
+void
+printRes(const ResType &r);
 
 typedef struct ParserMeta {
     std::set<std::string> clauseKeywords_p;

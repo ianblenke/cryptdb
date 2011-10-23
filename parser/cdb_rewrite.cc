@@ -22,7 +22,7 @@ static inline void
 mysql_query_wrapper(MYSQL *m, const string &q)
 {
     if (mysql_query(m, q.c_str())) {
-        fatal() << "query failed: " << q
+        cryptdb_err() << "query failed: " << q
                 << " reason: " << mysql_error(m);
     }
 
@@ -33,6 +33,81 @@ mysql_query_wrapper(MYSQL *m, const string &q)
     void* ret = create_embedded_thd(0);
     if (!ret) assert(false);
 }
+
+
+static inline bool
+FieldQualifies(const FieldMeta * restriction,
+               const FieldMeta * field)
+{
+    return !restriction || restriction == field;
+}
+
+static inline bool
+IsMySQLTypeNumeric(enum_field_types t) {
+    switch (t) {
+        case MYSQL_TYPE_DECIMAL:
+        case MYSQL_TYPE_TINY:
+        case MYSQL_TYPE_SHORT:
+        case MYSQL_TYPE_LONG:
+        case MYSQL_TYPE_FLOAT:
+        case MYSQL_TYPE_DOUBLE:
+        case MYSQL_TYPE_LONGLONG:
+        case MYSQL_TYPE_INT24:
+        case MYSQL_TYPE_NEWDECIMAL:
+
+        // numeric also includes dates for now,
+        // since it makes sense to do +/- on date types
+        case MYSQL_TYPE_TIMESTAMP:
+        case MYSQL_TYPE_DATE:
+        case MYSQL_TYPE_TIME:
+        case MYSQL_TYPE_DATETIME:
+        case MYSQL_TYPE_YEAR:
+        case MYSQL_TYPE_NEWDATE:
+            return true;
+        default: return false;
+    }
+}
+
+static string
+getAnonName(const ItemMeta * im) {
+    return im->basefield->onionnames[im->o];
+}
+
+//TODO raluca: should unify enc/dec for numeric and strings
+static fieldType
+getTypeForDec(const ItemMeta * im) {
+    if (IsMySQLTypeNumeric(im->basefield->sql_field->sql_type)) {
+	return TYPE_INTEGER;
+    } else {
+	return TYPE_TEXT;
+    }
+}
+
+
+static void
+addToReturn(ReturnMeta & rm, int pos, ItemMeta * im, bool has_salt) {
+    ReturnField rf = ReturnField();
+    rf.is_salt = false;
+    rf.im = im;
+    if (has_salt) {
+	rf.pos_salt = pos+1;
+    } else {
+	rf.pos_salt = -1;
+    }
+    rm.rfmeta[pos] = rf;
+}
+
+
+static void
+addSaltToReturn(ReturnMeta & rm, int pos) {
+    ReturnField rf = ReturnField();
+    rf.is_salt = true;
+    rf.im = NULL;
+    rf.pos_salt = -1;
+    rm.rfmeta[pos] = rf;
+}
+
+
 
 static inline string
 sq(MYSQL *m, const string &s)
@@ -70,39 +145,6 @@ encryptConstantItem(Item * i, const Analysis & a){
 }
 
 /***********end of parser utils *****************/
-
-static inline bool
-FieldQualifies(const FieldMeta * restriction,
-               const FieldMeta * field)
-{
-    return !restriction || restriction == field;
-}
-
-static inline bool
-IsMySQLTypeNumeric(enum_field_types t) {
-    switch (t) {
-        case MYSQL_TYPE_DECIMAL:
-        case MYSQL_TYPE_TINY:
-        case MYSQL_TYPE_SHORT:
-        case MYSQL_TYPE_LONG:
-        case MYSQL_TYPE_FLOAT:
-        case MYSQL_TYPE_DOUBLE:
-        case MYSQL_TYPE_LONGLONG:
-        case MYSQL_TYPE_INT24:
-        case MYSQL_TYPE_NEWDECIMAL:
-
-        // numeric also includes dates for now,
-        // since it makes sense to do +/- on date types
-        case MYSQL_TYPE_TIMESTAMP:
-        case MYSQL_TYPE_DATE:
-        case MYSQL_TYPE_TIME:
-        case MYSQL_TYPE_DATETIME:
-        case MYSQL_TYPE_YEAR:
-        case MYSQL_TYPE_NEWDATE:
-            return true;
-        default: return false;
-    }
-}
 
 /*static
 void print(const map<string, TableMeta*>& t) {
@@ -425,9 +467,8 @@ rewrite(Item **i, Analysis &a) {
         i0->name = (*i)->name; // preserve the name (alias)
         *i = i0;
     }
+    i0->name = NULL; // HACK(stephentu): drop the aliases for now
 }
-
-
 
 template <class T>
 static Item *
@@ -726,7 +767,7 @@ static class ANON : public CItemSubtypeIT<Item_field, Item::Type::FIELD_ITEM> {
             } else {
                 // we aren't aware of this field. this is an error
                 // for now
-                fatal() << "Cannot find FieldMeta information for: " << *i;
+                cryptdb_err() << "Cannot find FieldMeta information for: " << *i;
             }
         }
         it->second->exposedLevels.restrict(encpair.first,
@@ -748,7 +789,7 @@ static class ANON : public CItemSubtypeIT<Item_field, Item::Type::FIELD_ITEM> {
             auto it = a.itemToMeta.find(i);
             if (it == a.itemToMeta.end()) {
                 // this is a bug, we should have recorded this in enforce()
-                fatal() << "should have recorded item meta object in enforce()";
+                cryptdb_err() << "should have recorded item meta object in enforce()";
             }
             ItemMeta *im = it->second;
             cerr << "onion is " << im->o << "\n";
@@ -775,15 +816,20 @@ static class ANON : public CItemSubtypeIT<Item_field, Item::Type::FIELD_ITEM> {
     virtual void
     do_rewrite_proj_type(Item_field *i, Analysis & a, vector<Item *> &l) const
     {
-
+	//rewrite current projection field
         l.push_back(do_rewrite_type(i, a));
-        // if there is a salt for the onion, then extract it
+
+        // if there is a salt for the onion, then also fetch the onion from the server
         auto it = a.itemToFieldMeta.find(i);
         assert(it != a.itemToFieldMeta.end());
         FieldMeta *fm = it->second;
-        if (fm->has_salt) {
+
+	addToReturn(a.rmeta, a.pos++, a.itemToMeta[i], fm->has_salt);
+
+	if (fm->has_salt) {
             assert(!fm->salt_name.empty());
             l.push_back(make_from_template(i, fm->salt_name.c_str()));
+	    addSaltToReturn(a.rmeta, a.pos++);
         }
     }
 
@@ -1840,6 +1886,7 @@ static void
 rewrite_select_lex(st_select_lex *select_lex, Analysis & a)
 {
     auto item_it = List_iterator<Item>(select_lex->item_list);
+
     List<Item> newList;
     for (;;) {
         Item *item = item_it++;
@@ -1848,6 +1895,7 @@ rewrite_select_lex(st_select_lex *select_lex, Analysis & a)
         vector<Item *> l;
         itemTypes.do_rewrite_proj(item, a, l);
         for (auto it = l.begin(); it != l.end(); ++it) {
+            (*it)->name = NULL; // TODO: fix this
             newList.push_back(*it);
         }
     }
@@ -1942,6 +1990,8 @@ rewrite_table_list(TABLE_LIST *t, Analysis &a)
     string anon_name = anonymize_table_name(string(t->table_name,
                                                    t->table_name_length), a);
     t->table_name = make_thd_string(anon_name, &t->table_name_length);
+    // TODO: handle correctly
+    t->alias      = make_thd_string(anon_name);
 }
 
 static void
@@ -2093,7 +2143,7 @@ const map<onion, V> OnionHandlers = {
                    MYSQL_TYPE_INT24,
                    MYSQL_TYPE_DECIMAL,
                    MYSQL_TYPE_DOUBLE}),
-                new OnionFieldHandler(MYSQL_TYPE_VARCHAR, 256, &my_charset_bin))})},
+		    new OnionFieldHandler(MYSQL_TYPE_VARCHAR, 256, &my_charset_bin))})},
 
     {oSWP, V({H(S({MYSQL_TYPE_VARCHAR,
                    MYSQL_TYPE_BLOB}),
@@ -2124,7 +2174,7 @@ static void rewrite_create_field(const string &table_name,
             }
         }
         if (newF == NULL) {
-            fatal() << "Could not rewrite for onion: " <<
+            cryptdb_err() << "Could not rewrite for onion: " <<
                         it->first << ", type: " << f->sql_type;
         }
         l.push_back(newF);
@@ -2148,7 +2198,7 @@ static void rewrite_key(const string &table_name,
                         Analysis &a,
                         vector<Key*> &l)
 {
-    fatal() << "No support for rewriting keys. "
+    cryptdb_err() << "No support for rewriting keys. "
             << "If you see this, please implement me";
 }
 
@@ -2185,7 +2235,7 @@ rewrite_create_lex(LEX *lex, Analysis &a)
 
     //TODO: support for "create table like"
     if (lex->create_info.options & HA_LEX_CREATE_TABLE_LIKE) {
-        fatal() << "No support for create table like yet. " <<
+        cryptdb_err() << "No support for create table like yet. " <<
                    "If you see this, please implement me";
     } else {
         // TODO(stephentu): template this pattern away
@@ -2380,7 +2430,7 @@ TableMeta::~TableMeta()
  * Fills rmeta with information about how to decrypt fields returned.
  */
 static int
-lex_rewrite(const string & db, LEX * lex, Analysis & analysis, ReturnMeta & rmeta)
+lex_rewrite(const string & db, LEX * lex, Analysis & analysis)
 {
     switch (lex->sql_command) {
     case SQLCOM_CREATE_TABLE:
@@ -2531,7 +2581,7 @@ Rewriter::Rewriter(const std::string & db) : db(db)
     mysql_options(m, MYSQL_OPT_USE_EMBEDDED_CONNECTION, 0);
     if (!mysql_real_connect(m, 0, 0, 0, 0, 0, 0, CLIENT_MULTI_STATEMENTS)) {
         mysql_close(m);
-        fatal() << "mysql_real_connect: " << mysql_error(m);
+        cryptdb_err() << "mysql_real_connect: " << mysql_error(m);
     }
     // HACK: create this DB if it doesn't exist, for now
     string create_q = "CREATE DATABASE IF NOT EXISTS " + db;
@@ -2561,7 +2611,7 @@ Rewriter::createMetaTablesIfNotExists()
                    ", name varchar(64) NOT NULL"
                    ", anon_name varchar(64) NOT NULL"
                    ", UNIQUE INDEX idx_table_name( name )"
-                   ");");
+                   ") ENGINE=InnoDB;");
 
     mysql_query_wrapper(m,
                    "CREATE TABLE IF NOT EXISTS proxy_db.column_info"
@@ -2620,7 +2670,7 @@ Rewriter::createMetaTablesIfNotExists()
                    "      ) NOT NULL DEFAULT 'INVALID'"
                    ", INDEX idx_column_name( name )"
                    ", FOREIGN KEY( table_id ) REFERENCES table_info( id ) ON DELETE CASCADE"
-                   ");");
+                   ") ENGINE=InnoDB;");
 }
 
 void
@@ -2777,20 +2827,20 @@ Rewriter::setMasterKey(const string &mkey)
 }
 
 string
-Rewriter::rewrite(const string & q, ReturnMeta & rmeta)
+Rewriter::rewrite(const string & q, Analysis & a)
 {
     query_parse p(db, q);
     LEX *lex = p.lex();
 
     cerr << "query lex is " << *lex << "\n";
 
-    Analysis analysis(conn(), schema, cm);
+    Analysis analysis = Analysis(conn(), schema, cm);
     query_analyze(db, q, lex, analysis);
 
     int ret = updateMeta(db, q, lex, analysis);
     if (ret < 0) assert(false);
 
-    lex_rewrite(db, lex, analysis, rmeta);
+    lex_rewrite(db, lex, analysis);
 
     stringstream ss;
 
@@ -2799,10 +2849,65 @@ Rewriter::rewrite(const string & q, ReturnMeta & rmeta)
     return ss.str();
 }
 
-/*
+
 ResType
-decryptResults(ResType & dbres, const ReturnMeta & rmeta) {
-    //todo
+Rewriter::decryptResults(ResType & dbres,
+			 Analysis & a) {
+
+    unsigned int rows = dbres.rows.size();
+
+    unsigned int cols = dbres.names.size();
+
+    ResType res = ResType();
+
+    unsigned int index = 0;
+      // un-anonymize the names
+    for (auto it = dbres.names.begin(); it != dbres.names.end(); it++) {
+	ReturnField rf = a.rmeta.rfmeta[index];
+	if (rf.is_salt) {
+
+	} else {
+	    //need to return this field
+	    res.names.push_back(rf.im->basefield->fname);
+
+	}
+	index++;
+    }
+
+    unsigned int real_cols = dbres.names.size();
+
+    // switch types to original ones : TODO
+
+    //allocate space in results for decrypted rows
+    res.rows = vector<vector<SqlItem> >(rows);
+    for (unsigned int i = 0; i < rows; i++) {
+	res.rows[i] = vector<SqlItem>(real_cols);
+    }
+
+    // decrypt rows
+
+    unsigned int col_index = 0;
+    for (unsigned int c = 0; c < cols; c++) {
+	ReturnField rf = a.rmeta.rfmeta[c];
+	ItemMeta * im = rf.im;
+	if (rf.is_salt) {
+
+	} else {
+	    for (unsigned int r = 0; r < rows; r++) {
+		bool isBin;
+		res.rows[r][col_index] = dbres.rows[r][c];
+		res.rows[r][col_index].data = a.cm->crypt(cm->getmkey(), dbres.rows[r][c].data,
+					     getTypeForDec(rf.im), getAnonName(rf.im), im->uptolevel, getMin(im->o), isBin);
+	    }
+	    col_index++;
+	}
+
+    }
+
+
+
     return dbres;
 }
-*/
+
+
+
