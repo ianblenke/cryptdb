@@ -2,14 +2,14 @@ OBJDIRS	+= parser
 
 
 PARSERSRC	:= embedmysql.cc mysqld-filler.cc cdb_rewrite.cc
-PARSERPROGS	:= analyze load-schema print-back cdb_test
+PARSERPROGS	:= analyze load-schema print-back cdb_test cdb_enc cdb_dec
 
 PARSERPROGOBJS	:= $(patsubst %,$(OBJDIR)/parser/%,$(PARSERPROGS))
 
 all:	$(PARSERPROGOBJS) $(OBJDIR)/libedbparser.so
 
 $(PARSERPROGOBJS): %: %.o $(OBJDIR)/libedbparser.so  $(OBJDIR)/libedbutil.so
-	$(CXX) $< -o $@ -ledbparser  $(LDFLAGS) -ledbutil -lcryptdb
+	$(CXX) $< -o $@ -ledbparser  $(LDFLAGS) -ledbutil -lcryptdb -ledbcrypto -lmysqlclient
 
 EDBPARSER_OBJS	:= $(patsubst %.cc,$(OBJDIR)/parser/%.o,$(PARSERSRC))
 $(OBJDIR)/libedbparser.so: $(EDBPARSER_OBJS) $(OBJDIR)/libedbutil.so $(OBJDIR)/libedbcrypto.so
