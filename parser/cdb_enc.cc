@@ -86,7 +86,9 @@ inline string to_hex(const string& input) {
 
 template <typename T>
 static inline string to_mysql_hex(T t) {
-    return string("X'") + to_hex(t) + string("'");
+    ostringstream buf;
+    buf << "X'" << to_hex(t) << "'";
+    return buf.str();
 }
 
 static inline long roundToLong(double x) {
