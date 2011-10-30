@@ -134,6 +134,7 @@ static void do_encrypt(size_t i,
             string encDET = cm.crypt(cm.getmkey(), plaintext, TYPE_TEXT,
                                      fieldname(i, "DET"),
                                      getMin(oDET), SECLEVEL::DET, isBin, 12345);
+            assert((encDET.size() % 16) == 0);
             enccols.push_back(to_mysql_hex(encDET));
 
             string encOPE = cm.crypt(cm.getmkey(), plaintext, TYPE_TEXT,
