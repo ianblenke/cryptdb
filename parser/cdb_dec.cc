@@ -267,6 +267,26 @@ int main(int argc, char **argv) {
 
     for (auto it = agg_groups.begin();
          it != agg_groups.end(); ++it) {
+        const lineitem_key &key = it->first;
+
+        for (auto it0 = it->second.begin();
+             it0 != it->second.end();
+             ++it0) {
+            const lineitem_group &elem = *it0;
+
+            cout << key.l_returnflag() << "|"
+                 << key.l_linestatus() << "|"
+                 << elem.l_quantity << "|"
+                 << elem.l_extendedprice << "|"
+                 << elem.l_discount << "|"
+                 << elem.l_tax << endl;
+        }
+    }
+
+    cout << "------------------" << endl;
+
+    for (auto it = agg_groups.begin();
+         it != agg_groups.end(); ++it) {
         double sum_qty = 0.0;
         double sum_base_price = 0.0;
         double sum_disc_price = 0.0;

@@ -89,6 +89,10 @@ static inline string to_mysql_hex(T t) {
     return string("X'") + to_hex(t) + string("'");
 }
 
+static inline long roundToLong(double x) {
+    return ((x)>=0?(long)((x)+0.5):(long)((x)-0.5));
+}
+
 static void do_encrypt(size_t i,
                        datatypes dt,
                        const string &plaintext,
@@ -122,8 +126,8 @@ static void do_encrypt(size_t i,
     case DT_FLOAT:
         {
             // TODO: fix precision
-            double f = atof(plaintext.c_str());
-            uint64_t t = (uint64_t) (f * 100.0);
+            double f = strtod(plaintext.c_str(), NULL);
+            long t = roundToLong(f * 100.0);
             do_encrypt(i, DT_INTEGER, to_s(t), enccols, cm);
         }
         break;
@@ -165,7 +169,6 @@ static void do_encrypt(size_t i,
                                          fieldname(i, "year_OPE"),
                                          getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
                 enccols.push_back(to_s(valFromStr(encOPE)));
-                cerr << fieldname(i, "year_OPE") << ": " << valFromStr(encOPE) << endl;
 
                 string encAGG = cm.crypt(cm.getmkey(), to_s(year), TYPE_INTEGER,
                                          fieldname(i, "year_AGG"),
