@@ -304,21 +304,21 @@ void EDBProxy::readMetaInfo( ) {
     }
 
     map<string,SECLEVEL> seclevel_map = {
-        {"INVALID", SECLEVEL::INVALID}, 
-        {"PLAIN", SECLEVEL::PLAIN}, 
+        {"INVALID", SECLEVEL::INVALID},
+        {"PLAIN", SECLEVEL::PLAIN},
         {"PLAIN_DET", SECLEVEL::PLAIN_DET},
-        {"DETJOIN", SECLEVEL::DETJOIN}, 
-        {"DET", SECLEVEL::DET}, 
-        {"SEMANTIC_DET", SECLEVEL::SEMANTIC_DET}, 
-        {"PLAIN_OPE", SECLEVEL::PLAIN_OPE}, 
-        {"OPEJOIN", SECLEVEL::OPEJOIN}, 
-        {"OPE", SECLEVEL::OPE}, 
-        {"SEMANTIC_OPE", SECLEVEL::SEMANTIC_OPE}, 
-        {"PLAIN_AGG", SECLEVEL::PLAIN_AGG}, 
-        {"SEMANTIC_AGG", SECLEVEL::SEMANTIC_AGG}, 
-        {"PLAIN_SWP", SECLEVEL::PLAIN_SWP}, 
-        {"SWP", SECLEVEL::SWP}, 
-        {"SEMANTIC_VAL", SECLEVEL::SEMANTIC_VAL}, 
+        {"DETJOIN", SECLEVEL::DETJOIN},
+        {"DET", SECLEVEL::DET},
+        {"SEMANTIC_DET", SECLEVEL::SEMANTIC_DET},
+        {"PLAIN_OPE", SECLEVEL::PLAIN_OPE},
+        {"OPEJOIN", SECLEVEL::OPEJOIN},
+        {"OPE", SECLEVEL::OPE},
+        {"SEMANTIC_OPE", SECLEVEL::SEMANTIC_OPE},
+        {"PLAIN_AGG", SECLEVEL::PLAIN_AGG},
+        {"SEMANTIC_AGG", SECLEVEL::SEMANTIC_AGG},
+        {"PLAIN_SWP", SECLEVEL::PLAIN_SWP},
+        {"SWP", SECLEVEL::SWP},
+        {"SEMANTIC_VAL", SECLEVEL::SEMANTIC_VAL},
         {"SECLEVEL_LAST", SECLEVEL::SECLEVEL_LAST}
     };
 
@@ -333,7 +333,7 @@ void EDBProxy::readMetaInfo( ) {
                        "       salt_name, is_encrypted, can_be_null, has_ope, has_agg, has_search, has_salt,"
                        "       ope_used, agg_used, search_used, update_set_performed, sec_level_ope, sec_level_det "
                        "FROM column_info "
-                       "WHERE table_id=" + table_id, reply ); 
+                       "WHERE table_id=" + table_id, reply );
 
         res_type = reply->unpack();
 
@@ -389,7 +389,7 @@ static string sGetProxyDirectory( const string& proxy_directory, const string& d
 
     string result = proxy_directory;
     if (result.length() == 0) {
-        // use user's home directory as 
+        // use user's home directory as
         result += getpwuid(getuid())->pw_dir;
         result += "/" + dbname;
     } else {
@@ -917,7 +917,7 @@ throw (CryptDBError)
 
     char table_id[16];
     sprintf( table_id, "%lld", pconn.last_insert_id() );
-    
+
 
     for (map<string, FieldMetadata*>::iterator it = tm->fieldMetaMap.begin(); it != tm->fieldMetaMap.end(); ++it) {
         string col_name   = it->first;
@@ -3519,7 +3519,7 @@ EDBProxy::considerQuery(command com, const string &query)
                 return false;
             }
         }
-        break; 
+        break;
     }
     case cmd::INSERT: {
         list<string> words = getSQLWords(query);
@@ -3544,7 +3544,7 @@ EDBProxy::considerQuery(command com, const string &query)
                 return false;
             }
         }
-        break; 
+        break;
     }
     case cmd::SELECT: {
         list<string> words = getSQLWords(query);
@@ -3600,7 +3600,7 @@ EDBProxy::considerQuery(command com, const string &query)
                 return false;
             }
         }
-        break; 
+        break;
     }
     case cmd::BEGIN: {
         return true;
@@ -4136,9 +4136,9 @@ EDBProxy::crypt(string data, fieldType ft, string fullname,
         //cerr << "result is " << resu << "\n";
     }
     if (isBin) {
-        LOG(crypto) << "result is " << marshallBinary(resu);
+        LOG(crypto) << "result is (len = " << resu.size() << ") " << marshallBinary(resu);
     } else {
-        LOG(crypto) << "result is " << resu;
+        LOG(crypto) << "result is (len = " << resu.size() << ") " << resu;
     }
     return resu;
 }
