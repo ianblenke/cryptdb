@@ -2,7 +2,7 @@ OBJDIRS	+= parser
 
 
 PARSERSRC	:= embedmysql.cc mysqld-filler.cc cdb_rewrite.cc
-PARSERPROGS	:= analyze load-schema print-back cdb_test cdb_enc cdb_dec
+PARSERPROGS	:= analyze load-schema print-back cdb_test cdb_enc cdb_dec cdb_exp
 
 PARSERPROGOBJS	:= $(patsubst %,$(OBJDIR)/parser/%,$(PARSERPROGS))
 
