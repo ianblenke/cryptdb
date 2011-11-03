@@ -148,6 +148,8 @@ enum f {
     l_shipinstruct,
     l_shipmode,
     l_comment,
+    l_disc_price,
+    l_charge
 };
 
 struct q1entry {
@@ -220,6 +222,141 @@ static void do_query_orig(Connect &conn,
         double avg_price = resultFromStr<double>(row[7].data);
         double avg_disc = resultFromStr<double>(row[8].data);
         uint64_t count_order = resultFromStr<uint64_t>(row[9].data);
+        results.push_back(q1entry(
+            l_returnflag,
+            l_linestatus,
+            sum_qty,
+            sum_base_price,
+            sum_disc_price,
+            sum_charge,
+            avg_qty,
+            avg_price,
+            avg_disc,
+            count_order));
+    }
+}
+
+static void do_query_cryptdb_opt(Connect &conn,
+                                 CryptoManager &cm,
+                                 uint32_t year,
+                                 vector<q1entry> &results) {
+	// l_shipdate <= date '[year]-01-01'
+    bool isBin;
+    string encYEAR = cm.crypt(cm.getmkey(), strFromVal(year), TYPE_INTEGER,
+                              fieldname(10, "year_OPE"),
+                              getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
+    string encMONTH = cm.crypt(cm.getmkey(), "1", TYPE_INTEGER,
+                               fieldname(10, "month_OPE"),
+                               getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
+    string encDAY = cm.crypt(cm.getmkey(), "1", TYPE_INTEGER,
+                             fieldname(10, "day_OPE"),
+                             getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
+
+
+    DBResult * dbres;
+
+    auto y = valFromStr(encYEAR);
+    auto m = valFromStr(encMONTH);
+    auto d = valFromStr(encDAY);
+
+    string pkinfo = marshallBinary(cm.getPKInfo());
+    ostringstream s;
+    s << "SELECT SQL_NO_CACHE "
+          << "l_returnflag_DET, l_returnflag_SALT, "
+          << "l_linestatus_DET, l_linestatus_SALT, "
+          << "agg(l_quantity_AGG, " << pkinfo << "), "
+          << "agg(l_extendedprice_AGG, " << pkinfo << "), "
+          << "agg(l_disc_price_AGG, " << pkinfo << "), "
+          << "agg(l_charge_AGG, " << pkinfo << "), "
+          << "agg(l_discount_AGG, " << pkinfo << "), "
+          << "count(*) "
+      << "FROM lineitem_enc_opt "
+      << "WHERE l_shipdate_year_OPE < " << y << " "
+      << "OR ( l_shipdate_year_OPE = " << y << " AND l_shipdate_month_OPE < " << m << " ) "
+      << "OR ( l_shipdate_year_OPE = " << y << " AND l_shipdate_month_OPE = " << m << " AND l_shipdate_day_OPE <= " << d << " ) "
+      << "GROUP BY l_returnflag_OPE, l_linestatus_OPE "
+      << "ORDER BY l_returnflag_OPE, l_linestatus_OPE ";
+
+    conn.execute(s.str(), dbres);
+    ResType res = dbres->unpack();
+    assert(res.ok);
+
+    for (auto row : res.rows) {
+        // l_returnflag
+        string l_returnflag = decryptRow<string>(
+                mysqlHexToBinaryData(row[0].data),
+                valFromStr(row[1].data),
+                fieldname(f::l_returnflag, "DET"),
+                TYPE_TEXT,
+                oDET,
+                cm);
+
+        // l_linestatus
+        string l_linestatus = decryptRow<string>(
+                mysqlHexToBinaryData(row[2].data),
+                valFromStr(row[3].data),
+                fieldname(f::l_linestatus, "DET"),
+                TYPE_TEXT,
+                oDET,
+                cm);
+
+        // sum_qty
+        uint64_t sum_qty_int = decryptRow<uint64_t>(
+                row[4].data,
+                12345,
+                fieldname(f::l_quantity, "AGG"),
+                TYPE_INTEGER,
+                oAGG,
+                cm);
+        double sum_qty = ((double)sum_qty_int)/100.0;
+
+        // sum_base_price
+        uint64_t sum_base_price_int = decryptRow<uint64_t>(
+                row[5].data,
+                12345,
+                fieldname(f::l_extendedprice, "AGG"),
+                TYPE_INTEGER,
+                oAGG,
+                cm);
+        double sum_base_price = ((double)sum_base_price_int)/100.0;
+
+        // sum_disc_price
+        uint64_t sum_disc_price_int = decryptRow<uint64_t>(
+                row[6].data,
+                12345,
+                fieldname(f::l_disc_price, "AGG"),
+                TYPE_INTEGER,
+                oAGG,
+                cm);
+        double sum_disc_price = ((double)sum_disc_price_int)/100.0;
+
+        // sum_charge
+        uint64_t sum_charge_int = decryptRow<uint64_t>(
+                row[7].data,
+                12345,
+                fieldname(f::l_charge, "AGG"),
+                TYPE_INTEGER,
+                oAGG,
+                cm);
+        double sum_charge = ((double)sum_charge_int)/100.0;
+
+        // sum_discount
+        uint64_t sum_discount_int = decryptRow<uint64_t>(
+                row[8].data,
+                12345,
+                fieldname(f::l_discount, "AGG"),
+                TYPE_INTEGER,
+                oAGG,
+                cm);
+        double sum_discount = ((double)sum_discount_int)/100.0;
+
+        // count_order
+        uint64_t count_order = resultFromStr<uint64_t>(row[9].data);
+
+        double avg_qty = sum_qty / ((double)count_order);
+        double avg_price = sum_base_price / ((double)count_order);
+        double avg_disc = sum_discount / ((double)count_order);
+
         results.push_back(q1entry(
             l_returnflag,
             l_linestatus,
@@ -402,12 +539,13 @@ static inline uint32_t random_year() {
 int main(int argc, char **argv) {
     srand(time(NULL));
     if (argc != 2) {
-        cerr << "[USAGE]: " << argv[0] << " (--orig|--crypt)" << endl;
+        cerr << "[USAGE]: " << argv[0] << " (--orig|--crypt|--crypt-opt)" << endl;
         return 1;
     }
     if (strcmp(argv[1], "--orig") &&
-        strcmp(argv[1], "--crypt")) {
-        cerr << "[USAGE]: " << argv[0] << " (--orig|--crypt)" << endl;
+        strcmp(argv[1], "--crypt") &&
+        strcmp(argv[1], "--crypt-opt")) {
+        cerr << "[USAGE]: " << argv[0] << " (--orig|--crypt|--crypt-opt)" << endl;
         return 1;
     }
 
@@ -419,15 +557,31 @@ int main(int argc, char **argv) {
         for (size_t i = 0; i < n_runs; i++) {
             do_query_orig(conn, 1995, results);
             ctr += results.size();
+            for (auto r : results) {
+                cout << r << endl;
+            }
+            cout << "------" << endl;
             results.clear();
         }
     } else {
         // crypt case
         CryptoManager cm("12345");
-        for (size_t i = 0; i < n_runs; i++) {
-            do_query_cryptdb(conn, cm, 1995, results);
-            ctr += results.size();
-            results.clear();
+        if (!strcmp(argv[1], "--crypt")) {
+            for (size_t i = 0; i < n_runs; i++) {
+                do_query_cryptdb(conn, cm, 1995, results);
+                ctr += results.size();
+                results.clear();
+            }
+        } else {
+            for (size_t i = 0; i < n_runs; i++) {
+                do_query_cryptdb_opt(conn, cm, 1995, results);
+                ctr += results.size();
+                for (auto r : results) {
+                    cout << r << endl;
+                }
+                cout << "------" << endl;
+                results.clear();
+            }
         }
     }
     cout << ctr << endl;

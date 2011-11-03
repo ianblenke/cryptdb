@@ -16,6 +16,17 @@
 
 using namespace std;
 
+template <typename R>
+R resultFromStr(const string &r) {
+    stringstream ss(r);
+    R val;
+    ss >> val;
+    return val;
+}
+
+template <>
+string resultFromStr(const string &r) { return r; }
+
 static void tokenize(const string &s,
                      const string &delim,
                      vector<string> &tokens) {
@@ -106,6 +117,19 @@ static inline bool DoDET(int m) { return m & ONION_DET; }
 static inline bool DoOPE(int m) { return m & ONION_OPE; }
 static inline bool DoAGG(int m) { return m & ONION_AGG; }
 
+static inline string to_mysql_escape_varbin(
+        const string &buf, char escape, char fieldTerm, char newlineTerm) {
+    ostringstream s;
+    for (size_t i = 0; i < buf.size(); i++) {
+        char cur = buf[i];
+        if (cur == escape || cur == fieldTerm || cur == newlineTerm) {
+            s << escape;
+        }
+        s << cur;
+    }
+    return s.str();
+}
+
 static void do_encrypt(size_t i,
                        datatypes dt,
                        int onions,
@@ -140,7 +164,7 @@ static void do_encrypt(size_t i,
                 string encAGG = cm.crypt(cm.getmkey(), plaintext, TYPE_INTEGER,
                                          fieldname(i, "AGG"),
                                          getMin(oAGG), SECLEVEL::SEMANTIC_AGG, isBin, 12345);
-                enccols.push_back(to_mysql_hex(encAGG));
+                enccols.push_back(to_mysql_escape_varbin(encAGG, '\\', '|', '\n'));
             } else {
                 enccols.push_back("NULL");;
             }
@@ -236,13 +260,31 @@ static void do_encrypt(size_t i,
     }
 }
 
+enum f {
+    l_orderkey,
+    l_partkey,
+    l_suppkey,
+    l_linenumber,
 
-struct input_output_t {
-    vector<string> input;
-    vector<string> output;
+    l_quantity,
+    l_extendedprice,
+    l_discount,
+    l_tax,
+
+    l_returnflag,
+    l_linestatus,
+
+    l_shipdate,
+    l_commitdate,
+    l_receiptdate,
+
+    l_shipinstruct,
+    l_shipmode,
+    l_comment,
 };
 
-static inline string process_input(const string &s, CryptoManager &cm) {
+static inline string process_input(const string &s, CryptoManager &cm, bool opt) {
+
     static const datatypes schema[] = {
         DT_INTEGER,
         DT_INTEGER,
@@ -272,10 +314,10 @@ static inline string process_input(const string &s, CryptoManager &cm) {
         0,
         0,
 
-        ONION_DET | ONION_OPE,
-        ONION_DET | ONION_OPE,
-        ONION_DET | ONION_OPE,
-        ONION_DET | ONION_OPE,
+        ONION_DET,
+        ONION_DET,
+        ONION_DET,
+        ONION_DET,
 
         ONION_DET | ONION_OPE,
         ONION_DET | ONION_OPE,
@@ -289,9 +331,65 @@ static inline string process_input(const string &s, CryptoManager &cm) {
         0,
     };
 
+    static const datatypes schema_opt[] = {
+        DT_INTEGER,
+        DT_INTEGER,
+        DT_INTEGER,
+        DT_INTEGER,
+
+        DT_FLOAT,
+        DT_FLOAT,
+        DT_FLOAT,
+        DT_FLOAT,
+
+        DT_STRING,
+        DT_STRING,
+
+        DT_DATE,
+        DT_DATE,
+        DT_DATE,
+
+        DT_STRING,
+        DT_STRING,
+        DT_STRING,
+
+        DT_FLOAT,
+        DT_FLOAT,
+    };
+
+    static const unsigned int onion_opt[] = {
+        0,
+        0,
+        0,
+        0,
+
+        ONION_AGG,
+        ONION_AGG,
+        ONION_AGG,
+        ONION_AGG,
+
+        ONION_DET | ONION_OPE,
+        ONION_DET | ONION_OPE,
+
+        ONION_OPE,
+        0,
+        0,
+
+        0,
+        0,
+        0,
+
+        ONION_AGG,
+        ONION_AGG,
+    };
+
     static const size_t n_schema = sizeof(schema) / sizeof(schema[0]);
     static const size_t n_onion  = sizeof(onion)  / sizeof(onion [0]);
     assert(n_schema == n_onion);
+
+    static const size_t n_schema_opt = sizeof(schema_opt) / sizeof(schema_opt[0]);
+    static const size_t n_onion_opt  = sizeof(onion_opt)  / sizeof(onion_opt [0]);
+    assert(n_schema_opt == n_onion_opt);
 
     vector<string> tokens;
     tokenize(s, "|", tokens);
@@ -299,8 +397,25 @@ static inline string process_input(const string &s, CryptoManager &cm) {
     assert(tokens.size() >= n_schema);
 
     vector<string> columns;
+    const datatypes *pschema = opt ? schema_opt : schema;
+    const unsigned int *ponion = opt ? onion_opt : onion;
     for (size_t i = 0; i < n_schema; i++) {
-        do_encrypt(i, schema[i], onion[i], tokens[i], columns, cm);
+        do_encrypt(i, pschema[i], ponion[i], tokens[i], columns, cm);
+    }
+
+    if (opt) {
+        // l_disc_price = l_extendedprice * (1 - l_discount)
+        double l_extendedprice  = resultFromStr<double>(tokens[f::l_extendedprice]);
+        double l_discount       = resultFromStr<double>(tokens[f::l_discount]);
+        double l_disc_price     = l_extendedprice * (1.0 - l_discount);
+        long   l_disc_price_int = roundToLong(l_disc_price * 100.0);
+        do_encrypt(n_schema, DT_INTEGER, onion_opt[n_schema], to_s(l_disc_price_int), columns, cm);
+
+        // l_charge = l_extendedprice * (1 - l_discount) * (1 + l_tax)
+        double l_tax        = resultFromStr<double>(tokens[f::l_tax]);
+        double l_charge     = l_extendedprice * (1.0 - l_discount) * (1.0 + l_tax);
+        long   l_charge_int = roundToLong(l_charge * 100.0);
+        do_encrypt(n_schema + 1, DT_INTEGER, onion_opt[n_schema + 1], to_s(l_charge_int), columns, cm);
     }
 
     string out;
@@ -313,6 +428,16 @@ static inline size_t GetNumProcessors() {
 }
 
 int main(int argc, char **argv) {
+    if (argc != 1 && argc != 2) {
+        cerr << "[USAGE]: " << argv[0] << " [--opt]" << endl;
+        return 1;
+    }
+    if (argc == 2 && strcmp(argv[1], "--opt")) {
+        cerr << "[USAGE]: " << argv[0] << " [--opt]" << endl;
+        return 1;
+    }
+    bool opt = argc == 2;
+
     CryptoManager cm("12345");
     for (;;) {
         string s;
@@ -320,7 +445,7 @@ int main(int argc, char **argv) {
         if (!cin.good())
             break;
         try {
-            cout << process_input(s, cm) << endl;
+            cout << process_input(s, cm, opt) << endl;
         } catch (...) {
             cerr << "Input line failed:" << endl
                  << "  " << s << endl;
