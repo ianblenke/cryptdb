@@ -552,10 +552,11 @@ int main(int argc, char **argv) {
     Connect conn("localhost", "root", "letmein", "tpch");
     vector<q1entry> results;
     unsigned long ctr = 0;
+    uint32_t year = 2000;
     if (!strcmp(argv[1], "--orig")) {
         // vanilla MYSQL case
         for (size_t i = 0; i < n_runs; i++) {
-            do_query_orig(conn, 1995, results);
+            do_query_orig(conn, year, results);
             ctr += results.size();
             for (auto r : results) {
                 cout << r << endl;
@@ -568,13 +569,13 @@ int main(int argc, char **argv) {
         CryptoManager cm("12345");
         if (!strcmp(argv[1], "--crypt")) {
             for (size_t i = 0; i < n_runs; i++) {
-                do_query_cryptdb(conn, cm, 1995, results);
+                do_query_cryptdb(conn, cm, year, results);
                 ctr += results.size();
                 results.clear();
             }
         } else {
             for (size_t i = 0; i < n_runs; i++) {
-                do_query_cryptdb_opt(conn, cm, 1995, results);
+                do_query_cryptdb_opt(conn, cm, year, results);
                 ctr += results.size();
                 for (auto r : results) {
                     cout << r << endl;
