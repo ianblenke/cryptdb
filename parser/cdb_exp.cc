@@ -528,34 +528,43 @@ static void do_query_cryptdb(Connect &conn,
     }
 }
 
-static const size_t n_runs = 100;
-
 static inline uint32_t random_year() {
     static const uint32_t gap = 1999 - 1993 + 1;
     return 1993 + (rand() % gap);
 
 }
 
+static void usage(char **argv) {
+    cerr << "[USAGE]: " << argv[0] << " (--orig|--crypt|--crypt-opt) year num_queries" << endl;
+}
+
 int main(int argc, char **argv) {
     srand(time(NULL));
-    if (argc != 2) {
-        cerr << "[USAGE]: " << argv[0] << " (--orig|--crypt|--crypt-opt)" << endl;
+    if (argc != 4) {
+        usage(argv);
         return 1;
     }
     if (strcmp(argv[1], "--orig") &&
         strcmp(argv[1], "--crypt") &&
         strcmp(argv[1], "--crypt-opt")) {
-        cerr << "[USAGE]: " << argv[0] << " (--orig|--crypt|--crypt-opt)" << endl;
+        usage(argv);
         return 1;
     }
+    int input_year = atoi(argv[2]);
+    int input_nruns = atoi(argv[3]);
+    if (input_year < 0 || input_nruns < 0) {
+      usage(argv);
+      return 1;
+    }
+    uint32_t year = (uint32_t) input_year;
+    uint32_t nruns = (uint32_t) input_nruns;
 
     Connect conn("localhost", "root", "letmein", "tpch");
     vector<q1entry> results;
     unsigned long ctr = 0;
-    uint32_t year = 2000;
     if (!strcmp(argv[1], "--orig")) {
         // vanilla MYSQL case
-        for (size_t i = 0; i < n_runs; i++) {
+        for (size_t i = 0; i < nruns; i++) {
             do_query_orig(conn, year, results);
             ctr += results.size();
             for (auto r : results) {
@@ -568,13 +577,17 @@ int main(int argc, char **argv) {
         // crypt case
         CryptoManager cm("12345");
         if (!strcmp(argv[1], "--crypt")) {
-            for (size_t i = 0; i < n_runs; i++) {
+            for (size_t i = 0; i < nruns; i++) {
                 do_query_cryptdb(conn, cm, year, results);
                 ctr += results.size();
+                for (auto r : results) {
+                    cout << r << endl;
+                }
+                cout << "------" << endl;
                 results.clear();
             }
         } else {
-            for (size_t i = 0; i < n_runs; i++) {
+            for (size_t i = 0; i < nruns; i++) {
                 do_query_cryptdb_opt(conn, cm, year, results);
                 ctr += results.size();
                 for (auto r : results) {
