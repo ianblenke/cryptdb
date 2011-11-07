@@ -56,6 +56,7 @@ static void join(const vector<string> &tokens,
 typedef enum datatypes {
     DT_INTEGER,
     DT_FLOAT,
+    DT_CHAR,
     DT_STRING,
     DT_DATE,
 } datatypes;
@@ -181,6 +182,12 @@ static void do_encrypt(size_t i,
             do_encrypt(i, DT_INTEGER, onions, to_s(t), enccols, cm);
         }
         break;
+    case DT_CHAR:
+        {
+          unsigned int c = plaintext[0];
+          do_encrypt(i, DT_INTEGER, onions, to_s(c), enccols, cm);
+        }
+        break;
     case DT_STRING:
         {
             // DET, OPE, SALT
@@ -283,7 +290,13 @@ enum f {
     l_comment,
 };
 
-static inline string process_input(const string &s, CryptoManager &cm, bool opt) {
+enum opt_type {
+    none,
+    normal,
+    sort_key,
+};
+
+static inline string process_input(const string &s, CryptoManager &cm, enum opt_type opt) {
 
     static const datatypes schema[] = {
         DT_INTEGER,
@@ -383,6 +396,58 @@ static inline string process_input(const string &s, CryptoManager &cm, bool opt)
         ONION_AGG,
     };
 
+    static const datatypes schema_opt_sk[] = {
+        DT_INTEGER,
+        DT_INTEGER,
+        DT_INTEGER,
+        DT_INTEGER,
+
+        DT_FLOAT,
+        DT_FLOAT,
+        DT_FLOAT,
+        DT_FLOAT,
+
+        DT_CHAR,
+        DT_CHAR,
+
+        DT_DATE,
+        DT_DATE,
+        DT_DATE,
+
+        DT_STRING,
+        DT_STRING,
+        DT_STRING,
+
+        DT_FLOAT,
+        DT_FLOAT,
+    };
+
+    static const unsigned int onion_opt_sk[] = {
+        0,
+        0,
+        0,
+        0,
+
+        ONION_AGG,
+        ONION_AGG,
+        ONION_AGG,
+        ONION_AGG,
+
+        ONION_DET | ONION_OPE,
+        ONION_DET | ONION_OPE,
+
+        ONION_OPE,
+        0,
+        0,
+
+        0,
+        0,
+        0,
+
+        ONION_AGG,
+        ONION_AGG,
+    };
+
     static const size_t n_schema = sizeof(schema) / sizeof(schema[0]);
     static const size_t n_onion  = sizeof(onion)  / sizeof(onion [0]);
     assert(n_schema == n_onion);
@@ -391,19 +456,23 @@ static inline string process_input(const string &s, CryptoManager &cm, bool opt)
     static const size_t n_onion_opt  = sizeof(onion_opt)  / sizeof(onion_opt [0]);
     assert(n_schema_opt == n_onion_opt);
 
+    static const size_t n_schema_opt_sk = sizeof(schema_opt_sk) / sizeof(schema_opt_sk[0]);
+    static const size_t n_onion_opt_sk  = sizeof(onion_opt_sk)  / sizeof(onion_opt_sk [0]);
+    assert(n_schema_opt_sk == n_onion_opt_sk);
+
     vector<string> tokens;
     tokenize(s, "|", tokens);
 
     assert(tokens.size() >= n_schema);
 
     vector<string> columns;
-    const datatypes *pschema = opt ? schema_opt : schema;
-    const unsigned int *ponion = opt ? onion_opt : onion;
+    const datatypes *pschema = (opt == opt_type::none) ? schema : (opt == opt_type::normal ? schema_opt : schema_opt_sk);
+    const unsigned int *ponion = (opt == opt_type::none) ? onion : (opt == opt_type::normal ? onion_opt : onion_opt_sk);
     for (size_t i = 0; i < n_schema; i++) {
         do_encrypt(i, pschema[i], ponion[i], tokens[i], columns, cm);
     }
 
-    if (opt) {
+    if (opt != opt_type::none) {
         // l_disc_price = l_extendedprice * (1 - l_discount)
         double l_extendedprice  = resultFromStr<double>(tokens[f::l_extendedprice]);
         double l_discount       = resultFromStr<double>(tokens[f::l_discount]);
@@ -427,16 +496,22 @@ static inline size_t GetNumProcessors() {
   return sysconf(_SC_NPROCESSORS_ONLN);
 }
 
+static void usage(char **argv) {
+    cerr << "[USAGE]: " << argv[0] << " [--opt|--opt-compact-sort-key]" << endl;
+}
+
 int main(int argc, char **argv) {
     if (argc != 1 && argc != 2) {
-        cerr << "[USAGE]: " << argv[0] << " [--opt]" << endl;
+        usage(argv);
         return 1;
     }
-    if (argc == 2 && strcmp(argv[1], "--opt")) {
-        cerr << "[USAGE]: " << argv[0] << " [--opt]" << endl;
+    if (argc == 2 &&
+        strcmp(argv[1], "--opt") &&
+        strcmp(argv[1], "--opt-compact-sort-key")) {
+        usage(argv);
         return 1;
     }
-    bool opt = argc == 2;
+    enum opt_type tpe = (argc == 2) ? (!strcmp(argv[1], "--opt") ? opt_type::normal : opt_type::sort_key) : opt_type::none;
 
     CryptoManager cm("12345");
     for (;;) {
@@ -445,7 +520,7 @@ int main(int argc, char **argv) {
         if (!cin.good())
             break;
         try {
-            cout << process_input(s, cm, opt) << endl;
+            cout << process_input(s, cm, tpe) << endl;
         } catch (...) {
             cerr << "Input line failed:" << endl
                  << "  " << s << endl;
