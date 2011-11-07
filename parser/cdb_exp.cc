@@ -263,6 +263,15 @@ static void do_query_orig(Connect &conn,
     }
 }
 
+static inline uint64_t ExtractTimeInfo(const string &data) {
+  const uint64_t *p = (const uint64_t *) data.data();
+  return *p;
+}
+
+static inline string ExtractAggPayload(const string &data) {
+  return data.substr(sizeof(uint64_t));
+}
+
 static void do_query_cryptdb_opt(Connect &conn,
                                  CryptoManager &cm,
                                  uint32_t year,
@@ -292,12 +301,10 @@ static void do_query_cryptdb_opt(Connect &conn,
     ostringstream s;
     s << "SELECT SQL_NO_CACHE "
           << "l_returnflag_DET, l_returnflag_SALT, "
-          << "l_linestatus_DET, l_linestatus_SALT, "
-          << "agg(l_quantity_AGG, " << pkinfo << "), "
-          << "agg(l_extendedprice_AGG, " << pkinfo << "), "
-          << "agg(l_disc_price_AGG, " << pkinfo << "), "
-          << "agg(l_charge_AGG, " << pkinfo << "), "
-          << "agg(l_discount_AGG, " << pkinfo << "), "
+          << "l_linestatus_DET, l_linestatus_SALT, " << "agg_profile(l_quantity_AGG, " << pkinfo << "), "
+          << "agg_profile(l_extendedprice_AGG, " << pkinfo << "), " << "agg_profile(l_disc_price_AGG, " << pkinfo << "), "
+          << "agg_profile(l_charge_AGG, " << pkinfo << "), "
+          << "agg_profile(l_discount_AGG, " << pkinfo << "), "
           << "count(*) "
       << "FROM lineitem_enc_opt "
       << "WHERE l_shipdate_year_OPE < " << y << " "
@@ -317,6 +324,7 @@ static void do_query_cryptdb_opt(Connect &conn,
       assert(res.ok);
     }
 
+    uint64_t aggTime = 0;
     {
       NamedTimer t(__func__, "decrypt");
       for (auto row : res.rows) {
@@ -339,8 +347,9 @@ static void do_query_cryptdb_opt(Connect &conn,
                   cm);
 
           // sum_qty
+          aggTime += ExtractTimeInfo(row[4].data);
           uint64_t sum_qty_int = decryptRow<uint64_t>(
-                  row[4].data,
+                  ExtractAggPayload(row[4].data),
                   12345,
                   fieldname(f::l_quantity, "AGG"),
                   TYPE_INTEGER,
@@ -349,8 +358,9 @@ static void do_query_cryptdb_opt(Connect &conn,
           double sum_qty = ((double)sum_qty_int)/100.0;
 
           // sum_base_price
+          aggTime += ExtractTimeInfo(row[5].data);
           uint64_t sum_base_price_int = decryptRow<uint64_t>(
-                  row[5].data,
+                  ExtractAggPayload(row[5].data),
                   12345,
                   fieldname(f::l_extendedprice, "AGG"),
                   TYPE_INTEGER,
@@ -359,8 +369,9 @@ static void do_query_cryptdb_opt(Connect &conn,
           double sum_base_price = ((double)sum_base_price_int)/100.0;
 
           // sum_disc_price
+          aggTime += ExtractTimeInfo(row[6].data);
           uint64_t sum_disc_price_int = decryptRow<uint64_t>(
-                  row[6].data,
+                  ExtractAggPayload(row[6].data),
                   12345,
                   fieldname(f::l_disc_price, "AGG"),
                   TYPE_INTEGER,
@@ -369,8 +380,9 @@ static void do_query_cryptdb_opt(Connect &conn,
           double sum_disc_price = ((double)sum_disc_price_int)/100.0;
 
           // sum_charge
+          aggTime += ExtractTimeInfo(row[7].data);
           uint64_t sum_charge_int = decryptRow<uint64_t>(
-                  row[7].data,
+                  ExtractAggPayload(row[7].data),
                   12345,
                   fieldname(f::l_charge, "AGG"),
                   TYPE_INTEGER,
@@ -379,8 +391,9 @@ static void do_query_cryptdb_opt(Connect &conn,
           double sum_charge = ((double)sum_charge_int)/100.0;
 
           // sum_discount
+          aggTime += ExtractTimeInfo(row[8].data);
           uint64_t sum_discount_int = decryptRow<uint64_t>(
-                  row[8].data,
+                  ExtractAggPayload(row[8].data),
                   12345,
                   fieldname(f::l_discount, "AGG"),
                   TYPE_INTEGER,
@@ -408,6 +421,7 @@ static void do_query_cryptdb_opt(Connect &conn,
               count_order));
       }
     }
+    cout << __func__ << ":homadd " << aggTime << endl;
 }
 
 static void do_query_cryptdb_opt_compact_sort_key(Connect &conn,

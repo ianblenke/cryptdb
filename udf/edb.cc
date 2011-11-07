@@ -19,6 +19,8 @@
 #include <crypto-old/CryptoManager.hh> /* various functions for EDB */
 #include <util/params.hh>
 #include <util/util.hh>
+#include <sys/time.h>
+#include <time.h>
 
 using namespace std;
 using namespace NTL;
@@ -64,6 +66,13 @@ void     agg_clear(UDF_INIT *initid, char *is_null, char *error);
 my_bool  agg_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error);
 char *   agg(UDF_INIT *initid, UDF_ARGS *args, char *result,
              unsigned long *length, char *is_null, char *error);
+
+my_bool  agg_profile_init(UDF_INIT *initid, UDF_ARGS *args, char *message);
+void     agg_profile_deinit(UDF_INIT *initid);
+void     agg_profile_clear(UDF_INIT *initid, char *is_null, char *error);
+my_bool  agg_profile_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error);
+char *   agg_profile(UDF_INIT *initid, UDF_ARGS *args, char *result,
+                     unsigned long *length, char *is_null, char *error);
 
 void     func_add_set_deinit(UDF_INIT *initid);
 char *   func_add_set(UDF_INIT *initid, UDF_ARGS *args, char *result,
@@ -610,6 +619,86 @@ agg(UDF_INIT *initid, UDF_ARGS *args, char *result,
                 CryptoManager::Paillier_len_bytes);
     *length = CryptoManager::Paillier_len_bytes;
     return (char *) as->rbuf;
+}
+
+struct agg_profile_state {
+  struct agg_state agg;
+  uint64_t start;
+  uint64_t realstart;
+};
+
+static uint64_t cur_usec() {
+    //struct timeval tv;
+    //gettimeofday(&tv, 0);
+    //return ((uint64_t)tv.tv_sec) * 1000000 + tv.tv_usec;
+
+  struct timespec t;
+  clock_gettime(CLOCK_MONOTONIC, &t);
+  return ((uint64_t)t.tv_sec) * 1000000 + (t.tv_nsec / 1000);
+}
+
+my_bool
+agg_profile_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
+{
+    agg_profile_state *as = new agg_profile_state();
+    as->realstart = as->start = cur_usec();
+    as->agg.rbuf = malloc(sizeof(uint64_t) + CryptoManager::Paillier_len_bytes);
+    initid->ptr = (char *) as;
+    return 0;
+}
+
+void
+agg_profile_deinit(UDF_INIT *initid)
+{
+    agg_profile_state *as = (agg_profile_state *) initid->ptr;
+    uint64_t now = cur_usec();
+    uint64_t diff = now - as->realstart;
+    cout << "total: " << diff << endl;
+    free(as->agg.rbuf);
+    delete as;
+}
+
+void
+agg_profile_clear(UDF_INIT *initid, char *is_null, char *error)
+{
+    agg_profile_state *as = (agg_profile_state *) initid->ptr;
+    as->start = cur_usec();
+    as->agg.sum = to_ZZ(1);
+    as->agg.n2_set = 0;
+}
+
+//args will be element to add, constant N2
+my_bool
+agg_profile_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error)
+{
+    agg_profile_state *as = (agg_profile_state *) initid->ptr;
+    if (!as->agg.n2_set) {
+        ZZFromBytes(as->agg.n2, (const uint8_t *) args->args[1],
+                    args->lengths[1]);
+        as->agg.n2_set = 1;
+    }
+
+    ZZ e;
+    ZZFromBytes(e, (const uint8_t *) args->args[0], args->lengths[0]);
+
+    MulMod(as->agg.sum, as->agg.sum, e, as->agg.n2);
+    return true;
+}
+
+char *
+agg_profile(UDF_INIT *initid, UDF_ARGS *args, char *result,
+            unsigned long *length, char *is_null, char *error)
+{
+    agg_profile_state *as = (agg_profile_state *) initid->ptr;
+    uint64_t now = cur_usec();
+    uint64_t *p = (uint64_t*) as->agg.rbuf;
+    cout << (now - as->start) << endl;
+    *p = now - as->start;
+
+    BytesFromZZ(((uint8_t*)as->agg.rbuf) + sizeof(uint64_t), as->agg.sum,
+                CryptoManager::Paillier_len_bytes);
+    *length = sizeof(uint64_t) + CryptoManager::Paillier_len_bytes;
+    return (char *) as->agg.rbuf;
 }
 
 #else
