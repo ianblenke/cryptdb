@@ -117,6 +117,7 @@ enum onion_bitmask {
 static inline bool DoDET(int m) { return m & ONION_DET; }
 static inline bool DoOPE(int m) { return m & ONION_OPE; }
 static inline bool DoAGG(int m) { return m & ONION_AGG; }
+static inline bool DoAny(int m) { return DoDET(m) || DoOPE(m) || DoAGG(m); }
 
 static inline string to_mysql_escape_varbin(
         const string &buf, char escape, char fieldTerm, char newlineTerm) {
@@ -136,7 +137,8 @@ static void do_encrypt(size_t i,
                        int onions,
                        const string &plaintext,
                        vector<string> &enccols,
-                       CryptoManager &cm) {
+                       CryptoManager &cm,
+                       bool usenull = true) {
 
     switch (dt) {
     case DT_INTEGER:
@@ -149,7 +151,7 @@ static void do_encrypt(size_t i,
                                          getMin(oDET), SECLEVEL::DET, isBin, 12345);
                 enccols.push_back(to_s(valFromStr(encDET)));
             } else {
-                enccols.push_back("NULL");
+                if (usenull) enccols.push_back("NULL");
             }
 
             if (DoOPE(onions)) {
@@ -158,7 +160,7 @@ static void do_encrypt(size_t i,
                                          getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
                 enccols.push_back(to_s(valFromStr(encOPE)));
             } else {
-                enccols.push_back("NULL");
+                if (usenull) enccols.push_back("NULL");
             }
 
             if (DoAGG(onions)) {
@@ -167,11 +169,11 @@ static void do_encrypt(size_t i,
                                          getMin(oAGG), SECLEVEL::SEMANTIC_AGG, isBin, 12345);
                 enccols.push_back(to_mysql_escape_varbin(encAGG, '\\', '|', '\n'));
             } else {
-                enccols.push_back("NULL");;
+                if (usenull) enccols.push_back("NULL");;
             }
 
             // salt
-            enccols.push_back(to_s(12345));
+            if (DoAny(onions)) enccols.push_back(to_s(12345));
         }
         break;
     case DT_FLOAT:
@@ -179,13 +181,13 @@ static void do_encrypt(size_t i,
             // TODO: fix precision
             double f = strtod(plaintext.c_str(), NULL);
             long t = roundToLong(f * 100.0);
-            do_encrypt(i, DT_INTEGER, onions, to_s(t), enccols, cm);
+            do_encrypt(i, DT_INTEGER, onions, to_s(t), enccols, cm, usenull);
         }
         break;
     case DT_CHAR:
         {
           unsigned int c = plaintext[0];
-          do_encrypt(i, DT_INTEGER, onions, to_s(c), enccols, cm);
+          do_encrypt(i, DT_INTEGER, onions, to_s(c), enccols, cm, usenull);
         }
         break;
     case DT_STRING:
@@ -199,7 +201,7 @@ static void do_encrypt(size_t i,
                 assert((encDET.size() % 16) == 0);
                 enccols.push_back(to_mysql_hex(encDET));
             } else {
-                enccols.push_back("NULL");
+                if (usenull) enccols.push_back("NULL");
             }
 
             if (DoOPE(onions)) {
@@ -208,11 +210,11 @@ static void do_encrypt(size_t i,
                                          getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
                 enccols.push_back(to_s(valFromStr(encOPE)));
             } else {
-                enccols.push_back("NULL");
+                if (usenull) enccols.push_back("NULL");
             }
 
             // salt
-            enccols.push_back(to_s(12345));
+            if (DoAny(onions)) enccols.push_back(to_s(12345));
         }
         break;
     case DT_DATE:
@@ -231,7 +233,7 @@ static void do_encrypt(size_t i,
                                              getMin(oDET), SECLEVEL::DET, isBin, 12345); \
                     enccols.push_back(to_s(valFromStr(encDET))); \
                 } else { \
-                    enccols.push_back("NULL"); \
+                    if (usenull) enccols.push_back("NULL"); \
                 } \
                 if (DoOPE(onions)) { \
                     string encOPE = cm.crypt(cm.getmkey(), to_s(field), TYPE_INTEGER, \
@@ -239,7 +241,7 @@ static void do_encrypt(size_t i,
                                              getMin(oOPE), SECLEVEL::OPE, isBin, 12345); \
                     enccols.push_back(to_s(valFromStr(encOPE))); \
                 } else { \
-                    enccols.push_back("NULL"); \
+                    if (usenull) enccols.push_back("NULL"); \
                 } \
                 if (DoAGG(onions)) { \
                     string encAGG = cm.crypt(cm.getmkey(), to_s(field), TYPE_INTEGER, \
@@ -247,7 +249,7 @@ static void do_encrypt(size_t i,
                                              getMin(oAGG), SECLEVEL::SEMANTIC_AGG, isBin, 12345); \
                     enccols.push_back(to_mysql_hex(encAGG)); \
                 } else { \
-                    enccols.push_back("NULL"); \
+                    if (usenull) enccols.push_back("NULL"); \
                 } \
             } while (0)
 
@@ -261,7 +263,7 @@ static void do_encrypt(size_t i,
 #undef __IMPL_FIELD_ENC
 
             // salt
-            enccols.push_back(to_s(12345));
+            if (DoAny(onions)) enccols.push_back(to_s(12345));
         }
         break;
     }
@@ -294,6 +296,7 @@ enum opt_type {
     none,
     normal,
     sort_key,
+    compact_table,
 };
 
 static inline string process_input(const string &s, CryptoManager &cm, enum opt_type opt) {
@@ -469,7 +472,7 @@ static inline string process_input(const string &s, CryptoManager &cm, enum opt_
     const datatypes *pschema = (opt == opt_type::none) ? schema : (opt == opt_type::normal ? schema_opt : schema_opt_sk);
     const unsigned int *ponion = (opt == opt_type::none) ? onion : (opt == opt_type::normal ? onion_opt : onion_opt_sk);
     for (size_t i = 0; i < n_schema; i++) {
-        do_encrypt(i, pschema[i], ponion[i], tokens[i], columns, cm);
+        do_encrypt(i, pschema[i], ponion[i], tokens[i], columns, cm, opt != opt_type::compact_table);
     }
 
     if (opt != opt_type::none) {
@@ -478,13 +481,13 @@ static inline string process_input(const string &s, CryptoManager &cm, enum opt_
         double l_discount       = resultFromStr<double>(tokens[f::l_discount]);
         double l_disc_price     = l_extendedprice * (1.0 - l_discount);
         long   l_disc_price_int = roundToLong(l_disc_price * 100.0);
-        do_encrypt(n_schema, DT_INTEGER, onion_opt[n_schema], to_s(l_disc_price_int), columns, cm);
+        do_encrypt(n_schema, DT_INTEGER, onion_opt[n_schema], to_s(l_disc_price_int), columns, cm, opt != opt_type::compact_table);
 
         // l_charge = l_extendedprice * (1 - l_discount) * (1 + l_tax)
         double l_tax        = resultFromStr<double>(tokens[f::l_tax]);
         double l_charge     = l_extendedprice * (1.0 - l_discount) * (1.0 + l_tax);
         long   l_charge_int = roundToLong(l_charge * 100.0);
-        do_encrypt(n_schema + 1, DT_INTEGER, onion_opt[n_schema + 1], to_s(l_charge_int), columns, cm);
+        do_encrypt(n_schema + 1, DT_INTEGER, onion_opt[n_schema + 1], to_s(l_charge_int), columns, cm, opt != opt_type::compact_table);
     }
 
     string out;
@@ -497,7 +500,7 @@ static inline size_t GetNumProcessors() {
 }
 
 static void usage(char **argv) {
-    cerr << "[USAGE]: " << argv[0] << " [--opt|--opt-compact-sort-key]" << endl;
+    cerr << "[USAGE]: " << argv[0] << " [--opt|--opt-compact-sort-key|--opt-compact-table]" << endl;
 }
 
 int main(int argc, char **argv) {
@@ -507,11 +510,12 @@ int main(int argc, char **argv) {
     }
     if (argc == 2 &&
         strcmp(argv[1], "--opt") &&
-        strcmp(argv[1], "--opt-compact-sort-key")) {
+        strcmp(argv[1], "--opt-compact-sort-key") &&
+        strcmp(argv[1], "--opt-compact-table")) {
         usage(argv);
         return 1;
     }
-    enum opt_type tpe = (argc == 2) ? (!strcmp(argv[1], "--opt") ? opt_type::normal : opt_type::sort_key) : opt_type::none;
+    enum opt_type tpe = (argc == 2) ? (!strcmp(argv[1], "--opt") ? opt_type::normal : (!strcmp(argv[1], "--opt-compact-sort-key") ? opt_type::sort_key : opt_type::compact_table)) : opt_type::none;
 
     CryptoManager cm("12345");
     for (;;) {

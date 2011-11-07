@@ -559,6 +559,155 @@ static void do_query_cryptdb_opt_compact_sort_key(Connect &conn,
     }
 }
 
+static void do_query_cryptdb_opt_compact_table(Connect &conn,
+                                               CryptoManager &cm,
+                                               uint32_t year,
+                                               vector<q1entry> &results) {
+    NamedTimer fcnTimer(__func__);
+
+    // l_shipdate <= date '[year]-01-01'
+    bool isBin;
+    string encYEAR = cm.crypt(cm.getmkey(), strFromVal(year), TYPE_INTEGER,
+                              fieldname(10, "year_OPE"),
+                              getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
+    string encMONTH = cm.crypt(cm.getmkey(), "1", TYPE_INTEGER,
+                               fieldname(10, "month_OPE"),
+                               getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
+    string encDAY = cm.crypt(cm.getmkey(), "1", TYPE_INTEGER,
+                             fieldname(10, "day_OPE"),
+                             getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
+
+
+    DBResult * dbres;
+
+    auto y = valFromStr(encYEAR);
+    auto m = valFromStr(encMONTH);
+    auto d = valFromStr(encDAY);
+
+    string pkinfo = marshallBinary(cm.getPKInfo());
+    ostringstream s;
+    s << "SELECT SQL_NO_CACHE "
+          << "l_returnflag_DET, l_returnflag_SALT, "
+          << "l_linestatus_DET, l_linestatus_SALT, "
+          << "agg(l_quantity_AGG, " << pkinfo << "), "
+          << "agg(l_extendedprice_AGG, " << pkinfo << "), "
+          << "agg(l_disc_price_AGG, " << pkinfo << "), "
+          << "agg(l_charge_AGG, " << pkinfo << "), "
+          << "agg(l_discount_AGG, " << pkinfo << "), "
+          << "count(*) "
+      << "FROM lineitem_enc_opt_compact "
+      << "WHERE l_shipdate_year_OPE < " << y << " "
+      << "OR ( l_shipdate_year_OPE = " << y << " AND l_shipdate_month_OPE < " << m << " ) "
+      << "OR ( l_shipdate_year_OPE = " << y << " AND l_shipdate_month_OPE = " << m << " AND l_shipdate_day_OPE <= " << d << " ) "
+      << "GROUP BY l_returnflag_OPE, l_linestatus_OPE "
+      << "ORDER BY l_returnflag_OPE, l_linestatus_OPE ";
+
+    {
+      NamedTimer t(__func__, "execute");
+      conn.execute(s.str(), dbres);
+    }
+    ResType res;
+    {
+      NamedTimer t(__func__, "unpack");
+      res = dbres->unpack();
+      assert(res.ok);
+    }
+
+    {
+      NamedTimer t(__func__, "decrypt");
+      for (auto row : res.rows) {
+          // l_returnflag
+          unsigned char l_returnflag_ch = (unsigned char) decryptRow<uint32_t>(
+                  row[0].data,
+                  valFromStr(row[1].data),
+                  fieldname(f::l_returnflag, "DET"),
+                  TYPE_INTEGER,
+                  oDET,
+                  cm);
+          string l_returnflag(1, l_returnflag_ch);
+
+          // l_linestatus
+          unsigned char l_linestatus_ch = (unsigned char) decryptRow<uint32_t>(
+                  row[2].data,
+                  valFromStr(row[3].data),
+                  fieldname(f::l_linestatus, "DET"),
+                  TYPE_INTEGER,
+                  oDET,
+                  cm);
+          string l_linestatus(1, l_linestatus_ch);
+
+          // sum_qty
+          uint64_t sum_qty_int = decryptRow<uint64_t>(
+                  row[4].data,
+                  12345,
+                  fieldname(f::l_quantity, "AGG"),
+                  TYPE_INTEGER,
+                  oAGG,
+                  cm);
+          double sum_qty = ((double)sum_qty_int)/100.0;
+
+          // sum_base_price
+          uint64_t sum_base_price_int = decryptRow<uint64_t>(
+                  row[5].data,
+                  12345,
+                  fieldname(f::l_extendedprice, "AGG"),
+                  TYPE_INTEGER,
+                  oAGG,
+                  cm);
+          double sum_base_price = ((double)sum_base_price_int)/100.0;
+
+          // sum_disc_price
+          uint64_t sum_disc_price_int = decryptRow<uint64_t>(
+                  row[6].data,
+                  12345,
+                  fieldname(f::l_disc_price, "AGG"),
+                  TYPE_INTEGER,
+                  oAGG,
+                  cm);
+          double sum_disc_price = ((double)sum_disc_price_int)/100.0;
+
+          // sum_charge
+          uint64_t sum_charge_int = decryptRow<uint64_t>(
+                  row[7].data,
+                  12345,
+                  fieldname(f::l_charge, "AGG"),
+                  TYPE_INTEGER,
+                  oAGG,
+                  cm);
+          double sum_charge = ((double)sum_charge_int)/100.0;
+
+          // sum_discount
+          uint64_t sum_discount_int = decryptRow<uint64_t>(
+                  row[8].data,
+                  12345,
+                  fieldname(f::l_discount, "AGG"),
+                  TYPE_INTEGER,
+                  oAGG,
+                  cm);
+          double sum_discount = ((double)sum_discount_int)/100.0;
+
+          // count_order
+          uint64_t count_order = resultFromStr<uint64_t>(row[9].data);
+
+          double avg_qty = sum_qty / ((double)count_order);
+          double avg_price = sum_base_price / ((double)count_order);
+          double avg_disc = sum_discount / ((double)count_order);
+
+          results.push_back(q1entry(
+              l_returnflag,
+              l_linestatus,
+              sum_qty,
+              sum_base_price,
+              sum_disc_price,
+              sum_charge,
+              avg_qty,
+              avg_price,
+              avg_disc,
+              count_order));
+      }
+    }
+}
+
 static void do_query_cryptdb(Connect &conn,
                              CryptoManager &cm,
                              uint32_t year,
@@ -738,7 +887,7 @@ static inline uint32_t random_year() {
 }
 
 static void usage(char **argv) {
-    cerr << "[USAGE]: " << argv[0] << " (--orig|--crypt|--crypt-opt|--crypt-opt-compact-sort-key) year num_queries" << endl;
+    cerr << "[USAGE]: " << argv[0] << " (--orig|--crypt|--crypt-opt|--crypt-opt-compact-sort-key|--crypt-opt-compact-table) year num_queries" << endl;
 }
 
 int main(int argc, char **argv) {
@@ -750,7 +899,8 @@ int main(int argc, char **argv) {
     if (strcmp(argv[1], "--orig") &&
         strcmp(argv[1], "--crypt") &&
         strcmp(argv[1], "--crypt-opt") &&
-        strcmp(argv[1], "--crypt-opt-compact-sort-key")) {
+        strcmp(argv[1], "--crypt-opt-compact-sort-key") &&
+        strcmp(argv[1], "--crypt-opt-compact-table")) {
         usage(argv);
         return 1;
     }
@@ -771,10 +921,10 @@ int main(int argc, char **argv) {
         for (size_t i = 0; i < nruns; i++) {
             do_query_orig(conn, year, results);
             ctr += results.size();
-            for (auto r : results) {
-                cout << r << endl;
-            }
-            cout << "------" << endl;
+            //for (auto r : results) {
+            //    cout << r << endl;
+            //}
+            //cout << "------" << endl;
             results.clear();
         }
     } else {
@@ -800,14 +950,24 @@ int main(int argc, char **argv) {
                 //cout << "------" << endl;
                 results.clear();
             }
-        } else {
+        } else if (!strcmp(argv[1], "--crypt-opt-compact-sort-key")) {
             for (size_t i = 0; i < nruns; i++) {
                 do_query_cryptdb_opt_compact_sort_key(conn, cm, year, results);
                 ctr += results.size();
-                for (auto r : results) {
-                    cout << r << endl;
-                }
-                cout << "------" << endl;
+                //for (auto r : results) {
+                //    cout << r << endl;
+                //}
+                //cout << "------" << endl;
+                results.clear();
+            }
+        } else {
+            for (size_t i = 0; i < nruns; i++) {
+                do_query_cryptdb_opt_compact_table(conn, cm, year, results);
+                ctr += results.size();
+                //for (auto r : results) {
+                //    cout << r << endl;
+                //}
+                //cout << "------" << endl;
                 results.clear();
             }
         }
