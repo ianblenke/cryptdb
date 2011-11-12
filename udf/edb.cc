@@ -572,6 +572,7 @@ agg_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
 {
     agg_state *as = new agg_state();
     as->rbuf = malloc(CryptoManager::Paillier_len_bytes);
+    as->n2_set = 0;
     initid->ptr = (char *) as;
     return 0;
 }
@@ -589,7 +590,6 @@ agg_clear(UDF_INIT *initid, char *is_null, char *error)
 {
     agg_state *as = (agg_state *) initid->ptr;
     as->sum = to_ZZ(1);
-    as->n2_set = 0;
 }
 
 //args will be element to add, constant N2

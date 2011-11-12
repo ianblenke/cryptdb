@@ -182,7 +182,9 @@ class CryptoManager {
     static const unsigned int Paillier_len_bytes = PAILLIER_LEN_BYTES;
     static const unsigned int Paillier_len_bits = Paillier_len_bytes * 8;
     std::string encrypt_Paillier(uint64_t val);
+    std::string encrypt_Paillier(const NTL::ZZ& val);
     int decrypt_Paillier(const std::string &ciphertext);
+    void decrypt_Paillier(const std::string &ciphertext, NTL::ZZ& m);
 
     std::string getPKInfo();
     AES_KEY * getmkey();

@@ -15,6 +15,7 @@
 #include <parser/cdb_rewrite.hh>
 
 using namespace std;
+using namespace NTL;
 
 template <typename R>
 R resultFromStr(const string &r) {
@@ -297,7 +298,15 @@ enum opt_type {
     normal,
     sort_key,
     compact_table,
+    all,
 };
+
+/** assumes slot currently un-occupied */
+static void insert_into_slot(ZZ &z, uint64_t value, size_t slot) {
+  static const size_t wordbits = sizeof(uint64_t) * 8;
+  static const size_t slotbits = wordbits * 2;
+  z |= (to_ZZ(value) << (slotbits * slot));
+}
 
 static inline string process_input(const string &s, CryptoManager &cm, enum opt_type opt) {
 
@@ -451,6 +460,56 @@ static inline string process_input(const string &s, CryptoManager &cm, enum opt_
         ONION_AGG,
     };
 
+    static const datatypes schema_opt_all[] = {
+        DT_INTEGER,
+        DT_INTEGER,
+        DT_INTEGER,
+        DT_INTEGER,
+
+        DT_FLOAT,
+        DT_FLOAT,
+        DT_FLOAT,
+        DT_FLOAT,
+
+        DT_CHAR,
+        DT_CHAR,
+
+        DT_DATE,
+        DT_DATE,
+        DT_DATE,
+
+        DT_STRING,
+        DT_STRING,
+        DT_STRING,
+
+        DT_FLOAT,
+    };
+
+    static const unsigned int onion_opt_all[] = {
+        0,
+        0,
+        0,
+        0,
+
+        0,
+        0,
+        0,
+        0,
+
+        ONION_DET | ONION_OPE,
+        ONION_DET | ONION_OPE,
+
+        ONION_OPE,
+        0,
+        0,
+
+        0,
+        0,
+        0,
+
+        ONION_AGG,
+    };
+
     static const size_t n_schema = sizeof(schema) / sizeof(schema[0]);
     static const size_t n_onion  = sizeof(onion)  / sizeof(onion [0]);
     assert(n_schema == n_onion);
@@ -469,13 +528,35 @@ static inline string process_input(const string &s, CryptoManager &cm, enum opt_
     assert(tokens.size() >= n_schema);
 
     vector<string> columns;
-    const datatypes *pschema = (opt == opt_type::none) ? schema : (opt == opt_type::normal ? schema_opt : schema_opt_sk);
-    const unsigned int *ponion = (opt == opt_type::none) ? onion : (opt == opt_type::normal ? onion_opt : onion_opt_sk);
-    for (size_t i = 0; i < n_schema; i++) {
-        do_encrypt(i, pschema[i], ponion[i], tokens[i], columns, cm, opt != opt_type::compact_table);
+    const datatypes *pschema = schema;
+
+    switch (opt) {
+    case opt_type::normal: pschema = schema_opt; break;
+    case opt_type::sort_key:
+    case opt_type::compact_table: pschema = schema_opt_sk; break;
+    case opt_type::all: pschema = schema_opt_all; break;
+    default: break;
     }
 
-    if (opt != opt_type::none) {
+    const unsigned int *ponion = onion;
+
+    switch (opt) {
+    case opt_type::normal: ponion = onion_opt; break;
+    case opt_type::sort_key:
+    case opt_type::compact_table: ponion = onion_opt_sk; break;
+    case opt_type::all: ponion = onion_opt_all; break;
+    default: break;
+    }
+
+    for (size_t i = 0; i < n_schema; i++) {
+        do_encrypt(i, pschema[i], ponion[i], tokens[i], columns, cm, opt != opt_type::compact_table && opt != opt_type::all);
+    }
+
+    switch (opt) {
+    case opt_type::normal:
+    case opt_type::sort_key:
+    case opt_type::compact_table:
+      {
         // l_disc_price = l_extendedprice * (1 - l_discount)
         double l_extendedprice  = resultFromStr<double>(tokens[f::l_extendedprice]);
         double l_discount       = resultFromStr<double>(tokens[f::l_discount]);
@@ -488,6 +569,44 @@ static inline string process_input(const string &s, CryptoManager &cm, enum opt_
         double l_charge     = l_extendedprice * (1.0 - l_discount) * (1.0 + l_tax);
         long   l_charge_int = roundToLong(l_charge * 100.0);
         do_encrypt(n_schema + 1, DT_INTEGER, onion_opt[n_schema + 1], to_s(l_charge_int), columns, cm, opt != opt_type::compact_table);
+      }
+    case opt_type::all:
+      {
+        ZZ z;
+
+        // l_quantity_AGG
+        long l_quantity_int = roundToLong(resultFromStr<double>(tokens[f::l_quantity]) * 100.0);
+        insert_into_slot(z, l_quantity_int, 0);
+
+        // l_extendedprice_AGG
+        long l_extendedprice_int = roundToLong(resultFromStr<double>(tokens[f::l_extendedprice]) * 100.0);
+        insert_into_slot(z, l_extendedprice_int, 1);
+
+        // l_discount_AGG
+        long l_discount_int = roundToLong(resultFromStr<double>(tokens[f::l_discount]) * 100.0);
+        insert_into_slot(z, l_discount_int, 2);
+
+        // l_tax_AGG
+        long l_tax_int = roundToLong(resultFromStr<double>(tokens[f::l_tax]) * 100.0);
+        insert_into_slot(z, l_tax_int, 3);
+
+        // l_disc_price = l_extendedprice * (1 - l_discount)
+        double l_extendedprice  = resultFromStr<double>(tokens[f::l_extendedprice]);
+        double l_discount       = resultFromStr<double>(tokens[f::l_discount]);
+        double l_disc_price     = l_extendedprice * (1.0 - l_discount);
+        long   l_disc_price_int = roundToLong(l_disc_price * 100.0);
+        insert_into_slot(z, l_disc_price_int, 4);
+
+        // l_charge = l_extendedprice * (1 - l_discount) * (1 + l_tax)
+        double l_tax        = resultFromStr<double>(tokens[f::l_tax]);
+        double l_charge     = l_extendedprice * (1.0 - l_discount) * (1.0 + l_tax);
+        long   l_charge_int = roundToLong(l_charge * 100.0);
+        insert_into_slot(z, l_charge_int, 5);
+
+        string enc = cm.encrypt_Paillier(z);
+        columns.push_back(to_mysql_escape_varbin(enc, '\\', '|', '\n'));
+      }
+    default: break;
     }
 
     string out;
@@ -500,7 +619,7 @@ static inline size_t GetNumProcessors() {
 }
 
 static void usage(char **argv) {
-    cerr << "[USAGE]: " << argv[0] << " [--opt|--opt-compact-sort-key|--opt-compact-table]" << endl;
+    cerr << "[USAGE]: " << argv[0] << " [--opt|--opt-compact-sort-key|--opt-compact-table|--opt-all]" << endl;
 }
 
 int main(int argc, char **argv) {
@@ -511,11 +630,20 @@ int main(int argc, char **argv) {
     if (argc == 2 &&
         strcmp(argv[1], "--opt") &&
         strcmp(argv[1], "--opt-compact-sort-key") &&
-        strcmp(argv[1], "--opt-compact-table")) {
+        strcmp(argv[1], "--opt-compact-table") &&
+        strcmp(argv[1], "--opt-all")) {
         usage(argv);
         return 1;
     }
-    enum opt_type tpe = (argc == 2) ? (!strcmp(argv[1], "--opt") ? opt_type::normal : (!strcmp(argv[1], "--opt-compact-sort-key") ? opt_type::sort_key : opt_type::compact_table)) : opt_type::none;
+
+    enum opt_type tpe = opt_type::none;
+    if (argc == 2) {
+      if (!strcmp(argv[1], "--opt")) tpe = opt_type::normal;
+      else if (!strcmp(argv[1], "--opt-compact-sort-key")) tpe = opt_type::sort_key;
+      else if (!strcmp(argv[1], "--opt-compact-table")) tpe = opt_type::compact_table;
+      else if (!strcmp(argv[1], "--opt-all")) tpe = opt_type::all;
+      else assert(false);
+    }
 
     CryptoManager cm("12345");
     for (;;) {

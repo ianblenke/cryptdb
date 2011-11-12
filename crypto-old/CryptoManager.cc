@@ -1418,8 +1418,8 @@ CryptoManager::encrypt_Paillier(uint64_t val)
         }
 
         LOG(crypto_v) << "HOM miss for " << val;
-    
-    
+
+
         auto it2 = HOMRandCache.begin();
         if (it2 != HOMRandCache.end()) {
             ZZ rn = *it2;
@@ -1431,15 +1431,28 @@ CryptoManager::encrypt_Paillier(uint64_t val)
 
         cerr << "HOM and RAND Pool miss for " << val << "\n";
     }
-    
+
+    return encrypt_Paillier(to_ZZ((uint) val));
+}
+
+string
+CryptoManager::encrypt_Paillier(const ZZ &val)
+{
     ZZ r = RandomLen_ZZ(Paillier_len_bits/2) % Paillier_n;
-    ZZ c = PowerMod(Paillier_g, to_ZZ((uint) val) + Paillier_n*r, Paillier_n2);
+    ZZ c = PowerMod(Paillier_g, val + Paillier_n*r, Paillier_n2);
     return StringFromZZ(c);
-    
 }
 
 int
 CryptoManager::decrypt_Paillier(const string &ciphertext)
+{
+    ZZ m;
+    decrypt_Paillier(ciphertext, m);
+    return to_int(m);
+}
+
+void
+CryptoManager::decrypt_Paillier(const string &ciphertext, ZZ &m)
 {
     ZZ c = ZZFromString(ciphertext);
 
@@ -1452,12 +1465,10 @@ CryptoManager::decrypt_Paillier(const string &ciphertext)
                         Paillier_qinv, Paillier_2q, Paillier_q)
          * Paillier_hq) % Paillier_q;
 
-    ZZ m, pq;
+    ZZ pq;
     pq = 1;
     CRT(m, pq, mp, Paillier_p);
     CRT(m, pq, mq, Paillier_q);
-
-    return to_int(m);
 }
 
 string
