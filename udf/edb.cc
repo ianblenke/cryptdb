@@ -22,8 +22,19 @@
 #include <sys/time.h>
 #include <time.h>
 
+#include <gmp.h>
+#include <pthread.h>
+#include <tbb/concurrent_queue.h>
+#include <cassert>
+
 using namespace std;
 using namespace NTL;
+using namespace tbb;
+
+#define LIKELY(pred)   __builtin_expect((pred), true)
+#define UNLIKELY(pred) __builtin_expect((pred), false)
+//#define TRACE() (cout << __func__ << endl)
+#define TRACE()
 
 extern "C" {
 #if MYSQL_S
@@ -73,6 +84,13 @@ void     agg_profile_clear(UDF_INIT *initid, char *is_null, char *error);
 my_bool  agg_profile_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error);
 char *   agg_profile(UDF_INIT *initid, UDF_ARGS *args, char *result,
                      unsigned long *length, char *is_null, char *error);
+
+my_bool  agg_par_init(UDF_INIT *initid, UDF_ARGS *args, char *message);
+void     agg_par_deinit(UDF_INIT *initid);
+void     agg_par_clear(UDF_INIT *initid, char *is_null, char *error);
+my_bool  agg_par_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error);
+char *   agg_par(UDF_INIT *initid, UDF_ARGS *args, char *result,
+                 unsigned long *length, char *is_null, char *error);
 
 void     func_add_set_deinit(UDF_INIT *initid);
 char *   func_add_set(UDF_INIT *initid, UDF_ARGS *args, char *result,
@@ -570,6 +588,7 @@ struct agg_state {
 my_bool
 agg_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
 {
+    TRACE();
     agg_state *as = new agg_state();
     as->rbuf = malloc(CryptoManager::Paillier_len_bytes);
     as->n2_set = 0;
@@ -699,6 +718,157 @@ agg_profile(UDF_INIT *initid, UDF_ARGS *args, char *result,
                 CryptoManager::Paillier_len_bytes);
     *length = sizeof(uint64_t) + CryptoManager::Paillier_len_bytes;
     return (char *) as->agg.rbuf;
+}
+
+// --------------------------------------------------
+
+struct agg_par_state;
+
+struct worker_ctx {
+public:
+  worker_ctx(agg_par_state *as) : as(as) { mpz_init_set_ui(sum, 1); }
+  ~worker_ctx() { mpz_clear(sum); }
+  agg_par_state *as;
+  mpz_t sum;
+  concurrent_bounded_queue<pair<void*, int> > q;
+};
+
+struct agg_par_state {
+public:
+  agg_par_state() { mpz_init(mod); }
+  ~agg_par_state() { mpz_clear(mod); }
+
+  bool mod_set;
+  mpz_t mod;
+
+  bool threads_inited;
+  vector<pthread_t> thds;
+  vector<worker_ctx*> ctxs;
+
+  uint32_t ctr;
+
+  void *rbuf;
+};
+
+static void *thd_main(void *ptr) {
+  worker_ctx *ctx = (worker_ctx *)ptr;
+
+  mpz_t p;
+  mpz_init(p);
+
+  pair<void*, int> x;
+  while (true) {
+    ctx->q.pop(x);
+    if (x.second == -1) {
+      break;
+    } else {
+      mpz_import(p, x.second, -1, sizeof(uint8_t), 0, 0, x.first);
+      mpz_mul(ctx->sum, ctx->sum, p);
+      mpz_mod(ctx->sum, ctx->sum, ctx->as->mod);
+      free(x.first);
+    }
+  }
+
+  mpz_clear(p);
+  return NULL;
+}
+
+
+
+my_bool
+agg_par_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
+{
+    TRACE();
+    agg_par_state *as = new agg_par_state();
+    as->rbuf = malloc(CryptoManager::Paillier_len_bytes);
+    as->mod_set = 0;
+    as->threads_inited = false;
+    initid->ptr = (char *) as;
+    return 0;
+}
+
+void
+agg_par_deinit(UDF_INIT *initid)
+{
+    TRACE();
+    agg_par_state *as = (agg_par_state *) initid->ptr;
+    free(as->rbuf);
+    delete as;
+}
+
+void
+agg_par_clear(UDF_INIT *initid, char *is_null, char *error)
+{
+    TRACE();
+    agg_par_state *as = (agg_par_state *) initid->ptr;
+    assert(!as->threads_inited);
+    as->ctr = 0;
+}
+
+static const size_t nthreads = 16;
+
+//args will be element to add, constant N2
+my_bool
+agg_par_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error)
+{
+    TRACE();
+    agg_par_state *as = (agg_par_state *) initid->ptr;
+    if (UNLIKELY(!as->mod_set)) {
+        mpz_import(as->mod, args->lengths[1], -1, sizeof(uint8_t), 0, 0, args->args[1]);
+        as->mod_set = 1;
+    }
+
+    if (UNLIKELY(!as->threads_inited)) {
+      for (size_t i = 0; i < nthreads; i++) {
+        worker_ctx *ctx = new worker_ctx(as);
+        pthread_t t;
+        pthread_create(&t, NULL, thd_main, ctx);
+        as->thds.push_back(t);
+        as->ctxs.push_back(ctx);
+      }
+      as->threads_inited = true;
+    }
+
+    worker_ctx *ctx = as->ctxs[as->ctr++ % as->ctxs.size()];
+    void *buffer = malloc(args->lengths[0]);
+    memcpy(buffer, args->args[0], args->lengths[0]);
+    ctx->q.push(pair<void*, int>(buffer, args->lengths[0]));
+    return true;
+}
+
+char *
+agg_par(UDF_INIT *initid, UDF_ARGS *args, char *result,
+    unsigned long *length, char *is_null, char *error)
+{
+    TRACE();
+
+    agg_par_state *as = (agg_par_state *) initid->ptr;
+    assert(as->threads_inited);
+
+    // send signal to stop worker threads + join
+    mpz_t sum;
+    mpz_init_set_si(sum, 1);
+    for (size_t i = 0; i < as->ctxs.size(); i++) {
+      as->ctxs[i]->q.push(pair<void*, int>(NULL, -1));
+      pthread_join(as->thds[i], NULL);
+      mpz_mul(sum, sum, as->ctxs[i]->sum);
+      mpz_mod(sum, sum, as->mod);
+    }
+
+    // cleanup thread stuff
+    for (size_t i = 0; i < as->ctxs.size(); i++) {
+      delete as->ctxs[i];
+    }
+    as->thds.clear();
+    as->ctxs.clear();
+    as->threads_inited = false;
+
+    size_t count;
+    mpz_export(as->rbuf, &count, -1, CryptoManager::Paillier_len_bytes, -1, 0, sum);
+    assert(count == 1);
+    *length = CryptoManager::Paillier_len_bytes;
+    mpz_clear(sum);
+    return (char *) as->rbuf;
 }
 
 #else

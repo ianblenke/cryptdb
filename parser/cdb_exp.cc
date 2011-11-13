@@ -808,7 +808,7 @@ static void do_query_cryptdb_opt_all(Connect &conn,
     s << "SELECT SQL_NO_CACHE "
           << "l_returnflag_DET, l_returnflag_SALT, "
           << "l_linestatus_DET, l_linestatus_SALT, "
-          << "agg(l_bitpacked_AGG, " << pkinfo << "), "
+          << "agg_par(l_bitpacked_AGG, " << pkinfo << "), "
           << "count(*) "
       << "FROM lineitem_enc_opt_all "
       << "WHERE l_shipdate_year_OPE < " << y << " "
