@@ -33,8 +33,9 @@ using namespace tbb;
 
 #define LIKELY(pred)   __builtin_expect((pred), true)
 #define UNLIKELY(pred) __builtin_expect((pred), false)
-//#define TRACE() (cout << __func__ << endl)
+
 #define TRACE()
+#define SANITY(x) assert(x)
 
 extern "C" {
 #if MYSQL_S
@@ -722,6 +723,85 @@ agg_profile(UDF_INIT *initid, UDF_ARGS *args, char *result,
 
 // --------------------------------------------------
 
+struct memory_slab {
+public:
+  static const size_t NSlots = 32;
+  static const size_t SlabSize = 256 * NSlots;
+
+  memory_slab() : stream_end(false), is_raw(false), num_valid(0) {
+    memset(ptrs, 0, sizeof(ptrs));
+    memset(sizes, 0, sizeof(sizes));
+  }
+
+  bool stream_end;
+  bool is_raw;
+
+  uint8_t * ptrs[NSlots];
+  size_t sizes[NSlots];
+  size_t num_valid; // between 0-NSlots inclusive
+
+  inline bool needs_init() const { return ptrs[0] == NULL; }
+  inline void init() {
+    ptrs[0] = (uint8_t*) malloc(SlabSize);
+  }
+  inline uint8_t * init_raw(size_t bytes) {
+    ptrs[0] = (uint8_t*) malloc(bytes);
+    is_raw = true;
+    sizes[0] = bytes;
+    num_valid = 1;
+    return ptrs[0];
+  }
+
+  inline void free() {
+    ::free(ptrs[0]);
+  }
+
+  inline uint8_t * tail() {
+    SANITY(!is_raw);
+    SANITY(!needs_init());
+    if (num_valid == 0) return ptrs[0];
+    return ptrs[num_valid - 1] + sizes[num_valid - 1];
+  }
+
+  inline const uint8_t * const_tail() const {
+    SANITY(!is_raw);
+    SANITY(!needs_init());
+    if (num_valid == 0) return ptrs[0];
+    return ptrs[num_valid - 1] + sizes[num_valid - 1];
+  }
+
+  inline uint8_t * alloc(size_t bytes) {
+    SANITY(!is_raw);
+    SANITY(!needs_init());
+    SANITY(!slots_full());
+    SANITY(remaining() >= bytes);
+    uint8_t * end = tail();
+    num_valid++;
+    ptrs[num_valid - 1] = end;
+    sizes[num_valid - 1] = bytes;
+    return end;
+  }
+
+  inline bool slots_full() const {
+    SANITY(!is_raw);
+    return num_valid == NSlots;
+  }
+
+  inline size_t remaining() const {
+    SANITY(!is_raw);
+    if (num_valid == 0) return SlabSize;
+    SANITY(1 <= num_valid && num_valid <= NSlots);
+    const uint8_t * end = const_tail();
+    return SlabSize - (end - ptrs[0]);
+  }
+};
+
+static inline memory_slab mem_slab_end() {
+  memory_slab m;
+  m.stream_end = true;
+  return m;
+}
+
 struct agg_par_state;
 
 struct worker_ctx {
@@ -730,7 +810,7 @@ public:
   ~worker_ctx() { mpz_clear(sum); }
   agg_par_state *as;
   mpz_t sum;
-  concurrent_bounded_queue<pair<void*, int> > q;
+  concurrent_bounded_queue<memory_slab> q;
 };
 
 struct agg_par_state {
@@ -745,9 +825,14 @@ public:
   vector<pthread_t> thds;
   vector<worker_ctx*> ctxs;
 
+  memory_slab cur_slab;
   uint32_t ctr;
 
   void *rbuf;
+
+  inline worker_ctx* next_ctx() {
+    return ctxs[ctr++ % ctxs.size()];
+  }
 };
 
 static void *thd_main(void *ptr) {
@@ -756,24 +841,24 @@ static void *thd_main(void *ptr) {
   mpz_t p;
   mpz_init(p);
 
-  pair<void*, int> x;
+  memory_slab slab;
   while (true) {
-    ctx->q.pop(x);
-    if (x.second == -1) {
+    ctx->q.pop(slab);
+    if (slab.stream_end) {
       break;
     } else {
-      mpz_import(p, x.second, -1, sizeof(uint8_t), 0, 0, x.first);
-      mpz_mul(ctx->sum, ctx->sum, p);
-      mpz_mod(ctx->sum, ctx->sum, ctx->as->mod);
-      free(x.first);
+      for (size_t i = 0; i < slab.num_valid; i++) {
+        mpz_import(p, slab.sizes[i], -1, sizeof(uint8_t), 0, 0, slab.ptrs[i]);
+        mpz_mul(ctx->sum, ctx->sum, p);
+        mpz_mod(ctx->sum, ctx->sum, ctx->as->mod);
+      }
+      slab.free();
     }
   }
 
   mpz_clear(p);
   return NULL;
 }
-
-
 
 my_bool
 agg_par_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
@@ -801,7 +886,7 @@ agg_par_clear(UDF_INIT *initid, char *is_null, char *error)
 {
     TRACE();
     agg_par_state *as = (agg_par_state *) initid->ptr;
-    assert(!as->threads_inited);
+    SANITY(!as->threads_inited);
     as->ctr = 0;
 }
 
@@ -829,10 +914,32 @@ agg_par_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error)
       as->threads_inited = true;
     }
 
-    worker_ctx *ctx = as->ctxs[as->ctr++ % as->ctxs.size()];
-    void *buffer = malloc(args->lengths[0]);
-    memcpy(buffer, args->args[0], args->lengths[0]);
-    ctx->q.push(pair<void*, int>(buffer, args->lengths[0]));
+    size_t count = args->lengths[0];
+    const uint8_t *buffer = (const uint8_t*) args->args[0];
+    if (UNLIKELY(count > memory_slab::SlabSize)) {
+      // won't fit in entire slab
+      memory_slab special;
+      uint8_t *p = special.init_raw(count);
+      memcpy(p, buffer, count);
+      as->next_ctx()->q.push(special);
+    } else {
+      if (count > as->cur_slab.remaining() /* won't fit */ ||
+          as->cur_slab.slots_full() /* no more slots */) {
+        // need new mem slab
+        SANITY(!as->cur_slab.needs_init());
+        SANITY(as->cur_slab.remaining() != memory_slab::SlabSize);
+        as->next_ctx()->q.push(as->cur_slab);
+        as->cur_slab = memory_slab(); // reset
+      }
+
+      SANITY(count <= as->cur_slab.remaining() &&
+             !as->cur_slab.slots_full());
+
+      if (as->cur_slab.needs_init()) as->cur_slab.init();
+      uint8_t *p = as->cur_slab.alloc(count);
+      memcpy(p, buffer, count);
+    }
+
     return true;
 }
 
@@ -843,13 +950,20 @@ agg_par(UDF_INIT *initid, UDF_ARGS *args, char *result,
     TRACE();
 
     agg_par_state *as = (agg_par_state *) initid->ptr;
-    assert(as->threads_inited);
+    SANITY(as->threads_inited);
+
+    // send outstanding slab
+    if (as->cur_slab.num_valid > 0) {
+      SANITY(!as->cur_slab.needs_init());
+      as->next_ctx()->q.push(as->cur_slab);
+      as->cur_slab = memory_slab();
+    }
 
     // send signal to stop worker threads + join
     mpz_t sum;
     mpz_init_set_si(sum, 1);
     for (size_t i = 0; i < as->ctxs.size(); i++) {
-      as->ctxs[i]->q.push(pair<void*, int>(NULL, -1));
+      as->ctxs[i]->q.push(mem_slab_end());
       pthread_join(as->thds[i], NULL);
       mpz_mul(sum, sum, as->ctxs[i]->sum);
       mpz_mod(sum, sum, as->mod);
@@ -865,7 +979,7 @@ agg_par(UDF_INIT *initid, UDF_ARGS *args, char *result,
 
     size_t count;
     mpz_export(as->rbuf, &count, -1, CryptoManager::Paillier_len_bytes, -1, 0, sum);
-    assert(count == 1);
+    SANITY(count == 1);
     *length = CryptoManager::Paillier_len_bytes;
     mpz_clear(sum);
     return (char *) as->rbuf;
