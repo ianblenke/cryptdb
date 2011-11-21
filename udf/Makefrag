@@ -2,6 +2,10 @@ OBJDIRS	+= udf
 
 all:    $(OBJDIR)/udf/edb.so
 
+$(OBJDIR)/udf/edb.o: udf/edb.cc
+	@mkdir -p $(@D)
+	$(CXX) -MD $(CXXFLAGS) -c $< -o $@
+
 $(OBJDIR)/udf/edb.so: $(OBJDIR)/udf/edb.o \
 		      $(OBJDIR)/libedbcrypto.so \
 		      $(OBJDIR)/libedbutil.so 

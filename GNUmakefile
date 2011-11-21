@@ -19,6 +19,7 @@ CXXFLAGS += -I$(MYBUILD)/include \
 	    -I$(MYBUILD)/sql \
 	    -DHAVE_CONFIG_H -DMYSQL_SERVER -DEMBEDDED_LIBRARY -DDBUG_OFF \
 	    -DMYSQL_BUILD_DIR=\"$(MYBUILD)\"
+CXXFLAGS_NORTTI := $(CXXFLAGS) -fno-rtti
 LDFLAGS	 += -lpthread -lrt -ldl -lcrypt -lreadline
 
 ## To be populated by Makefrag files
@@ -45,7 +46,7 @@ clean:
 
 $(OBJDIR)/%.o: %.cc
 	@mkdir -p $(@D)
-	$(CXX) -MD $(CXXFLAGS) -c $< -o $@
+	$(CXX) -MD $(CXXFLAGS_NORTTI) -c $< -o $@
 
 include crypto/Makefrag
 include crypto-old/Makefrag
