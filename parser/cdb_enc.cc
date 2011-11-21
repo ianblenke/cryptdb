@@ -187,7 +187,11 @@ static void do_encrypt(size_t i,
             }
 
             // salt
-            if (DoAny(onions)) enccols.push_back(to_s(12345));
+            if (DoAny(onions)) {
+                enccols.push_back(to_s(12345));
+            } else {
+                if (usenull) enccols.push_back("NULL");
+            }
         }
         break;
     case DT_FLOAT:
@@ -200,8 +204,8 @@ static void do_encrypt(size_t i,
         break;
     case DT_CHAR:
         {
-          unsigned int c = plaintext[0];
-          do_encrypt(i, DT_INTEGER, onions, to_s(c), enccols, cm, usenull);
+            unsigned int c = plaintext[0];
+            do_encrypt(i, DT_INTEGER, onions, to_s(c), enccols, cm, usenull);
         }
         break;
     case DT_STRING:
@@ -230,7 +234,11 @@ static void do_encrypt(size_t i,
             }
 
             // salt
-            if (DoAny(onions)) enccols.push_back(to_s(12345));
+            if (DoAny(onions)) {
+                enccols.push_back(to_s(12345));
+            } else {
+                if (usenull) enccols.push_back("NULL");
+            }
         }
         break;
     case DT_DATE:
@@ -280,7 +288,11 @@ static void do_encrypt(size_t i,
 #undef __IMPL_FIELD_ENC
 
             // salt
-            if (DoAny(onions)) enccols.push_back(to_s(12345));
+            if (DoAny(onions)) {
+                enccols.push_back(to_s(12345));
+            } else {
+                if (usenull) enccols.push_back("NULL");
+            }
         }
         break;
     }
@@ -631,8 +643,8 @@ vector<datatypes> partsupp_encryptor::PartSuppSchema = {
 vector<int> partsupp_encryptor::PartSuppOnions = {
   ONION_DETJOIN,
   ONION_DETJOIN,
-  0,
-  0,
+  ONION_DET,
+  ONION_DET,
   0,
 };
 
