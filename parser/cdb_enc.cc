@@ -219,7 +219,7 @@ static void do_encrypt(size_t i,
                                          fieldname(i, "DET"),
                                          getMin(oDET), max, isBin, 12345);
                 assert((encDET.size() % 16) == 0);
-                enccols.push_back(to_mysql_hex(encDET));
+                enccols.push_back(to_mysql_escape_varbin(encDET, '\\', '|', '\n'));
             } else {
                 if (usenull) enccols.push_back("NULL");
             }
