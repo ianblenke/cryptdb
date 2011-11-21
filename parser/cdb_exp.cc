@@ -1137,7 +1137,6 @@ static void do_query_q11_noopt(Connect &conn,
         << "ps_suppkey_DET = s_suppkey_DET AND "
         << "s_nationkey_DET = n_nationkey_DET AND "
         << "n_name_DET = " << marshallBinary(encNAME);
-    cerr << s.str() << endl;
 
     DBResult * dbres;
     {
@@ -1266,11 +1265,11 @@ static void do_query_q11_opt(Connect &conn,
     s << "SELECT SQL_NO_CACHE "
         << "ps_partkey_DET, ps_partkey_SALT, "
         << "agg(ps_value_AGG, " << pkinfo << ") "
-      << "FROM partsupp_enc_opt, supplier_enc_opt, nation_enc_opt "
+      << "FROM partsupp_enc_opt, supplier_enc, nation_enc "
       << "WHERE "
         << "ps_suppkey_DET = s_suppkey_DET AND "
         << "s_nationkey_DET = n_nationkey_DET AND "
-        << "n_name_DET = " << valFromStr(encNAME) << " "
+        << "n_name_DET = " << marshallBinary(encNAME) << " "
       << "GROUP BY ps_partkey_DET";
 
     DBResult * dbres;
@@ -1341,6 +1340,8 @@ static void usage(char **argv) {
          << endl;
 }
 
+static const bool PrintResults = false;
+
 int main(int argc, char **argv) {
     srand(time(NULL));
     if (argc != 4 && argc != 5) {
@@ -1377,6 +1378,17 @@ int main(int argc, char **argv) {
     unsigned long ctr = 0;
     CryptoManager cm("12345");
 
+
+#define PRINT_RESULTS() \
+    do { \
+        if (PrintResults) { \
+            for (auto r : results) { \
+                cout << r << endl; \
+            } \
+            cout << "------" << endl; \
+        } \
+    } while (0)
+
     if (query1) {
       int input_year = atoi(argv[2]);
 			if (input_year < 0 || input_nruns < 0) {
@@ -1390,10 +1402,7 @@ int main(int argc, char **argv) {
           for (size_t i = 0; i < nruns; i++) {
               do_query_orig(conn, year, results);
               ctr += results.size();
-              //for (auto r : results) {
-              //    cout << r << endl;
-              //}
-              //cout << "------" << endl;
+              PRINT_RESULTS();
               results.clear();
           }
       } else {
@@ -1402,60 +1411,42 @@ int main(int argc, char **argv) {
               for (size_t i = 0; i < nruns; i++) {
                   do_query_cryptdb(conn, cm, year, results);
                   ctr += results.size();
-                  //for (auto r : results) {
-                  //    cout << r << endl;
-                  //}
-                  //cout << "------" << endl;
+                  PRINT_RESULTS();
                   results.clear();
               }
           } else if (!strcmp(argv[1], "--crypt-opt")) {
               for (size_t i = 0; i < nruns; i++) {
                   do_query_cryptdb_opt(conn, cm, year, results);
                   ctr += results.size();
-                  //for (auto r : results) {
-                  //    cout << r << endl;
-                  //}
-                  //cout << "------" << endl;
+                  PRINT_RESULTS();
                   results.clear();
               }
           } else if (!strcmp(argv[1], "--crypt-opt-compact-sort-key")) {
               for (size_t i = 0; i < nruns; i++) {
                   do_query_cryptdb_opt_compact_sort_key(conn, cm, year, results);
                   ctr += results.size();
-                  //for (auto r : results) {
-                  //    cout << r << endl;
-                  //}
-                  //cout << "------" << endl;
+                  PRINT_RESULTS();
                   results.clear();
               }
           } else if (!strcmp(argv[1], "--crypt-opt-compact-table")) {
               for (size_t i = 0; i < nruns; i++) {
                   do_query_cryptdb_opt_compact_table(conn, cm, year, results);
                   ctr += results.size();
-                  //for (auto r : results) {
-                  //    cout << r << endl;
-                  //}
-                  //cout << "------" << endl;
+                  PRINT_RESULTS();
                   results.clear();
               }
           } else if (!strcmp(argv[1], "--crypt-opt-all")) {
               for (size_t i = 0; i < nruns; i++) {
                   do_query_cryptdb_opt_all(conn, cm, year, results);
                   ctr += results.size();
-                  //for (auto r : results) {
-                  //    cout << r << endl;
-                  //}
-                  //cout << "------" << endl;
+                  PRINT_RESULTS();
                   results.clear();
               }
           } else if (!strcmp(argv[1], "--crypt-sum")) {
               for (size_t i = 0; i < nruns; i++) {
                   do_query_cryptdb_sum(conn, cm, year, results);
                   ctr += results.size();
-                  //for (auto r : results) {
-                  //    cout << r << endl;
-                  //}
-                  //cout << "------" << endl;
+                  PRINT_RESULTS();
                   results.clear();
               }
           } else assert(false);
@@ -1472,30 +1463,21 @@ int main(int argc, char **argv) {
         for (size_t i = 0; i < nruns; i++) {
 					do_query_q11(conn, nation, fraction, results);
           ctr += results.size();
-          for (auto r : results) {
-              cout << r << endl;
-          }
-          cout << "------" << endl;
+          PRINT_RESULTS();
           results.clear();
         }
       } else if (!strcmp(argv[1], "--crypt-query11")) {
         for (size_t i = 0; i < nruns; i++) {
           do_query_q11_noopt(conn, cm, nation, fraction, results);
           ctr += results.size();
-          for (auto r : results) {
-              cout << r << endl;
-          }
-          cout << "------" << endl;
+          PRINT_RESULTS();
           results.clear();
         }
       } else if (!strcmp(argv[1], "--crypt-opt-query11")) {
         for (size_t i = 0; i < nruns; i++) {
           do_query_q11_opt(conn, cm, nation, fraction, results);
           ctr += results.size();
-          for (auto r : results) {
-              cout << r << endl;
-          }
-          cout << "------" << endl;
+          PRINT_RESULTS();
           results.clear();
         }
 			} else assert(false);

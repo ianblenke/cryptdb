@@ -611,7 +611,7 @@ protected:
     double ps_availqty   = resultFromStr<double>(tokens[partsupp::ps_availqty]);
     double ps_value      = ps_supplycost * ps_availqty;
     long   ps_value_int  = roundToLong(ps_value * 100.0);
-    do_encrypt(schema.size(), DT_INTEGER, ONION_AGG,
+    do_encrypt(schema.size(), DT_INTEGER, ONION_AGG | ONION_OPE,
                to_s(ps_value_int), enccols, cm, usenull);
   }
 
