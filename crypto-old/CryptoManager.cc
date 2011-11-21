@@ -1110,9 +1110,18 @@ CryptoManager::setMasterKey(const string &masterKeyArg)
 
 AES_KEY * CryptoManager::getKey(const string & key) {
     AES_KEY * resKey = new AES_KEY();
+    string mkey = key;
+
+    // PAD KEY to be AES_KEY_SIZE bits long
+    if (mkey.size() < AES_KEY_BYTES) {
+      char buf[AES_KEY_BYTES];
+      memset(buf, 0, sizeof(buf));
+      memcpy(buf, mkey.data(), mkey.size());
+      mkey = string(buf, sizeof(buf));
+    }
 
     AES_set_encrypt_key(
-            (const uint8_t *) key.c_str(), AES_KEY_SIZE, resKey);
+            (const uint8_t *) mkey.data(), AES_KEY_SIZE, resKey);
 
     return resKey;
 
