@@ -24,6 +24,6 @@ create table partsupp_enc (
   `ps_comment_OPE` bigint(20) unsigned DEFAULT NULL,
   `ps_comment_SALT` bigint(20) unsigned DEFAULT NULL,
 
-  INDEX (ps_partkey_DET, ps_suppkey_DET)
+  PRIMARY KEY (ps_partkey_DET, ps_suppkey_DET)
 
 ) Engine=InnoDB;

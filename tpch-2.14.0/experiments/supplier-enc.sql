@@ -31,6 +31,6 @@ create table supplier_enc (
   `s_comment_OPE` bigint(20) unsigned DEFAULT NULL,
   `s_comment_SALT` bigint(20) unsigned DEFAULT NULL,
 
-  INDEX (s_suppkey_DET)
+  PRIMARY KEY (s_suppkey_DET)
 
 ) Engine=InnoDB;

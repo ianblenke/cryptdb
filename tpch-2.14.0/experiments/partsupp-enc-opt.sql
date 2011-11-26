@@ -29,6 +29,6 @@ create table partsupp_enc_opt (
   `ps_value_AGG` varbinary(256) DEFAULT NULL,
   `ps_value_SALT` bigint(20) unsigned DEFAULT NULL,
 
-  INDEX (ps_partkey_DET, ps_suppkey_DET)
+  PRIMARY KEY (ps_partkey_DET, ps_suppkey_DET)
 
 ) Engine=InnoDB;

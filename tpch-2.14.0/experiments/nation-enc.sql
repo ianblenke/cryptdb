@@ -18,6 +18,6 @@ create table nation_enc (
   `n_comment_OPE` bigint(20) unsigned DEFAULT NULL,
   `n_comment_SALT` bigint(20) unsigned DEFAULT NULL,
 
-  INDEX (n_nationkey_DET)
+  PRIMARY KEY (n_nationkey_DET)
 
 ) Engine=InnoDB;
