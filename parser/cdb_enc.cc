@@ -10,9 +10,11 @@
 #include <set>
 #include <list>
 #include <algorithm>
+#include <type_traits>
 
 #include <unistd.h>
 #include <parser/cdb_rewrite.hh>
+#include <parser/encdata.hh>
 
 using namespace std;
 using namespace NTL;
@@ -137,12 +139,29 @@ static inline string to_mysql_escape_varbin(
     return s.str();
 }
 
-/** assumes slot currently un-occupied */
-static void insert_into_slot(ZZ &z, uint64_t value, size_t slot) {
-  static const size_t wordbits = sizeof(uint64_t) * 8;
-  static const size_t slotbits = wordbits * 2;
-  z |= (to_ZZ(value) << (slotbits * slot));
-}
+template <typename T, size_t WordsPerSlot>
+struct PallierSlotManager {
+  static const size_t WordBits = sizeof(T) * 8;
+  static const size_t SlotBits = WordBits * WordsPerSlot;
+  static const size_t TotalBits = CryptoManager::Paillier_len_bits / 2;
+  static const size_t NumSlots = TotalBits / SlotBits;
+  static const typename make_unsigned<T>::type Mask = -1;
+  static ZZ ZZMask;
+
+  /** assumes slot currently un-occupied */
+  static void insert_into_slot(ZZ &z, T value, size_t slot) {
+    assert(slot < NumSlots);
+    z |= (to_ZZ(value) << (SlotBits * slot));
+  }
+
+  static T extract_from_slot(const ZZ &z, size_t slot) {
+    assert(slot < NumSlots);
+    return (T) to_long((z >> (SlotBits * slot)) & ZZMask);
+  }
+};
+
+template <typename T, size_t WordsPerSlot>
+ZZ PallierSlotManager<T, WordsPerSlot>::ZZMask = to_ZZ(Mask);
 
 static void do_encrypt(size_t i,
                        datatypes dt,
@@ -305,31 +324,57 @@ protected:
 public:
   table_encryptor(const vector<datatypes> &schema,
                   const vector<int>       &onions,
-                  bool                     usenull)
-    : schema(schema), onions(onions), usenull(usenull) {
+                  bool                     usenull,
+                  bool                     processrow)
+    : schema(schema), onions(onions),
+      usenull(usenull), processrow(processrow) {
     assert(schema.size() == onions.size());
   }
 
-  void encrypt(const vector<string> &tokens,
-               vector<string>       &enccols,
-               CryptoManager        &cm) {
+  ~table_encryptor() {}
+
+  inline bool shouldProcessRow() const { return processrow; }
+
+  virtual
+  void encryptRow(const vector<string> &tokens,
+                  vector<string>       &enccols,
+                  CryptoManager        &cm) {
     assert(tokens.size() >= schema.size());
     for (size_t i = 0; i < schema.size(); i++) {
       do_encrypt(i, schema[i], onions[i], tokens[i], enccols, cm, usenull);
     }
-    postprocess(tokens, enccols, cm);
+    postprocessRow(tokens, enccols, cm);
+  }
+
+  virtual
+  void encryptBatch(const vector<vector<string> > &tokens,
+                    vector<vector<string> >       &enccols,
+                    CryptoManager &cm) {
+    for (size_t i = 0; i < tokens.size(); i++) {
+      const vector<string> &v = tokens[i];
+      vector<string> e;
+      encryptRow(v, e, cm);
+      enccols.push_back(e);
+    }
+    postprocessBatch(tokens, enccols, cm);
   }
 
 protected:
 
   virtual
-  void postprocess(const vector<string> &tokens,
-                   vector<string>       &enccols,
-                   CryptoManager        &cm) {}
+  void postprocessRow(const vector<string> &tokens,
+                      vector<string>       &enccols,
+                      CryptoManager        &cm) {}
+
+  virtual
+  void postprocessBatch(const vector<vector<string> > &tokens,
+                        vector<vector<string> >       &enccols,
+                        CryptoManager &cm) {}
 
   vector<datatypes> schema;
   vector<int>       onions;
   bool              usenull;
+  bool              processrow;
 };
 
 //----------------------------------------------------------------------------
@@ -379,6 +424,7 @@ public:
 
     schema = Schema;
     usenull = true;
+    processrow = true;
     switch (tpe) {
       case none:
         onions = NoneOnions;
@@ -423,9 +469,9 @@ protected:
   }
 
   virtual
-  void postprocess(const vector<string> &tokens,
-                   vector<string>       &enccols,
-                   CryptoManager        &cm) {
+  void postprocessRow(const vector<string> &tokens,
+                      vector<string>       &enccols,
+                      CryptoManager        &cm) {
 
     switch (tpe) {
       case opt_type::normal:
@@ -438,35 +484,36 @@ protected:
           precomputeExprs(tokens, enccols, cm);
 
           ZZ z;
+          typedef PallierSlotManager<uint64_t, 2> PSM;
 
           // l_quantity_AGG
           long l_quantity_int = roundToLong(resultFromStr<double>(tokens[lineitem::l_quantity]) * 100.0);
-          insert_into_slot(z, l_quantity_int, 0);
+          PSM::insert_into_slot(z, l_quantity_int, 0);
 
           // l_extendedprice_AGG
           long l_extendedprice_int = roundToLong(resultFromStr<double>(tokens[lineitem::l_extendedprice]) * 100.0);
-          insert_into_slot(z, l_extendedprice_int, 1);
+          PSM::insert_into_slot(z, l_extendedprice_int, 1);
 
           // l_discount_AGG
           long l_discount_int = roundToLong(resultFromStr<double>(tokens[lineitem::l_discount]) * 100.0);
-          insert_into_slot(z, l_discount_int, 2);
+          PSM::insert_into_slot(z, l_discount_int, 2);
 
           // l_tax_AGG
           long l_tax_int = roundToLong(resultFromStr<double>(tokens[lineitem::l_tax]) * 100.0);
-          insert_into_slot(z, l_tax_int, 3);
+          PSM::insert_into_slot(z, l_tax_int, 3);
 
           // l_disc_price = l_extendedprice * (1 - l_discount)
           double l_extendedprice  = resultFromStr<double>(tokens[lineitem::l_extendedprice]);
           double l_discount       = resultFromStr<double>(tokens[lineitem::l_discount]);
           double l_disc_price     = l_extendedprice * (1.0 - l_discount);
           long   l_disc_price_int = roundToLong(l_disc_price * 100.0);
-          insert_into_slot(z, l_disc_price_int, 4);
+          PSM::insert_into_slot(z, l_disc_price_int, 4);
 
           // l_charge = l_extendedprice * (1 - l_discount) * (1 + l_tax)
           double l_tax        = resultFromStr<double>(tokens[lineitem::l_tax]);
           double l_charge     = l_extendedprice * (1.0 - l_discount) * (1.0 + l_tax);
           long   l_charge_int = roundToLong(l_charge * 100.0);
-          insert_into_slot(z, l_charge_int, 5);
+          PSM::insert_into_slot(z, l_charge_int, 5);
 
           string enc = cm.encrypt_Paillier(z);
           enccols.push_back(to_mysql_escape_varbin(enc, '\\', '|', '\n'));
@@ -593,32 +640,105 @@ public:
   enum opt_type {
       none,
       normal,
+      projection,
   };
 
   static vector<datatypes> PartSuppSchema;
   static vector<int> PartSuppOnions;
+  static vector<int> PartSuppProjOnions;
 
   partsupp_encryptor(enum opt_type tpe)
-    : table_encryptor(PartSuppSchema, PartSuppOnions, true), tpe(tpe) {}
+    : table_encryptor(), tpe(tpe) {
+
+    schema = PartSuppSchema;
+    switch (tpe) {
+      case none:
+      case normal:
+        onions = PartSuppOnions;
+        usenull = true;
+        processrow = true;
+        break;
+      case projection:
+        onions = PartSuppProjOnions;
+        usenull = false;
+        processrow = false;
+        break;
+      default:
+        assert(false);
+        break;
+    }
+  }
+
+  static std::set<uint32_t> IraqNationKeySet;
+
+  struct remover {
+    inline bool operator()(const vector<string> &v) const {
+      uint32_t suppkey = resultFromStr<uint32_t>(v[partsupp::ps_suppkey]);
+      return IraqNationKeySet.find(suppkey) == IraqNationKeySet.end();
+    }
+  };
+
+  virtual
+  void encryptBatch(const vector<vector<string> > &tokens,
+                    vector<vector<string> >       &enccols,
+                    CryptoManager &cm) {
+    typedef PallierSlotManager<uint32_t, 2> PSM;
+    assert(tpe == projection);
+    assert(!IraqNationKeySet.empty());
+
+    vector<vector<string> > filtered(tokens);
+    filtered.erase(
+        remove_if(filtered.begin(), filtered.end(), remover()),
+        filtered.end());
+
+    size_t nbatches = filtered.size() / PSM::NumSlots +
+                      ((filtered.size() % PSM::NumSlots) ? 1 : 0);
+
+    for (size_t i = 0; i < nbatches; i++) {
+      ZZ z;
+      size_t remaining = filtered.size() - i * PSM::NumSlots;
+      assert(remaining > 0);
+      size_t limit = min(remaining, PSM::NumSlots);
+      for (size_t j = 0; j < limit; j++) {
+        size_t idx = i * PSM::NumSlots + j;
+        assert(idx < filtered.size());
+        const vector<string> &v = filtered[idx];
+        uint32_t ps_value_int = (uint32_t) psValueFromRow(v);
+        PSM::insert_into_slot(z, ps_value_int, j);
+        //assert(ps_value_int == PSM::extract_from_slot(z, j));
+      }
+      string enc = cm.encrypt_Paillier(z);
+      vector<string> e;
+      do_encrypt(0, DT_INTEGER, ONION_DETJOIN,
+                 to_s(IraqNationKey), e, cm, false);
+      e.push_back(to_mysql_escape_varbin(enc, '\\', '|', '\n'));
+      enccols.push_back(e);
+    }
+  }
 
 protected:
 
-  void precomputeExprs(const vector<string> &tokens,
-                       vector<string>       &enccols,
-                       CryptoManager        &cm) {
+  long psValueFromRow(const vector<string> &tokens) {
     // ps_value = ps_supplycost * ps_availqty
     double ps_supplycost = resultFromStr<double>(tokens[partsupp::ps_supplycost]);
     double ps_availqty   = resultFromStr<double>(tokens[partsupp::ps_availqty]);
     double ps_value      = ps_supplycost * ps_availqty;
     long   ps_value_int  = roundToLong(ps_value * 100.0);
-    do_encrypt(schema.size(), DT_INTEGER, ONION_AGG | ONION_OPE,
+    return ps_value_int;
+  }
+
+  void precomputeExprs(const vector<string> &tokens,
+                       vector<string>       &enccols,
+                       CryptoManager        &cm) {
+    long ps_value_int = psValueFromRow(tokens);
+    do_encrypt(schema.size(), DT_INTEGER, (ONION_DET | ONION_AGG | ONION_OPE),
                to_s(ps_value_int), enccols, cm, usenull);
   }
 
   virtual
-  void postprocess(const vector<string> &tokens,
-                   vector<string>       &enccols,
-                   CryptoManager        &cm) {
+  void postprocessRow(const vector<string> &tokens,
+                      vector<string>       &enccols,
+                      CryptoManager        &cm) {
     switch (tpe) {
       case opt_type::normal:
         precomputeExprs(tokens, enccols, cm);
@@ -631,6 +751,11 @@ private:
   enum opt_type tpe;
 
 };
+
+#define NELEMS(array) (sizeof(array) / sizeof(array[0]))
+
+std::set<uint32_t> partsupp_encryptor::IraqNationKeySet
+  (IraqNationSuppKeys, IraqNationSuppKeys + NELEMS(IraqNationSuppKeys));
 
 vector<datatypes> partsupp_encryptor::PartSuppSchema = {
   DT_INTEGER,
@@ -645,6 +770,14 @@ vector<int> partsupp_encryptor::PartSuppOnions = {
   ONION_DETJOIN,
   ONION_DET,
   ONION_DET,
+  0,
+};
+
+vector<int> partsupp_encryptor::PartSuppProjOnions = {
+  0,
+  0,
+  0,
+  0,
   0,
 };
 
@@ -716,10 +849,11 @@ static map<string, table_encryptor *> EncryptorMap = {
 
   {"partsupp-none", new partsupp_encryptor(partsupp_encryptor::none)},
   {"partsupp-normal", new partsupp_encryptor(partsupp_encryptor::normal)},
+  {"partsupp-projection", new partsupp_encryptor(partsupp_encryptor::projection)},
 
-  {"supplier-none", new table_encryptor(SupplierSchema, SupplierOnions, true)},
+  {"supplier-none", new table_encryptor(SupplierSchema, SupplierOnions, true, true)},
 
-  {"nation-none", new table_encryptor(NationSchema, NationOnions, true)},
+  {"nation-none", new table_encryptor(NationSchema, NationOnions, true, true)},
 };
 
 
@@ -728,8 +862,29 @@ static inline string process_input(const string &s, CryptoManager &cm, table_enc
   vector<string> tokens;
   tokenize(s, "|", tokens);
   vector<string> columns;
-  tenc->encrypt(tokens, columns, cm);
+  tenc->encryptRow(tokens, columns, cm);
   return join(columns, "|");
+}
+
+static inline void process_batch(const vector<string> &lines,
+                                 CryptoManager &cm,
+                                 table_encryptor *tenc) {
+  vector<vector<string> > tokens;
+  for (auto it = lines.begin();
+       it != lines.end();
+       ++it) {
+    vector<string> t;
+    tokenize(*it, "|", t);
+    tokens.push_back(t);
+  }
+  vector<vector<string> > rows;
+  tenc->encryptBatch(tokens, rows, cm);
+  for (auto it = rows.begin();
+       it != rows.end();
+       ++it) {
+    vector<string> &v = *it;
+    cout << join(v, "|") << endl;
+  }
 }
 
 template <typename A, typename B>
@@ -775,17 +930,25 @@ int main(int argc, char **argv) {
     assert(tenc != NULL);
 
     CryptoManager cm("12345");
+    vector<string> lines;
     for (;;) {
         string s;
         getline(cin, s);
         if (!cin.good())
             break;
-        try {
-            cout << process_input(s, cm, tenc) << endl;
-        } catch (...) {
-            cerr << "Input line failed:" << endl
-                 << "  " << s << endl;
+        if (tenc->shouldProcessRow()) {
+          try {
+              cout << process_input(s, cm, tenc) << endl;
+          } catch (...) {
+              cerr << "Input line failed:" << endl
+                   << "  " << s << endl;
+          }
+        } else {
+          lines.push_back(s);
         }
+    }
+    if (!tenc->shouldProcessRow()) {
+      process_batch(lines, cm, tenc);
     }
     return 0;
 }
