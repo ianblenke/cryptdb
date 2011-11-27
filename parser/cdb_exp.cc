@@ -434,7 +434,7 @@ static void do_query_cryptdb_opt(Connect &conn,
       for (auto row : res.rows) {
           // l_returnflag
           string l_returnflag = decryptRow<string>(
-                  mysqlHexToBinaryData(row[0].data),
+                  (row[0].data),
                   valFromStr(row[1].data),
                   fieldname(lineitem::l_returnflag, "DET"),
                   TYPE_TEXT,
@@ -443,7 +443,7 @@ static void do_query_cryptdb_opt(Connect &conn,
 
           // l_linestatus
           string l_linestatus = decryptRow<string>(
-                  mysqlHexToBinaryData(row[2].data),
+                  (row[2].data),
                   valFromStr(row[3].data),
                   fieldname(lineitem::l_linestatus, "DET"),
                   TYPE_TEXT,
@@ -728,25 +728,24 @@ static void do_query_cryptdb_opt_compact_table(Connect &conn,
     {
       NamedTimer t(__func__, "decrypt");
       for (auto row : res.rows) {
+          // NO sort-key optimization
           // l_returnflag
-          unsigned char l_returnflag_ch = (unsigned char) decryptRow<uint32_t>(
-                  row[0].data,
+          string l_returnflag = decryptRow<string>(
+                  (row[0].data),
                   valFromStr(row[1].data),
                   fieldname(lineitem::l_returnflag, "DET"),
-                  TYPE_INTEGER,
+                  TYPE_TEXT,
                   oDET,
                   cm);
-          string l_returnflag(1, l_returnflag_ch);
 
           // l_linestatus
-          unsigned char l_linestatus_ch = (unsigned char) decryptRow<uint32_t>(
-                  row[2].data,
+          string l_linestatus = decryptRow<string>(
+                  (row[2].data),
                   valFromStr(row[3].data),
                   fieldname(lineitem::l_linestatus, "DET"),
-                  TYPE_INTEGER,
+                  TYPE_TEXT,
                   oDET,
                   cm);
-          string l_linestatus(1, l_linestatus_ch);
 
           // sum_qty
           uint64_t sum_qty_int = decryptRow<uint64_t>(
@@ -1354,6 +1353,7 @@ static void do_query_q11_opt_proj(Connect &conn,
           << "n_name_DET = " << marshallBinary(encNAME) << " "
         << "GROUP BY ps_partkey_DET"
       << ") AS __ANON__ WHERE filter = 1";
+    //cerr << s1.str() << endl;
 
     {
       NamedTimer t(__func__, "execute_groups");
@@ -1590,7 +1590,7 @@ static void usage(char **argv) {
          << endl;
 }
 
-static const bool PrintResults = false;
+static const bool PrintResults = true;
 
 int main(int argc, char **argv) {
     srand(time(NULL));
