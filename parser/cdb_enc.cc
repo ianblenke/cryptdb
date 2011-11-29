@@ -481,8 +481,6 @@ protected:
         break;
       case opt_type::all:
         {
-          precomputeExprs(tokens, enccols, cm);
-
           ZZ z;
           typedef PallierSlotManager<uint64_t, 2> PSM;
 
