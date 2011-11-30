@@ -15,6 +15,7 @@
 #include <unistd.h>
 #include <parser/cdb_rewrite.hh>
 #include <parser/encdata.hh>
+#include <util/cryptdb_log.hh>
 
 using namespace std;
 using namespace NTL;
@@ -115,14 +116,16 @@ enum onion_bitmask {
     ONION_DETJOIN = 0x1 << 1,
     ONION_OPE     = 0x1 << 2,
     ONION_AGG     = 0x1 << 3,
+    ONION_SEARCH  = 0x1 << 4,
 };
 
 static const int DET_BITMASK = ONION_DET | ONION_DETJOIN;
 
-static inline bool DoDET(int m) { return m & DET_BITMASK; }
-static inline bool DoOPE(int m) { return m & ONION_OPE; }
-static inline bool DoAGG(int m) { return m & ONION_AGG; }
-static inline bool DoAny(int m) { return DoDET(m) || DoOPE(m) || DoAGG(m); }
+static inline bool DoDET(int m)    { return m & DET_BITMASK; }
+static inline bool DoOPE(int m)    { return m & ONION_OPE; }
+static inline bool DoAGG(int m)    { return m & ONION_AGG; }
+static inline bool DoSEARCH(int m) { return m & ONION_SEARCH; }
+static inline bool DoAny(int m)    { return DoDET(m) || DoOPE(m) || DoAGG(m) || DoSEARCH(m); }
 
 static inline bool OnlyOneBit(int m) { return m && !(m & (m-1)); }
 
@@ -229,7 +232,7 @@ static void do_encrypt(size_t i,
         break;
     case DT_STRING:
         {
-            // DET, OPE, SALT
+            // DET, OPE, SWP, SALT
             bool isBin;
             if (DoDET(onions)) {
                 assert(OnlyOneBit(onions & DET_BITMASK));
@@ -250,6 +253,15 @@ static void do_encrypt(size_t i,
                 enccols.push_back(to_s(valFromStr(encOPE)));
             } else {
                 if (usenull) enccols.push_back("NULL");
+            }
+
+            if (DoSEARCH(onions)) {
+                string encSWP = cm.crypt(cm.getmkey(), plaintext, TYPE_TEXT,
+                                         fieldname(i, "SWP"),
+                                         getMin(oSWP), SECLEVEL::SWP, isBin, 12345);
+                enccols.push_back(to_mysql_escape_varbin(encSWP, '\\', '|', '\n'));
+            } else {
+              /* Don't put a NULL here for now */
             }
 
             // salt
@@ -767,7 +779,7 @@ vector<int> partsupp_encryptor::PartSuppOnions = {
   ONION_DETJOIN,
   ONION_DETJOIN,
   ONION_DET,
-  ONION_DET,
+  ONION_DET | ONION_OPE,
   0,
 };
 
@@ -804,11 +816,11 @@ static const vector<datatypes> SupplierSchema = {
 
 static const vector<int> SupplierOnions = {
   ONION_DETJOIN,
-  0,
+  ONION_DET | ONION_OPE,
   0,
   ONION_DETJOIN,
   0,
-  0,
+  ONION_DET | ONION_OPE,
   0,
 };
 
@@ -831,9 +843,69 @@ static const vector<datatypes> NationSchema = {
 
 static const vector<int> NationOnions = {
   ONION_DETJOIN,
-  ONION_DET,
+  ONION_DET | ONION_OPE,
   ONION_DETJOIN,
   0,
+};
+
+//----------------------------------------------------------------------------
+// part
+
+enum part {
+  p_partkey     ,
+  p_name        ,
+  p_mfgr        ,
+  p_brand       ,
+  p_type        ,
+  p_size        ,
+  p_container   ,
+  p_retailprice ,
+  p_comment     ,
+};
+
+static const vector<datatypes> PartSchema = {
+  DT_INTEGER,
+  DT_STRING,
+  DT_STRING,
+  DT_STRING,
+  DT_STRING,
+  DT_INTEGER,
+  DT_STRING,
+  DT_FLOAT,
+  DT_STRING,
+};
+
+static const vector<int> PartOnions = {
+  ONION_DETJOIN | ONION_OPE,
+  0,
+  ONION_DET,
+  0,
+  ONION_DET | ONION_SEARCH,
+  ONION_DET,
+  0,
+  0,
+  0,
+};
+
+//----------------------------------------------------------------------------
+// region
+
+enum region {
+  r_regionkey,
+  r_name,
+  r_comment,
+};
+
+static const vector<datatypes> RegionSchema = {
+  DT_INTEGER,
+  DT_STRING,
+  DT_STRING,
+};
+
+static const vector<int> RegionOnions = {
+  ONION_DETJOIN,
+  ONION_DET,
+  ONION_DET,
 };
 
 //----------------------------------------------------------------------------
@@ -852,6 +924,10 @@ static map<string, table_encryptor *> EncryptorMap = {
   {"supplier-none", new table_encryptor(SupplierSchema, SupplierOnions, true, true)},
 
   {"nation-none", new table_encryptor(NationSchema, NationOnions, true, true)},
+
+  {"part-none", new table_encryptor(PartSchema, PartOnions, true, true)},
+
+  {"region-none", new table_encryptor(RegionSchema, RegionOnions, true, true)},
 };
 
 
@@ -926,6 +1002,8 @@ int main(int argc, char **argv) {
     string key = string(argv[1]).substr(2);
     table_encryptor *tenc = EncryptorMap[key];
     assert(tenc != NULL);
+
+    //cryptdb_logger::enable(log_name_to_group["crypto"]);
 
     CryptoManager cm("12345");
     vector<string> lines;

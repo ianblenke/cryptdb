@@ -208,6 +208,24 @@ enum partsupp {
   ps_value,
 };
 
+enum part {
+  p_partkey     ,
+  p_name        ,
+  p_mfgr        ,
+  p_brand       ,
+  p_type        ,
+  p_size        ,
+  p_container   ,
+  p_retailprice ,
+  p_comment     ,
+};
+
+enum region {
+  r_regionkey,
+  r_name,
+  r_comment,
+};
+
 struct q1entry {
     q1entry(string l_returnflag,
             string l_linestatus,
@@ -267,6 +285,48 @@ struct q11entry {
 inline ostream& operator<<(ostream &o, const q11entry &q) {
 	o << q.ps_partkey << "|" << q.value;
 	return o;
+}
+
+struct q2entry {
+  q2entry(
+    double s_acctbal,
+    const string& s_name,
+    const string& n_name,
+    uint64_t p_partkey,
+    const string& p_mfgr,
+    const string& s_address,
+    const string& s_phone,
+    const string& s_comment) :
+
+  s_acctbal(s_acctbal),
+  s_name(s_name),
+  n_name(n_name),
+  p_partkey(p_partkey),
+  p_mfgr(p_mfgr),
+  s_address(s_address),
+  s_phone(s_phone),
+  s_comment(s_comment) {}
+
+  double s_acctbal;
+  string s_name;
+  string n_name;
+  uint64_t p_partkey;
+  string p_mfgr;
+  string s_address;
+  string s_phone;
+  string s_comment;
+};
+
+inline ostream& operator<<(ostream &o, const q2entry &q) {
+  o << q.s_acctbal << "|"
+    << q.s_name << "|"
+    << q.n_name << "|"
+    << q.p_partkey << "|"
+    << q.p_mfgr << "|"
+    << q.s_address << "|"
+    << q.s_phone << "|"
+    << q.s_comment;
+  return o;
 }
 
 static void do_query_orig(Connect &conn,
@@ -1577,6 +1637,134 @@ static void do_query_q11_opt(Connect &conn,
     }
 }
 
+static void do_query_q2(Connect &conn,
+                        uint64_t size,
+                        const string &type,
+                        const string &name,
+                        vector<q2entry> &results) {
+    NamedTimer fcnTimer(__func__);
+
+		ostringstream s;
+    s << "select SQL_NO_CACHE s_acctbal, s_name, n_name, p_partkey, p_mfgr, s_address, s_phone, s_comment from PART, SUPPLIER, PARTSUPP, NATION, REGION where p_partkey = ps_partkey and s_suppkey = ps_suppkey and p_size = " << size << " and p_type like '%" << type << "' and s_nationkey = n_nationkey and n_regionkey = r_regionkey and r_name = '" << name << "' and ps_supplycost = ( select SQL_NO_CACHE min(ps_supplycost) from PARTSUPP, SUPPLIER, NATION, REGION where p_partkey = ps_partkey and s_suppkey = ps_suppkey and s_nationkey = n_nationkey and n_regionkey = r_regionkey and r_name = '" << name << "') order by s_acctbal desc, n_name, s_name, p_partkey limit 100";
+
+    DBResult * dbres;
+    {
+      NamedTimer t(__func__, "execute");
+      conn.execute(s.str(), dbres);
+    }
+    ResType res;
+    {
+      NamedTimer t(__func__, "unpack");
+      res = dbres->unpack();
+      assert(res.ok);
+    }
+
+		for (auto row : res.rows) {
+			results.push_back(
+					q2entry(resultFromStr<double>(row[0].data),
+								  row[1].data,
+								  row[2].data,
+                  resultFromStr<uint64_t>(row[3].data),
+								  row[4].data,
+								  row[5].data,
+								  row[6].data,
+								  row[7].data));
+		}
+
+}
+
+static void do_query_q2_noopt(Connect &conn,
+                              CryptoManager &cm,
+                              uint64_t size,
+                              const string &type,
+                              const string &name,
+                              vector<q2entry> &results) {
+    NamedTimer fcnTimer(__func__);
+
+    bool isBin;
+    string encSIZE = cm.crypt(cm.getmkey(), to_s(size), TYPE_INTEGER,
+                              fieldname(part::p_size, "DET"),
+                              getMin(oDET), SECLEVEL::DET, isBin, 12345);
+
+    string encNAME = cm.crypt(cm.getmkey(), name, TYPE_TEXT,
+                              fieldname(region::r_name, "DET"),
+                              getMin(oDET), SECLEVEL::DET, isBin, 12345);
+
+    Binary key(cm.getKey(cm.getmkey(), fieldname(part::p_type, "SWP"), SECLEVEL::SWP));
+    Token t = CryptoManager::token(key, Binary(type));
+
+		ostringstream s;
+    s << "SELECT SQL_NO_CACHE "
+        << "s_acctbal_DET, s_name_DET, n_name_DET, p_partkey_DET, "
+        << "p_mfgr_DET, s_address_DET, s_phone_DET, s_comment_DET, p_type_DET "
+      << "FROM part_enc, supplier_enc, partsupp_enc, nation_enc, region_enc "
+      << "WHERE "
+        << "p_partkey_DET = ps_partkey_DET AND "
+        << "s_suppkey_DET = ps_suppkey_DET AND "
+        << "p_size_DET = " << encSIZE << " AND "
+        << "searchSWP("
+          << marshallBinary(string((char *)t.ciph.content, t.ciph.len))
+          << ", "
+          << marshallBinary(string((char *)t.wordKey.content, t.wordKey.len))
+          << ", p_type_SWP) = 1 AND"
+        << "s_nationkey_DET = n_nationkey_DET AND "
+        << "n_regionkey_DET = r_regionkey_DET AND "
+        << "r_name_DET = " << marshallBinary(encNAME) << " AND "
+        << "ps_supplycost_OPE = ("
+          << "SELECT SQL_NO_CACHE "
+            << "min(ps_supplycost_OPE) "
+          << "FROM part_enc, supplier_enc, partsupp_enc, nation_enc, region_enc "
+          << "WHERE "
+            << "p_partkey_DET = ps_partkey_DET AND "
+            << "s_suppkey_DET = ps_suppkey_DET AND "
+            << "s_nationkey_DET = n_nationkey_DET AND "
+            << "n_regionkey_DET = r_regionkey_DET AND "
+            << "r_name_DET = " << marshallBinary(encNAME) << ") "
+      << "ORDER BY "
+        << "s_acctbal_OPE DESC, n_name_OPE, s_name_OPE, p_partkey_OPE "
+      << "LIMIT 100";
+
+    /*
+    s << "select p_partkey_DET, p_type_DET from part_enc where searchSWP("
+      << marshallBinary(string((char *)t.ciph.content, t.ciph.len))
+      << ", "
+      << marshallBinary(string((char *)t.wordKey.content, t.wordKey.len))
+      << ", p_type_SWP) = 1";
+    cerr << s.str() << endl;
+    */
+
+    DBResult * dbres;
+    {
+      NamedTimer t(__func__, "execute");
+      conn.execute(s.str(), dbres);
+    }
+    ResType res;
+    {
+      NamedTimer t(__func__, "unpack");
+      res = dbres->unpack();
+      assert(res.ok);
+    }
+
+    for (auto row : res.rows) {
+        uint64_t p_partkey = decryptRowFromTo<uint64_t>(
+                row[3].data,
+                12345,
+                fieldname(part::p_partkey, "DET"),
+                TYPE_INTEGER,
+                SECLEVEL::DETJOIN,
+								getMin(oDET),
+								cm);
+        string p_type = decryptRow<string>(
+                row[8].data,
+                12345,
+                fieldname(part::p_type, "DET"),
+                TYPE_TEXT,
+                oDET,
+                cm);
+        cerr << p_partkey << "|" << p_type << endl;
+    }
+}
+
 static inline uint32_t random_year() {
     static const uint32_t gap = 1999 - 1993 + 1;
     return 1993 + (rand() % gap);
@@ -1585,16 +1773,22 @@ static inline uint32_t random_year() {
 
 static void usage(char **argv) {
     cerr << "[USAGE]: " << argv[0] << " "
-         << "(((--orig|--crypt|--crypt-opt|--crypt-opt-compact-sort-key|--crypt-opt-compact-table|--crypt-opt-all|--crypt-sum) year)|(--orig-query11|--crypt-query11|--crypt-opt-query11|--crypt-opt-proj-query11 nation fraction)) num_queries"
+         << "(((--orig|--crypt|--crypt-opt|--crypt-opt-compact-sort-key|--crypt-opt-compact-table|--crypt-opt-all|--crypt-sum) year)|(--orig-query11|--crypt-query11|--crypt-opt-query11|--crypt-opt-proj-query11 nation fraction)|((--orig-query2|--crypt-query2) size type name)) num_queries"
 
          << endl;
 }
 
 static const bool PrintResults = true;
 
+enum query_selection {
+  query1,
+  query2,
+  query11,
+};
+
 int main(int argc, char **argv) {
     srand(time(NULL));
-    if (argc != 4 && argc != 5) {
+    if (argc != 4 && argc != 5 && argc != 6) {
         usage(argv);
         return 1;
     }
@@ -1608,22 +1802,39 @@ int main(int argc, char **argv) {
         strcmp(argv[1], "--orig-query11") &&
         strcmp(argv[1], "--crypt-query11") &&
         strcmp(argv[1], "--crypt-opt-query11") &&
-				strcmp(argv[1], "--crypt-opt-proj-query11")) {
+				strcmp(argv[1], "--crypt-opt-proj-query11") &&
+        strcmp(argv[1], "--orig-query2") &&
+        strcmp(argv[1], "--crypt-query2")) {
         usage(argv);
         return 1;
     }
 
-    bool query1 =
+    enum query_selection q;
+
+    if (
         !strcmp(argv[1], "--orig") ||
         !strcmp(argv[1], "--crypt") ||
         !strcmp(argv[1], "--crypt-opt") ||
         !strcmp(argv[1], "--crypt-opt-compact-sort-key") ||
         !strcmp(argv[1], "--crypt-opt-compact-table") ||
         !strcmp(argv[1], "--crypt-opt-all") ||
-        !strcmp(argv[1], "--crypt-sum");
+        !strcmp(argv[1], "--crypt-sum")) {
+      q = query1;
+    } else if (
+        !strcmp(argv[1], "--orig-query2") ||
+        !strcmp(argv[1], "--crypt-query2")) {
+      q = query2;
+    } else {
+      q = query11;
+    }
 
-    Connect conn("localhost", "root", "sam15theboss", "tpch");
-    int input_nruns = atoi(argv[query1 ? 3 : 4]);
+    Connect conn("localhost", "root", "letmein", "tpch");
+    int input_nruns;
+    switch (q) {
+      case query1: input_nruns = atoi(argv[3]); break;
+      case query2: input_nruns = atoi(argv[5]); break;
+      case query11: input_nruns = atoi(argv[4]); break;
+    }
     uint32_t nruns = (uint32_t) input_nruns;
 
     unsigned long ctr = 0;
@@ -1640,105 +1851,136 @@ int main(int argc, char **argv) {
         } \
     } while (0)
 
-    if (query1) {
-      int input_year = atoi(argv[2]);
-			if (input_year < 0 || input_nruns < 0) {
-				usage(argv);
-				return 1;
-			}
-      uint32_t year = (uint32_t) input_year;
-      vector<q1entry> results;
-      if (!strcmp(argv[1], "--orig")) {
-          // vanilla MYSQL case
-          for (size_t i = 0; i < nruns; i++) {
+    switch (q) {
+      case query1:
+        {
+          int input_year = atoi(argv[2]);
+          if (input_year < 0 || input_nruns < 0) {
+            usage(argv);
+            return 1;
+          }
+          uint32_t year = (uint32_t) input_year;
+          vector<q1entry> results;
+          if (!strcmp(argv[1], "--orig")) {
+            // vanilla MYSQL case
+            for (size_t i = 0; i < nruns; i++) {
               do_query_orig(conn, year, results);
               ctr += results.size();
               PRINT_RESULTS();
               results.clear();
+            }
+          } else {
+            // crypt case
+            if (!strcmp(argv[1], "--crypt")) {
+              for (size_t i = 0; i < nruns; i++) {
+                do_query_cryptdb(conn, cm, year, results);
+                ctr += results.size();
+                PRINT_RESULTS();
+                results.clear();
+              }
+            } else if (!strcmp(argv[1], "--crypt-opt")) {
+              for (size_t i = 0; i < nruns; i++) {
+                do_query_cryptdb_opt(conn, cm, year, results);
+                ctr += results.size();
+                PRINT_RESULTS();
+                results.clear();
+              }
+            } else if (!strcmp(argv[1], "--crypt-opt-compact-sort-key")) {
+              for (size_t i = 0; i < nruns; i++) {
+                do_query_cryptdb_opt_compact_sort_key(conn, cm, year, results);
+                ctr += results.size();
+                PRINT_RESULTS();
+                results.clear();
+              }
+            } else if (!strcmp(argv[1], "--crypt-opt-compact-table")) {
+              for (size_t i = 0; i < nruns; i++) {
+                do_query_cryptdb_opt_compact_table(conn, cm, year, results);
+                ctr += results.size();
+                PRINT_RESULTS();
+                results.clear();
+              }
+            } else if (!strcmp(argv[1], "--crypt-opt-all")) {
+              for (size_t i = 0; i < nruns; i++) {
+                do_query_cryptdb_opt_all(conn, cm, year, results);
+                ctr += results.size();
+                PRINT_RESULTS();
+                results.clear();
+              }
+            } else if (!strcmp(argv[1], "--crypt-sum")) {
+              for (size_t i = 0; i < nruns; i++) {
+                do_query_cryptdb_sum(conn, cm, year, results);
+                ctr += results.size();
+                PRINT_RESULTS();
+                results.clear();
+              }
+            } else assert(false);
           }
-      } else {
-          // crypt case
-          if (!strcmp(argv[1], "--crypt")) {
-              for (size_t i = 0; i < nruns; i++) {
-                  do_query_cryptdb(conn, cm, year, results);
-                  ctr += results.size();
-                  PRINT_RESULTS();
-                  results.clear();
-              }
-          } else if (!strcmp(argv[1], "--crypt-opt")) {
-              for (size_t i = 0; i < nruns; i++) {
-                  do_query_cryptdb_opt(conn, cm, year, results);
-                  ctr += results.size();
-                  PRINT_RESULTS();
-                  results.clear();
-              }
-          } else if (!strcmp(argv[1], "--crypt-opt-compact-sort-key")) {
-              for (size_t i = 0; i < nruns; i++) {
-                  do_query_cryptdb_opt_compact_sort_key(conn, cm, year, results);
-                  ctr += results.size();
-                  PRINT_RESULTS();
-                  results.clear();
-              }
-          } else if (!strcmp(argv[1], "--crypt-opt-compact-table")) {
-              for (size_t i = 0; i < nruns; i++) {
-                  do_query_cryptdb_opt_compact_table(conn, cm, year, results);
-                  ctr += results.size();
-                  PRINT_RESULTS();
-                  results.clear();
-              }
-          } else if (!strcmp(argv[1], "--crypt-opt-all")) {
-              for (size_t i = 0; i < nruns; i++) {
-                  do_query_cryptdb_opt_all(conn, cm, year, results);
-                  ctr += results.size();
-                  PRINT_RESULTS();
-                  results.clear();
-              }
-          } else if (!strcmp(argv[1], "--crypt-sum")) {
-              for (size_t i = 0; i < nruns; i++) {
-                  do_query_cryptdb_sum(conn, cm, year, results);
-                  ctr += results.size();
-                  PRINT_RESULTS();
-                  results.clear();
-              }
+          break;
+        }
+      case query2:
+        {
+          uint64_t size = (uint64_t) atoi(argv[2]);
+          string type(argv[3]);
+          string name(argv[4]);
+          vector<q2entry> results;
+          if (!strcmp(argv[1], "--orig-query2")) {
+            for (size_t i = 0; i < nruns; i++) {
+              do_query_q2(conn, size, type, name, results);
+              ctr += results.size();
+              PRINT_RESULTS();
+              results.clear();
+            }
+          } else if (!strcmp(argv[1], "--crypt-query2")) {
+            for (size_t i = 0; i < nruns; i++) {
+              do_query_q2_noopt(conn, cm, size, type, name, results);
+              ctr += results.size();
+              PRINT_RESULTS();
+              results.clear();
+            }
           } else assert(false);
-      }
-    } else {
-      string nation = argv[2];
-      double fraction = atof(argv[3]);
-      if (fraction < 0.0 || fraction > 1.0) {
-        usage(argv);
-        return 1;
-      }
-      vector<q11entry> results;
-      if (!strcmp(argv[1], "--orig-query11")) {
-        for (size_t i = 0; i < nruns; i++) {
-					do_query_q11(conn, nation, fraction, results);
-          ctr += results.size();
-          PRINT_RESULTS();
-          results.clear();
         }
-      } else if (!strcmp(argv[1], "--crypt-query11")) {
-        for (size_t i = 0; i < nruns; i++) {
-          do_query_q11_noopt(conn, cm, nation, fraction, results);
-          ctr += results.size();
-          PRINT_RESULTS();
-          results.clear();
+        break;
+      case query11:
+        {
+          string nation = argv[2];
+          double fraction = atof(argv[3]);
+          if (fraction < 0.0 || fraction > 1.0) {
+            usage(argv);
+            return 1;
+          }
+          vector<q11entry> results;
+          if (!strcmp(argv[1], "--orig-query11")) {
+            for (size_t i = 0; i < nruns; i++) {
+              do_query_q11(conn, nation, fraction, results);
+              ctr += results.size();
+              PRINT_RESULTS();
+              results.clear();
+            }
+          } else if (!strcmp(argv[1], "--crypt-query11")) {
+            for (size_t i = 0; i < nruns; i++) {
+              do_query_q11_noopt(conn, cm, nation, fraction, results);
+              ctr += results.size();
+              PRINT_RESULTS();
+              results.clear();
+            }
+          } else if (!strcmp(argv[1], "--crypt-opt-query11")) {
+            for (size_t i = 0; i < nruns; i++) {
+              do_query_q11_opt(conn, cm, nation, fraction, results);
+              ctr += results.size();
+              PRINT_RESULTS();
+              results.clear();
+            }
+          } else if (!strcmp(argv[1], "--crypt-opt-proj-query11")) {
+            for (size_t i = 0; i < nruns; i++) {
+              do_query_q11_opt_proj(conn, cm, nation, fraction, results);
+              ctr += results.size();
+              PRINT_RESULTS();
+              results.clear();
+            }
+          } else assert(false);
         }
-      } else if (!strcmp(argv[1], "--crypt-opt-query11")) {
-        for (size_t i = 0; i < nruns; i++) {
-          do_query_q11_opt(conn, cm, nation, fraction, results);
-          ctr += results.size();
-          PRINT_RESULTS();
-          results.clear();
-        }
-      } else if (!strcmp(argv[1], "--crypt-opt-proj-query11")) {
-        for (size_t i = 0; i < nruns; i++) {
-          do_query_q11_opt_proj(conn, cm, nation, fraction, results);
-          ctr += results.size();
-          PRINT_RESULTS();
-          results.clear();
-        }
-			} else assert(false);
+        break;
+      default: assert(false);
     }
     cerr << ctr << endl;
     return 0;
