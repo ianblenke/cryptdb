@@ -100,12 +100,12 @@ Result decryptRow(const string &data,
 
 template <typename Result>
 Result decryptRowFromTo(const string &data,
-											  uint64_t salt,
-                  		  const string &fieldname,
-                  		  fieldType f,
-											  SECLEVEL max,
-											  SECLEVEL min,
-                  		  CryptoManager &cm) {
+                        uint64_t salt,
+                        const string &fieldname,
+                        fieldType f,
+                        SECLEVEL max,
+                        SECLEVEL min,
+                        CryptoManager &cm) {
     bool isBin;
     string res = cm.crypt(
         cm.getmkey(),
@@ -300,8 +300,8 @@ struct q11entry {
 };
 
 inline ostream& operator<<(ostream &o, const q11entry &q) {
-	o << q.ps_partkey << "|" << q.value;
-	return o;
+  o << q.ps_partkey << "|" << q.value;
+  return o;
 }
 
 struct q2entry {
@@ -1240,8 +1240,8 @@ static void do_query_q11_noopt(Connect &conn,
                 fieldname(partsupp::ps_partkey, "DET"),
                 TYPE_INTEGER,
                 SECLEVEL::DETJOIN,
-								getMin(oDET),
-								cm);
+                getMin(oDET),
+                cm);
 
         // ps_supplycost
         uint64_t ps_supplycost_int = decryptRow<uint64_t>(
@@ -1303,8 +1303,8 @@ static void do_query_q11(Connect &conn,
                          vector<q11entry> &results) {
     NamedTimer fcnTimer(__func__);
 
-		ostringstream s;
-		s << "select SQL_NO_CACHE ps_partkey, sum(ps_supplycost * ps_availqty) as value from PARTSUPP, SUPPLIER, NATION where ps_suppkey = s_suppkey and s_nationkey = n_nationkey and n_name = '" << name << "' group by ps_partkey having sum(ps_supplycost * ps_availqty) > ( select sum(ps_supplycost * ps_availqty) * " << fraction << " from PARTSUPP, SUPPLIER, NATION where ps_suppkey = s_suppkey and s_nationkey = n_nationkey and n_name = '" << name << "') order by value desc";
+    ostringstream s;
+    s << "select SQL_NO_CACHE ps_partkey, sum(ps_supplycost * ps_availqty) as value from PARTSUPP, SUPPLIER, NATION where ps_suppkey = s_suppkey and s_nationkey = n_nationkey and n_name = '" << name << "' group by ps_partkey having sum(ps_supplycost * ps_availqty) > ( select sum(ps_supplycost * ps_availqty) * " << fraction << " from PARTSUPP, SUPPLIER, NATION where ps_suppkey = s_suppkey and s_nationkey = n_nationkey and n_name = '" << name << "') order by value desc";
 
     DBResult * dbres;
     {
@@ -1318,11 +1318,11 @@ static void do_query_q11(Connect &conn,
       assert(res.ok);
     }
 
-		for (auto row : res.rows) {
-			results.push_back(
-					q11entry(resultFromStr<uint64_t>(row[0].data),
-									 resultFromStr<double>(row[1].data)));
-		}
+    for (auto row : res.rows) {
+      results.push_back(
+          q11entry(resultFromStr<uint64_t>(row[0].data),
+                   resultFromStr<double>(row[1].data)));
+    }
 }
 
 static inline long roundToLong(double x) {
@@ -1355,12 +1355,12 @@ static inline string join(const vector<string> &tokens,
 }
 
 static void do_query_q11_opt_proj(Connect &conn,
-																	CryptoManager &cm,
-                             			const string &name,
-                             			double fraction,
-                             			vector<q11entry> &results) {
+                                  CryptoManager &cm,
+                                   const string &name,
+                                   double fraction,
+                                   vector<q11entry> &results) {
     NamedTimer fcnTimer(__func__);
-		assert(name == "IRAQ"); // TODO: can only handle IRAQ for now
+    assert(name == "IRAQ"); // TODO: can only handle IRAQ for now
 
     bool isBin;
     string encNAME = cm.crypt(cm.getmkey(), name, TYPE_TEXT,
@@ -1368,13 +1368,13 @@ static void do_query_q11_opt_proj(Connect &conn,
                               getMin(oDET), SECLEVEL::DET, isBin, 12345);
 
     string pkinfo = marshallBinary(cm.getPKInfo());
-		ostringstream s;
-		s << "SELECT SQL_NO_CACHE "
-				<< "agg(ps_value_bitpacked_AGG, " << pkinfo << ") "
-			<< "FROM partsupp_enc_proj, nation_enc "
-			<< "WHERE "
-				<< "n_nationkey_DET = nationkey_DET AND "
-				<< "n_name_DET = " << marshallBinary(encNAME);
+    ostringstream s;
+    s << "SELECT SQL_NO_CACHE "
+        << "agg(ps_value_bitpacked_AGG, " << pkinfo << ") "
+      << "FROM partsupp_enc_proj, nation_enc "
+      << "WHERE "
+        << "n_nationkey_DET = nationkey_DET AND "
+        << "n_name_DET = " << marshallBinary(encNAME);
 
     DBResult * dbres;
     {
@@ -1538,8 +1538,8 @@ static void do_query_q11_opt_proj(Connect &conn,
                 fieldname(partsupp::ps_partkey, "DET"),
                 TYPE_INTEGER,
                 SECLEVEL::DETJOIN,
-								getMin(oDET),
-								cm);
+                getMin(oDET),
+                cm);
 
         // ps_value
         uint64_t ps_value_int = decryptRow<uint64_t>(
@@ -1623,8 +1623,8 @@ static void do_query_q11_opt(Connect &conn,
                 fieldname(partsupp::ps_partkey, "DET"),
                 TYPE_INTEGER,
                 SECLEVEL::DETJOIN,
-								getMin(oDET),
-								cm);
+                getMin(oDET),
+                cm);
 
         // ps_value
         uint64_t ps_value_int = decryptRow<uint64_t>(
@@ -1661,7 +1661,7 @@ static void do_query_q2(Connect &conn,
                         vector<q2entry> &results) {
     NamedTimer fcnTimer(__func__);
 
-		ostringstream s;
+    ostringstream s;
     s << "select SQL_NO_CACHE s_acctbal, s_name, n_name, p_partkey, p_mfgr, s_address, s_phone, s_comment from PART, SUPPLIER, PARTSUPP, NATION, REGION where p_partkey = ps_partkey and s_suppkey = ps_suppkey and p_size = " << size << " and p_type like '%" << type << "' and s_nationkey = n_nationkey and n_regionkey = r_regionkey and r_name = '" << name << "' and ps_supplycost = ( select SQL_NO_CACHE min(ps_supplycost) from PARTSUPP, SUPPLIER, NATION, REGION where p_partkey = ps_partkey and s_suppkey = ps_suppkey and s_nationkey = n_nationkey and n_regionkey = r_regionkey and r_name = '" << name << "') order by s_acctbal desc, n_name, s_name, p_partkey limit 100";
     cerr << s.str() << endl;
 
@@ -1677,17 +1677,17 @@ static void do_query_q2(Connect &conn,
       assert(res.ok);
     }
 
-		for (auto row : res.rows) {
-			results.push_back(
-					q2entry(resultFromStr<double>(row[0].data),
-								  row[1].data,
-								  row[2].data,
+    for (auto row : res.rows) {
+      results.push_back(
+          q2entry(resultFromStr<double>(row[0].data),
+                  row[1].data,
+                  row[2].data,
                   resultFromStr<uint64_t>(row[3].data),
-								  row[4].data,
-								  row[5].data,
-								  row[6].data,
-								  row[7].data));
-		}
+                  row[4].data,
+                  row[5].data,
+                  row[6].data,
+                  row[7].data));
+    }
 
 }
 
@@ -1713,7 +1713,7 @@ static void do_query_q2_noopt(Connect &conn,
     Binary key(cm.getKey(cm.getmkey(), fieldname(part::p_type, "SWP"), SECLEVEL::SWP));
     Token t = CryptoManager::token(key, Binary(lowertype));
 
-		ostringstream s;
+    ostringstream s;
     s << "SELECT SQL_NO_CACHE "
         << "s_acctbal_DET, s_name_DET, n_name_DET, p_partkey_DET, "
         << "p_mfgr_DET, s_address_DET, s_phone_DET, s_comment_DET, p_type_DET "
@@ -1790,8 +1790,8 @@ static void do_query_q2_noopt(Connect &conn,
                 fieldname(part::p_partkey, "DET"),
                 TYPE_INTEGER,
                 SECLEVEL::DETJOIN,
-								getMin(oDET),
-								cm);
+                getMin(oDET),
+                cm);
 
         string p_mfgr = decryptRow<string>(
                 row[4].data,
@@ -1887,7 +1887,7 @@ int main(int argc, char **argv) {
         strcmp(argv[1], "--orig-query11") &&
         strcmp(argv[1], "--crypt-query11") &&
         strcmp(argv[1], "--crypt-opt-query11") &&
-				strcmp(argv[1], "--crypt-opt-proj-query11") &&
+        strcmp(argv[1], "--crypt-opt-proj-query11") &&
         strcmp(argv[1], "--orig-query2") &&
         strcmp(argv[1], "--crypt-query2")) {
         usage(argv);
