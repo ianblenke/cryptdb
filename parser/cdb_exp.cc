@@ -346,13 +346,16 @@ inline ostream& operator<<(ostream &o, const q2entry &q) {
   return o;
 }
 
-static void do_query_orig(Connect &conn,
-                          uint32_t year,
-                          vector<q1entry> &results) {
+typedef double q14entry;
+
+static void do_query_q1(Connect &conn,
+                        uint32_t year,
+                        vector<q1entry> &results) {
     NamedTimer fcnTimer(__func__);
 
     ostringstream buf;
     buf << "select SQL_NO_CACHE l_returnflag, l_linestatus, sum(l_quantity) as sum_qty, sum(l_extendedprice) as sum_base_price, sum(l_extendedprice * (1 - l_discount)) as sum_disc_price, sum(l_extendedprice * (1 - l_discount) * (1 + l_tax)) as sum_charge, avg(l_quantity) as avg_qty, avg(l_extendedprice) as avg_price, avg(l_discount) as avg_disc, count(*) as count_order from LINEITEM where l_shipdate <= date '" << year << "-1-1' group by l_returnflag, l_linestatus order by l_returnflag, l_linestatus";
+    cerr << buf.str() << endl;
 
     DBResult * dbres;
     {
@@ -399,503 +402,6 @@ static inline string ExtractAggPayload(const string &data) {
   return data.substr(sizeof(uint64_t));
 }
 
-static void do_query_cryptdb_sum(Connect &conn,
-                                 CryptoManager &cm,
-                                 uint32_t year,
-                                 vector<q1entry> &results) {
-    NamedTimer fcnTimer(__func__);
-
-    // l_shipdate <= date '[year]-01-01'
-    bool isBin;
-    string encYEAR = cm.crypt(cm.getmkey(), strFromVal(year), TYPE_INTEGER,
-                              fieldname(10, "year_OPE"),
-                              getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
-    string encMONTH = cm.crypt(cm.getmkey(), "1", TYPE_INTEGER,
-                               fieldname(10, "month_OPE"),
-                               getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
-    string encDAY = cm.crypt(cm.getmkey(), "1", TYPE_INTEGER,
-                             fieldname(10, "day_OPE"),
-                             getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
-
-    auto y = valFromStr(encYEAR);
-    auto m = valFromStr(encMONTH);
-    auto d = valFromStr(encDAY);
-
-    ostringstream s;
-    s << "SELECT SQL_NO_CACHE "
-          << "l_returnflag_DET, l_returnflag_SALT, "
-          << "l_linestatus_DET, l_linestatus_SALT, "
-          << "sum(l_quantity_AGG), "
-          << "sum(l_extendedprice_AGG), "
-          << "sum(l_disc_price_AGG), "
-          << "sum(l_charge_AGG), "
-          << "sum(l_discount_AGG), "
-          << "count(*) "
-      << "FROM lineitem_enc_opt_compact "
-      << "WHERE l_shipdate_year_OPE < " << y << " "
-      << "OR ( l_shipdate_year_OPE = " << y << " AND l_shipdate_month_OPE < " << m << " ) "
-      << "OR ( l_shipdate_year_OPE = " << y << " AND l_shipdate_month_OPE = " << m << " AND l_shipdate_day_OPE <= " << d << " ) "
-      << "GROUP BY l_returnflag_OPE, l_linestatus_OPE "
-      << "ORDER BY l_returnflag_OPE, l_linestatus_OPE ";
-
-    DBResult * dbres;
-    {
-      NamedTimer t(__func__, "execute");
-      conn.execute(s.str(), dbres);
-    }
-    ResType res;
-    {
-      NamedTimer t(__func__, "unpack");
-      res = dbres->unpack();
-      assert(res.ok);
-    }
-
-}
-
-static void do_query_cryptdb_opt(Connect &conn,
-                                 CryptoManager &cm,
-                                 uint32_t year,
-                                 vector<q1entry> &results) {
-    NamedTimer fcnTimer(__func__);
-
-    // l_shipdate <= date '[year]-01-01'
-    bool isBin;
-    string encYEAR = cm.crypt(cm.getmkey(), strFromVal(year), TYPE_INTEGER,
-                              fieldname(10, "year_OPE"),
-                              getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
-    string encMONTH = cm.crypt(cm.getmkey(), "1", TYPE_INTEGER,
-                               fieldname(10, "month_OPE"),
-                               getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
-    string encDAY = cm.crypt(cm.getmkey(), "1", TYPE_INTEGER,
-                             fieldname(10, "day_OPE"),
-                             getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
-
-
-    DBResult * dbres;
-
-    auto y = valFromStr(encYEAR);
-    auto m = valFromStr(encMONTH);
-    auto d = valFromStr(encDAY);
-
-    string pkinfo = marshallBinary(cm.getPKInfo());
-    ostringstream s;
-    s << "SELECT SQL_NO_CACHE "
-          << "l_returnflag_DET, l_returnflag_SALT, "
-          << "l_linestatus_DET, l_linestatus_SALT, "
-          << "agg(l_quantity_AGG, " << pkinfo << "), "
-          << "agg(l_extendedprice_AGG, " << pkinfo << "), "
-          << "agg(l_disc_price_AGG, " << pkinfo << "), "
-          << "agg(l_charge_AGG, " << pkinfo << "), "
-          << "agg(l_discount_AGG, " << pkinfo << "), "
-          << "count(*) "
-      << "FROM lineitem_enc_opt "
-      << "WHERE l_shipdate_year_OPE < " << y << " "
-      << "OR ( l_shipdate_year_OPE = " << y << " AND l_shipdate_month_OPE < " << m << " ) "
-      << "OR ( l_shipdate_year_OPE = " << y << " AND l_shipdate_month_OPE = " << m << " AND l_shipdate_day_OPE <= " << d << " ) "
-      << "GROUP BY l_returnflag_OPE, l_linestatus_OPE "
-      << "ORDER BY l_returnflag_OPE, l_linestatus_OPE ";
-
-    {
-      NamedTimer t(__func__, "execute");
-      conn.execute(s.str(), dbres);
-    }
-    ResType res;
-    {
-      NamedTimer t(__func__, "unpack");
-      res = dbres->unpack();
-      assert(res.ok);
-    }
-
-    {
-      NamedTimer t(__func__, "decrypt");
-      for (auto row : res.rows) {
-          // l_returnflag
-          string l_returnflag = decryptRow<string>(
-                  (row[0].data),
-                  valFromStr(row[1].data),
-                  fieldname(lineitem::l_returnflag, "DET"),
-                  TYPE_TEXT,
-                  oDET,
-                  cm);
-
-          // l_linestatus
-          string l_linestatus = decryptRow<string>(
-                  (row[2].data),
-                  valFromStr(row[3].data),
-                  fieldname(lineitem::l_linestatus, "DET"),
-                  TYPE_TEXT,
-                  oDET,
-                  cm);
-
-          // sum_qty
-          uint64_t sum_qty_int = decryptRow<uint64_t>(
-                  row[4].data,
-                  12345,
-                  fieldname(lineitem::l_quantity, "AGG"),
-                  TYPE_INTEGER,
-                  oAGG,
-                  cm);
-          double sum_qty = ((double)sum_qty_int)/100.0;
-
-          // sum_base_price
-          uint64_t sum_base_price_int = decryptRow<uint64_t>(
-                  row[5].data,
-                  12345,
-                  fieldname(lineitem::l_extendedprice, "AGG"),
-                  TYPE_INTEGER,
-                  oAGG,
-                  cm);
-          double sum_base_price = ((double)sum_base_price_int)/100.0;
-
-          // sum_disc_price
-          uint64_t sum_disc_price_int = decryptRow<uint64_t>(
-                  row[6].data,
-                  12345,
-                  fieldname(lineitem::l_disc_price, "AGG"),
-                  TYPE_INTEGER,
-                  oAGG,
-                  cm);
-          double sum_disc_price = ((double)sum_disc_price_int)/100.0;
-
-          // sum_charge
-          uint64_t sum_charge_int = decryptRow<uint64_t>(
-                  row[7].data,
-                  12345,
-                  fieldname(lineitem::l_charge, "AGG"),
-                  TYPE_INTEGER,
-                  oAGG,
-                  cm);
-          double sum_charge = ((double)sum_charge_int)/100.0;
-
-          // sum_discount
-          uint64_t sum_discount_int = decryptRow<uint64_t>(
-                  row[8].data,
-                  12345,
-                  fieldname(lineitem::l_discount, "AGG"),
-                  TYPE_INTEGER,
-                  oAGG,
-                  cm);
-          double sum_discount = ((double)sum_discount_int)/100.0;
-
-          // count_order
-          uint64_t count_order = resultFromStr<uint64_t>(row[9].data);
-
-          double avg_qty = sum_qty / ((double)count_order);
-          double avg_price = sum_base_price / ((double)count_order);
-          double avg_disc = sum_discount / ((double)count_order);
-
-          results.push_back(q1entry(
-              l_returnflag,
-              l_linestatus,
-              sum_qty,
-              sum_base_price,
-              sum_disc_price,
-              sum_charge,
-              avg_qty,
-              avg_price,
-              avg_disc,
-              count_order));
-      }
-    }
-}
-
-static void do_query_cryptdb_opt_compact_sort_key(Connect &conn,
-                                                  CryptoManager &cm,
-                                                  uint32_t year,
-                                                  vector<q1entry> &results) {
-    NamedTimer fcnTimer(__func__);
-
-    // l_shipdate <= date '[year]-01-01'
-    bool isBin;
-    string encYEAR = cm.crypt(cm.getmkey(), strFromVal(year), TYPE_INTEGER,
-                              fieldname(10, "year_OPE"),
-                              getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
-    string encMONTH = cm.crypt(cm.getmkey(), "1", TYPE_INTEGER,
-                               fieldname(10, "month_OPE"),
-                               getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
-    string encDAY = cm.crypt(cm.getmkey(), "1", TYPE_INTEGER,
-                             fieldname(10, "day_OPE"),
-                             getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
-
-
-    DBResult * dbres;
-
-    auto y = valFromStr(encYEAR);
-    auto m = valFromStr(encMONTH);
-    auto d = valFromStr(encDAY);
-
-    string pkinfo = marshallBinary(cm.getPKInfo());
-    ostringstream s;
-    s << "SELECT SQL_NO_CACHE "
-          << "l_returnflag_DET, l_returnflag_SALT, "
-          << "l_linestatus_DET, l_linestatus_SALT, "
-          << "agg(l_quantity_AGG, " << pkinfo << "), "
-          << "agg(l_extendedprice_AGG, " << pkinfo << "), "
-          << "agg(l_disc_price_AGG, " << pkinfo << "), "
-          << "agg(l_charge_AGG, " << pkinfo << "), "
-          << "agg(l_discount_AGG, " << pkinfo << "), "
-          << "count(*) "
-      << "FROM lineitem_enc_opt_sort_key "
-      << "WHERE l_shipdate_year_OPE < " << y << " "
-      << "OR ( l_shipdate_year_OPE = " << y << " AND l_shipdate_month_OPE < " << m << " ) "
-      << "OR ( l_shipdate_year_OPE = " << y << " AND l_shipdate_month_OPE = " << m << " AND l_shipdate_day_OPE <= " << d << " ) "
-      << "GROUP BY l_returnflag_OPE, l_linestatus_OPE "
-      << "ORDER BY l_returnflag_OPE, l_linestatus_OPE ";
-
-    {
-      NamedTimer t(__func__, "execute");
-      conn.execute(s.str(), dbres);
-    }
-    ResType res;
-    {
-      NamedTimer t(__func__, "unpack");
-      res = dbres->unpack();
-      assert(res.ok);
-    }
-
-    {
-      NamedTimer t(__func__, "decrypt");
-      for (auto row : res.rows) {
-          // l_returnflag
-          unsigned char l_returnflag_ch = (unsigned char) decryptRow<uint32_t>(
-                  row[0].data,
-                  valFromStr(row[1].data),
-                  fieldname(lineitem::l_returnflag, "DET"),
-                  TYPE_INTEGER,
-                  oDET,
-                  cm);
-          string l_returnflag(1, l_returnflag_ch);
-
-          // l_linestatus
-          unsigned char l_linestatus_ch = (unsigned char) decryptRow<uint32_t>(
-                  row[2].data,
-                  valFromStr(row[3].data),
-                  fieldname(lineitem::l_linestatus, "DET"),
-                  TYPE_INTEGER,
-                  oDET,
-                  cm);
-          string l_linestatus(1, l_linestatus_ch);
-
-          // sum_qty
-          uint64_t sum_qty_int = decryptRow<uint64_t>(
-                  row[4].data,
-                  12345,
-                  fieldname(lineitem::l_quantity, "AGG"),
-                  TYPE_INTEGER,
-                  oAGG,
-                  cm);
-          double sum_qty = ((double)sum_qty_int)/100.0;
-
-          // sum_base_price
-          uint64_t sum_base_price_int = decryptRow<uint64_t>(
-                  row[5].data,
-                  12345,
-                  fieldname(lineitem::l_extendedprice, "AGG"),
-                  TYPE_INTEGER,
-                  oAGG,
-                  cm);
-          double sum_base_price = ((double)sum_base_price_int)/100.0;
-
-          // sum_disc_price
-          uint64_t sum_disc_price_int = decryptRow<uint64_t>(
-                  row[6].data,
-                  12345,
-                  fieldname(lineitem::l_disc_price, "AGG"),
-                  TYPE_INTEGER,
-                  oAGG,
-                  cm);
-          double sum_disc_price = ((double)sum_disc_price_int)/100.0;
-
-          // sum_charge
-          uint64_t sum_charge_int = decryptRow<uint64_t>(
-                  row[7].data,
-                  12345,
-                  fieldname(lineitem::l_charge, "AGG"),
-                  TYPE_INTEGER,
-                  oAGG,
-                  cm);
-          double sum_charge = ((double)sum_charge_int)/100.0;
-
-          // sum_discount
-          uint64_t sum_discount_int = decryptRow<uint64_t>(
-                  row[8].data,
-                  12345,
-                  fieldname(lineitem::l_discount, "AGG"),
-                  TYPE_INTEGER,
-                  oAGG,
-                  cm);
-          double sum_discount = ((double)sum_discount_int)/100.0;
-
-          // count_order
-          uint64_t count_order = resultFromStr<uint64_t>(row[9].data);
-
-          double avg_qty = sum_qty / ((double)count_order);
-          double avg_price = sum_base_price / ((double)count_order);
-          double avg_disc = sum_discount / ((double)count_order);
-
-          results.push_back(q1entry(
-              l_returnflag,
-              l_linestatus,
-              sum_qty,
-              sum_base_price,
-              sum_disc_price,
-              sum_charge,
-              avg_qty,
-              avg_price,
-              avg_disc,
-              count_order));
-      }
-    }
-}
-
-static void do_query_cryptdb_opt_compact_table(Connect &conn,
-                                               CryptoManager &cm,
-                                               uint32_t year,
-                                               vector<q1entry> &results) {
-    NamedTimer fcnTimer(__func__);
-
-    // l_shipdate <= date '[year]-01-01'
-    bool isBin;
-    string encYEAR = cm.crypt(cm.getmkey(), strFromVal(year), TYPE_INTEGER,
-                              fieldname(10, "year_OPE"),
-                              getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
-    string encMONTH = cm.crypt(cm.getmkey(), "1", TYPE_INTEGER,
-                               fieldname(10, "month_OPE"),
-                               getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
-    string encDAY = cm.crypt(cm.getmkey(), "1", TYPE_INTEGER,
-                             fieldname(10, "day_OPE"),
-                             getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
-
-
-    DBResult * dbres;
-
-    auto y = valFromStr(encYEAR);
-    auto m = valFromStr(encMONTH);
-    auto d = valFromStr(encDAY);
-
-    string pkinfo = marshallBinary(cm.getPKInfo());
-    ostringstream s;
-    s << "SELECT SQL_NO_CACHE "
-          << "l_returnflag_DET, l_returnflag_SALT, "
-          << "l_linestatus_DET, l_linestatus_SALT, "
-          << "agg(l_quantity_AGG, " << pkinfo << "), "
-          << "agg(l_extendedprice_AGG, " << pkinfo << "), "
-          << "agg(l_disc_price_AGG, " << pkinfo << "), "
-          << "agg(l_charge_AGG, " << pkinfo << "), "
-          << "agg(l_discount_AGG, " << pkinfo << "), "
-          << "count(*) "
-      << "FROM lineitem_enc_opt_compact "
-      << "WHERE l_shipdate_year_OPE < " << y << " "
-      << "OR ( l_shipdate_year_OPE = " << y << " AND l_shipdate_month_OPE < " << m << " ) "
-      << "OR ( l_shipdate_year_OPE = " << y << " AND l_shipdate_month_OPE = " << m << " AND l_shipdate_day_OPE <= " << d << " ) "
-      << "GROUP BY l_returnflag_OPE, l_linestatus_OPE "
-      << "ORDER BY l_returnflag_OPE, l_linestatus_OPE ";
-
-    {
-      NamedTimer t(__func__, "execute");
-      conn.execute(s.str(), dbres);
-    }
-    ResType res;
-    {
-      NamedTimer t(__func__, "unpack");
-      res = dbres->unpack();
-      assert(res.ok);
-    }
-
-    {
-      NamedTimer t(__func__, "decrypt");
-      for (auto row : res.rows) {
-          // NO sort-key optimization
-          // l_returnflag
-          string l_returnflag = decryptRow<string>(
-                  (row[0].data),
-                  valFromStr(row[1].data),
-                  fieldname(lineitem::l_returnflag, "DET"),
-                  TYPE_TEXT,
-                  oDET,
-                  cm);
-
-          // l_linestatus
-          string l_linestatus = decryptRow<string>(
-                  (row[2].data),
-                  valFromStr(row[3].data),
-                  fieldname(lineitem::l_linestatus, "DET"),
-                  TYPE_TEXT,
-                  oDET,
-                  cm);
-
-          // sum_qty
-          uint64_t sum_qty_int = decryptRow<uint64_t>(
-                  row[4].data,
-                  12345,
-                  fieldname(lineitem::l_quantity, "AGG"),
-                  TYPE_INTEGER,
-                  oAGG,
-                  cm);
-          double sum_qty = ((double)sum_qty_int)/100.0;
-
-          // sum_base_price
-          uint64_t sum_base_price_int = decryptRow<uint64_t>(
-                  row[5].data,
-                  12345,
-                  fieldname(lineitem::l_extendedprice, "AGG"),
-                  TYPE_INTEGER,
-                  oAGG,
-                  cm);
-          double sum_base_price = ((double)sum_base_price_int)/100.0;
-
-          // sum_disc_price
-          uint64_t sum_disc_price_int = decryptRow<uint64_t>(
-                  row[6].data,
-                  12345,
-                  fieldname(lineitem::l_disc_price, "AGG"),
-                  TYPE_INTEGER,
-                  oAGG,
-                  cm);
-          double sum_disc_price = ((double)sum_disc_price_int)/100.0;
-
-          // sum_charge
-          uint64_t sum_charge_int = decryptRow<uint64_t>(
-                  row[7].data,
-                  12345,
-                  fieldname(lineitem::l_charge, "AGG"),
-                  TYPE_INTEGER,
-                  oAGG,
-                  cm);
-          double sum_charge = ((double)sum_charge_int)/100.0;
-
-          // sum_discount
-          uint64_t sum_discount_int = decryptRow<uint64_t>(
-                  row[8].data,
-                  12345,
-                  fieldname(lineitem::l_discount, "AGG"),
-                  TYPE_INTEGER,
-                  oAGG,
-                  cm);
-          double sum_discount = ((double)sum_discount_int)/100.0;
-
-          // count_order
-          uint64_t count_order = resultFromStr<uint64_t>(row[9].data);
-
-          double avg_qty = sum_qty / ((double)count_order);
-          double avg_price = sum_base_price / ((double)count_order);
-          double avg_disc = sum_discount / ((double)count_order);
-
-          results.push_back(q1entry(
-              l_returnflag,
-              l_linestatus,
-              sum_qty,
-              sum_base_price,
-              sum_disc_price,
-              sum_charge,
-              avg_qty,
-              avg_price,
-              avg_disc,
-              count_order));
-      }
-    }
-}
-
 static long extract_from_slot(const ZZ &m, size_t slot) {
   static const size_t wordbits = sizeof(uint64_t) * 8;
   static const size_t slotbits = wordbits * 2;
@@ -903,44 +409,49 @@ static long extract_from_slot(const ZZ &m, size_t slot) {
   return to_long((m >> (slotbits * slot)) & mask);
 }
 
-static void do_query_cryptdb_opt_all(Connect &conn,
-                                     CryptoManager &cm,
-                                     uint32_t year,
-                                     vector<q1entry> &results) {
+static inline uint32_t EncodeDate(uint32_t month, uint32_t day, uint32_t year) {
+  return day | (month << 5) | (year << 9);
+}
+
+static inline void ExtractDate(uint32_t encoding,
+                               uint32_t &month,
+                               uint32_t &day,
+                               uint32_t &year) {
+  static const uint32_t DayMask = 0x1F;
+  static const uint32_t MonthMask = 0x1E0;
+  static const uint32_t YearMask = ((uint32_t)-1) << 9;
+
+  day = encoding & DayMask;
+  month = (encoding & MonthMask) >> 5;
+  year = (encoding & YearMask) >> 9;
+}
+
+static void do_query_q1_opt(Connect &conn,
+                            CryptoManager &cm,
+                            uint32_t year,
+                            vector<q1entry> &results) {
     NamedTimer fcnTimer(__func__);
 
     // l_shipdate <= date '[year]-01-01'
     bool isBin;
-    string encYEAR = cm.crypt(cm.getmkey(), strFromVal(year), TYPE_INTEGER,
-                              fieldname(10, "year_OPE"),
+    string encDATE = cm.crypt(cm.getmkey(), strFromVal(EncodeDate(1, 1, year)),
+                              TYPE_INTEGER, fieldname(lineitem::l_shipdate, "OPE"),
                               getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
-    string encMONTH = cm.crypt(cm.getmkey(), "1", TYPE_INTEGER,
-                               fieldname(10, "month_OPE"),
-                               getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
-    string encDAY = cm.crypt(cm.getmkey(), "1", TYPE_INTEGER,
-                             fieldname(10, "day_OPE"),
-                             getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
-
 
     DBResult * dbres;
-
-    auto y = valFromStr(encYEAR);
-    auto m = valFromStr(encMONTH);
-    auto d = valFromStr(encDAY);
 
     string pkinfo = marshallBinary(cm.getPKInfo());
     ostringstream s;
     s << "SELECT SQL_NO_CACHE "
-          << "l_returnflag_DET, l_returnflag_SALT, "
-          << "l_linestatus_DET, l_linestatus_SALT, "
-          << "agg_par(l_bitpacked_AGG, " << pkinfo << "), "
+          << "l_returnflag_DET, "
+          << "l_linestatus_DET, "
+          << "agg(l_bitpacked_AGG, " << pkinfo << "), "
           << "count(*) "
-      << "FROM lineitem_enc_opt_all "
-      << "WHERE l_shipdate_year_OPE < " << y << " "
-      << "OR ( l_shipdate_year_OPE = " << y << " AND l_shipdate_month_OPE < " << m << " ) "
-      << "OR ( l_shipdate_year_OPE = " << y << " AND l_shipdate_month_OPE = " << m << " AND l_shipdate_day_OPE <= " << d << " ) "
+      << "FROM lineitem_enc "
+      << "WHERE l_shipdate_OPE < " << encDATE << " "
       << "GROUP BY l_returnflag_OPE, l_linestatus_OPE "
-      << "ORDER BY l_returnflag_OPE, l_linestatus_OPE ";
+      << "ORDER BY l_returnflag_OPE, l_linestatus_OPE";
+    cerr << s.str() << endl;
 
     {
       NamedTimer t(__func__, "execute");
@@ -959,7 +470,7 @@ static void do_query_cryptdb_opt_all(Connect &conn,
           // l_returnflag
           unsigned char l_returnflag_ch = (unsigned char) decryptRow<uint32_t>(
                   row[0].data,
-                  valFromStr(row[1].data),
+                  12345,
                   fieldname(lineitem::l_returnflag, "DET"),
                   TYPE_INTEGER,
                   oDET,
@@ -968,8 +479,8 @@ static void do_query_cryptdb_opt_all(Connect &conn,
 
           // l_linestatus
           unsigned char l_linestatus_ch = (unsigned char) decryptRow<uint32_t>(
-                  row[2].data,
-                  valFromStr(row[3].data),
+                  row[1].data,
+                  12345,
                   fieldname(lineitem::l_linestatus, "DET"),
                   TYPE_INTEGER,
                   oDET,
@@ -977,7 +488,7 @@ static void do_query_cryptdb_opt_all(Connect &conn,
           string l_linestatus(1, l_linestatus_ch);
 
           ZZ m;
-          cm.decrypt_Paillier(row[4].data, m);
+          cm.decrypt_Paillier(row[2].data, m);
           long sum_qty_int = extract_from_slot(m, 0);
           long sum_base_price_int = extract_from_slot(m, 1);
           long sum_discount_int = extract_from_slot(m, 2);
@@ -992,7 +503,7 @@ static void do_query_cryptdb_opt_all(Connect &conn,
           double sum_charge = ((double)sum_charge_int)/100.0;
 
           // count_order
-          uint64_t count_order = resultFromStr<uint64_t>(row[5].data);
+          uint64_t count_order = resultFromStr<uint64_t>(row[3].data);
 
           double avg_qty = sum_qty / ((double)count_order);
           double avg_price = sum_base_price / ((double)count_order);
@@ -1013,46 +524,33 @@ static void do_query_cryptdb_opt_all(Connect &conn,
     }
 }
 
-static void do_query_cryptdb(Connect &conn,
-                             CryptoManager &cm,
-                             uint32_t year,
-                             vector<q1entry> &results) {
+static void do_query_q1_noopt(Connect &conn,
+                              CryptoManager &cm,
+                              uint32_t year,
+                              vector<q1entry> &results) {
     NamedTimer fcnTimer(__func__);
 
     // l_shipdate <= date '[year]-01-01'
     bool isBin;
-    string encYEAR = cm.crypt(cm.getmkey(), strFromVal(year), TYPE_INTEGER,
-                              fieldname(10, "year_OPE"),
+    string encDATE = cm.crypt(cm.getmkey(), strFromVal(EncodeDate(1, 1, year)),
+                              TYPE_INTEGER, fieldname(lineitem::l_shipdate, "OPE"),
                               getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
-    string encMONTH = cm.crypt(cm.getmkey(), "1", TYPE_INTEGER,
-                               fieldname(10, "month_OPE"),
-                               getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
-    string encDAY = cm.crypt(cm.getmkey(), "1", TYPE_INTEGER,
-                             fieldname(10, "day_OPE"),
-                             getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
 
 
     DBResult * dbres;
 
-    auto y = valFromStr(encYEAR);
-    auto m = valFromStr(encMONTH);
-    auto d = valFromStr(encDAY);
-
     ostringstream s;
     s << "SELECT SQL_NO_CACHE "
 
-          << "l_returnflag_DET, l_returnflag_SALT, "
-          << "l_linestatus_DET, l_linestatus_SALT, "
-          << "l_quantity_DET, l_quantity_SALT, "
-          << "l_extendedprice_DET, l_extendedprice_SALT, "
-          << "l_discount_DET, l_discount_SALT, "
-          << "l_tax_DET, l_tax_SALT "
+          << "l_returnflag_DET, "
+          << "l_linestatus_DET, "
+          << "l_quantity_DET, "
+          << "l_extendedprice_DET, "
+          << "l_discount_DET, "
+          << "l_tax_DET "
 
       << "FROM lineitem_enc "
-      << "WHERE l_shipdate_year_OPE < " << y << " "
-      << "OR ( l_shipdate_year_OPE = " << y << " AND l_shipdate_month_OPE < " << m << " ) "
-      << "OR ( l_shipdate_year_OPE = " << y << " AND l_shipdate_month_OPE = " << m << " AND l_shipdate_day_OPE <= " << d << " ) "
-      << "ORDER BY l_returnflag_OPE, l_linestatus_OPE";
+      << "WHERE l_shipdate_OPE < " << encDATE;
 
     {
       NamedTimer t(__func__, "execute");
@@ -1069,27 +567,29 @@ static void do_query_cryptdb(Connect &conn,
       NamedTimer t(__func__, "decrypt");
       for (auto row : res.rows) {
           // l_returnflag
-          string l_returnflag = decryptRow<string>(
-                  mysqlHexToBinaryData(row[0].data),
-                  valFromStr(row[1].data),
+          unsigned char l_returnflag_ch = (unsigned char) decryptRow<uint32_t>(
+                  row[0].data,
+                  12345,
                   fieldname(lineitem::l_returnflag, "DET"),
-                  TYPE_TEXT,
+                  TYPE_INTEGER,
                   oDET,
                   cm);
+          string l_returnflag(1, l_returnflag_ch);
 
           // l_linestatus
-          string l_linestatus = decryptRow<string>(
-                  mysqlHexToBinaryData(row[2].data),
-                  valFromStr(row[3].data),
+          unsigned char l_linestatus_ch = (unsigned char) decryptRow<uint32_t>(
+                  row[1].data,
+                  12345,
                   fieldname(lineitem::l_linestatus, "DET"),
-                  TYPE_TEXT,
+                  TYPE_INTEGER,
                   oDET,
                   cm);
+          string l_linestatus(1, l_linestatus_ch);
 
           // l_quantity
           uint64_t l_quantity_int = decryptRow<uint64_t>(
-                  row[4].data,
-                  valFromStr(row[5].data),
+                  row[2].data,
+                  12345,
                   fieldname(lineitem::l_quantity, "DET"),
                   TYPE_INTEGER,
                   oDET,
@@ -1098,8 +598,8 @@ static void do_query_cryptdb(Connect &conn,
 
           // l_extendedprice
           uint64_t l_extendedprice_int = decryptRow<uint64_t>(
-                  row[6].data,
-                  valFromStr(row[7].data),
+                  row[3].data,
+                  12345,
                   fieldname(lineitem::l_extendedprice, "DET"),
                   TYPE_INTEGER,
                   oDET,
@@ -1108,8 +608,8 @@ static void do_query_cryptdb(Connect &conn,
 
           // l_discount
           uint64_t l_discount_int = decryptRow<uint64_t>(
-                  row[8].data,
-                  valFromStr(row[9].data),
+                  row[4].data,
+                  12345,
                   fieldname(lineitem::l_discount, "DET"),
                   TYPE_INTEGER,
                   oDET,
@@ -1118,8 +618,8 @@ static void do_query_cryptdb(Connect &conn,
 
           // l_tax
           uint64_t l_tax_int = decryptRow<uint64_t>(
-                  row[10].data,
-                  valFromStr(row[11].data),
+                  row[5].data,
+                  12345,
                   fieldname(lineitem::l_tax, "DET"),
                   TYPE_INTEGER,
                   oDET,
@@ -1187,8 +687,8 @@ static void do_query_cryptdb(Connect &conn,
 
 static struct q11entry_sorter {
   inline bool operator()(const q11entry &lhs, const q11entry &rhs) const {
-    //return lhs.value > rhs.value;
-    return lhs.ps_partkey < rhs.ps_partkey;
+    return lhs.value > rhs.value;
+    //return lhs.ps_partkey < rhs.ps_partkey;
   }
 } q11entry_functor;
 
@@ -1206,9 +706,9 @@ static void do_query_q11_noopt(Connect &conn,
 
     ostringstream s;
     s << "SELECT SQL_NO_CACHE "
-        << "ps_partkey_DET, ps_partkey_SALT, "
-        << "ps_supplycost_DET, ps_supplycost_SALT, "
-        << "ps_availqty_DET, ps_availqty_SALT "
+        << "ps_partkey_DET, "
+        << "ps_supplycost_DET, "
+        << "ps_availqty_DET "
       << "FROM partsupp_enc, supplier_enc, nation_enc "
       << "WHERE "
         << "ps_suppkey_DET = s_suppkey_DET AND "
@@ -1236,7 +736,7 @@ static void do_query_q11_noopt(Connect &conn,
         // ps_partkey
         uint64_t ps_partkey = decryptRowFromTo<uint64_t>(
                 row[0].data,
-                valFromStr(row[1].data),
+                12345,
                 fieldname(partsupp::ps_partkey, "DET"),
                 TYPE_INTEGER,
                 SECLEVEL::DETJOIN,
@@ -1245,8 +745,8 @@ static void do_query_q11_noopt(Connect &conn,
 
         // ps_supplycost
         uint64_t ps_supplycost_int = decryptRow<uint64_t>(
-                row[2].data,
-                valFromStr(row[3].data),
+                row[1].data,
+                12345,
                 fieldname(partsupp::ps_supplycost, "DET"),
                 TYPE_INTEGER,
                 oDET,
@@ -1255,8 +755,8 @@ static void do_query_q11_noopt(Connect &conn,
 
         // ps_availqty
         uint64_t ps_availqty = decryptRow<uint64_t>(
-                row[4].data,
-                valFromStr(row[5].data),
+                row[2].data,
+                12345,
                 fieldname(partsupp::ps_availqty, "DET"),
                 TYPE_INTEGER,
                 oDET,
@@ -1322,6 +822,95 @@ static void do_query_q11(Connect &conn,
       results.push_back(
           q11entry(resultFromStr<uint64_t>(row[0].data),
                    resultFromStr<double>(row[1].data)));
+    }
+}
+
+static void do_query_q14_opt(Connect &conn,
+                             CryptoManager &cm,
+                             uint32_t year,
+                             vector<q14entry> &results) {
+    NamedTimer fcnTimer(__func__);
+
+    bool isBin;
+    string encDateLower = cm.crypt(cm.getmkey(), strFromVal(EncodeDate(1, 1, year)),
+                                   TYPE_INTEGER, fieldname(lineitem::l_shipdate, "OPE"),
+                                   getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
+    string encDateUpper = cm.crypt(cm.getmkey(), strFromVal(EncodeDate(2, 1, year)),
+                                   TYPE_INTEGER, fieldname(lineitem::l_shipdate, "OPE"),
+                                   getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
+
+    Binary key(cm.getKey(cm.getmkey(), fieldname(part::p_type, "SWP"), SECLEVEL::SWP));
+    Token t = CryptoManager::token(key, Binary("promo"));
+
+    ZZ zero(to_ZZ(0));
+    string encZERO = cm.encrypt_Paillier(zero);
+
+    ostringstream s;
+    s << "SELECT SQL_NO_CACHE "
+        << "agg(CASE WHEN "
+          << "searchSWP("
+            << marshallBinary(string((char *)t.ciph.content, t.ciph.len))
+            << ", "
+            << marshallBinary(string((char *)t.wordKey.content, t.wordKey.len))
+            << ", p_type_SWP) = 1 "
+          << "THEN l_bitpacked_AGG ELSE " << marshallBinary(encZERO) << " END), "
+        << "agg(l_bitpacked_AGG) "
+      << "FROM lineitem_enc, part_enc "
+      << "WHERE "
+        << "l_partkey_DET = p_partkey_DET AND "
+        << "l_shipdate_OPE >= " << encDateLower << " AND "
+        << "l_shipdate_OPE < " << encDateUpper;
+
+    DBResult * dbres;
+    {
+      NamedTimer t(__func__, "execute");
+      conn.execute(s.str(), dbres);
+    }
+    ResType res;
+    {
+      NamedTimer t(__func__, "unpack");
+      res = dbres->unpack();
+      assert(res.ok);
+    }
+
+    for (auto row : res.rows) {
+      ZZ m0, m1;
+      cm.decrypt_Paillier(row[0].data, m0);
+      cm.decrypt_Paillier(row[1].data, m1);
+
+      long sum_disc_price_int_top = extract_from_slot(m0, 4);
+      long sum_disc_price_int_bot = extract_from_slot(m1, 4);
+
+      double sum_disc_price_top = ((double)sum_disc_price_int_top)/100.0;
+      double sum_disc_price_bot = ((double)sum_disc_price_int_bot)/100.0;
+
+      double result = 100.0 * (sum_disc_price_top / sum_disc_price_bot);
+      results.push_back(result);
+    }
+}
+
+static void do_query_q14(Connect &conn,
+                         uint32_t year,
+                         vector<q14entry> &results) {
+    NamedTimer fcnTimer(__func__);
+
+    ostringstream s;
+    s << "select 100.00 * sum(case when p_type like 'PROMO%' then l_extendedprice * (1 - l_discount) else 0 end) / sum(l_extendedprice * (1 - l_discount)) as promo_revenue from LINEITEM, PART where l_partkey = p_partkey and l_shipdate >= date '" << year << "-01-01' and l_shipdate < date '" << year << "-01-01' + interval '1' month";
+
+    DBResult * dbres;
+    {
+      NamedTimer t(__func__, "execute");
+      conn.execute(s.str(), dbres);
+    }
+    ResType res;
+    {
+      NamedTimer t(__func__, "unpack");
+      res = dbres->unpack();
+      assert(res.ok);
+    }
+
+    for (auto row : res.rows) {
+      results.push_back(resultFromStr<double>(row[0].data));
     }
 }
 
@@ -1417,13 +1006,13 @@ static void do_query_q11_opt_proj(Connect &conn,
     // same time, while optimizing for minimum data sent back
     ostringstream s1;
     s1
-      << "SELECT SQL_NO_CACHE ps_partkey_DET, ps_partkey_SALT, ps_value_DET, cnt, suppkeys FROM ("
+      << "SELECT SQL_NO_CACHE ps_partkey_DET, ps_value_DET, cnt, suppkeys FROM ("
         << "SELECT SQL_NO_CACHE "
-          << "ps_partkey_DET, ps_partkey_SALT, ps_value_DET, "
+          << "ps_partkey_DET, ps_value_DET, "
           << "COUNT(*) AS cnt, COUNT(*) > 1 OR ps_value_OPE > "
             << encVALUE << " AS filter, "
           << "CASE COUNT(*) WHEN 1 THEN NULL ELSE GROUP_CONCAT(ps_suppkey_DET) END AS suppkeys "
-        << "FROM partsupp_enc_opt, supplier_enc, nation_enc "
+        << "FROM partsupp_enc, supplier_enc, nation_enc "
         << "WHERE "
           << "ps_suppkey_DET = s_suppkey_DET AND "
           << "s_nationkey_DET = n_nationkey_DET AND "
@@ -1451,11 +1040,11 @@ static void do_query_q11_opt_proj(Connect &conn,
         // and do the decryption. if count(*) > 1, then save ps_partkey_DET
         // away for later (but do NOT decrypt it)
 
-        if (valFromStr(row[3].data) == 1) {
+        if (valFromStr(row[2].data) == 1) {
           // ps_partkey
           uint64_t ps_partkey = decryptRowFromTo<uint64_t>(
                   row[0].data,
-                  valFromStr(row[1].data),
+                  12345,
                   fieldname(partsupp::ps_partkey, "DET"),
                   TYPE_INTEGER,
                   SECLEVEL::DETJOIN,
@@ -1464,7 +1053,7 @@ static void do_query_q11_opt_proj(Connect &conn,
 
           // ps_value
           uint64_t ps_value_int = decryptRow<uint64_t>(
-                  row[2].data,
+                  row[1].data,
                   12345,
                   fieldname(partsupp::ps_value, "DET"),
                   TYPE_INTEGER,
@@ -1476,7 +1065,7 @@ static void do_query_q11_opt_proj(Connect &conn,
           results.push_back(q11entry(ps_partkey, ps_value));
         } else {
           vector<string> suppkeys;
-          tokenize(row[4].data, ",", suppkeys);
+          tokenize(row[3].data, ",", suppkeys);
           assert(suppkeys.size() > 1);
           savedKeys.push_back(GroupEntry(row[0].data, suppkeys));
         }
@@ -1512,8 +1101,8 @@ static void do_query_q11_opt_proj(Connect &conn,
     ostringstream s2;
     s2
       << "SELECT SQL_NO_CACHE "
-        << "ps_partkey_DET, ps_partkey_SALT, ps_value_DET "
-      << "FROM partsupp_enc_opt "
+        << "ps_partkey_DET, ps_value_DET "
+      << "FROM partsupp_enc "
       << "WHERE " << join(mapped, " OR ");
 
     {
@@ -1534,7 +1123,7 @@ static void do_query_q11_opt_proj(Connect &conn,
         // ps_partkey
         uint64_t ps_partkey = decryptRowFromTo<uint64_t>(
                 row[0].data,
-                valFromStr(row[1].data),
+                12345,
                 fieldname(partsupp::ps_partkey, "DET"),
                 TYPE_INTEGER,
                 SECLEVEL::DETJOIN,
@@ -1543,7 +1132,7 @@ static void do_query_q11_opt_proj(Connect &conn,
 
         // ps_value
         uint64_t ps_value_int = decryptRow<uint64_t>(
-                row[2].data,
+                row[1].data,
                 12345,
                 fieldname(partsupp::ps_value, "DET"),
                 TYPE_INTEGER,
@@ -1575,6 +1164,7 @@ static void do_query_q11_opt_proj(Connect &conn,
     }
 }
 
+/*
 static void do_query_q11_opt(Connect &conn,
                              CryptoManager &cm,
                              const string &name,
@@ -1653,6 +1243,7 @@ static void do_query_q11_opt(Connect &conn,
       sort(results.begin(), results.end(), q11entry_functor);
     }
 }
+*/
 
 static void do_query_q2(Connect &conn,
                         uint64_t size,
@@ -1858,7 +1449,7 @@ static inline uint32_t random_year() {
 
 static void usage(char **argv) {
     cerr << "[USAGE]: " << argv[0] << " "
-         << "(((--orig|--crypt|--crypt-opt|--crypt-opt-compact-sort-key|--crypt-opt-compact-table|--crypt-opt-all|--crypt-sum) year)|(--orig-query11|--crypt-query11|--crypt-opt-query11|--crypt-opt-proj-query11 nation fraction)|((--orig-query2|--crypt-query2) size type name)) num_queries"
+         << "(((--orig-query1|--crypt-query1|--crypt-opt-query1) year)|(--orig-query11|--crypt-query11|--crypt-opt-query11|--crypt-opt-proj-query11 nation fraction)|((--orig-query2|--crypt-query2) size type name)|((--orig-query14|--crypt-opt-query14) year)) num_queries"
 
          << endl;
 }
@@ -1869,7 +1460,10 @@ enum query_selection {
   query1,
   query2,
   query11,
+  query14,
 };
+
+#define NELEMS(array) (sizeof(array) / sizeof(array[0]))
 
 int main(int argc, char **argv) {
     srand(time(NULL));
@@ -1877,40 +1471,51 @@ int main(int argc, char **argv) {
         usage(argv);
         return 1;
     }
-    if (strcmp(argv[1], "--orig") &&
-        strcmp(argv[1], "--crypt") &&
-        strcmp(argv[1], "--crypt-opt") &&
-        strcmp(argv[1], "--crypt-opt-compact-sort-key") &&
-        strcmp(argv[1], "--crypt-opt-compact-table") &&
-        strcmp(argv[1], "--crypt-opt-all") &&
-        strcmp(argv[1], "--crypt-sum") &&
-        strcmp(argv[1], "--orig-query11") &&
-        strcmp(argv[1], "--crypt-query11") &&
-        strcmp(argv[1], "--crypt-opt-query11") &&
-        strcmp(argv[1], "--crypt-opt-proj-query11") &&
-        strcmp(argv[1], "--orig-query2") &&
-        strcmp(argv[1], "--crypt-query2")) {
-        usage(argv);
-        return 1;
-    }
+
+    static const char * Query1Strings[] = {
+        "--orig-query1",
+        "--crypt-query1",
+        "--crypt-opt-query1",
+    };
+    std::set<string> Query1Modes
+      (Query1Strings, Query1Strings + NELEMS(Query1Strings));
+
+    static const char * Query2Strings[] = {
+        "--orig-query2",
+        "--crypt-query2",
+    };
+    std::set<string> Query2Modes
+      (Query2Strings, Query2Strings + NELEMS(Query2Strings));
+
+    static const char * Query11Strings[] = {
+        "--orig-query11",
+        "--crypt-query11",
+        //"--crypt-opt-query11",
+        "--crypt-opt-proj-query11",
+    };
+    std::set<string> Query11Modes
+      (Query11Strings, Query11Strings + NELEMS(Query11Strings));
+
+    static const char * Query14Strings[] = {
+        "--orig-query14",
+        "--crypt-opt-query14",
+    };
+    std::set<string> Query14Modes
+      (Query14Strings, Query14Strings + NELEMS(Query14Strings));
 
     enum query_selection q;
 
-    if (
-        !strcmp(argv[1], "--orig") ||
-        !strcmp(argv[1], "--crypt") ||
-        !strcmp(argv[1], "--crypt-opt") ||
-        !strcmp(argv[1], "--crypt-opt-compact-sort-key") ||
-        !strcmp(argv[1], "--crypt-opt-compact-table") ||
-        !strcmp(argv[1], "--crypt-opt-all") ||
-        !strcmp(argv[1], "--crypt-sum")) {
-      q = query1;
-    } else if (
-        !strcmp(argv[1], "--orig-query2") ||
-        !strcmp(argv[1], "--crypt-query2")) {
-      q = query2;
+    if (Query1Modes.find(argv[1]) != Query1Modes.end()) {
+        q = query1;
+    } else if (Query2Modes.find(argv[1]) != Query2Modes.end()) {
+        q = query2;
+    } else if (Query11Modes.find(argv[1]) != Query11Modes.end()) {
+        q = query11;
+    } else if (Query14Modes.find(argv[1]) != Query14Modes.end()) {
+        q = query14;
     } else {
-      q = query11;
+        usage(argv);
+        return 1;
     }
 
     Connect conn("localhost", "root", "letmein", "tpch");
@@ -1919,12 +1524,12 @@ int main(int argc, char **argv) {
       case query1: input_nruns = atoi(argv[3]); break;
       case query2: input_nruns = atoi(argv[5]); break;
       case query11: input_nruns = atoi(argv[4]); break;
+      case query14: input_nruns = atoi(argv[3]); break;
     }
     uint32_t nruns = (uint32_t) input_nruns;
 
     unsigned long ctr = 0;
     CryptoManager cm("12345");
-
 
 #define PRINT_RESULTS() \
     do { \
@@ -1936,70 +1541,38 @@ int main(int argc, char **argv) {
         } \
     } while (0)
 
+    string mode(argv[1] + 2); // remove "--"
+
     switch (q) {
       case query1:
         {
           int input_year = atoi(argv[2]);
-          if (input_year < 0 || input_nruns < 0) {
-            usage(argv);
-            return 1;
-          }
+          assert(input_year >= 0);
           uint32_t year = (uint32_t) input_year;
           vector<q1entry> results;
-          if (!strcmp(argv[1], "--orig")) {
+          if (mode == "orig-query1") {
             // vanilla MYSQL case
             for (size_t i = 0; i < nruns; i++) {
-              do_query_orig(conn, year, results);
+              do_query_q1(conn, year, results);
               ctr += results.size();
               PRINT_RESULTS();
               results.clear();
             }
-          } else {
-            // crypt case
-            if (!strcmp(argv[1], "--crypt")) {
-              for (size_t i = 0; i < nruns; i++) {
-                do_query_cryptdb(conn, cm, year, results);
-                ctr += results.size();
-                PRINT_RESULTS();
-                results.clear();
-              }
-            } else if (!strcmp(argv[1], "--crypt-opt")) {
-              for (size_t i = 0; i < nruns; i++) {
-                do_query_cryptdb_opt(conn, cm, year, results);
-                ctr += results.size();
-                PRINT_RESULTS();
-                results.clear();
-              }
-            } else if (!strcmp(argv[1], "--crypt-opt-compact-sort-key")) {
-              for (size_t i = 0; i < nruns; i++) {
-                do_query_cryptdb_opt_compact_sort_key(conn, cm, year, results);
-                ctr += results.size();
-                PRINT_RESULTS();
-                results.clear();
-              }
-            } else if (!strcmp(argv[1], "--crypt-opt-compact-table")) {
-              for (size_t i = 0; i < nruns; i++) {
-                do_query_cryptdb_opt_compact_table(conn, cm, year, results);
-                ctr += results.size();
-                PRINT_RESULTS();
-                results.clear();
-              }
-            } else if (!strcmp(argv[1], "--crypt-opt-all")) {
-              for (size_t i = 0; i < nruns; i++) {
-                do_query_cryptdb_opt_all(conn, cm, year, results);
-                ctr += results.size();
-                PRINT_RESULTS();
-                results.clear();
-              }
-            } else if (!strcmp(argv[1], "--crypt-sum")) {
-              for (size_t i = 0; i < nruns; i++) {
-                do_query_cryptdb_sum(conn, cm, year, results);
-                ctr += results.size();
-                PRINT_RESULTS();
-                results.clear();
-              }
-            } else assert(false);
-          }
+          } else if (mode == "crypt-query1") {
+            for (size_t i = 0; i < nruns; i++) {
+              do_query_q1_noopt(conn, cm, year, results);
+              ctr += results.size();
+              PRINT_RESULTS();
+              results.clear();
+            }
+          } else if (mode == "crypt-opt-query1") {
+            for (size_t i = 0; i < nruns; i++) {
+              do_query_q1_opt(conn, cm, year, results);
+              ctr += results.size();
+              PRINT_RESULTS();
+              results.clear();
+            }
+          } else assert(false);
           break;
         }
       case query2:
@@ -2008,14 +1581,14 @@ int main(int argc, char **argv) {
           string type(argv[3]);
           string name(argv[4]);
           vector<q2entry> results;
-          if (!strcmp(argv[1], "--orig-query2")) {
+          if (mode == "orig-query2") {
             for (size_t i = 0; i < nruns; i++) {
               do_query_q2(conn, size, type, name, results);
               ctr += results.size();
               PRINT_RESULTS();
               results.clear();
             }
-          } else if (!strcmp(argv[1], "--crypt-query2")) {
+          } else if (mode == "crypt-query2") {
             for (size_t i = 0; i < nruns; i++) {
               do_query_q2_noopt(conn, cm, size, type, name, results);
               ctr += results.size();
@@ -2034,30 +1607,55 @@ int main(int argc, char **argv) {
             return 1;
           }
           vector<q11entry> results;
-          if (!strcmp(argv[1], "--orig-query11")) {
+          if (mode == "orig-query11") {
             for (size_t i = 0; i < nruns; i++) {
               do_query_q11(conn, nation, fraction, results);
               ctr += results.size();
               PRINT_RESULTS();
               results.clear();
             }
-          } else if (!strcmp(argv[1], "--crypt-query11")) {
+          } else if (mode == "crypt-query11") {
             for (size_t i = 0; i < nruns; i++) {
               do_query_q11_noopt(conn, cm, nation, fraction, results);
               ctr += results.size();
               PRINT_RESULTS();
               results.clear();
             }
-          } else if (!strcmp(argv[1], "--crypt-opt-query11")) {
+          /*
+          } else if (mode == "crypt-opt-query11") {
             for (size_t i = 0; i < nruns; i++) {
               do_query_q11_opt(conn, cm, nation, fraction, results);
               ctr += results.size();
               PRINT_RESULTS();
               results.clear();
             }
-          } else if (!strcmp(argv[1], "--crypt-opt-proj-query11")) {
+          */
+          } else if ("crypt-opt-proj-query11") {
             for (size_t i = 0; i < nruns; i++) {
               do_query_q11_opt_proj(conn, cm, nation, fraction, results);
+              ctr += results.size();
+              PRINT_RESULTS();
+              results.clear();
+            }
+          } else assert(false);
+        }
+        break;
+      case query14:
+        {
+          int input_year = atoi(argv[2]);
+          assert(input_year >= 0);
+          uint32_t year = (uint32_t) input_year;
+          vector<q14entry> results;
+          if (mode == "orig-query14") {
+            for (size_t i = 0; i < nruns; i++) {
+              do_query_q14(conn, year, results);
+              ctr += results.size();
+              PRINT_RESULTS();
+              results.clear();
+            }
+          } else if (mode == "crypt-opt-query14") {
+            for (size_t i = 0; i < nruns; i++) {
+              do_query_q14_opt(conn, cm, year, results);
               ctr += results.size();
               PRINT_RESULTS();
               results.clear();

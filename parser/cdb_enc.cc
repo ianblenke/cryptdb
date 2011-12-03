@@ -177,7 +177,7 @@ static void do_encrypt(size_t i,
     switch (dt) {
     case DT_INTEGER:
         {
-            // DET, OPE, AGG, SALT
+            // DET, OPE, AGG
             bool isBin;
             if (DoDET(onions)) {
                 assert(OnlyOneBit(onions & DET_BITMASK));
@@ -207,13 +207,6 @@ static void do_encrypt(size_t i,
             } else {
                 if (usenull) enccols.push_back("NULL");;
             }
-
-            // salt
-            if (DoAny(onions)) {
-                enccols.push_back(to_s(12345));
-            } else {
-                if (usenull) enccols.push_back("NULL");
-            }
         }
         break;
     case DT_FLOAT:
@@ -232,7 +225,7 @@ static void do_encrypt(size_t i,
         break;
     case DT_STRING:
         {
-            // DET, OPE, SWP, SALT
+            // DET, OPE, SWP
             bool isBin;
             if (DoDET(onions)) {
                 assert(OnlyOneBit(onions & DET_BITMASK));
@@ -261,13 +254,6 @@ static void do_encrypt(size_t i,
                                          getMin(oSWP), SECLEVEL::SWP, isBin, 12345);
                 enccols.push_back(to_mysql_escape_varbin(encSWP, '\\', '|', '\n'));
             } else {
-              /* Don't put a NULL here for now */
-            }
-
-            // salt
-            if (DoAny(onions)) {
-                enccols.push_back(to_s(12345));
-            } else {
                 if (usenull) enccols.push_back("NULL");
             }
         }
@@ -278,6 +264,10 @@ static void do_encrypt(size_t i,
             int year, month, day;
             int ret = sscanf(plaintext.c_str(), "%d-%d-%d", &year, &month, &day);
             assert(ret == 3);
+            assert(1 <= day && day <= 31);
+            assert(1 <= month && month <= 12);
+            assert(year >= 0);
+            int encoding = day | (month << 5) | (year << 9);
 
 #define __IMPL_FIELD_ENC(field) \
             do { \
@@ -285,7 +275,7 @@ static void do_encrypt(size_t i,
                 if (DoDET(onions)) { \
                     assert(!(onions & ONION_DETJOIN)); \
                     string encDET = cm.crypt(cm.getmkey(), to_s(field), TYPE_INTEGER, \
-                                             fieldname(i, #field "_DET"), \
+                                             fieldname(i, "DET"), \
                                              getMin(oDET), SECLEVEL::DET, isBin, 12345); \
                     enccols.push_back(to_s(valFromStr(encDET))); \
                 } else { \
@@ -293,37 +283,18 @@ static void do_encrypt(size_t i,
                 } \
                 if (DoOPE(onions)) { \
                     string encOPE = cm.crypt(cm.getmkey(), to_s(field), TYPE_INTEGER, \
-                                             fieldname(i, #field "_OPE"), \
+                                             fieldname(i, "OPE"), \
                                              getMin(oOPE), SECLEVEL::OPE, isBin, 12345); \
                     enccols.push_back(to_s(valFromStr(encOPE))); \
                 } else { \
                     if (usenull) enccols.push_back("NULL"); \
                 } \
-                if (DoAGG(onions)) { \
-                    string encAGG = cm.crypt(cm.getmkey(), to_s(field), TYPE_INTEGER, \
-                                             fieldname(i, #field "_AGG"), \
-                                             getMin(oAGG), SECLEVEL::SEMANTIC_AGG, isBin, 12345); \
-                    enccols.push_back(to_mysql_hex(encAGG)); \
-                } else { \
-                    if (usenull) enccols.push_back("NULL"); \
-                } \
             } while (0)
 
-            // year_DET, year_OPE, year_AGG
-            __IMPL_FIELD_ENC(year);
-            // month_DET, month_OPE, month_AGG
-            __IMPL_FIELD_ENC(month);
-            // day_DET, day_OPE, day_AGG
-            __IMPL_FIELD_ENC(day);
+            __IMPL_FIELD_ENC(encoding);
 
 #undef __IMPL_FIELD_ENC
 
-            // salt
-            if (DoAny(onions)) {
-                enccols.push_back(to_s(12345));
-            } else {
-                if (usenull) enccols.push_back("NULL");
-            }
         }
         break;
     }
@@ -356,6 +327,7 @@ public:
       do_encrypt(i, schema[i], onions[i], tokens[i], enccols, cm, usenull);
     }
     postprocessRow(tokens, enccols, cm);
+    writeSalt(tokens, enccols, cm);
   }
 
   virtual
@@ -369,6 +341,12 @@ public:
       enccols.push_back(e);
     }
     postprocessBatch(tokens, enccols, cm);
+  }
+
+  virtual void writeSalt(const vector<string> &tokens,
+                         vector<string>       &enccols,
+                         CryptoManager        &cm) {
+    enccols.push_back("12345");
   }
 
 protected:
@@ -419,48 +397,18 @@ class lineitem_encryptor : public table_encryptor {
 public:
   enum opt_type {
       none,
-      normal,
-      sort_key,
-      compact_table,
-      all,
+      normal
   };
 
   static vector<datatypes> Schema;
-  static vector<int>       NoneOnions;
-  static vector<int>       OptOnions;
-  static vector<int>       OptSkOnions;
-  static vector<int>       OptAllOnions;
+  static vector<int>       Onions;
 
   lineitem_encryptor(enum opt_type tpe)
-    : table_encryptor() , tpe(tpe) {
-
-    schema = Schema;
-    usenull = true;
-    processrow = true;
-    switch (tpe) {
-      case none:
-        onions = NoneOnions;
-        break;
-      case normal:
-        onions = OptOnions;
-        break;
-      case sort_key:
-        onions = OptSkOnions;
-        break;
-      case compact_table:
-        onions = OptSkOnions;
-        usenull = false;
-        break;
-      case all:
-        onions = OptAllOnions;
-        usenull = false;
-        break;
-      default: assert(false);
-    }
-  }
+    : table_encryptor(Schema, Onions, true, true) , tpe(tpe) {}
 
 protected:
 
+  /*
   void precomputeExprs(const vector<string> &tokens,
                        vector<string>       &enccols,
                        CryptoManager        &cm) {
@@ -479,6 +427,7 @@ protected:
     do_encrypt(schema.size() + 1, DT_INTEGER, ONION_AGG,
                to_s(l_charge_int), enccols, cm, usenull);
   }
+  */
 
   virtual
   void postprocessRow(const vector<string> &tokens,
@@ -487,11 +436,6 @@ protected:
 
     switch (tpe) {
       case opt_type::normal:
-      case opt_type::sort_key:
-      case opt_type::compact_table:
-        precomputeExprs(tokens, enccols, cm);
-        break;
-      case opt_type::all:
         {
           ZZ z;
           typedef PallierSlotManager<uint64_t, 2> PSM;
@@ -550,8 +494,8 @@ vector<datatypes> lineitem_encryptor::Schema = {
   DT_FLOAT,
   DT_FLOAT,
 
-  DT_STRING,
-  DT_STRING,
+  DT_CHAR,
+  DT_CHAR,
 
   DT_DATE,
   DT_DATE,
@@ -562,11 +506,11 @@ vector<datatypes> lineitem_encryptor::Schema = {
   DT_STRING,
 };
 
-vector<int> lineitem_encryptor::NoneOnions = {
-  0,
-  0,
-  0,
-  0,
+vector<int> lineitem_encryptor::Onions = {
+  ONION_DETJOIN,
+  ONION_DETJOIN,
+  ONION_DETJOIN,
+  ONION_DETJOIN,
 
   ONION_DET,
   ONION_DET,
@@ -576,62 +520,13 @@ vector<int> lineitem_encryptor::NoneOnions = {
   ONION_DET | ONION_OPE,
   ONION_DET | ONION_OPE,
 
-  ONION_OPE,
-  0,
-  0,
-
-  0,
-  0,
-  0,
-};
-
-vector<int> lineitem_encryptor::OptOnions = {
-  0,
-  0,
-  0,
-  0,
-
-  ONION_AGG,
-  ONION_AGG,
-  ONION_AGG,
-  ONION_AGG,
-
   ONION_DET | ONION_OPE,
-  ONION_DET | ONION_OPE,
+  ONION_DET,
+  ONION_DET,
 
-  ONION_OPE,
-  0,
-  0,
-
-  0,
-  0,
-  0,
-};
-
-vector<int> lineitem_encryptor::OptSkOnions =
-  lineitem_encryptor::OptOnions;
-
-vector<int> lineitem_encryptor::OptAllOnions = {
-  0,
-  0,
-  0,
-  0,
-
-  0,
-  0,
-  0,
-  0,
-
-  ONION_DET | ONION_OPE,
-  ONION_DET | ONION_OPE,
-
-  ONION_OPE,
-  0,
-  0,
-
-  0,
-  0,
-  0,
+  ONION_DET,
+  ONION_DET,
+  ONION_DET,
 };
 
 //----------------------------------------------------------------------------
@@ -780,7 +675,7 @@ vector<int> partsupp_encryptor::PartSuppOnions = {
   ONION_DETJOIN,
   ONION_DET,
   ONION_DET | ONION_OPE,
-  0,
+  ONION_DET,
 };
 
 vector<int> partsupp_encryptor::PartSuppProjOnions = {
@@ -845,7 +740,7 @@ static const vector<int> NationOnions = {
   ONION_DETJOIN,
   ONION_DET | ONION_OPE,
   ONION_DETJOIN,
-  0,
+  ONION_DET,
 };
 
 //----------------------------------------------------------------------------
@@ -877,14 +772,14 @@ static const vector<datatypes> PartSchema = {
 
 static const vector<int> PartOnions = {
   ONION_DETJOIN | ONION_OPE,
-  0,
   ONION_DET,
-  0,
+  ONION_DET,
+  ONION_DET,
   ONION_DET | ONION_SEARCH,
   ONION_DET,
-  0,
-  0,
-  0,
+  ONION_DET,
+  ONION_DET,
+  ONION_DET,
 };
 
 //----------------------------------------------------------------------------
@@ -913,9 +808,6 @@ static const vector<int> RegionOnions = {
 static map<string, table_encryptor *> EncryptorMap = {
   {"lineitem-none", new lineitem_encryptor(lineitem_encryptor::none)},
   {"lineitem-normal", new lineitem_encryptor(lineitem_encryptor::normal)},
-  {"lineitem-sort-key", new lineitem_encryptor(lineitem_encryptor::sort_key)},
-  {"lineitem-compact-table", new lineitem_encryptor(lineitem_encryptor::compact_table)},
-  {"lineitem-all", new lineitem_encryptor(lineitem_encryptor::all)},
 
   {"partsupp-none", new partsupp_encryptor(partsupp_encryptor::none)},
   {"partsupp-normal", new partsupp_encryptor(partsupp_encryptor::normal)},
