@@ -50,6 +50,13 @@ inline string to_s(const T& t) {
     return s.str();
 }
 
+static inline string lower_s(const string &s) {
+  string ret(s);
+  // why isn't there a string.to_lower()?
+  transform(ret.begin(), ret.end(), ret.begin(), ::tolower);
+  return ret;
+}
+
 static SECLEVEL getUsefulMax(onion o) {
     switch (o) {
     case oDET: {return SECLEVEL::DET;}
@@ -224,6 +231,16 @@ enum region {
   r_regionkey,
   r_name,
   r_comment,
+};
+
+enum supplier {
+  s_suppkey,
+  s_name,
+  s_address,
+  s_nationkey,
+  s_phone,
+  s_acctbal,
+  s_comment,
 };
 
 struct q1entry {
@@ -1646,6 +1663,7 @@ static void do_query_q2(Connect &conn,
 
 		ostringstream s;
     s << "select SQL_NO_CACHE s_acctbal, s_name, n_name, p_partkey, p_mfgr, s_address, s_phone, s_comment from PART, SUPPLIER, PARTSUPP, NATION, REGION where p_partkey = ps_partkey and s_suppkey = ps_suppkey and p_size = " << size << " and p_type like '%" << type << "' and s_nationkey = n_nationkey and n_regionkey = r_regionkey and r_name = '" << name << "' and ps_supplycost = ( select SQL_NO_CACHE min(ps_supplycost) from PARTSUPP, SUPPLIER, NATION, REGION where p_partkey = ps_partkey and s_suppkey = ps_suppkey and s_nationkey = n_nationkey and n_regionkey = r_regionkey and r_name = '" << name << "') order by s_acctbal desc, n_name, s_name, p_partkey limit 100";
+    cerr << s.str() << endl;
 
     DBResult * dbres;
     {
@@ -1681,6 +1699,8 @@ static void do_query_q2_noopt(Connect &conn,
                               vector<q2entry> &results) {
     NamedTimer fcnTimer(__func__);
 
+    string lowertype(lower_s(type));
+
     bool isBin;
     string encSIZE = cm.crypt(cm.getmkey(), to_s(size), TYPE_INTEGER,
                               fieldname(part::p_size, "DET"),
@@ -1691,7 +1711,7 @@ static void do_query_q2_noopt(Connect &conn,
                               getMin(oDET), SECLEVEL::DET, isBin, 12345);
 
     Binary key(cm.getKey(cm.getmkey(), fieldname(part::p_type, "SWP"), SECLEVEL::SWP));
-    Token t = CryptoManager::token(key, Binary(type));
+    Token t = CryptoManager::token(key, Binary(lowertype));
 
 		ostringstream s;
     s << "SELECT SQL_NO_CACHE "
@@ -1706,14 +1726,14 @@ static void do_query_q2_noopt(Connect &conn,
           << marshallBinary(string((char *)t.ciph.content, t.ciph.len))
           << ", "
           << marshallBinary(string((char *)t.wordKey.content, t.wordKey.len))
-          << ", p_type_SWP) = 1 AND"
+          << ", p_type_SWP) = 1 AND "
         << "s_nationkey_DET = n_nationkey_DET AND "
         << "n_regionkey_DET = r_regionkey_DET AND "
         << "r_name_DET = " << marshallBinary(encNAME) << " AND "
         << "ps_supplycost_OPE = ("
           << "SELECT SQL_NO_CACHE "
             << "min(ps_supplycost_OPE) "
-          << "FROM part_enc, supplier_enc, partsupp_enc, nation_enc, region_enc "
+          << "FROM partsupp_enc, supplier_enc, nation_enc, region_enc "
           << "WHERE "
             << "p_partkey_DET = ps_partkey_DET AND "
             << "s_suppkey_DET = ps_suppkey_DET AND "
@@ -1723,15 +1743,7 @@ static void do_query_q2_noopt(Connect &conn,
       << "ORDER BY "
         << "s_acctbal_OPE DESC, n_name_OPE, s_name_OPE, p_partkey_OPE "
       << "LIMIT 100";
-
-    /*
-    s << "select p_partkey_DET, p_type_DET from part_enc where searchSWP("
-      << marshallBinary(string((char *)t.ciph.content, t.ciph.len))
-      << ", "
-      << marshallBinary(string((char *)t.wordKey.content, t.wordKey.len))
-      << ", p_type_SWP) = 1";
     cerr << s.str() << endl;
-    */
 
     DBResult * dbres;
     {
@@ -1746,6 +1758,32 @@ static void do_query_q2_noopt(Connect &conn,
     }
 
     for (auto row : res.rows) {
+
+        uint64_t s_acctbal_int = decryptRow<uint64_t>(
+                row[0].data,
+                12345,
+                fieldname(supplier::s_acctbal, "DET"),
+                TYPE_INTEGER,
+                oDET,
+                cm);
+        double s_acctbal = ((double)s_acctbal_int)/100.0;
+
+        string s_name = decryptRow<string>(
+                row[1].data,
+                12345,
+                fieldname(supplier::s_name, "DET"),
+                TYPE_TEXT,
+                oDET,
+                cm);
+
+        string n_name = decryptRow<string>(
+                row[2].data,
+                12345,
+                fieldname(nation::n_name, "DET"),
+                TYPE_TEXT,
+                oDET,
+                cm);
+
         uint64_t p_partkey = decryptRowFromTo<uint64_t>(
                 row[3].data,
                 12345,
@@ -1754,6 +1792,39 @@ static void do_query_q2_noopt(Connect &conn,
                 SECLEVEL::DETJOIN,
 								getMin(oDET),
 								cm);
+
+        string p_mfgr = decryptRow<string>(
+                row[4].data,
+                12345,
+                fieldname(part::p_mfgr, "DET"),
+                TYPE_TEXT,
+                oDET,
+                cm);
+
+        string s_address = decryptRow<string>(
+                row[5].data,
+                12345,
+                fieldname(supplier::s_address, "DET"),
+                TYPE_TEXT,
+                oDET,
+                cm);
+
+        string s_phone = decryptRow<string>(
+                row[6].data,
+                12345,
+                fieldname(supplier::s_phone, "DET"),
+                TYPE_TEXT,
+                oDET,
+                cm);
+
+        string s_comment = decryptRow<string>(
+                row[7].data,
+                12345,
+                fieldname(supplier::s_comment, "DET"),
+                TYPE_TEXT,
+                oDET,
+                cm);
+
         string p_type = decryptRow<string>(
                 row[8].data,
                 12345,
@@ -1761,7 +1832,21 @@ static void do_query_q2_noopt(Connect &conn,
                 TYPE_TEXT,
                 oDET,
                 cm);
-        cerr << p_partkey << "|" << p_type << endl;
+
+        q2entry entry(s_acctbal,
+                      s_name,
+                      n_name,
+                      p_partkey,
+                      p_mfgr,
+                      s_address,
+                      s_phone,
+                      s_comment);
+
+        if (lower_s(p_type).find(lowertype) != string::npos) {
+          results.push_back(entry);
+        } else {
+          cerr << "bad row found (p_type = " << p_type << "): " << entry << endl;
+        }
     }
 }
 

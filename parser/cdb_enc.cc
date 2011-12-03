@@ -817,11 +817,11 @@ static const vector<datatypes> SupplierSchema = {
 static const vector<int> SupplierOnions = {
   ONION_DETJOIN,
   ONION_DET | ONION_OPE,
-  0,
+  ONION_DET,
   ONION_DETJOIN,
-  0,
+  ONION_DET,
   ONION_DET | ONION_OPE,
-  0,
+  ONION_DET,
 };
 
 //----------------------------------------------------------------------------
