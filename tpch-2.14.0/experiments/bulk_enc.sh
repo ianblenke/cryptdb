@@ -1,11 +1,12 @@
 #!/bin/bash
-
+set -x
 NPROCS=24
-if [ $# -ne 1 ]; then 
-    echo "[USAGE]: $0 [filename]"
+if [ $# -ne 2 ]; then 
+    echo "[USAGE]: $0 [flag] [filename]"
     exit 1
 fi
-FNAME=$1
+FLAG=$1
+FNAME=$2
 if [ ! -f $FNAME ]; then
     echo "No such file $FNAME"
     exit 1
@@ -15,8 +16,14 @@ LINES_PER_FILE=$(( $NUM_ENTRIES / $NPROCS ))
 if [ $LINES_PER_FILE -eq 0 ]; then
     LINES_PER_FILE=1
 fi
+rm -f ${FNAME}_*
 split -d -l $LINES_PER_FILE $FNAME ${FNAME}_
+PIDS=()
 for i in ${FNAME}_*; do
-    obj/parser/cdb_enc < $i > ${i}.enc &
+    obj/parser/cdb_enc $FLAG < $i > ${i}.enc &
+    PIDS+=($!)
+done
+for pid in "${PIDS[@]}"; do
+    wait $pid
 done
 cat ${FNAME}_*.enc > ${FNAME}.enc
