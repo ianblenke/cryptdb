@@ -157,11 +157,12 @@ static inline string to_mysql_escape_varbin(
 
 template <typename T, size_t WordsPerSlot>
 struct PallierSlotManager {
+public:
   static const size_t WordBits = sizeof(T) * 8;
   static const size_t SlotBits = WordBits * WordsPerSlot;
   static const size_t TotalBits = CryptoManager::Paillier_len_bits / 2;
   static const size_t NumSlots = TotalBits / SlotBits;
-  static const typename make_unsigned<T>::type Mask = -1;
+
   static ZZ ZZMask;
 
   /** assumes slot currently un-occupied */
@@ -170,14 +171,26 @@ struct PallierSlotManager {
     z |= (to_ZZ(value) << (SlotBits * slot));
   }
 
-  static T extract_from_slot(const ZZ &z, size_t slot) {
+  template <typename R>
+  static R extract_from_slot(const ZZ &z, size_t slot) {
     assert(slot < NumSlots);
-    return (T) to_long((z >> (SlotBits * slot)) & ZZMask);
+    return (R) to_long((z >> (SlotBits * slot)) & ZZMask);
+  }
+
+private:
+  static inline ZZ MakeSlotMask() {
+    static const typename make_unsigned<T>::type PrimitiveMask = -1;
+    ZZ mask = to_ZZ(PrimitiveMask);
+    for (size_t i = 1; i < WordsPerSlot; i++) {
+      mask |= (to_ZZ(PrimitiveMask) << (WordBits * i));
+    }
+    assert((size_t)NumBits(mask) == SlotBits);
+    return mask;
   }
 };
 
 template <typename T, size_t WordsPerSlot>
-ZZ PallierSlotManager<T, WordsPerSlot>::ZZMask = to_ZZ(Mask);
+ZZ PallierSlotManager<T, WordsPerSlot>::ZZMask = MakeSlotMask();
 
 static void do_encrypt(size_t i,
                        datatypes dt,
@@ -537,7 +550,11 @@ protected:
                         ((rows.size() % PSM::NumSlots) ? 1 : 0);
 
       for (size_t i = 0; i < nbatches; i++) {
-        ZZ z1, z2, z3, z4, z5;
+        ZZ z1 = to_ZZ(0);
+        ZZ z2 = to_ZZ(0);
+        ZZ z3 = to_ZZ(0);
+        ZZ z4 = to_ZZ(0);
+        ZZ z5 = to_ZZ(0);
         vector<Key> keys;
 
         size_t remaining = rows.size() - i * PSM::NumSlots;
@@ -590,7 +607,7 @@ protected:
         }
 
         // (l_returnflag, l_linestatus), start_shipdate, end_shipdate,
-        //    k1, k2, ..., k16,
+        //    k1, k2, ..., k16, packed_count,
         //    z1, z2, z3, z4, z5
 
         Row enc_row(e_group_key.begin(), e_group_key.end());
@@ -607,14 +624,16 @@ protected:
                      it->second, enc_row, cm, false);
         }
 
-        for (size_t i = 0; i < PSM::NumSlots - keys.size(); i++) {
+        for (size_t e_i = 0; e_i < PSM::NumSlots - keys.size(); e_i++) {
           enc_row.push_back("NULL");
           enc_row.push_back("NULL");
         }
 
+        enc_row.push_back(to_s(keys.size()));
+
         ZZ * zs[] = {&z1, &z2, &z3, &z4, &z5};
-        for (size_t i = 0; i < NELEMS(zs); i++) {
-          string enc = cm.encrypt_Paillier(*zs[i]);
+        for (size_t zs_i = 0; zs_i < NELEMS(zs); zs_i++) {
+          string enc = cm.encrypt_Paillier(*zs[zs_i]);
           enc_row.push_back(to_mysql_escape_varbin(enc, '\\', '|', '\n'));
         }
 

@@ -39,11 +39,12 @@ private:
 
 template <typename T, size_t WordsPerSlot>
 struct PallierSlotManager {
+public:
   static const size_t WordBits = sizeof(T) * 8;
   static const size_t SlotBits = WordBits * WordsPerSlot;
   static const size_t TotalBits = CryptoManager::Paillier_len_bits / 2;
   static const size_t NumSlots = TotalBits / SlotBits;
-  static const typename make_unsigned<T>::type Mask = -1;
+
   static ZZ ZZMask;
 
   /** assumes slot currently un-occupied */
@@ -52,14 +53,27 @@ struct PallierSlotManager {
     z |= (to_ZZ(value) << (SlotBits * slot));
   }
 
-  static T extract_from_slot(const ZZ &z, size_t slot) {
+  template <typename R>
+  static R extract_from_slot(const ZZ &z, size_t slot) {
     assert(slot < NumSlots);
-    return (T) to_long((z >> (SlotBits * slot)) & ZZMask);
+    return (R) to_long((z >> (SlotBits * slot)) & ZZMask);
+  }
+
+private:
+  static inline ZZ MakeSlotMask() {
+    static const typename make_unsigned<T>::type PrimitiveMask = -1;
+    ZZ mask = to_ZZ(PrimitiveMask);
+    for (size_t i = 1; i < WordsPerSlot; i++) {
+      mask |= (to_ZZ(PrimitiveMask) << (WordBits * i));
+    }
+    assert((size_t)NumBits(mask) == SlotBits);
+    return mask;
   }
 };
 
 template <typename T, size_t WordsPerSlot>
-ZZ PallierSlotManager<T, WordsPerSlot>::ZZMask = to_ZZ(Mask);
+ZZ PallierSlotManager<T, WordsPerSlot>::ZZMask = MakeSlotMask();
+
 static string fieldname(size_t fieldnum, const string &suffix) {
     ostringstream s;
     s << "field" << fieldnum << suffix;
@@ -470,7 +484,15 @@ static void do_query_q1_packed_opt(Connect &conn,
     s << "SELECT SQL_NO_CACHE "
         << "l_returnflag_DET, "
         << "l_linestatus_DET, "
+
         << "agg(IF(l_shipdate_OPE_end <= " << encDATE << ", z1, NULL), " << pkinfo << "), "
+        << "agg(IF(l_shipdate_OPE_end <= " << encDATE << ", z2, NULL), " << pkinfo << "), "
+        << "agg(IF(l_shipdate_OPE_end <= " << encDATE << ", z3, NULL), " << pkinfo << "), "
+        << "agg(IF(l_shipdate_OPE_end <= " << encDATE << ", z4, NULL), " << pkinfo << "), "
+        << "agg(IF(l_shipdate_OPE_end <= " << encDATE << ", z5, NULL), " << pkinfo << "), "
+
+        << "sum(IF(l_shipdate_OPE_end <= " << encDATE << ", packed_count, 0)), "
+
         << "GROUP_CONCAT("
           << "IF(l_shipdate_OPE_start <= " << encDATE << " AND " << encDATE << " < l_shipdate_OPE_end, "
           << "CONCAT_WS(',',";
@@ -518,27 +540,52 @@ static void do_query_q1_packed_opt(Connect &conn,
                   cm);
           string l_linestatus(1, l_linestatus_ch);
 
-          ZZ z1;
+          ZZ z1, z2, z3, z4, z5;
           cm.decrypt_Paillier(row[2].data, z1);
+          cm.decrypt_Paillier(row[3].data, z2);
+          cm.decrypt_Paillier(row[4].data, z3);
+          cm.decrypt_Paillier(row[5].data, z4);
+          cm.decrypt_Paillier(row[6].data, z5);
 
           typedef PallierSlotManager<uint32_t, 2> PSM;
           uint64_t sum_qty_int = 0;
+          uint64_t sum_base_price_int = 0;
+          uint64_t sum_discount_int = 0;
+          uint64_t sum_disc_price_int = 0;
+          uint64_t sum_charge_int = 0;
+
           for (size_t i = 0; i < PSM::NumSlots; i++) {
-            sum_qty_int += PSM::extract_from_slot(z1, i);
+            sum_qty_int += PSM::extract_from_slot<uint64_t>(z1, i);
+            sum_base_price_int += PSM::extract_from_slot<uint64_t>(z2, i);
+            sum_discount_int += PSM::extract_from_slot<uint64_t>(z3, i);
+            sum_disc_price_int += PSM::extract_from_slot<uint64_t>(z4, i);
+            sum_charge_int += PSM::extract_from_slot<uint64_t>(z5, i);
           }
+
+          // count_order
+          uint64_t count_order = resultFromStr<uint64_t>(row[7].data);
+
           double sum_qty = ((double)sum_qty_int)/100.0;
+          double sum_base_price = ((double)sum_base_price_int)/100.0;
+          double sum_discount = ((double)sum_discount_int)/100.0;
+          double sum_disc_price = ((double)sum_disc_price_int)/100.0;
+          double sum_charge = ((double)sum_charge_int)/100.0;
+
+          double avg_qty = sum_qty / ((double)count_order);
+          double avg_price = sum_base_price / ((double)count_order);
+          double avg_disc = sum_discount / ((double)count_order);
 
           results.push_back(q1entry(
               l_returnflag,
               l_linestatus,
               sum_qty,
-              0,
-              0,
-              0,
-              0,
-              0,
-              0,
-              0));
+              sum_base_price,
+              sum_disc_price,
+              sum_charge,
+              avg_qty,
+              avg_price,
+              avg_disc,
+              count_order));
 
       }
     }
