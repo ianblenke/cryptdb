@@ -20,6 +20,8 @@
 using namespace std;
 using namespace NTL;
 
+#define NELEMS(array) (sizeof(array) / sizeof(array[0]))
+
 template <typename R>
 R resultFromStr(const string &r) {
     stringstream ss(r);
@@ -82,6 +84,17 @@ inline string to_hex(const T& t) {
     ostringstream s;
     s << hex << t;
     return s.str();
+}
+
+static inline int encode_yyyy_mm_dd(const string &datestr) {
+  int year, month, day;
+  int ret = sscanf(datestr.c_str(), "%d-%d-%d", &year, &month, &day);
+  assert(ret == 3);
+  assert(1 <= day && day <= 31);
+  assert(1 <= month && month <= 12);
+  assert(year >= 0);
+  int encoding = day | (month << 5) | (year << 9);
+  return encoding;
 }
 
 static const char* const lut = "0123456789ABCDEF";
@@ -261,13 +274,7 @@ static void do_encrypt(size_t i,
     case DT_DATE:
         {
             // TODO: don't assume yyyy-mm-dd format
-            int year, month, day;
-            int ret = sscanf(plaintext.c_str(), "%d-%d-%d", &year, &month, &day);
-            assert(ret == 3);
-            assert(1 <= day && day <= 31);
-            assert(1 <= month && month <= 12);
-            assert(year >= 0);
-            int encoding = day | (month << 5) | (year << 9);
+            int encoding = encode_yyyy_mm_dd(plaintext);
 
 #define __IMPL_FIELD_ENC(field) \
             do { \
@@ -397,14 +404,35 @@ class lineitem_encryptor : public table_encryptor {
 public:
   enum opt_type {
       none,
-      normal
+      normal,
+      packed,
   };
 
   static vector<datatypes> Schema;
   static vector<int>       Onions;
+  static vector<int>       PackedOnions;
 
   lineitem_encryptor(enum opt_type tpe)
-    : table_encryptor(Schema, Onions, true, true) , tpe(tpe) {}
+    : tpe(tpe) {
+
+    schema = Schema;
+    switch (tpe) {
+      case none:
+      case normal:
+        onions = Onions;
+        usenull = true;
+        processrow = true;
+        break;
+      case packed:
+        onions = PackedOnions;
+        usenull = false;
+        processrow = false;
+        break;
+      default:
+        assert(false);
+        break;
+    }
+  }
 
 protected:
 
@@ -428,6 +456,172 @@ protected:
                to_s(l_charge_int), enccols, cm, usenull);
   }
   */
+
+  virtual
+  void encryptBatch(const vector<vector<string> > &tokens,
+                    vector<vector<string> >       &enccols,
+                    CryptoManager &cm) {
+    assert(tpe == opt_type::packed);
+
+    // sort into (l_returnflag, l_lineitem)
+    typedef pair<string, string> Key;
+    typedef vector<string> Row;
+    typedef map< Key, vector<Row> > group_map;
+    group_map groups;
+
+    for (vector<Row>::const_iterator it = tokens.begin();
+         it != tokens.end(); ++it) {
+
+      const Row &r = *it;
+      Key k(r[lineitem::l_returnflag], r[lineitem::l_linestatus]);
+
+      group_map::iterator i = groups.find(k);
+      if (i == groups.end()) {
+        vector<Row> init;
+        init.push_back(r);
+        groups[k] = init;
+      } else {
+        vector<Row> &rows = i->second;
+        rows.push_back(r);
+      }
+    }
+
+    struct pack_functor_s {
+      inline bool operator()(const Row &lhs, const Row &rhs) const {
+        assert(lhs.size() > lineitem::l_comment);
+        assert(rhs.size() > lineitem::l_comment);
+
+        const string &lhs_shipdate_s = lhs[lineitem::l_shipdate];
+        const string &rhs_shipdate_s = rhs[lineitem::l_shipdate];
+
+        int lhs_encoding = encode_yyyy_mm_dd(lhs_shipdate_s);
+        int rhs_encoding = encode_yyyy_mm_dd(rhs_shipdate_s);
+
+        uint32_t lhs_orderkey = resultFromStr<uint32_t>(lhs[lineitem::l_orderkey]);
+        uint32_t rhs_orderkey = resultFromStr<uint32_t>(rhs[lineitem::l_orderkey]);
+
+        uint32_t lhs_linestatus = resultFromStr<uint32_t>(lhs[lineitem::l_linestatus]);
+        uint32_t rhs_linestatus = resultFromStr<uint32_t>(rhs[lineitem::l_linestatus]);
+
+        return lhs_encoding < rhs_encoding || (
+            lhs_encoding == rhs_encoding && (
+              lhs_orderkey < rhs_orderkey || (
+                lhs_orderkey == rhs_orderkey &&
+                  lhs_linestatus < rhs_linestatus
+              )
+            )
+          );
+      }
+    } pack_functor;
+
+    // sort each group by l_shipdate (asc). break ties by (l_orderkey, l_linenumber)
+    for (group_map::iterator it = groups.begin();
+         it != groups.end(); ++it) {
+      vector<Row> &rows = it->second;
+      sort(rows.begin(), rows.end(), pack_functor);
+    }
+
+    // for each group, we write out a variable number of blocks.
+    for (group_map::iterator it = groups.begin();
+         it != groups.end(); ++it) {
+      const vector<Row> &rows = it->second;
+      typedef PallierSlotManager<uint32_t, 2> PSM;
+
+      vector<string> e_group_key;
+      do_encrypt(lineitem::l_returnflag, DT_CHAR, ONION_DET,
+                 it->first.first, e_group_key, cm, false);
+      do_encrypt(lineitem::l_linestatus, DT_CHAR, ONION_DET,
+                 it->first.second, e_group_key, cm, false);
+
+      size_t nbatches = rows.size() / PSM::NumSlots +
+                        ((rows.size() % PSM::NumSlots) ? 1 : 0);
+
+      for (size_t i = 0; i < nbatches; i++) {
+        ZZ z1, z2, z3, z4, z5;
+        vector<Key> keys;
+
+        size_t remaining = rows.size() - i * PSM::NumSlots;
+        assert(remaining > 0);
+        size_t limit = min(remaining, PSM::NumSlots);
+
+        int mindate = 0, maxdate = 0;
+        for (size_t j = 0; j < limit; j++) {
+          size_t idx = i * PSM::NumSlots + j;
+          assert(idx < rows.size());
+          const Row &row = rows[idx];
+
+          if (j == 0) {
+            mindate = encode_yyyy_mm_dd(row[lineitem::l_shipdate]);
+          } else if (j == limit - 1) {
+            maxdate = encode_yyyy_mm_dd(row[lineitem::l_shipdate]);
+          }
+
+          // l_quantity_AGG
+          long l_quantity_int = roundToLong(resultFromStr<double>(row[lineitem::l_quantity]) * 100.0);
+          PSM::insert_into_slot(z1, l_quantity_int, j);
+
+          // l_extendedprice_AGG
+          long l_extendedprice_int = roundToLong(resultFromStr<double>(row[lineitem::l_extendedprice]) * 100.0);
+          PSM::insert_into_slot(z2, l_extendedprice_int, j);
+
+          // l_discount_AGG
+          long l_discount_int = roundToLong(resultFromStr<double>(row[lineitem::l_discount]) * 100.0);
+          PSM::insert_into_slot(z3, l_discount_int, j);
+
+          // l_tax_AGG
+          //long l_tax_int = roundToLong(resultFromStr<double>(row[lineitem::l_tax]) * 100.0);
+          //PSM::insert_into_slot(z, l_tax_int, 3);
+
+          // l_disc_price = l_extendedprice * (1 - l_discount)
+          double l_extendedprice  = resultFromStr<double>(row[lineitem::l_extendedprice]);
+          double l_discount       = resultFromStr<double>(row[lineitem::l_discount]);
+          double l_disc_price     = l_extendedprice * (1.0 - l_discount);
+          long   l_disc_price_int = roundToLong(l_disc_price * 100.0);
+          PSM::insert_into_slot(z4, l_disc_price_int, j);
+
+          // l_charge = l_extendedprice * (1 - l_discount) * (1 + l_tax)
+          double l_tax        = resultFromStr<double>(row[lineitem::l_tax]);
+          double l_charge     = l_extendedprice * (1.0 - l_discount) * (1.0 + l_tax);
+          long   l_charge_int = roundToLong(l_charge * 100.0);
+          PSM::insert_into_slot(z5, l_charge_int, j);
+
+          Key k(row[lineitem::l_orderkey], row[lineitem::l_linenumber]);
+          keys.push_back(k);
+        }
+
+        // (l_returnflag, l_linestatus), start_shipdate, end_shipdate,
+        //    k1, k2, ..., k16,
+        //    z1, z2, z3, z4, z5
+
+        Row enc_row(e_group_key.begin(), e_group_key.end());
+        do_encrypt(lineitem::l_shipdate, DT_INTEGER, ONION_OPE,
+                   to_s(mindate), enc_row, cm, false);
+        do_encrypt(lineitem::l_shipdate, DT_INTEGER, ONION_OPE,
+                   to_s(maxdate), enc_row, cm, false);
+
+        for (vector<Key>::const_iterator it = keys.begin();
+             it != keys.end(); ++it) {
+          do_encrypt(lineitem::l_orderkey, DT_INTEGER, ONION_DETJOIN,
+                     it->first, enc_row, cm, false);
+          do_encrypt(lineitem::l_linenumber, DT_INTEGER, ONION_DETJOIN,
+                     it->second, enc_row, cm, false);
+        }
+
+        for (size_t i = 0; i < PSM::NumSlots - keys.size(); i++) {
+          enc_row.push_back("NULL");
+          enc_row.push_back("NULL");
+        }
+
+        ZZ * zs[] = {&z1, &z2, &z3, &z4, &z5};
+        for (size_t i = 0; i < NELEMS(zs); i++) {
+          string enc = cm.encrypt_Paillier(*zs[i]);
+          enc_row.push_back(to_mysql_escape_varbin(enc, '\\', '|', '\n'));
+        }
+
+        enccols.push_back(enc_row);
+      }
+    }
+  }
 
   virtual
   void postprocessRow(const vector<string> &tokens,
@@ -527,6 +721,29 @@ vector<int> lineitem_encryptor::Onions = {
   ONION_DET,
   ONION_DET,
   ONION_DET,
+};
+
+vector<int> lineitem_encryptor::PackedOnions = {
+  0,
+  0,
+  0,
+  0,
+
+  0,
+  0,
+  0,
+  0,
+
+  0,
+  0,
+
+  0,
+  0,
+  0,
+
+  0,
+  0,
+  0,
 };
 
 //----------------------------------------------------------------------------
@@ -657,7 +874,7 @@ private:
 
 };
 
-#define NELEMS(array) (sizeof(array) / sizeof(array[0]))
+
 
 std::set<uint32_t> partsupp_encryptor::IraqNationKeySet
   (IraqNationSuppKeys, IraqNationSuppKeys + NELEMS(IraqNationSuppKeys));
@@ -808,6 +1025,7 @@ static const vector<int> RegionOnions = {
 static map<string, table_encryptor *> EncryptorMap = {
   {"lineitem-none", new lineitem_encryptor(lineitem_encryptor::none)},
   {"lineitem-normal", new lineitem_encryptor(lineitem_encryptor::normal)},
+  {"lineitem-packed", new lineitem_encryptor(lineitem_encryptor::packed)},
 
   {"partsupp-none", new partsupp_encryptor(partsupp_encryptor::none)},
   {"partsupp-normal", new partsupp_encryptor(partsupp_encryptor::normal)},

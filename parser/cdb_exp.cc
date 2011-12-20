@@ -37,6 +37,29 @@ private:
   string key1;
 };
 
+template <typename T, size_t WordsPerSlot>
+struct PallierSlotManager {
+  static const size_t WordBits = sizeof(T) * 8;
+  static const size_t SlotBits = WordBits * WordsPerSlot;
+  static const size_t TotalBits = CryptoManager::Paillier_len_bits / 2;
+  static const size_t NumSlots = TotalBits / SlotBits;
+  static const typename make_unsigned<T>::type Mask = -1;
+  static ZZ ZZMask;
+
+  /** assumes slot currently un-occupied */
+  static void insert_into_slot(ZZ &z, T value, size_t slot) {
+    assert(slot < NumSlots);
+    z |= (to_ZZ(value) << (SlotBits * slot));
+  }
+
+  static T extract_from_slot(const ZZ &z, size_t slot) {
+    assert(slot < NumSlots);
+    return (T) to_long((z >> (SlotBits * slot)) & ZZMask);
+  }
+};
+
+template <typename T, size_t WordsPerSlot>
+ZZ PallierSlotManager<T, WordsPerSlot>::ZZMask = to_ZZ(Mask);
 static string fieldname(size_t fieldnum, const string &suffix) {
     ostringstream s;
     s << "field" << fieldnum << suffix;
@@ -426,6 +449,102 @@ static inline void ExtractDate(uint32_t encoding,
   year = (encoding & YearMask) >> 9;
 }
 
+static void do_query_q1_packed_opt(Connect &conn,
+                                   CryptoManager &cm,
+                                   uint32_t year,
+                                   vector<q1entry> &results) {
+    NamedTimer fcnTimer(__func__);
+
+    // l_shipdate <= date '[year]-01-01'
+    bool isBin;
+    string encDATE = cm.crypt(cm.getmkey(), strFromVal(EncodeDate(1, 1, year)),
+                              TYPE_INTEGER, fieldname(lineitem::l_shipdate, "OPE"),
+                              getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
+
+    // do aggregation per group on all entries with enddate <= date.
+    // for intervals with start <= date < end, then we need to collect the
+    // pkey entries here, and query them separately.
+
+    string pkinfo = marshallBinary(cm.getPKInfo());
+    ostringstream s;
+    s << "SELECT SQL_NO_CACHE "
+        << "l_returnflag_DET, "
+        << "l_linestatus_DET, "
+        << "agg(IF(l_shipdate_OPE_end <= " << encDATE << ", z1, NULL), " << pkinfo << "), "
+        << "GROUP_CONCAT("
+          << "IF(l_shipdate_OPE_start <= " << encDATE << " AND " << encDATE << " < l_shipdate_OPE_end, "
+          << "CONCAT_WS(',',";
+
+    for (size_t i = 1; i <= 16; i++) {
+      s << "IF(l_orderkey_DET_" << i << " IS NULL, NULL, CONCAT_WS('|', l_orderkey_DET_" << i << ", l_orderkey_DET_" << i << "))";
+      if (i != 16) s << ",";
+    }
+
+    s << "), NULL)) FROM lineitem_packed_enc GROUP BY l_returnflag_DET, l_linestatus_DET";
+    cerr << s.str() << endl;
+
+    DBResult * dbres;
+    {
+      NamedTimer t(__func__, "execute");
+      conn.execute(s.str(), dbres);
+    }
+    ResType res;
+    {
+      NamedTimer t(__func__, "unpack");
+      res = dbres->unpack();
+      assert(res.ok);
+    }
+
+    {
+      NamedTimer t(__func__, "decrypt");
+      for (auto row : res.rows) {
+          // l_returnflag
+          unsigned char l_returnflag_ch = (unsigned char) decryptRow<uint32_t>(
+                  row[0].data,
+                  12345,
+                  fieldname(lineitem::l_returnflag, "DET"),
+                  TYPE_INTEGER,
+                  oDET,
+                  cm);
+          string l_returnflag(1, l_returnflag_ch);
+
+          // l_linestatus
+          unsigned char l_linestatus_ch = (unsigned char) decryptRow<uint32_t>(
+                  row[1].data,
+                  12345,
+                  fieldname(lineitem::l_linestatus, "DET"),
+                  TYPE_INTEGER,
+                  oDET,
+                  cm);
+          string l_linestatus(1, l_linestatus_ch);
+
+          ZZ z1;
+          cm.decrypt_Paillier(row[2].data, z1);
+
+          typedef PallierSlotManager<uint32_t, 2> PSM;
+          uint64_t sum_qty_int = 0;
+          for (size_t i = 0; i < PSM::NumSlots; i++) {
+            sum_qty_int += PSM::extract_from_slot(z1, i);
+          }
+          double sum_qty = ((double)sum_qty_int)/100.0;
+
+          results.push_back(q1entry(
+              l_returnflag,
+              l_linestatus,
+              sum_qty,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0));
+
+      }
+    }
+
+}
+
 static void do_query_q1_opt(Connect &conn,
                             CryptoManager &cm,
                             uint32_t year,
@@ -442,16 +561,24 @@ static void do_query_q1_opt(Connect &conn,
 
     string pkinfo = marshallBinary(cm.getPKInfo());
     ostringstream s;
-    s << "SELECT SQL_NO_CACHE "
-          << "l_returnflag_DET, "
-          << "l_linestatus_DET, "
-          << "agg(l_bitpacked_AGG, " << pkinfo << "), "
-          << "count(*) "
-      << "FROM lineitem_enc "
-      << "WHERE l_shipdate_OPE < " << encDATE << " "
-      << "GROUP BY l_returnflag_OPE, l_linestatus_OPE "
-      << "ORDER BY l_returnflag_OPE, l_linestatus_OPE";
-    cerr << s.str() << endl;
+    //s << "SELECT SQL_NO_CACHE "
+    //      << "l_returnflag_DET, "
+    //      << "l_linestatus_DET, "
+    //      << "agg(l_bitpacked_AGG, " << pkinfo << "), "
+    //      << "count(*) "
+    //  << "FROM lineitem_enc_3_proj "
+    //  << "WHERE l_shipdate_OPE < " << encDATE << " "
+    //  << "GROUP BY l_returnflag_OPE, l_linestatus_OPE "
+    //  << "ORDER BY l_returnflag_OPE, l_linestatus_OPE";
+    //cerr << s.str() << endl;
+
+    // attempt 1
+    //
+    //s << "SELECT SQL_NO_CACHE r1.l_returnflag_DET, r1.l_linestatus_DET, agg(r2.l_bitpacked_AGG, " << pkinfo << "), count(*) FROM ( SELECT l_returnflag_DET, l_linestatus_DET, l_returnflag_OPE, l_linestatus_OPE, agg_ptr FROM lineitem_enc_2_proj WHERE l_shipdate_OPE < " << encDATE << " ) AS r1 JOIN lineitem_enc_agg_proj AS r2 ON r1.agg_ptr = r2.id GROUP BY r1.l_returnflag_OPE, r1.l_linestatus_OPE ORDER BY r1.l_returnflag_OPE, r1.l_linestatus_OPE";
+
+    //s << "SELECT SQL_NO_CACHE r1.l_returnflag_DET, r1.l_linestatus_DET, sum(length(r2.l_bitpacked_AGG)), count(*) FROM ( SELECT l_returnflag_DET, l_linestatus_DET, l_returnflag_OPE, l_linestatus_OPE, agg_ptr FROM lineitem_enc_2_proj WHERE l_shipdate_OPE < " << encDATE << " ) AS r1 JOIN lineitem_enc_agg_proj AS r2 ON r1.agg_ptr = r2.id GROUP BY r1.l_returnflag_OPE, r1.l_linestatus_OPE ORDER BY r1.l_returnflag_OPE, r1.l_linestatus_OPE";
+
+    s << "SELECT SQL_NO_CACHE r1.l_returnflag_DET, r1.l_linestatus_DET, agg(r2.l_bitpacked_AGG, " << pkinfo << "), count(*) FROM lineitem_enc_2_proj AS r1 JOIN lineitem_enc_agg_proj AS r2 ON r1.agg_ptr = r2.id WHERE r1.l_shipdate_OPE < " << encDATE << " GROUP BY r1.l_returnflag_OPE, r1.l_linestatus_OPE ORDER BY r1.l_returnflag_OPE, r1.l_linestatus_OPE";
 
     {
       NamedTimer t(__func__, "execute");
@@ -1476,6 +1603,7 @@ int main(int argc, char **argv) {
         "--orig-query1",
         "--crypt-query1",
         "--crypt-opt-query1",
+        "--crypt-opt-packed-query1",
     };
     std::set<string> Query1Modes
       (Query1Strings, Query1Strings + NELEMS(Query1Strings));
@@ -1518,7 +1646,7 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    Connect conn("localhost", "root", "letmein", "tpch");
+    Connect conn("localhost", "root", "", "tpch-0.25");
     int input_nruns;
     switch (q) {
       case query1: input_nruns = atoi(argv[3]); break;
@@ -1568,6 +1696,13 @@ int main(int argc, char **argv) {
           } else if (mode == "crypt-opt-query1") {
             for (size_t i = 0; i < nruns; i++) {
               do_query_q1_opt(conn, cm, year, results);
+              ctr += results.size();
+              PRINT_RESULTS();
+              results.clear();
+            }
+          } else if (mode == "crypt-opt-packed-query1") {
+            for (size_t i = 0; i < nruns; i++) {
+              do_query_q1_packed_opt(conn, cm, year, results);
               ctr += results.size();
               PRINT_RESULTS();
               results.clear();
