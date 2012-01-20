@@ -28,7 +28,7 @@ cmc_encrypt(const BlockCipher *c,
     for (size_t j = BlockCipher::blocksize; j != 0; j--) {
         uint16_t a = (*ctext)[j - 1] ^
                      (*ctext)[j - 1 + ptext.size() - BlockCipher::blocksize];
-        m[j] = carry | (uint8_t) (a << 1);
+        m[j - 1] = carry | (uint8_t) (a << 1);
         carry = a >> 7;
     }
     m[BlockCipher::blocksize-1] |= carry;
@@ -77,7 +77,7 @@ cmc_decrypt(const BlockCipher *c,
     for (size_t j = BlockCipher::blocksize; j != 0; j--) {
         uint16_t a = (*ptext)[j - 1] ^
                      (*ptext)[j - 1 + ctext.size() - BlockCipher::blocksize];
-        m[j] = carry | (uint8_t) (a << 1);
+        m[j - 1] = carry | (uint8_t) (a << 1);
         carry = a >> 7;
     }
 

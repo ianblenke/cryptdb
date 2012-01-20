@@ -269,7 +269,7 @@ static QueryList PrivMessages = QueryList("MultiPrivMessages",
       "CREATE TABLE u_mess (userid integer, username text)",
       "CREATE TABLE "+PWD_TABLE_PREFIX+"u_mess (username text, psswd text)" },
     { "CREATE TABLE msgs (msgid equals privmsg.msgid integer, msgtext encfor msgid text)",
-      "CREATE TABLE privmsg (msgid integer, recid equals u_mess.userid speaksfor msgid integer, senderid speaksfor msgid integer)",
+      "CREATE TABLE privmsg (msgid integer, recid equals u_mess.userid speaksfor msgid integer, senderid equals u_mess.userid speaksfor msgid integer)",
       "CREATE TABLE u_mess (userid equals privmsg.senderid integer, username givespsswd userid text)",
       "COMMIT ANNOTATIONS" },
     { Query("INSERT INTO "+PWD_TABLE_PREFIX+"u_mess (username, psswd) VALUES ('alice', 'secretalice')", false),
@@ -449,7 +449,7 @@ static QueryList Auto = QueryList("AutoInc",
       "CREATE TABLE u_auto (userid enc integer, username enc text)",
       "CREATE TABLE "+PWD_TABLE_PREFIX+"u_auto (username text, psswd text)" },
     { "CREATE TABLE msgs (msgid equals privmsg.msgid integer AUTO_INCREMENT PRIMARY KEY , msgtext encfor msgid text)",
-      "CREATE TABLE privmsg (msgid integer, recid equals u_auto.userid speaksfor msgid integer, senderid speaksfor msgid integer)",
+      "CREATE TABLE privmsg (msgid integer, recid equals u_auto.userid speaksfor msgid integer, senderid equals u_auto.userid speaksfor msgid integer)",
       "CREATE TABLE u_auto (userid equals privmsg.senderid integer, username givespsswd userid text)",
       "COMMIT ANNOTATIONS" },
     { Query("INSERT INTO "+PWD_TABLE_PREFIX+"u_auto (username, psswd) VALUES ('alice','secretA')",false),
@@ -526,7 +526,7 @@ static QueryList ManyConnections = QueryList("Multiple connections",
       "CREATE TABLE u_conn (userid enc integer, username enc text)",
       "CREATE TABLE "+PWD_TABLE_PREFIX+"u_conn (username text, psswd text)" },
     { "CREATE TABLE msgs (msgid equals privmsg.msgid integer AUTO_INCREMENT PRIMARY KEY , msgtext encfor msgid text)",
-      "CREATE TABLE privmsg (msgid integer, recid equals u_conn.userid speaksfor msgid integer, senderid speaksfor msgid integer)",
+      "CREATE TABLE privmsg (msgid integer, recid equals u_conn.userid speaksfor msgid integer, senderid equals u_conn.userid speaksfor msgid integer)",
       "CREATE TABLE forum (forumid integer AUTO_INCREMENT PRIMARY KEY, title text)",
       "CREATE TABLE post (postid integer AUTO_INCREMENT PRIMARY KEY, forumid equals forum.forumid integer, posttext encfor forumid text, author equals u_conn.userid speaksfor forumid integer)",
       "CREATE TABLE u_conn (userid equals privmsg.senderid integer, username givespsswd userid text)",
@@ -658,7 +658,7 @@ Connection::start() {
         this->conn = conn_set.begin();
         break;
     }
-        //single -- new EDBProxy
+    /*        //single -- new EDBProxy
     case SINGLE:
         cl = new EDBProxy(tc.host, tc.user, tc.pass, tc.db, tc.port, false);
         cl->setMasterKey(masterKey);
@@ -669,7 +669,23 @@ Connection::start() {
         cl->setMasterKey(masterKey);
         assert_s(cl->plain_execute("DROP FUNCTION IF EXISTS test").ok, "dropping test for multi");
         assert_s(cl->plain_execute("CREATE FUNCTION test (optionid integer) RETURNS bool RETURN optionid=20").ok, "creating test function for multi");
-        break;
+        break;*/
+        //single -- new Rewriter
+    case SINGLE: {
+        Connect * c = new Connect(tc.host, tc.user, tc.pass, tc.db, tc.port);
+        conn_set.insert(c);
+        this->conn = conn_set.begin();
+        ConnectionData cd = ConnectionData(tc.host, tc.user, tc.pass, tc.db, tc.port);
+        re = new Rewriter(cd, cd, false);
+        break; }
+        //multi -- new Rewriter
+    case MULTI: {
+        Connect * c = new Connect(tc.host, tc.user, tc.pass, tc.db, tc.port);
+        conn_set.insert(c);
+        this->conn = conn_set.begin();
+        ConnectionData cd = ConnectionData(tc.host, tc.user, tc.pass, tc.db, tc.port);
+        re = new Rewriter(cd, cd, true);
+        break; }
         //proxy -- start proxy in separate process and initialize connection
     case PROXYPLAIN:
     case PROXYSINGLE:
@@ -738,18 +754,21 @@ Connection::start() {
 void
 Connection::stop() {
     switch (type) {
-    case SINGLE:
-    case MULTI:
-        if (cl) {
-            delete cl;
-            cl = NULL;
-        }
-        break;
     case PROXYPLAIN:
     case PROXYSINGLE:
     case PROXYMULTI:
         if (proxy_pid > 0)
             kill(proxy_pid, SIGKILL);
+    case SINGLE:
+    case MULTI:
+        /*if (cl) {
+            delete cl;
+            cl = NULL;
+            }*/
+        if (re) {
+            delete re;
+            re = NULL;
+        }
     case UNENCRYPTED:
         for (auto c = conn_set.begin(); c != conn_set.end(); c++) {
             delete *c;
@@ -771,7 +790,8 @@ Connection::execute(string query) {
         return executeConn(query);
     case SINGLE:
     case MULTI:
-        return executeEDBProxy(query);
+        //return executeEDBProxy(query);
+        return executeRewriter(query);
     default:
         assert_s(false, "unrecognized type in Connection");
     }
@@ -784,14 +804,14 @@ Connection::executeFail(string query) {
     LOG(test) << "Query: " << query << " could not execute" << endl;
 }
 
-ResType
+/*ResType
 Connection::executeEDBProxy(string query) {
     ResType res = cl->execute(query);
     if (!res.ok) {
         executeFail(query);
     }
     return res;
-}
+    }*/
     
 ResType
 Connection::executeConn(string query) {
@@ -810,12 +830,29 @@ Connection::executeConn(string query) {
     return dbres->unpack();
 }
 
+ResType
+Connection::executeRewriter(string query) {
+    //translate the query
+    Analysis analysis;
+    list<string> enc_queries = re->rewrite(query, analysis);
+    
+    //execute
+    // only the last query should actually have a useful result
+    ResType enc_res;
+    for (auto q = enc_queries.begin(); q != enc_queries.end(); q++) {
+        enc_res = executeConn(*q);
+    }
+    
+    //decrypt results
+    return re->decryptResults(enc_res, analysis);
+}
+
 my_ulonglong
 Connection::executeLast() {
     switch(type) {
     case SINGLE:
     case MULTI:
-        return executeLastEDB();
+        //return executeLastEDB();
     case UNENCRYPTED:
     case PROXYPLAIN:
     case PROXYSINGLE:
@@ -834,7 +871,7 @@ Connection::executeLastConn() {
         conn = conn_set.begin();
     }
     return (*conn)->last_insert_id();
-} 
+}
 
 my_ulonglong
 Connection::executeLastEDB() {
@@ -1045,6 +1082,7 @@ string_to_test_mode(const string &s)
         return PROXYMULTI;
     else
         thrower() << "unknown test mode " << s;
+    return TESTINVALID;
 }
 
 void

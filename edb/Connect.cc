@@ -71,6 +71,12 @@ bool
 Connect::execute(const string &query, DBResult * & res)
 {
 #if MYSQL_S
+    //silently ignore empty queries
+    if (query.length() == 0) {
+        LOG(warn) << "empty query";
+        res = 0;
+        return true;
+    }
     if (mysql_query(conn, query.c_str())) {
         LOG(warn) << "mysql_query: " << mysql_error(conn);
         LOG(warn) << "on query: " << query;

@@ -52,6 +52,12 @@ Paillier::add(const ZZ &c0, const ZZ &c1) const
     return MulMod(c0, c1, n2);
 }
 
+ZZ
+Paillier::mul(const ZZ &ciphertext, const ZZ &constval) const
+{
+    return PowerMod(ciphertext, constval, n2);
+}
+
 
 /*
  * Private-key operations

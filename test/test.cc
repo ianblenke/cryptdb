@@ -408,8 +408,9 @@ public:
 void
 tester::testClientParser()
 {
+    cerr << "testClientParser uses old EDBProxy -- not run" << endl;
 
-    list<string> queries = list<string>();
+    /*list<string> queries = list<string>();
     //queries.push_back(string("CREATE TABLE people (id integer, age integer,
             // name integer);"));
     queries.push_back(string(
@@ -460,6 +461,7 @@ tester::testClientParser()
 
     exit();
     cerr << "TEST TRANSLATOR PASSED \n";
+    */
 }
 
 static void __attribute__((unused))
@@ -519,7 +521,7 @@ testCryptoManager()
 
 static void
 testTrain(const TestConfig &tc, int ac, char **a) {
-    EDBProxy * pr = new EDBProxy(tc.host, tc.user, tc.pass, tc.db, tc.port, false, true);
+    /*EDBProxy * pr = new EDBProxy(tc.host, tc.user, tc.pass, tc.db, tc.port, false, true);
 
     pr->plain_execute("drop database cryptdbtest;");
     pr->plain_execute("create database cryptdbtest;");
@@ -561,7 +563,7 @@ testTrain(const TestConfig &tc, int ac, char **a) {
 
     f.close();
     cerr << "Test train passed\n";
-
+    */
 }
 //do not change: has been used in creating the DUMPS for experiments
 const uint64_t mkey = 113341234;
@@ -602,6 +604,8 @@ evalImproveSummations(const TestConfig &tc)
 static void
 interactiveTest(const TestConfig &tc, int ac, char **av)
 {
+    cerr << "interactiveTest uses old EDBProxy; please use obj/parser/cdb_test" << endl;
+    /*
     cout << "\n ---------   CryptDB ---------- \n \n";
 
     cout << "To exit, hit \\q\n";
@@ -722,21 +726,21 @@ interactiveTest(const TestConfig &tc, int ac, char **av)
 
             assert_res(cl->execute( "SELECT * FROM t;"),
                                                     "failed");
-/*
+
             assert_res(cl->execute(  "CREATE TABLE t2 (age enc integer);"),
                                                     "failed");
             assert_res(cl->execute(  "INSERT INTO t2 VALUES (5);"), "failed");
 
                         assert_res(cl->execute(
                                         "SELECT t2.age FROM test_insert, t2 WHERE test_insert.age = t2.age;"), "failed");
-*/
+
                         //assert_res(cl->execute("SELECT * FROM test_insert;"), "failed");
 
             // assert_res(cl->execute(
             //              "SELECT sum(id) FROM hi;"), "failed");
 
 
-            /* assert_res(cl->execute(
+             assert_res(cl->execute(
                          "INSERT INTO hi VALUES (1, 'lauren');"), "failed");
                assert_res(cl->execute(
                          "INSERT INTO hi VALUES (1, 'aaa');"), "failed");
@@ -752,7 +756,7 @@ interactiveTest(const TestConfig &tc, int ac, char **av)
                          "INSERT INTO hi VALUES (1, 'hello');"), "failed");
             assert_res(cl->execute(
                          "SELECT * FROM hi, hi2 WHERE hi.name = hi2.name ;"),
-                     "failed");*/
+                     "failed");
 
             //debugging of DECRYPTFIRST mode
 
@@ -770,7 +774,7 @@ interactiveTest(const TestConfig &tc, int ac, char **av)
 
             //GENERAL MULTI-KEY DEBUGGING
 
-            /*
+            
                cl->plain_execute("DROP TABLE IF EXISTS t1, users,
                   pwdcryptdb__users, cryptdb_public, cryptdb_active0;");
                assert_res(cl->execute("CREATE TABLE t1 (id integer, post encfor
@@ -805,10 +809,10 @@ interactiveTest(const TestConfig &tc, int ac, char **av)
                   'raluca');"), "failed");
                assert_res(cl->execute("INSERT INTO t1 VALUES (2, 'my text',
                   5);"), "failed");
-             */
+             
 
             //PRIVATE MESSAGES EXAMPLE
-            /*    cl->plain_execute("DROP TABLE IF EXISTS users, msgs,
+                cl->plain_execute("DROP TABLE IF EXISTS users, msgs,
                privmsg;");
                     assert_res(cl->execute("CREATE TABLE msgs (msgid equals
                        privmsg.msgid integer, msgtext encfor msgid text);"),
@@ -842,9 +846,9 @@ interactiveTest(const TestConfig &tc, int ac, char **av)
                     assert_res(cl->execute("SELECT msgtext from msgs, privmsg,
                        users WHERE username = 'alice' AND userid = recid AND
                        msgs.msgid = privmsg.msgid;"), "failed");
-             */
+             
             //private messages without orphans
-            /* cl->plain_execute("DROP TABLE IF EXISTS users, msgs,
+             cl->plain_execute("DROP TABLE IF EXISTS users, msgs,
                privmsg;");
                assert_res(cl->execute("CREATE TABLE msgs (msgid equals
                   privmsg.msgid integer, msgtext encfor msgid text);"),
@@ -876,7 +880,7 @@ interactiveTest(const TestConfig &tc, int ac, char **av)
                assert_res(cl->execute("SELECT msgtext from msgs, privmsg, users
                   WHERE username = 'alice' AND userid = recid AND msgs.msgid =
                   privmsg.msgid;"), "failed");
-             */
+             
 
             //USERID, GROUP, FORUM, SQL PRED EXAMPLE
             //    cl->plain_execute("DROP TABLE IF EXISTS users, usergroup,
@@ -967,7 +971,7 @@ interactiveTest(const TestConfig &tc, int ac, char **av)
 
             //multi-key debugging
 
-            /*    cl->plain_execute("DROP TABLE IF EXISTS hi, try, bye;");
+                cl->plain_execute("DROP TABLE IF EXISTS hi, try, bye;");
                //some single key debugging
                assert_res(cl->execute("CREATE TABLE hi (id integer, age enc
                   integer, name enc text);"), "q failed");
@@ -1050,7 +1054,7 @@ interactiveTest(const TestConfig &tc, int ac, char **av)
                assert_res(cl->execute("SELECT * FROM  hi ORDER BY id;"), "order
                   by failed");
 
-               cl->outputOnionState();*/
+               cl->outputOnionState();
         } else {
             ResType r = cl->execute(cmd);
             if (r.ok && r.names.size() > 0) {
@@ -1079,7 +1083,7 @@ interactiveTest(const TestConfig &tc, int ac, char **av)
 
     delete cl;
     cout << "Goodbye!\n";
-
+            */
 }
 
 static void __attribute__((unused))
@@ -2457,7 +2461,8 @@ encryptionTablesTest(const TestConfig &tc, int ac, char **av)
 static void
 testParseAccess(const TestConfig &tc, int ac, char **av)
 {
-
+    cerr << "testParseAccess uses old EDBProxy -- not run" << endl;
+    /*
     EDBProxy * cl = new EDBProxy(tc.host, tc.user, tc.pass, tc.db);
     cl->setMasterKey(BytesFromInt(mkey, AES_KEY_BYTES));
 
@@ -2497,13 +2502,13 @@ testParseAccess(const TestConfig &tc, int ac, char **av)
         it++;
     }
     cl->execute("DROP TABLE test;");
-
+    */
 }
 
 static void
 autoIncTest(const TestConfig &tc, int ac, char **av)
 {
-
+    /*
     string masterKey = BytesFromInt(mkey, AES_KEY_BYTES);
     string host = tc.host;
     string user = tc.user;
@@ -2553,7 +2558,7 @@ autoIncTest(const TestConfig &tc, int ac, char **av)
     rt = cl->execute(
             "INSERT INTO t1 (post, age) VALUES ( 'D there you go', 23);");
     assert_s(rt.ok && rt.rows[0][0].data == "4", "autoinc not correct4");
-
+    */
     //delete cl;
 }
 
@@ -2630,7 +2635,7 @@ accessManagerTest(const TestConfig &tc, int ac, char **av)
        return;*/
 
     //Testing new AccessManager, called AccessManager2
-    cerr <<
+    /*cerr <<
             "============================= AccessManager2 =================================="
             << endl;
     MetaAccess * meta;
@@ -2999,7 +3004,7 @@ accessManagerTest(const TestConfig &tc, int ac, char **av)
     string s6_key = am->getKey(s6);
     string m2_key = am->getKey(m2);
     string s6_key1 = marshallBinary(s6_key);
-    string m2_key1 = marshallBinary(m2_key);
+    string m2_key1 = marshallBinary(m2_key);*/
 #if 0   /* XXX this is all broken because of char->string changes */
     assert_s(s6_key,
             "subject 6 key is not available after it has been inserted");
@@ -3780,7 +3785,7 @@ typedef struct Stats {
     }
 } Stats;
 
-static Stats * myStats;
+//static Stats * myStats;
 
 /*
  * - if execQuery is true, the query is sent to the DB
@@ -3792,11 +3797,13 @@ static Stats * myStats;
  * - if execEncQuery is true the query is execute via cryptdb (query encrypted and results decrypted), the previous flags
  * are not taken into account any more
  */
+/*
 static void
 runQueriesFromFile(EDBProxy * cl, string queryFile, bool execQuery, bool encryptQuery, Connect * conn,
         string outputfile, bool allowExecFailures,  bool execEncQuery, Stats * stats, int logFreq)
 throw (CryptDBError)
 {
+    cerr << "runQueriesFromFile uses old EDBProxy -- not run" << endl;
     ifstream infile(queryFile);
     ofstream * outfile = NULL;
 
@@ -3867,11 +3874,10 @@ throw (CryptDBError)
         outfile->close();
     }
 
-
 }
+*/
 
-
-static void
+/*static void
 dotrain(EDBProxy * cl, string createsfile, string querypatterns, string exec) {
     cl->execute(string("train ") + " 1 " + createsfile + " " + querypatterns + " " + exec);
 }
@@ -3892,7 +3898,7 @@ fixedRepr(int i) {
 static void
 assignWork(string queryfile, int noWorkers,   int totalLines, int noRepeats, bool split) {
     int blah = system("mkdir pieces");
-    assert_s(system("rm -f pieces/*") >= 0, "problem when removing pieces/*");
+    assert_s(system("rm -f pieces") >= 0, "problem when removing pieces");
     if (false) {
         LOG(test) << blah;
     }
@@ -3960,7 +3966,7 @@ assignWork(string queryfile, int noWorkers,   int totalLines, int noRepeats, boo
     }
 
     infile.close();
-}
+    }
 
 static void __attribute__((noreturn))
 workerFinish() {
@@ -4123,7 +4129,7 @@ static void runExp(EDBProxy * cl, int noWorkers, const TestConfig & tc, int logF
     }
 
 }
-
+*/
 
 static void
 loadDB(const TestConfig & tc, string dbname, string dumpname) {
@@ -4190,7 +4196,8 @@ startProxy(const TestConfig & tc, string host, uint port) {
 static void
 testTrace(const TestConfig &tc, int argc, char ** argv)
 {
-
+    cerr << "testTrace uses old EDBProxy -- not run" << endl;    
+    /*
     string masterKey =  BytesFromInt(mkey, AES_KEY_BYTES);
 
     //trace encrypt_db createsfile indexfile queriesfile insertsfile outputfile
@@ -4329,13 +4336,15 @@ testTrace(const TestConfig &tc, int argc, char ** argv)
     }
 
 
-
+    */
     return;
 }
 
 static void
-generateEncTables(const TestConfig & tc, int argc, char ** argv) {
-
+generateEncTables(const TestConfig & tc, int argc, char ** argv)
+{
+    cerr << "generateEncTables uses old EDBProxy -- not run" << endl;
+    /*
     if (argc!=2) {
         cerr << "usage: gen_enc_tables filename\n";
         return;
@@ -4365,12 +4374,13 @@ generateEncTables(const TestConfig & tc, int argc, char ** argv) {
     cl->generateEncTables(opes, 0, 10000, 20000, filename);
 
     delete cl;
+    */
 }
 
 static void
 testEncTables(const TestConfig & tc, int argc, char ** argv) {
-
-    if (argc!=3) {
+    cerr << "testEncTables uses old EDBProxy -- not run" << endl;
+    /*if (argc!=3) {
         cerr << "usage: test_enc_tables filename queriesfile\n";
         return;
     }
@@ -4404,6 +4414,7 @@ testEncTables(const TestConfig & tc, int argc, char ** argv) {
 
     Stats * stats = new Stats();
     runQueriesFromFile(cl, queryfile, 1, 1, conn, "", 0, false, stats, 1000);
+    */
 }
 
 
@@ -4723,16 +4734,16 @@ static struct {
         { "access_old",     "",                             &accessManagerTest },
         { "aes",            "",                             &evaluate_AES },
         { "autoinc",        "",                             &autoIncTest },
-        { "consider",       "consider queries (or not)",    &TestNotConsider::run },
+        //{ "consider",       "consider queries (or not)",    &TestNotConsider::run },
         { "crypto",         "crypto functions",             &TestCrypto::run },
-        { "multi",          "integration multi principal",  &TestMultiPrinc::run },
+        //{ "multi",          "integration multi principal",  &TestMultiPrinc::run },
         { "paillier",       "",                             &testPaillier },
         { "parseaccess",    "",                             &testParseAccess },
         { "pkcs",           "",                             &test_PKCS },
         { "proxy",          "proxy",                        &TestProxy::run },
         { "queries",        "queries",                      &TestQueries::run },
         { "shell",          "interactive shell",            &interactiveTest },
-        { "single",         "integration - single principal",&TestSinglePrinc::run },
+        //{ "single",         "integration - single principal",&TestSinglePrinc::run },
         { "gen_enc_tables", "",                             &generateEncTables },
         { "test_enc_tables","",                             &testEncTables },
         { "trace",          "trace eval",                   &testTrace },

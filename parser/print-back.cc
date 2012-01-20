@@ -9,6 +9,8 @@
 #include <algorithm>
 #include <stdio.h>
 
+#include <parser/embedmysql.hh>
+
 #include <sql_select.h>
 #include <sql_delete.h>
 #include <sql_insert.h>
@@ -19,7 +21,6 @@
 #include <util/cleanup.hh>
 #include <util/rob.hh>
 
-#include <parser/embedmysql.hh>
 #include <parser/stringify.hh>
 
 

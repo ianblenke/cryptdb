@@ -21,6 +21,7 @@ class TestConfig {
         pass = "letmein";
         host = "localhost";
         db   = "cryptdbtest";
+        shadowdb = "~/shadow-db";
         port = 3306;
         stop_if_fail = false;
 
@@ -41,6 +42,7 @@ class TestConfig {
     std::string pass;
     std::string host;
     std::string db;
+    std::string shadowdb;
     uint port;
 
     bool stop_if_fail;

@@ -52,14 +52,32 @@ anonymizeFieldName(unsigned int index, onion o, string origname, bool multiPrinc
     switch (o) {
     case oDET: {
         if (multiPrinc) {
-            return origname;
+            return origname + "DET";
         } else {
             return string("field") + strFromVal(index) + "DET";
         }
     }
-    case oOPE: {return string("field") + strFromVal(index) + "OPE"; }
-    case oAGG: {return string("field") + strFromVal(index) + "AGG"; }
-    case oSWP: {return string("field") + strFromVal(index) + "SWP"; }
+    case oOPE: {
+        if (multiPrinc) {
+            return origname + "OPE";
+        } else {
+            return string("field") + strFromVal(index) + "OPE"; 
+        }
+    }
+    case oAGG: {
+        if (multiPrinc) {
+            return origname + "AGG";
+        } else {
+            return string("field") + strFromVal(index) + "AGG"; 
+        }
+    }
+    case oSWP: {
+        if (multiPrinc) {
+            return origname + "SWP";
+        } else {
+            return string("field") + strFromVal(index) + "SWP"; 
+        }        
+    }
     default: {assert_s(false, "invalid onion in anonymizeFieldName"); }
     }
 

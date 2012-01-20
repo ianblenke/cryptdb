@@ -12,10 +12,12 @@
 #include <edb/Connect.hh>
 #include <test/test_utils.hh>
 
+#include <parser/cdb_rewrite.hh>
 
 typedef enum test_mode {
     UNENCRYPTED, SINGLE, MULTI,
-    PROXYPLAIN, PROXYSINGLE, PROXYMULTI
+    PROXYPLAIN, PROXYSINGLE, PROXYMULTI,
+    TESTINVALID
 } test_mode;
 
 struct QueryChoice {
@@ -88,8 +90,10 @@ class Connection {
  private:
     test_mode type;
     TestConfig tc;
-    //connection objects for encryption test
+    //connection object for encryption test
     EDBProxy * cl;
+    //connection object for using rewriter
+    Rewriter * re;
     //connection objects for plain and proxy test
     std::set<Connect *> conn_set;
     //current connection we are on, for multiple connections
@@ -98,9 +102,11 @@ class Connection {
 
     ResType executeConn(std::string query);
     ResType executeEDBProxy(std::string query);
+    ResType executeRewriter(std::string query);
 
     my_ulonglong executeLastConn();
     my_ulonglong executeLastEDB();
+    my_ulonglong executeRewriter();
 
     void executeFail(std::string query);
 };

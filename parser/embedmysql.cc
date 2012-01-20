@@ -3,6 +3,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
+#include <parser/embedmysql.hh>
 #include <sql_base.h>
 #include <sql_select.h>
 #include <sql_delete.h>
@@ -11,7 +12,7 @@
 #include <sql_parse.h>
 #include <handler.h>
 
-#include <parser/embedmysql.hh>
+
 #include <parser/stringify.hh>
 
 #include <util/errstream.hh>
@@ -82,6 +83,9 @@ extern "C" void *create_embedded_thd(int client_flag);
 void
 query_parse::cleanup()
 {
+    if (annot) {
+        delete annot;
+    }
     if (t) {
         t->end_statement();
         t->cleanup_after_query();
@@ -107,6 +111,16 @@ query_parse::query_parse(const std::string &db, const std::string &q)
     assert(create_embedded_thd(0));
     t = current_thd;
     assert(t != NULL);
+    
+    //if first word of query is CRYPTDB, we can't use the embedded db
+    //  set annotation to true and return
+    cerr << "q is " << q << endl;
+    if (strncmp(toLowerCase(q).c_str(), "cryptdb", 7) == 0) {
+        annot = new Annotation(q);
+        return;
+    } else {
+        annot = NULL;
+    }
 
     try {
         t->set_db(db.data(), db.length());
@@ -172,7 +186,11 @@ query_parse::query_parse(const std::string &db, const std::string &q)
         case SQLCOM_DROP_TABLE:
         case SQLCOM_DROP_INDEX:
             return;
-
+        case SQLCOM_INSERT:
+        case SQLCOM_DELETE:
+            if (string(lex->select_lex.table_list.first->table_name).substr(0, PWD_TABLE_PREFIX.length()) == PWD_TABLE_PREFIX) {
+                return;
+            }
         default:
             break;
         }

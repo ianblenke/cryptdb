@@ -9,13 +9,14 @@
 #include <algorithm>
 #include <stdio.h>
 
+#include <parser/embedmysql.hh>
 #include <sql_select.h>
 #include <sql_delete.h>
 #include <sql_insert.h>
 #include <sql_update.h>
 #include <handler.h>
 
-#include <parser/embedmysql.hh>
+
 #include <parser/stringify.hh>
 
 #include <util/errstream.hh>

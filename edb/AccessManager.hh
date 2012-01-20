@@ -28,11 +28,15 @@
  * ASSUMPTION: only terminal (does not have access to anything) principals 
  *  have > THRESHOLD keys
  *
+ *
+ * [for those used to the old annotations]
+ * speaks := hasAccess
+ * spoken := accessTo
  */
 
 //TODO: fix PRINCVALUE to be application dependent
-#define PRINCTYPE "varchar(100)"
-#define PRINCVALUE "varchar(255)"
+#define SQL_PRINCTYPE "varchar(100)"
+#define SQL_PRINCVALUE "varchar(255)"
 #define TESTING 1
 #define THRESHOLD 100
 
@@ -103,15 +107,17 @@ class MetaAccess {
  public:
     MetaAccess(Connect * c, bool verb);
 
-    //defines two names that refer to the same principal
-    void addEquals(std::string princ1, std::string princ2);
+    //define a new generic name for a PrincType
+    void startEquals(std::string gen);
+    //add a column name to a generic PrincType
+    void addEquals(std::string princ, std::string gen);
     //calls addEquals after the access tree has been established
     //returns: 0  if the equality was added
     //         <0 if adding the equality would break the access tree, or some error occured
-    int addEqualsCheck(std::string princ1, std::string princ2);
+    int addEqualsCheck(std::string princ, std::string gen);
 
     //princHasAccess has access to princAccessible
-    void addAccess(std::string princHasAccess, std::string princAccessible);
+    void addAccess(std::string genHasAccess, std::string genAccessible);
     //calls addAccess after the access tree has been established
     //returns: 0  if the access link was added
     //         <0 if adding the access link would break the access tree
@@ -165,8 +171,9 @@ class MetaAccess {
     bool isGenGives(std::string gen);
 
     //gives generic for princ
-    //requires: princ is already stored in MetaAccess
-    std::string getGenericPublic(std::string princ);
+    //returns: generic, if it exists
+    //         empty string, if there is no generic for this princ
+    std::string getGeneric(std::string princ);
 
     std::string publicTableName();
     std::string accessTableName();
@@ -174,9 +181,6 @@ class MetaAccess {
     ~MetaAccess();
 
  private:
-    std::string getGeneric(std::string princ);
-    std::string createGeneric(std::string clean_princ);
-
     //requires unsanitized to be of the form table.field (exactly one '.')
     std::string sanitize(std::string unsanitized);
     std::string unsanitize(std::string sanitized);
@@ -194,7 +198,7 @@ class MetaAccess {
     // they are accessible by
     std::map<std::string, std::set<std::string> > genAccessibleByList;
 
-    //keeps track of principals which can give passwords
+    //keeps track of generics which can give passwords
     std::set<std::string> givesPsswd;
 
     //wrapper for conn->execute
@@ -211,12 +215,14 @@ class KeyAccess {
     KeyAccess(Connect * connect);
 
     //meta access functions
-    //defines two names that refer to the same principal
-    int addEquals(std::string prin1, std::string prin2);
-    //princHasAccess has access to princAccessible
-    int addAccess(std::string hasAccess, std::string accessTo);
+    //starts a generic PRINCTYPE
+    int startPrinc(std::string gen);
+    //defines a column name that is part of the given generic
+    int addToPrinc(std::string colname, std::string generic);
+    //adds that genSpeaks SPEAKSFOR genSpoken
+    int addSpeaksFor(std::string genSpeaks, std::string genSpoken);
     //adds princ to the set of principals which can give a password
-    int addGives(std::string prin);
+    int addGives(std::string gen);
     //this method should only be called once, after all the access and equals
     // links have been added
     int CreateTables();
@@ -238,8 +244,8 @@ class KeyAccess {
     // principal princ
     std::set<std::string> getEquals(std::string princ);
 
-    //get generic public
-    std::string getGeneric(std::string prin);
+    //get princType
+    std::string getPrincType(std::string prin);
 
     void Print();
 
@@ -395,7 +401,7 @@ class KeyAccess {
     PrinKey getUncached(Prin prin);
 
     //Bredth First Search for generics start has access to
-    std::list<std::string> BFS_hasAccess(Prin start);
+    std::list<Prin> BFS_hasAccess(Prin start);
 
     //Depth First Search for generics start has access to
     std::list<std::string> DFS_hasAccess(Prin start);

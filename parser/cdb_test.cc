@@ -27,6 +27,9 @@
 
 using namespace std;
 
+// if true, uses MultiPrinc mode
+static bool Multi = true;
+
 static inline string user_homedir() {
     return getenv("HOME");
 }
@@ -68,7 +71,9 @@ main(int ac, char **av)
     atexit(__write_history);
 
     string db(av[2]);
-    Rewriter r(db);
+    //HACK (cat_red) currently hard-coding other db information
+    ConnectionData cd = ConnectionData("localhost", "root", "letmein", db);
+    Rewriter r(cd, cd, Multi);
     r.setMasterKey("2392834");
 
     cerr << "connecting to localhost db cryptdbtest user root pass letmein" << "\n";
@@ -91,16 +96,22 @@ main(int ac, char **av)
         string new_q;
         try {
             Analysis analysis;
-            new_q = r.rewrite(q, analysis);
-            cout << "SUCCESS: " << new_q << endl;
-	    conn.execute(new_q, dbres);
-	    ResType res = dbres->unpack();
-	    if (!res.ok) {
-		cerr << "issue with query \n";
-		continue;
-	    }
-	    ResType dec_res = r.decryptResults(res, analysis);
-	    cerr << "decrypted results are: \n"; printRes(dec_res);
+            list<string> new_queries = r.rewrite(q, analysis);
+            //only last query should return anything
+            for (auto new_q = new_queries.begin(); new_q != new_queries.end(); new_q++) {
+                cerr << "SUCCESS: " << *new_q << endl;
+                conn.execute(*new_q, dbres);
+            }
+            if (!dbres) {
+                continue;
+            }
+            ResType res = dbres->unpack();
+            if (!res.ok) {
+                cerr << "issue with query \n";
+                continue;
+            }
+            ResType dec_res = r.decryptResults(res, analysis);
+            cerr << "decrypted results are: \n"; printRes(dec_res);
 
         } catch (std::runtime_error &e) {
             cout << "Unexpected Error: " << e.what() << " in query " << q << endl;

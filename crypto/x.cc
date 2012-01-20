@@ -15,6 +15,10 @@
 #include <crypto/bn.hh>
 #include <crypto/ecjoin.hh>
 #include <crypto/search.hh>
+#include <crypto/skip32.hh>
+#include <crypto/cbcmac.hh>
+#include <crypto/ffx.hh>
+#include <crypto/online_ope.hh>
 #include <util/timer.hh>
 #include <NTL/ZZ.h>
 #include <NTL/RR.h>
@@ -44,7 +48,7 @@ test_block_cipher(T *c, PRNG *u, const std::string &cname)
     cmc_decrypt(c, cbc_ct, &cbc_pt2);
     assert(cbc_pt == cbc_pt2);
 
-    enum { nperf = 10 * 1000 };
+    enum { nperf = 1000 };
     auto cbc_perf_pt = u->rand_vec<uint8_t>(1024);
     auto cbc_perf_iv = u->rand_vec<uint8_t>(c->blocksize);
     vector<uint8_t> cbc_perf_ct, cbc_perf_pt2;
@@ -118,7 +122,7 @@ test_hgd()
     s = HGD(to_ZZ(100), to_ZZ(100), to_ZZ(0), &r);
     assert(s == 100);
 }
-
+/*
 static void
 test_paillier()
 {
@@ -138,8 +142,74 @@ test_paillier()
     assert(pp.decrypt(ct0) == pt0);
     assert(pp.decrypt(ct1) == pt1);
     assert(pp.decrypt(sum) == (pt0 + pt1));
-}
 
+    ZZ v0 = u.rand_zz_mod(to_ZZ(1) << 256);
+    ZZ v1 = u.rand_zz_mod(to_ZZ(1) << 256);
+    assert(pp.decrypt(p.mul(p.encrypt(v0), v1)) == v0 * v1);
+    }*/
+/*
+static void
+test_paillier_packing()
+{
+    urandom u;
+    Paillier_priv pp(Paillier_priv::keygen());
+    Paillier p(pp.pubkey());
+
+    uint32_t npack = p.pack_count<uint64_t>();
+    cout << "paillier pack count for uint64_t: " << npack << endl;
+    std::vector<uint64_t> a;
+    for (uint i = 0; i < npack; i++)
+        a.push_back(u.rand<uint32_t>());
+
+    ZZ ct = p.encrypt_pack(a);
+
+    for (uint x = 0; x < 10; x++) {
+        ZZ agg = to_ZZ(1);
+        uint64_t plainagg = 0;
+
+        uint64_t mask = u.rand<uint64_t>();
+        for (uint idx = 0; idx < npack; idx++) {
+            if (mask & (1 << idx)) {
+                plainagg += a[idx];
+                agg = p.add_pack<uint64_t>(agg, ct, idx);
+            }
+        }
+
+        uint64_t decagg = pp.decrypt_pack<uint64_t>(agg);
+        // cout << hex << "pack: " << decagg << ", " << plainagg << dec << endl;
+        assert(decagg == to_ZZ(plainagg));
+    }
+
+    uint32_t npack2 = p.pack2_count<uint64_t>();
+    cout << "paillier pack2 count for uint64_t: " << npack2 << endl;
+    std::vector<uint64_t> b[32];
+    ZZ bct[32];
+    for (uint i = 0; i < 32; i++) {
+        for (uint j = 0; j < npack2; j++)
+            b[i].push_back(u.rand<uint32_t>());
+        bct[i] = p.encrypt_pack2(b[i]);
+    }
+
+    for (uint x = 0; x < 100; x++) {
+        Paillier::pack2_agg<uint64_t> agg(&p);
+        uint64_t plainagg = 0;
+
+        for (uint i = 0; i < 32; i++) {
+            uint64_t mask = u.rand<uint64_t>();
+            for (uint idx = 0; idx < npack2; idx++) {
+                if (mask & (1 << idx)) {
+                    plainagg += b[i][idx];
+                    agg.add(bct[i], idx);
+                }
+            }
+        }
+
+        uint64_t decagg = pp.decrypt_pack2<uint64_t>(agg);
+        // cout << hex << "pack2: " << decagg << ", " << plainagg << dec << endl;
+        assert(decagg == to_ZZ(plainagg));
+    }
+}
+*/
 static void
 test_bn()
 {
@@ -191,6 +261,180 @@ test_search()
     assert(s.match(cl, s.wordkey("world")));
 }
 
+static void
+test_skip32(void)
+{
+    std::vector<uint8_t> k = { 0x00, 0x99, 0x88, 0x77, 0x66,
+                               0x55, 0x44, 0x33, 0x22, 0x11 };
+    skip32 s(k);
+
+    uint8_t pt[4] = { 0x33, 0x22, 0x11, 0x00 };
+    uint8_t ct[4];
+    s.block_encrypt(pt, ct);
+    assert(ct[0] == 0x81 && ct[1] == 0x9d && ct[2] == 0x5f && ct[3] == 0x1f);
+
+    uint8_t pt2[4];
+    s.block_decrypt(ct, pt2);
+    assert(pt2[0] == 0x33 && pt2[1] == 0x22 && pt2[2] == 0x11 && pt2[3] == 0x00);
+}
+
+static void
+test_ffx()
+{
+    streamrng<arc4> rnd("test seed");
+
+    AES key(rnd.rand_vec<uint8_t>(16));
+
+    for (int i = 0; i < 1000; i++) {
+        uint nbits = 8 + (rnd.rand<uint>() % 121);
+        auto pt = rnd.rand_vec<uint8_t>((nbits + 7) / 8);
+        auto t = rnd.rand_vec<uint8_t>(rnd.rand<uint>() % 1024);
+
+        uint lowbits = nbits % 8;
+        pt[(nbits-1) / 8] &= ~0 << (8 - lowbits);
+
+        std::vector<uint8_t> ct, pt2;
+        ct.resize(pt.size());
+        pt2.resize(pt.size());
+
+        ffx2<AES> f0(&key, nbits, t);
+        f0.encrypt(&pt[0], &ct[0]);
+
+        ffx2<AES> f1(&key, nbits, t);   /* duplicate of f0, for testing */
+        f1.decrypt(&ct[0], &pt2[0]);
+
+        if (0) {
+            cout << "nbits: " << nbits << endl;
+
+            cout << "plaintext:  ";
+            for (auto &x: pt)
+                cout << hex << setw(2) << setfill('0') << (uint) x;
+            cout << dec << endl;
+
+            cout << "ciphertext: ";
+            for (auto &x: ct)
+                cout << hex << setw(2) << setfill('0') << (uint) x;
+            cout << dec << endl;
+
+            cout << "plaintext2: ";
+            for (auto &x: pt2)
+                cout << hex << setw(2) << setfill('0') << (uint) x;
+            cout << dec << endl;
+        }
+
+        assert(pt != ct);
+        assert(pt == pt2);
+    }
+
+    urandom u;
+    auto tweak = u.rand_vec<uint8_t>(1024);
+    blowfish bf(u.rand_vec<uint8_t>(128));
+
+    ffx2_block_cipher<AES, 128> fbca128(&key, tweak);
+    test_block_cipher(&fbca128, &u, "ffx128-aes128");
+
+    ffx2_block_cipher<blowfish, 128> fbcb128(&bf, tweak);
+    test_block_cipher(&fbcb128, &u, "ffx128-bf");
+
+    ffx2_block_cipher<AES, 64> fbc64(&key, tweak);
+    test_block_cipher(&fbc64, &u, "ffx64-aes128");
+
+    ffx2_block_cipher<blowfish, 64> fbcb64(&bf, tweak);
+    test_block_cipher(&fbcb64, &u, "ffx64-bf");
+
+    ffx2_block_cipher<AES, 32> fbc32(&key, tweak);
+    test_block_cipher(&fbc32, &u, "ffx32-aes128");
+
+    ffx2_block_cipher<blowfish, 32> fbcb32(&bf, tweak);
+    test_block_cipher(&fbcb32, &u, "ffx32-bf");
+
+    if (0) {    /* Painfully slow */
+        ffx2_block_cipher<AES, 16> fbc16(&key, tweak);
+        test_block_cipher(&fbc16, &u, "ffx16-aes128");
+
+        ffx2_block_cipher<blowfish, 16> fbcb16(&bf, tweak);
+        test_block_cipher(&fbcb16, &u, "ffx16-bf");
+
+        ffx2_block_cipher<AES, 8> fbc8(&key, tweak);
+        test_block_cipher(&fbc8, &u, "ffx8-aes128");
+
+        ffx2_block_cipher<blowfish, 8> fbcb8(&bf, tweak);
+        test_block_cipher(&fbcb8, &u, "ffx8-bf");
+    }
+}
+
+static void
+test_online_ope()
+{
+    cerr << "test online ope .. \n";
+    urandom u;
+    blowfish bf(u.rand_vec<uint8_t>(128));
+    ffx2_block_cipher<blowfish, 16> fk(&bf, {});
+
+    ope_server<uint16_t> ope_serv;
+    ope_client<uint16_t, ffx2_block_cipher<blowfish, 16>> ope_clnt(&fk, &ope_serv);
+
+    for (uint i = 0; i < 1000; i++) {
+	cerr << "============= i = " << i << "========" << "\n";
+
+        uint64_t pt = u.rand<uint16_t>();
+        cout << "online-ope pt:  " << pt << endl;
+
+        auto ct = ope_clnt.encrypt(pt);
+        cout << "online-ope ct:  " << hex << ct << dec << endl;
+
+	//print_tree(ope_serv.root);
+	
+        auto pt2 = ope_clnt.decrypt(ct);
+        cout << "online-ope pt2: " << pt2 << endl;
+
+        assert(pt == pt2);
+    }
+
+    for (uint i = 0; i < 1000; i++) {
+        uint8_t a = u.rand<uint8_t>();
+        uint8_t b = u.rand<uint8_t>();
+
+        ope_clnt.encrypt(a);
+        ope_clnt.encrypt(b);
+
+	auto ac = ope_clnt.encrypt(a);
+	auto bc = ope_clnt.encrypt(b);
+
+        //cout << "a=" << hex << (uint64_t) a << ", ac=" << ac << dec << endl;
+        //cout << "b=" << hex << (uint64_t) b << ", bc=" << bc << dec << endl;
+
+        if (a == b)
+            assert(ac == bc);
+        else if (a > b)
+            assert(ac > bc);
+        else
+            assert(ac < bc);
+    }
+}
+
+static void
+test_online_ope_rebalance() {
+    urandom u;
+    blowfish bf(u.rand_vec<uint8_t>(128));
+    ffx2_block_cipher<blowfish, 16> fk(&bf, {});
+
+    ope_server<uint16_t> ope_serv;
+    ope_client<uint16_t, ffx2_block_cipher<blowfish, 16>> ope_clnt(&fk, &ope_serv);
+
+    cerr << "before encrypting \n";
+    //only manual testing so far -- when balancing is implemented this will be automated
+    ope_clnt.encrypt(10);
+    ope_clnt.encrypt(20);
+    ope_clnt.encrypt(30);
+    ope_clnt.encrypt(5);
+    ope_clnt.encrypt(1);
+    ope_clnt.encrypt(8);
+    ope_clnt.encrypt(3);
+    ope_clnt.encrypt(200);
+
+    cerr << "test online ope rebalance OK \n";
+}
 int
 main(int ac, char **av)
 {
@@ -198,10 +442,16 @@ main(int ac, char **av)
     cout << u.rand<uint64_t>() << endl;
     cout << u.rand<int64_t>() << endl;
 
+    test_online_ope_rebalance();
+    
     test_bn();
     test_ecjoin();
     test_search();
-    test_paillier();
+//    test_paillier();
+//    test_paillier_packing();
+    test_skip32();
+    test_online_ope();
+    test_ffx();
 
     AES aes128(u.rand_vec<uint8_t>(16));
     test_block_cipher(&aes128, &u, "aes-128");
@@ -212,6 +462,9 @@ main(int ac, char **av)
     blowfish bf(u.rand_vec<uint8_t>(128));
     test_block_cipher(&bf, &u, "blowfish");
 
+    skip32 s32(u.rand_vec<uint8_t>(10));
+    test_block_cipher(&s32, &u, "skip32");
+
     auto hv = sha256::hash("Hello world\n");
     for (auto &x: hv)
         cout << hex << setw(2) << setfill('0') << (uint) x;
@@ -219,6 +472,12 @@ main(int ac, char **av)
 
     auto mv = hmac<sha256>::mac("Hello world\n", "key");
     for (auto &x: mv)
+        cout << hex << setw(2) << setfill('0') << (uint) x;
+    cout << dec << endl;
+
+    cbcmac<AES> cmac(&aes256);
+    cmac.update(sha256::hash("Hello world\n"));
+    for (auto &x: cmac.final())
         cout << hex << setw(2) << setfill('0') << (uint) x;
     cout << dec << endl;
 

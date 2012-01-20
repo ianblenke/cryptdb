@@ -11,8 +11,79 @@ class Paillier {
 
     NTL::ZZ encrypt(const NTL::ZZ &plaintext);
     NTL::ZZ add(const NTL::ZZ &c0, const NTL::ZZ &c1) const;
+    NTL::ZZ mul(const NTL::ZZ &ciphertext, const NTL::ZZ &constval) const;
 
     void rand_gen(size_t niter = 100, size_t nmax = 1000);
+
+    /*
+     * For packing, choose a PackT such that addition will never overflow.
+     * E.g., for 32-bit values, using uint64_t as PackT may be a good idea.
+     */
+    template<class PackT>
+    uint32_t pack_count() {
+        return (nbits - 1 + sizeof(PackT)*8) / 2 / (sizeof(PackT)*8);
+    }
+
+    template<class PackT>
+    NTL::ZZ encrypt_pack(const std::vector<PackT> &items) {
+        uint32_t npack = pack_count<PackT>();
+        assert(items.size() == npack);
+
+        NTL::ZZ sum = NTL::to_ZZ(0);
+        for (uint i = 0; i < npack; i++)
+            sum += NTL::to_ZZ(items[i]) << (i*sizeof(PackT)*8);
+        return encrypt(sum);
+    }
+
+    template<class PackT>
+    NTL::ZZ add_pack(const NTL::ZZ &agg, const NTL::ZZ &pack, uint32_t packidx) {
+        uint32_t npack = pack_count<PackT>();
+        assert(packidx < npack);
+
+        NTL::ZZ s = mul(pack, NTL::to_ZZ(1) << (npack-1-packidx) * (sizeof(PackT)*8));
+        return add(agg, s);
+    }
+
+    /*
+     * A different packing scheme that achieves 2x the density, at the
+     * cost of a larger aggregate value.
+     */
+    template<class PackT>
+    class pack2_agg {
+     public:
+        std::vector<NTL::ZZ> aggs;
+
+        pack2_agg(Paillier *parg)
+            : aggs(parg->pack2_count<PackT>()), p(parg)
+        {
+            for (uint32_t i = 0; i < aggs.size(); i++)
+                aggs[i] = NTL::to_ZZ(1);
+        }
+
+        void add(const NTL::ZZ &pack, uint32_t packidx) {
+            assert(packidx <= aggs.size());
+            aggs[packidx] = p->add(aggs[packidx], pack);
+        }
+
+     private:
+        Paillier *p;
+    };
+
+    template<class PackT>
+    uint32_t pack2_count() {
+        return (nbits - 1) / (sizeof(PackT) * 8);
+    }
+
+    template<class PackT>
+    NTL::ZZ encrypt_pack2(const std::vector<PackT> &items) {
+        uint32_t npack = pack2_count<PackT>();
+        assert(items.size() == npack);
+
+        NTL::ZZ sum = NTL::to_ZZ(0);
+        for (uint i = 0; i < npack; i++)
+            sum += NTL::to_ZZ(items[i]) << (i*sizeof(PackT)*8);
+        return encrypt(sum);
+    }
 
  protected:
     /* Public key */
@@ -34,6 +105,26 @@ class Paillier_priv : public Paillier {
     NTL::ZZ decrypt(const NTL::ZZ &ciphertext) const;
 
     static std::vector<NTL::ZZ> keygen(uint nbits = 1024, uint abits = 256);
+
+    template<class PackT>
+    PackT decrypt_pack(const NTL::ZZ &pack) {
+        uint32_t npack = pack_count<PackT>();
+        NTL::ZZ plain = decrypt(pack);
+        PackT result;
+        NTL::conv(result, plain >> (npack - 1) * sizeof(PackT) * 8);
+        return result;
+    }
+
+    template<class PackT>
+    PackT decrypt_pack2(const pack2_agg<PackT> &agg) {
+        uint32_t npack = pack2_count<PackT>();
+        PackT result = 0, tmp;
+        for (uint32_t i = 0; i < npack; i++) {
+            NTL::conv(tmp, decrypt(agg.aggs[i]) >> (i*sizeof(PackT)*8));
+            result += tmp;
+        }
+        return result;
+    }
 
  private:
     /* Private key, including g from public part; n=pq */
