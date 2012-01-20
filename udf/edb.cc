@@ -616,6 +616,9 @@ agg_clear(UDF_INIT *initid, char *is_null, char *error)
 my_bool
 agg_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error)
 {
+    // means we don't add
+    if (args->args[0] == NULL) return true;
+
     agg_state *as = (agg_state *) initid->ptr;
     if (!as->n2_set) {
         ZZFromBytes(as->n2, (const uint8_t *) args->args[1],

@@ -476,7 +476,7 @@ protected:
                     CryptoManager &cm) {
     assert(tpe == opt_type::packed);
 
-    // sort into (l_returnflag, l_lineitem)
+    // sort into (l_returnflag, l_linestatus)
     typedef pair<string, string> Key;
     typedef vector<string> Row;
     typedef map< Key, vector<Row> > group_map;
@@ -513,14 +513,14 @@ protected:
         uint32_t lhs_orderkey = resultFromStr<uint32_t>(lhs[lineitem::l_orderkey]);
         uint32_t rhs_orderkey = resultFromStr<uint32_t>(rhs[lineitem::l_orderkey]);
 
-        uint32_t lhs_linestatus = resultFromStr<uint32_t>(lhs[lineitem::l_linestatus]);
-        uint32_t rhs_linestatus = resultFromStr<uint32_t>(rhs[lineitem::l_linestatus]);
+        uint32_t lhs_linenumber = resultFromStr<uint32_t>(lhs[lineitem::l_linenumber]);
+        uint32_t rhs_linenumber = resultFromStr<uint32_t>(rhs[lineitem::l_linenumber]);
 
         return lhs_encoding < rhs_encoding || (
             lhs_encoding == rhs_encoding && (
               lhs_orderkey < rhs_orderkey || (
                 lhs_orderkey == rhs_orderkey &&
-                  lhs_linestatus < rhs_linestatus
+                  lhs_linenumber < rhs_linenumber
               )
             )
           );
