@@ -14,6 +14,7 @@
 
 #include <edb/Connect.hh>
 #include <parser/cdb_rewrite.hh>
+#include <parser/cdb_helpers.hh>
 #include <util/util.hh>
 
 using namespace std;
@@ -107,17 +108,6 @@ static SECLEVEL getUsefulMax(onion o) {
     return SECLEVEL::INVALID;
 }
 
-template <typename R>
-R resultFromStr(const string &r) {
-    stringstream ss(r);
-    R val;
-    ss >> val;
-    return val;
-}
-
-template <>
-string resultFromStr(const string &r) { return r; }
-
 template <typename Result>
 Result decryptRow(const string &data,
                   uint64_t salt,
@@ -125,8 +115,9 @@ Result decryptRow(const string &data,
                   fieldType f,
                   onion o,
                   CryptoManager &cm) {
+    crypto_manager_stub cm_stub(&cm);
     bool isBin;
-    string res = cm.crypt(
+    string res = cm_stub.crypt(
         cm.getmkey(),
         data,
         f,
@@ -143,8 +134,9 @@ Result decryptRowFromTo(const string &data,
                         SECLEVEL max,
                         SECLEVEL min,
                         CryptoManager &cm) {
+    crypto_manager_stub cm_stub(&cm);
     bool isBin;
-    string res = cm.crypt(
+    string res = cm_stub.crypt(
         cm.getmkey(),
         data,
         f,
@@ -467,11 +459,12 @@ static void do_query_q1_packed_opt(Connect &conn,
                                    CryptoManager &cm,
                                    uint32_t year,
                                    vector<q1entry> &results) {
+    crypto_manager_stub cm_stub(&cm);
     NamedTimer fcnTimer(__func__);
 
     // l_shipdate <= date '[year]-01-01'
     bool isBin;
-    string encDATE = cm.crypt(cm.getmkey(), strFromVal(EncodeDate(1, 1, year)),
+    string encDATE = cm_stub.crypt(cm.getmkey(), strFromVal(EncodeDate(1, 1, year)),
                               TYPE_INTEGER, fieldname(lineitem::l_shipdate, "OPE"),
                               getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
 
@@ -596,11 +589,12 @@ static void do_query_q1_opt(Connect &conn,
                             CryptoManager &cm,
                             uint32_t year,
                             vector<q1entry> &results) {
+    crypto_manager_stub cm_stub(&cm);
     NamedTimer fcnTimer(__func__);
 
     // l_shipdate <= date '[year]-01-01'
     bool isBin;
-    string encDATE = cm.crypt(cm.getmkey(), strFromVal(EncodeDate(1, 1, year)),
+    string encDATE = cm_stub.crypt(cm.getmkey(), strFromVal(EncodeDate(1, 1, year)),
                               TYPE_INTEGER, fieldname(lineitem::l_shipdate, "OPE"),
                               getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
 
@@ -702,11 +696,12 @@ static void do_query_q1_noopt(Connect &conn,
                               CryptoManager &cm,
                               uint32_t year,
                               vector<q1entry> &results) {
+    crypto_manager_stub cm_stub(&cm);
     NamedTimer fcnTimer(__func__);
 
     // l_shipdate <= date '[year]-01-01'
     bool isBin;
-    string encDATE = cm.crypt(cm.getmkey(), strFromVal(EncodeDate(1, 1, year)),
+    string encDATE = cm_stub.crypt(cm.getmkey(), strFromVal(EncodeDate(1, 1, year)),
                               TYPE_INTEGER, fieldname(lineitem::l_shipdate, "OPE"),
                               getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
 
@@ -871,10 +866,11 @@ static void do_query_q11_noopt(Connect &conn,
                                const string &name,
                                double fraction,
                                vector<q11entry> &results) {
+    crypto_manager_stub cm_stub(&cm);
     NamedTimer fcnTimer(__func__);
 
     bool isBin;
-    string encNAME = cm.crypt(cm.getmkey(), name, TYPE_TEXT,
+    string encNAME = cm_stub.crypt(cm.getmkey(), name, TYPE_TEXT,
                               fieldname(nation::n_name, "DET"),
                               getMin(oDET), SECLEVEL::DET, isBin, 12345);
 
@@ -1003,13 +999,14 @@ static void do_query_q14_opt(Connect &conn,
                              CryptoManager &cm,
                              uint32_t year,
                              vector<q14entry> &results) {
+    crypto_manager_stub cm_stub(&cm);
     NamedTimer fcnTimer(__func__);
 
     bool isBin;
-    string encDateLower = cm.crypt(cm.getmkey(), strFromVal(EncodeDate(1, 1, year)),
+    string encDateLower = cm_stub.crypt(cm.getmkey(), strFromVal(EncodeDate(1, 1, year)),
                                    TYPE_INTEGER, fieldname(lineitem::l_shipdate, "OPE"),
                                    getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
-    string encDateUpper = cm.crypt(cm.getmkey(), strFromVal(EncodeDate(2, 1, year)),
+    string encDateUpper = cm_stub.crypt(cm.getmkey(), strFromVal(EncodeDate(2, 1, year)),
                                    TYPE_INTEGER, fieldname(lineitem::l_shipdate, "OPE"),
                                    getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
 
@@ -1122,11 +1119,12 @@ static void do_query_q11_opt_proj(Connect &conn,
                                    const string &name,
                                    double fraction,
                                    vector<q11entry> &results) {
+    crypto_manager_stub cm_stub(&cm);
     NamedTimer fcnTimer(__func__);
     assert(name == "IRAQ"); // TODO: can only handle IRAQ for now
 
     bool isBin;
-    string encNAME = cm.crypt(cm.getmkey(), name, TYPE_TEXT,
+    string encNAME = cm_stub.crypt(cm.getmkey(), name, TYPE_TEXT,
                               fieldname(nation::n_name, "DET"),
                               getMin(oDET), SECLEVEL::DET, isBin, 12345);
 
@@ -1171,7 +1169,7 @@ static void do_query_q11_opt_proj(Connect &conn,
     // encrypt threshold for ps_value_OPE
     uint64_t threshold_int = (uint64_t) roundToLong(threshold * 100.0);
     //cerr << "threshold_int: " << threshold_int << endl;
-    string encVALUE = cm.crypt(cm.getmkey(), to_s(threshold_int), TYPE_INTEGER,
+    string encVALUE = cm_stub.crypt(cm.getmkey(), to_s(threshold_int), TYPE_INTEGER,
                                fieldname(partsupp::ps_value, "OPE"),
                                getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
 
@@ -1462,16 +1460,17 @@ static void do_query_q2_noopt(Connect &conn,
                               const string &type,
                               const string &name,
                               vector<q2entry> &results) {
+    crypto_manager_stub cm_stub(&cm);
     NamedTimer fcnTimer(__func__);
 
     string lowertype(lower_s(type));
 
     bool isBin;
-    string encSIZE = cm.crypt(cm.getmkey(), to_s(size), TYPE_INTEGER,
+    string encSIZE = cm_stub.crypt(cm.getmkey(), to_s(size), TYPE_INTEGER,
                               fieldname(part::p_size, "DET"),
                               getMin(oDET), SECLEVEL::DET, isBin, 12345);
 
-    string encNAME = cm.crypt(cm.getmkey(), name, TYPE_TEXT,
+    string encNAME = cm_stub.crypt(cm.getmkey(), name, TYPE_TEXT,
                               fieldname(region::r_name, "DET"),
                               getMin(oDET), SECLEVEL::DET, isBin, 12345);
 
@@ -1636,8 +1635,6 @@ enum query_selection {
   query11,
   query14,
 };
-
-#define NELEMS(array) (sizeof(array) / sizeof(array[0]))
 
 int main(int argc, char **argv) {
     srand(time(NULL));

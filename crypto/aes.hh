@@ -8,9 +8,15 @@
 class AES {
  public:
     AES(const std::vector<uint8_t> &key) {
-        assert(key.size() == 16 || key.size() == 24 || key.size() == 32);
+        AssertValidKeySize(key.size());
         AES_set_encrypt_key(&key[0], key.size() * 8, &enc);
         AES_set_decrypt_key(&key[0], key.size() * 8, &dec);
+    }
+
+    AES(const uint8_t *key_data, size_t key_size) {
+        AssertValidKeySize(key_size);
+        AES_set_encrypt_key(key_data, key_size * 8, &enc);
+        AES_set_decrypt_key(key_data, key_size * 8, &dec);
     }
 
     void block_encrypt(const uint8_t *ptext, uint8_t *ctext) const {
@@ -24,6 +30,10 @@ class AES {
     static const size_t blocksize = 16;
 
  private:
+    static inline void AssertValidKeySize(size_t s) {
+        assert(s == 16 || s == 24 || s == 32);
+    }
+
     AES_KEY enc;
     AES_KEY dec;
 };

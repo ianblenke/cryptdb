@@ -3,6 +3,7 @@
 #include <string>
 #include <map>
 #include <iostream>
+#include <limits>
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
@@ -13,25 +14,15 @@
 #include <type_traits>
 
 #include <unistd.h>
+
 #include <parser/cdb_rewrite.hh>
+#include <parser/cdb_helpers.hh>
 #include <parser/encdata.hh>
+
 #include <util/cryptdb_log.hh>
 
 using namespace std;
 using namespace NTL;
-
-#define NELEMS(array) (sizeof(array) / sizeof(array[0]))
-
-template <typename R>
-R resultFromStr(const string &r) {
-    stringstream ss(r);
-    R val;
-    ss >> val;
-    return val;
-}
-
-template <>
-string resultFromStr(const string &r) { return r; }
 
 static void tokenize(const string &s,
                      const string &delim,
@@ -200,6 +191,7 @@ static void do_encrypt(size_t i,
                        CryptoManager &cm,
                        bool usenull = true) {
 
+    crypto_manager_stub cm_stub(&cm);
     switch (dt) {
     case DT_INTEGER:
         {
@@ -208,7 +200,7 @@ static void do_encrypt(size_t i,
             if (DoDET(onions)) {
                 assert(OnlyOneBit(onions & DET_BITMASK));
                 SECLEVEL max = (onions & ONION_DET) ? SECLEVEL::DET : SECLEVEL::DETJOIN;
-                string encDET = cm.crypt(cm.getmkey(), plaintext, TYPE_INTEGER,
+                string encDET = cm_stub.crypt(cm.getmkey(), plaintext, TYPE_INTEGER,
                                          fieldname(i, "DET"),
                                          getMin(oDET), max, isBin, 12345);
                 enccols.push_back(to_s(valFromStr(encDET)));
@@ -217,7 +209,7 @@ static void do_encrypt(size_t i,
             }
 
             if (DoOPE(onions)) {
-                string encOPE = cm.crypt(cm.getmkey(), plaintext, TYPE_INTEGER,
+                string encOPE = cm_stub.crypt(cm.getmkey(), plaintext, TYPE_INTEGER,
                                          fieldname(i, "OPE"),
                                          getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
                 enccols.push_back(to_s(valFromStr(encOPE)));
@@ -226,7 +218,7 @@ static void do_encrypt(size_t i,
             }
 
             if (DoAGG(onions)) {
-                string encAGG = cm.crypt(cm.getmkey(), plaintext, TYPE_INTEGER,
+                string encAGG = cm_stub.crypt(cm.getmkey(), plaintext, TYPE_INTEGER,
                                          fieldname(i, "AGG"),
                                          getMin(oAGG), SECLEVEL::SEMANTIC_AGG, isBin, 12345);
                 enccols.push_back(to_mysql_escape_varbin(encAGG, '\\', '|', '\n'));
@@ -256,7 +248,7 @@ static void do_encrypt(size_t i,
             if (DoDET(onions)) {
                 assert(OnlyOneBit(onions & DET_BITMASK));
                 SECLEVEL max = (onions & ONION_DET) ? SECLEVEL::DET : SECLEVEL::DETJOIN;
-                string encDET = cm.crypt(cm.getmkey(), plaintext, TYPE_TEXT,
+                string encDET = cm_stub.crypt(cm.getmkey(), plaintext, TYPE_TEXT,
                                          fieldname(i, "DET"),
                                          getMin(oDET), max, isBin, 12345);
                 assert((encDET.size() % 16) == 0);
@@ -266,7 +258,7 @@ static void do_encrypt(size_t i,
             }
 
             if (DoOPE(onions)) {
-                string encOPE = cm.crypt(cm.getmkey(), plaintext, TYPE_TEXT,
+                string encOPE = cm_stub.crypt(cm.getmkey(), plaintext, TYPE_TEXT,
                                          fieldname(i, "OPE"),
                                          getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
                 enccols.push_back(to_s(valFromStr(encOPE)));
@@ -275,7 +267,7 @@ static void do_encrypt(size_t i,
             }
 
             if (DoSEARCH(onions)) {
-                string encSWP = cm.crypt(cm.getmkey(), plaintext, TYPE_TEXT,
+                string encSWP = cm_stub.crypt(cm.getmkey(), plaintext, TYPE_TEXT,
                                          fieldname(i, "SWP"),
                                          getMin(oSWP), SECLEVEL::SWP, isBin, 12345);
                 enccols.push_back(to_mysql_escape_varbin(encSWP, '\\', '|', '\n'));
@@ -294,7 +286,7 @@ static void do_encrypt(size_t i,
                 bool isBin; \
                 if (DoDET(onions)) { \
                     assert(!(onions & ONION_DETJOIN)); \
-                    string encDET = cm.crypt(cm.getmkey(), to_s(field), TYPE_INTEGER, \
+                    string encDET = cm_stub.crypt(cm.getmkey(), to_s(field), TYPE_INTEGER, \
                                              fieldname(i, "DET"), \
                                              getMin(oDET), SECLEVEL::DET, isBin, 12345); \
                     enccols.push_back(to_s(valFromStr(encDET))); \
@@ -302,7 +294,7 @@ static void do_encrypt(size_t i,
                     if (usenull) enccols.push_back("NULL"); \
                 } \
                 if (DoOPE(onions)) { \
-                    string encOPE = cm.crypt(cm.getmkey(), to_s(field), TYPE_INTEGER, \
+                    string encOPE = cm_stub.crypt(cm.getmkey(), to_s(field), TYPE_INTEGER, \
                                              fieldname(i, "OPE"), \
                                              getMin(oOPE), SECLEVEL::OPE, isBin, 12345); \
                     enccols.push_back(to_s(valFromStr(encOPE))); \
