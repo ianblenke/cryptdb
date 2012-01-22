@@ -53,13 +53,13 @@ xlua_pushlstring(lua_State *l, const string &s)
 }
 
 static int
-connect(lua_State *L)
+cdb_connect(lua_State *L)
 {
-    
+
     ANON_REGION(__func__, &perf_cg);
     scoped_lock l(&big_lock);
 
-    
+
 
     string client = xlua_tolstring(L, 1);
     string server = xlua_tolstring(L, 2);
@@ -179,7 +179,7 @@ connect(lua_State *L)
 }
 
 static int
-disconnect(lua_State *L)
+cdb_disconnect(lua_State *L)
 {
     ANON_REGION(__func__, &perf_cg);
     scoped_lock l(&big_lock);
@@ -196,7 +196,7 @@ disconnect(lua_State *L)
 }
 
 static int
-rewrite(lua_State *L)
+cdb_rewrite(lua_State *L)
 {
     ANON_REGION(__func__, &perf_cg);
     scoped_lock l(&big_lock);
@@ -249,7 +249,7 @@ rewrite(lua_State *L)
 }
 
 static int
-decrypt(lua_State *L)
+cdb_decrypt(lua_State *L)
 {
     ANON_REGION(__func__, &perf_cg);
     scoped_lock l(&big_lock);
@@ -361,12 +361,13 @@ decrypt(lua_State *L)
 
 static const struct luaL_reg
 cryptdb_lib[] = {
-#define F(n) { #n, n }
+#define F(n) { #n, cdb_ ## n }
     F(connect),
     F(disconnect),
     F(rewrite),
     F(decrypt),
     { 0, 0 },
+#undef F
 };
 
 extern "C" int lua_cryptdb_init(lua_State *L);
