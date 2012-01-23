@@ -64,28 +64,10 @@ static string fieldname(size_t fieldnum, const string &suffix) {
 }
 
 template <typename T>
-inline string to_s(const T& t) {
-    ostringstream s;
-    s << t;
-    return s.str();
-}
-
-template <typename T>
 inline string to_hex(const T& t) {
     ostringstream s;
     s << hex << t;
     return s.str();
-}
-
-static inline int encode_yyyy_mm_dd(const string &datestr) {
-  int year, month, day;
-  int ret = sscanf(datestr.c_str(), "%d-%d-%d", &year, &month, &day);
-  assert(ret == 3);
-  assert(1 <= day && day <= 31);
-  assert(1 <= month && month <= 12);
-  assert(year >= 0);
-  int encoding = day | (month << 5) | (year << 9);
-  return encoding;
 }
 
 static const char* const lut = "0123456789ABCDEF";
@@ -237,8 +219,41 @@ static void do_encrypt(size_t i,
         break;
     case DT_CHAR:
         {
+            // we map char to a mysql unsigned tinyint
             unsigned int c = plaintext[0];
-            do_encrypt(i, DT_INTEGER, onions, to_s(c), enccols, cm, usenull);
+
+            string pt = to_s(c);
+
+            bool isBin;
+            if (DoDET(onions)) {
+                assert(OnlyOneBit(onions & DET_BITMASK));
+                SECLEVEL max = (onions & ONION_DET) ? SECLEVEL::DET : SECLEVEL::DETJOIN;
+                string encDET = cm_stub.crypt<1>(cm.getmkey(), pt, TYPE_INTEGER,
+                                         fieldname(i, "DET"),
+                                         getMin(oDET), max, isBin, 12345);
+                enccols.push_back(to_s(valFromStr(encDET)));
+            } else {
+                if (usenull) enccols.push_back("NULL");
+            }
+
+            if (DoOPE(onions)) {
+                string encOPE = cm_stub.crypt(cm.getmkey(), pt, TYPE_INTEGER,
+                                         fieldname(i, "OPE"),
+                                         getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
+                enccols.push_back(to_s(valFromStr(encOPE)));
+            } else {
+                if (usenull) enccols.push_back("NULL");
+            }
+
+            if (DoAGG(onions)) {
+                string encAGG = cm_stub.crypt(cm.getmkey(), pt, TYPE_INTEGER,
+                                         fieldname(i, "AGG"),
+                                         getMin(oAGG), SECLEVEL::SEMANTIC_AGG, isBin, 12345);
+                enccols.push_back(to_mysql_escape_varbin(encAGG, '\\', '|', '\n'));
+            } else {
+                if (usenull) enccols.push_back("NULL");;
+            }
+
         }
         break;
     case DT_STRING:
@@ -278,34 +293,32 @@ static void do_encrypt(size_t i,
         break;
     case DT_DATE:
         {
-            // TODO: don't assume yyyy-mm-dd format
-            int encoding = encode_yyyy_mm_dd(plaintext);
+          // TODO: don't assume yyyy-mm-dd format
+          int encoding = encode_yyyy_mm_dd(plaintext);
 
-#define __IMPL_FIELD_ENC(field) \
-            do { \
-                bool isBin; \
-                if (DoDET(onions)) { \
-                    assert(!(onions & ONION_DETJOIN)); \
-                    string encDET = cm_stub.crypt(cm.getmkey(), to_s(field), TYPE_INTEGER, \
-                                             fieldname(i, "DET"), \
-                                             getMin(oDET), SECLEVEL::DET, isBin, 12345); \
-                    enccols.push_back(to_s(valFromStr(encDET))); \
-                } else { \
-                    if (usenull) enccols.push_back("NULL"); \
-                } \
-                if (DoOPE(onions)) { \
-                    string encOPE = cm_stub.crypt(cm.getmkey(), to_s(field), TYPE_INTEGER, \
-                                             fieldname(i, "OPE"), \
-                                             getMin(oOPE), SECLEVEL::OPE, isBin, 12345); \
-                    enccols.push_back(to_s(valFromStr(encOPE))); \
-                } else { \
-                    if (usenull) enccols.push_back("NULL"); \
-                } \
-            } while (0)
+          bool isBin;
 
-            __IMPL_FIELD_ENC(encoding);
+          if (DoDET(onions)) {
+            assert(!(onions & ONION_DETJOIN));
+              string encDET = cm_stub.crypt<3>(cm.getmkey(), to_s(encoding), TYPE_INTEGER,
+                  fieldname(i, "DET"),
+                  getMin(oDET), SECLEVEL::DET, isBin, 12345);
+              enccols.push_back(to_s(valFromStr(encDET)));
+          } else {
+            if (usenull) enccols.push_back("NULL");
+          }
 
-#undef __IMPL_FIELD_ENC
+          if (DoOPE(onions)) {
+            string encOPE = cm_stub.crypt(cm.getmkey(), to_s(encoding), TYPE_INTEGER,
+                fieldname(i, "OPE"),
+                getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
+              enccols.push_back(to_s(valFromStr(encOPE)));
+          } else {
+            if (usenull) enccols.push_back("NULL");
+          }
+
+          // agg over dates makes no sense for now...
+          assert(!DoAGG(onions));
 
         }
         break;

@@ -81,13 +81,6 @@ static string fieldname(size_t fieldnum, const string &suffix) {
     return s.str();
 }
 
-template <typename T>
-inline string to_s(const T& t) {
-    ostringstream s;
-    s << t;
-    return s.str();
-}
-
 static inline string lower_s(const string &s) {
   string ret(s);
   // why isn't there a string.to_lower()?
@@ -108,7 +101,7 @@ static SECLEVEL getUsefulMax(onion o) {
     return SECLEVEL::INVALID;
 }
 
-template <typename Result>
+template <typename Result, size_t n_bytes = 4>
 Result decryptRow(const string &data,
                   uint64_t salt,
                   const string &fieldname,
@@ -117,7 +110,7 @@ Result decryptRow(const string &data,
                   CryptoManager &cm) {
     crypto_manager_stub cm_stub(&cm);
     bool isBin;
-    string res = cm_stub.crypt(
+    string res = cm_stub.crypt<n_bytes>(
         cm.getmkey(),
         data,
         f,
@@ -126,7 +119,7 @@ Result decryptRow(const string &data,
     return resultFromStr<Result>(res);
 }
 
-template <typename Result>
+template <typename Result, size_t n_bytes = 4>
 Result decryptRowFromTo(const string &data,
                         uint64_t salt,
                         const string &fieldname,
@@ -136,7 +129,7 @@ Result decryptRowFromTo(const string &data,
                         CryptoManager &cm) {
     crypto_manager_stub cm_stub(&cm);
     bool isBin;
-    string res = cm_stub.crypt(
+    string res = cm_stub.crypt<n_bytes>(
         cm.getmkey(),
         data,
         f,
@@ -636,7 +629,7 @@ static void do_query_q1_opt(Connect &conn,
       NamedTimer t(__func__, "decrypt");
       for (auto row : res.rows) {
           // l_returnflag
-          unsigned char l_returnflag_ch = (unsigned char) decryptRow<uint32_t>(
+          unsigned char l_returnflag_ch = (unsigned char) decryptRow<uint32_t, 1>(
                   row[0].data,
                   12345,
                   fieldname(lineitem::l_returnflag, "DET"),
@@ -646,7 +639,7 @@ static void do_query_q1_opt(Connect &conn,
           string l_returnflag(1, l_returnflag_ch);
 
           // l_linestatus
-          unsigned char l_linestatus_ch = (unsigned char) decryptRow<uint32_t>(
+          unsigned char l_linestatus_ch = (unsigned char) decryptRow<uint32_t, 1>(
                   row[1].data,
                   12345,
                   fieldname(lineitem::l_linestatus, "DET"),

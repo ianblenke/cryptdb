@@ -3,6 +3,8 @@
 #include <crypto/aes.hh>
 #include <crypto/ffx.hh>
 
+#include <util/static_assert.hh>
+
 #define NELEMS(array) (sizeof(array) / sizeof(array[0]))
 
 template <typename R>
@@ -16,12 +18,38 @@ R resultFromStr(const string &r) {
 template <>
 string resultFromStr(const string &r) { return r; }
 
+template <typename T>
+inline string to_s(const T& t) {
+    ostringstream s;
+    s << t;
+    return s.str();
+}
+
+int encode_yyyy_mm_dd(const string &datestr);
+
+int encode_yyyy_mm_dd(const string &datestr) {
+  int year, month, day;
+  int ret = sscanf(datestr.c_str(), "%d-%d-%d", &year, &month, &day);
+  assert(ret == 3);
+  assert(1 <= day && day <= 31);
+  assert(1 <= month && month <= 12);
+  assert(year >= 0);
+  int encoding = day | (month << 5) | (year << 9);
+  return encoding;
+}
+
+template <size_t n_bits>
+struct max_size {
+  static const uint64_t value = (0x1UL << n_bits) - 1L;
+};
+
 /** same interface as CryptoManager::crypt(), but lets us try out new
  * encryptions */
 class crypto_manager_stub {
 public:
   crypto_manager_stub(CryptoManager* cm) : cm(cm) {}
 
+  template <size_t n_bytes = 4>
   string crypt(AES_KEY * mkey, string data, fieldType ft,
                string fullfieldname,
                SECLEVEL fromlevel, SECLEVEL tolevel, bool & isBin,
@@ -31,23 +59,42 @@ public:
       // encryption
       if (ft == TYPE_INTEGER && getOnion(fromlevel) == oDET) {
         // we have a specialization
-        return encrypt_stub(mkey, data, ft, fullfieldname, fromlevel, tolevel, isBin, salt);
+        return encrypt_stub<n_bytes>(
+            mkey, data, ft, fullfieldname, fromlevel, tolevel, isBin, salt);
       }
       return cm->crypt(mkey, data, ft, fullfieldname, fromlevel, tolevel, isBin, salt);
     } else {
       // decryption
       if (ft == TYPE_INTEGER && getOnion(fromlevel) == oDET) {
-        return decrypt_stub(mkey, data, ft, fullfieldname, fromlevel, tolevel, isBin, salt);
+        return decrypt_stub<n_bytes>(
+            mkey, data, ft, fullfieldname, fromlevel, tolevel, isBin, salt);
       }
       return cm->crypt(mkey, data, ft, fullfieldname, fromlevel, tolevel, isBin, salt);
     }
   }
 
 private:
+
+  template <size_t n_bytes>
+  struct buffer {
+    union {
+      uint8_t u8p[n_bytes];
+      uint64_t u64;
+    } data;
+
+    static void ctAsserts() {
+      buffer<n_bytes> __attribute__((unused)) b;
+      _static_assert(sizeof(b.data) == sizeof(uint64_t));
+      _static_assert(&b.data.u8p == &b.data);
+    }
+  };
+
+  template <size_t n_bytes>
   string encrypt_stub(AES_KEY * mkey, string data, fieldType ft,
                       string fullfieldname,
                       SECLEVEL fromlevel, SECLEVEL tolevel, bool & isBin,
                       uint64_t salt) {
+    _static_assert(n_bytes <= sizeof(uint64_t));
     assert(fromlevel < tolevel);
     onion o = getOnion(fromlevel);
     switch (ft) {
@@ -55,39 +102,34 @@ private:
       switch (o) {
       case oDET: {
 
-        uint32_t val;
+        uint64_t val;
         if (fromlevel == SECLEVEL::PLAIN_DET) {
             int64_t r = resultFromStr<int64_t>(data);
-            assert(r >= 0);
+            assert(r >= 0); // no negative data for now
 
-  // TODO: FIX HACK
-#if defined(max)
-#define _RESTORE_MAX
-#undef max
-#endif
+            val = static_cast<uint64_t>(r);
+            assert(val <= max_size<n_bytes * 8>::value);
 
-            assert(uint64_t(r) <= numeric_limits<uint32_t>::max());
-
-#if defined(_RESTORE_MAX)
-#define max(a, b) ((a) < (b) ? (b) : (a))
-#undef _RESTORE_MAX
-#endif
-
-            val = static_cast<uint32_t>(r);
             fromlevel = increaseLevel(fromlevel, ft, oDET);
 
             string _keydata = cm->getKey(mkey, "join", fromlevel);
             AES key((const uint8_t*)_keydata.data(), _keydata.size());
-            ffx2<AES> f(&key, 32, {});
-            uint8_t ct[4];
-            f.encrypt((const uint8_t*)&val, ct);
-            val = *((uint32_t*)ct);
+            ffx2<AES> f(&key, n_bytes * 8, {});
+
+            buffer<n_bytes> buf;
+            buf.data.u64 = 0;
+
+            // x86 little endian makes this ok
+            f.encrypt((const uint8_t*)&val, buf.data.u8p);
+            val = buf.data.u64;
+            assert(val <= max_size<n_bytes * 8>::value);
 
             if (fromlevel == tolevel) {
                 return strFromVal(val);
             }
         } else {
             val = valFromStr(data);
+            assert(val <= max_size<n_bytes * 8>::value);
         }
 
         if (fromlevel == SECLEVEL::DETJOIN) {
@@ -95,10 +137,14 @@ private:
 
             string _keydata = cm->getKey(mkey, fullfieldname, fromlevel);
             AES key((const uint8_t*)_keydata.data(), _keydata.size());
-            ffx2<AES> f(&key, 32, {});
-            uint8_t ct[4];
-            f.encrypt((const uint8_t*)&val, ct);
-            val = *((uint32_t*)ct);
+            ffx2<AES> f(&key, n_bytes * 8, {});
+
+            buffer<n_bytes> buf;
+            buf.data.u64 = 0;
+
+            f.encrypt((const uint8_t*)&val, buf.data.u8p);
+            val = buf.data.u64;
+            assert(val <= max_size<n_bytes * 8>::value);
 
             if (fromlevel == tolevel) {
                 return strFromVal(val);
@@ -116,6 +162,7 @@ private:
     return "";
   }
 
+  template <size_t n_bytes>
   string decrypt_stub(AES_KEY * mkey, string data, fieldType ft,
                       string fullfieldname,
                       SECLEVEL fromlevel, SECLEVEL tolevel, bool & isBin,
@@ -131,14 +178,19 @@ private:
           assert(false);
         }
 
-        uint32_t val = valFromStr(data);
+        uint64_t val = valFromStr(data);
+        assert(val <= max_size<n_bytes * 8>::value);
         if (fromlevel == SECLEVEL::DET) {
             string _keydata = cm->getKey(mkey, fullfieldname, fromlevel);
             AES key((const uint8_t*)_keydata.data(), _keydata.size());
-            ffx2<AES> f(&key, 32, {});
-            uint8_t pt[4];
-            f.decrypt((const uint8_t*)&val, pt);
-            val = *((uint32_t*)pt);
+            ffx2<AES> f(&key, n_bytes * 8, {});
+
+            buffer<n_bytes> buf;
+            buf.data.u64 = 0;
+
+            f.decrypt((const uint8_t*)&val, buf.data.u8p);
+            val = buf.data.u64;
+            assert(val <= max_size<n_bytes * 8>::value);
 
             fromlevel = decreaseLevel(fromlevel, ft, oDET);
             if (fromlevel == tolevel) {
@@ -149,10 +201,13 @@ private:
         if (fromlevel == SECLEVEL::DETJOIN) {
             string _keydata = cm->getKey(mkey, "join", fromlevel);
             AES key((const uint8_t*)_keydata.data(), _keydata.size());
-            ffx2<AES> f(&key, 32, {});
-            uint8_t pt[4];
-            f.decrypt((const uint8_t*)&val, pt);
-            val = *((uint32_t*)pt);
+            ffx2<AES> f(&key, n_bytes * 8, {});
+
+            buffer<n_bytes> buf;
+            buf.data.u64 = 0;
+            f.decrypt((const uint8_t*)&val, buf.data.u8p);
+            val = buf.data.u64;
+            assert(val <= max_size<n_bytes * 8>::value);
 
             fromlevel = decreaseLevel(fromlevel, ft, oDET);
             if (fromlevel == tolevel) {
