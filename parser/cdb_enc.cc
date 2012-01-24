@@ -479,9 +479,13 @@ public:
     schema = Schema;
     switch (tpe) {
       case none:
-      case normal:
         onions = Onions;
         usenull = true;
+        processrow = true;
+        break;
+      case normal:
+        onions = Onions;
+        usenull = false;
         processrow = true;
         break;
       case packed:

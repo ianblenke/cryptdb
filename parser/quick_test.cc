@@ -32,6 +32,8 @@ int main(int argc, char **argv) {
 
     bool isBin;
 
+    // det tests
+
     // test int type
     {
         string ct = stub.crypt(cm.getmkey(), "34512", TYPE_INTEGER,
@@ -88,6 +90,23 @@ int main(int argc, char **argv) {
                                "my_field_name", SECLEVEL::DET, SECLEVEL::PLAIN_DET,
                                isBin, 12345);
         assert(pt == teststr);
+    }
+
+    // ope tests
+
+    // test int type
+    {
+        uint32_t i = 93254;
+        string ct = stub.crypt<4>(cm.getmkey(), to_s(i), TYPE_INTEGER,
+                               "my_field_name", SECLEVEL::PLAIN_OPE, SECLEVEL::OPE,
+                               isBin, 12345);
+        assert(!isBin);
+        assert(resultFromStr<uint64_t>(ct) <= uint64_t(-1));
+        string pt = stub.crypt<4>(cm.getmkey(), ct, TYPE_INTEGER,
+                               "my_field_name", SECLEVEL::OPE, SECLEVEL::PLAIN_OPE,
+                               isBin, 12345);
+        assert(!isBin);
+        assert(to_s(i) == pt);
     }
 
     return 0;

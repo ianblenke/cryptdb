@@ -7,6 +7,8 @@
 #include <crypto/ffx.hh>
 #include <crypto/prng.hh>
 
+#include <crypto-old/OPE.hh>
+
 #include <util/static_assert.hh>
 
 #define NELEMS(array) (sizeof(array) / sizeof(array[0]))
@@ -44,7 +46,11 @@ int encode_yyyy_mm_dd(const string &datestr) {
 
 template <size_t n_bits>
 struct max_size {
-  static const uint64_t value = (0x1UL << n_bits) - 1L;
+  static const bool is_valid = n_bits <= 64;
+  // if n_bits > 64, value is the max value for uint64_t
+  // (and is_valid is false)
+  static const uint64_t value =
+    ((0x1UL << (n_bits % 64)) - 1L) | ((n_bits / 64) ? (0x1UL << 63) : 0);
 };
 
 /** same interface as CryptoManager::crypt(), but lets us try out new
@@ -59,17 +65,22 @@ public:
                SECLEVEL fromlevel, SECLEVEL tolevel, bool & isBin,
                uint64_t salt) {
     assert(fromlevel != tolevel);
+
+    bool specialize =
+      ((ft == TYPE_INTEGER) &&
+       (getOnion(fromlevel) == oDET || getOnion(fromlevel) == oOPE)) ||
+      (ft == TYPE_TEXT && getOnion(fromlevel) == oDET);
+
     if (fromlevel < tolevel) {
       // encryption
-      if ((ft == TYPE_INTEGER || ft == TYPE_TEXT) && getOnion(fromlevel) == oDET) {
-        // we have a specialization
+      if (specialize) {
         return encrypt_stub<n_bytes>(
             mkey, data, ft, fullfieldname, fromlevel, tolevel, isBin, salt);
       }
       return cm->crypt(mkey, data, ft, fullfieldname, fromlevel, tolevel, isBin, salt);
     } else {
       // decryption
-      if ((ft == TYPE_INTEGER || ft == TYPE_TEXT) && getOnion(fromlevel) == oDET) {
+      if (specialize) {
         return decrypt_stub<n_bytes>(
             mkey, data, ft, fullfieldname, fromlevel, tolevel, isBin, salt);
       }
@@ -130,58 +141,100 @@ private:
 
         uint64_t val;
         if (fromlevel == SECLEVEL::PLAIN_DET) {
-            int64_t r = resultFromStr<int64_t>(data);
-            assert(r >= 0); // no negative data for now
+          int64_t r = resultFromStr<int64_t>(data);
+          assert(r >= 0); // no negative data for now
 
-            val = static_cast<uint64_t>(r);
-            assert(val <= max_size<n_bytes * 8>::value);
+          val = static_cast<uint64_t>(r);
+          assert(max_size<n_bytes * 8>::is_valid);
+          assert(val <= max_size<n_bytes * 8>::value);
 
-            fromlevel = increaseLevel(fromlevel, ft, oDET);
+          fromlevel = increaseLevel(fromlevel, ft, oDET);
 
-            string _keydata = cm->getKey(mkey, "join", fromlevel);
-            AES key((const uint8_t*)_keydata.data(), _keydata.size());
-            ffx2<AES> f(&key, n_bytes * 8, {});
+          string _keydata = cm->getKey(mkey, "join", fromlevel);
+          AES key((const uint8_t*)_keydata.data(), _keydata.size());
+          ffx2<AES> f(&key, n_bytes * 8, {});
 
-            buffer<n_bytes> buf;
-            buf.data.u64 = 0;
+          buffer<n_bytes> buf;
+          buf.data.u64 = 0;
 
-            // x86 little endian makes this ok
-            f.encrypt((const uint8_t*)&val, buf.data.u8p);
-            val = buf.data.u64;
-            assert(val <= max_size<n_bytes * 8>::value);
+          // x86 little endian makes this ok
+          f.encrypt((const uint8_t*)&val, buf.data.u8p);
+          val = buf.data.u64;
+          assert(max_size<n_bytes * 8>::is_valid);
+          assert(val <= max_size<n_bytes * 8>::value);
 
-            if (fromlevel == tolevel) {
-                isBin = false;
-                return strFromVal(val);
-            }
+          if (fromlevel == tolevel) {
+            isBin = false;
+            return strFromVal(val);
+          }
         } else {
-            val = valFromStr(data);
-            assert(val <= max_size<n_bytes * 8>::value);
+          val = valFromStr(data);
+          assert(max_size<n_bytes * 8>::is_valid);
+          assert(val <= max_size<n_bytes * 8>::value);
         }
 
         if (fromlevel == SECLEVEL::DETJOIN) {
-            fromlevel = increaseLevel(fromlevel, ft, oDET);
+          fromlevel = increaseLevel(fromlevel, ft, oDET);
 
-            string _keydata = cm->getKey(mkey, fullfieldname, fromlevel);
-            AES key((const uint8_t*)_keydata.data(), _keydata.size());
-            ffx2<AES> f(&key, n_bytes * 8, {});
+          string _keydata = cm->getKey(mkey, fullfieldname, fromlevel);
+          AES key((const uint8_t*)_keydata.data(), _keydata.size());
+          ffx2<AES> f(&key, n_bytes * 8, {});
 
-            buffer<n_bytes> buf;
-            buf.data.u64 = 0;
+          buffer<n_bytes> buf;
+          buf.data.u64 = 0;
 
-            f.encrypt((const uint8_t*)&val, buf.data.u8p);
-            val = buf.data.u64;
-            assert(val <= max_size<n_bytes * 8>::value);
+          f.encrypt((const uint8_t*)&val, buf.data.u8p);
+          val = buf.data.u64;
+          assert(max_size<n_bytes * 8>::is_valid);
+          assert(val <= max_size<n_bytes * 8>::value);
 
-            if (fromlevel == tolevel) {
-                isBin = false;
-                return strFromVal(val);
-            }
+          if (fromlevel == tolevel) {
+            isBin = false;
+            return strFromVal(val);
+          }
         }
 
         // unsupported
         assert(false);
       }
+        case oOPE: {
+
+            uint64_t val;
+            // plain_ope -> opejoin is a no-op...
+            if (fromlevel == SECLEVEL::PLAIN_OPE) {
+                val = valFromStr(data);
+
+                fromlevel = increaseLevel(fromlevel, ft, oOPE);
+                if (fromlevel == tolevel) {
+                    isBin = false;
+                    return strFromVal(val);
+                }
+            } else {
+                val = valFromStr(data);
+            }
+
+            if (fromlevel == SECLEVEL::OPEJOIN) {
+
+                fromlevel = increaseLevel(fromlevel, ft, oOPE);
+                OPE ope(cm->getKey(mkey, fullfieldname, fromlevel),
+                        n_bytes * 8,    /* plain text size (in bits) */
+                        n_bytes * 8 * 2 /* cipher text size (in bits) */);
+                val = ope.encrypt(val);
+
+                assert(max_size<n_bytes * 8 * 2>::is_valid);
+                assert(val <= max_size<n_bytes * 8 * 2>::value);
+
+                if (fromlevel == tolevel) {
+                    isBin = false;
+                    return strFromVal(val);
+                }
+            }
+
+            // unsupported
+            assert(false);
+
+            return "";
+        }
       default: assert(false);
       }
     }
@@ -240,6 +293,7 @@ private:
         }
 
         uint64_t val = valFromStr(data);
+        assert(max_size<n_bytes * 8>::is_valid);
         assert(val <= max_size<n_bytes * 8>::value);
         if (fromlevel == SECLEVEL::DET) {
             string _keydata = cm->getKey(mkey, fullfieldname, fromlevel);
@@ -251,6 +305,7 @@ private:
 
             f.decrypt((const uint8_t*)&val, buf.data.u8p);
             val = buf.data.u64;
+            assert(max_size<n_bytes * 8>::is_valid);
             assert(val <= max_size<n_bytes * 8>::value);
 
             fromlevel = decreaseLevel(fromlevel, ft, oDET);
@@ -268,6 +323,7 @@ private:
             buf.data.u64 = 0;
             f.decrypt((const uint8_t*)&val, buf.data.u8p);
             val = buf.data.u64;
+            assert(max_size<n_bytes * 8>::is_valid);
             assert(val <= max_size<n_bytes * 8>::value);
 
             fromlevel = decreaseLevel(fromlevel, ft, oDET);
@@ -276,7 +332,34 @@ private:
             }
         }
       }
+      case oOPE: {
+          if (fromlevel == SECLEVEL::SEMANTIC_OPE) {
+            // unsupported
+            assert(false);
+          }
 
+          uint64_t val = valFromStr(data);
+          if (fromlevel == SECLEVEL::OPE) {
+              OPE ope(cm->getKey(mkey, fullfieldname, fromlevel),
+                      n_bytes * 8,    /* plain text size (in bits) */
+                      n_bytes * 8 * 2 /* cipher text size (in bits) */);
+              val = ope.decrypt(val);
+              assert(max_size<n_bytes * 8>::is_valid);
+              assert(val <= max_size<n_bytes * 8>::value);
+              fromlevel = decreaseLevel(fromlevel, ft, oOPE);
+              if (fromlevel == tolevel) {
+                  return strFromVal(val);
+              }
+          }
+
+          if (fromlevel == SECLEVEL::OPEJOIN) {
+              fromlevel = decreaseLevel(fromlevel, ft, oOPE);
+              if (fromlevel == tolevel) {
+                  return strFromVal(val);
+              }
+          }
+
+      }
       default: assert(false);
       }
     }
