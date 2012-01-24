@@ -1,7 +1,11 @@
 #pragma once
 
+#include <iostream>
+
 #include <crypto/aes.hh>
+#include <crypto/arc4.hh>
 #include <crypto/ffx.hh>
+#include <crypto/prng.hh>
 
 #include <util/static_assert.hh>
 
@@ -57,7 +61,7 @@ public:
     assert(fromlevel != tolevel);
     if (fromlevel < tolevel) {
       // encryption
-      if (ft == TYPE_INTEGER && getOnion(fromlevel) == oDET) {
+      if ((ft == TYPE_INTEGER || ft == TYPE_TEXT) && getOnion(fromlevel) == oDET) {
         // we have a specialization
         return encrypt_stub<n_bytes>(
             mkey, data, ft, fullfieldname, fromlevel, tolevel, isBin, salt);
@@ -65,7 +69,7 @@ public:
       return cm->crypt(mkey, data, ft, fullfieldname, fromlevel, tolevel, isBin, salt);
     } else {
       // decryption
-      if (ft == TYPE_INTEGER && getOnion(fromlevel) == oDET) {
+      if ((ft == TYPE_INTEGER || ft == TYPE_TEXT) && getOnion(fromlevel) == oDET) {
         return decrypt_stub<n_bytes>(
             mkey, data, ft, fullfieldname, fromlevel, tolevel, isBin, salt);
       }
@@ -88,6 +92,28 @@ private:
       _static_assert(&b.data.u8p == &b.data);
     }
   };
+
+  string encrypt_string(const string& pt, const string& key) {
+    streamrng<arc4> r(key);
+    vector<uint8_t> pad = r.rand_vec<uint8_t>(pt.size());
+    string ct;
+    ct.resize(pad.size());
+    for (size_t i = 0; i < pt.size(); i++) {
+        ct[i] = pad[i] ^ pt[i];
+    }
+    return ct;
+  }
+
+  string decrypt_string(const string& ct, const string& key) {
+    streamrng<arc4> r(key);
+    vector<uint8_t> pad = r.rand_vec<uint8_t>(ct.size());
+    string pt;
+    pt.resize(pad.size());
+    for (size_t i = 0; i < pt.size(); i++) {
+        pt[i] = pad[i] ^ ct[i];
+    }
+    return pt;
+  }
 
   template <size_t n_bytes>
   string encrypt_stub(AES_KEY * mkey, string data, fieldType ft,
@@ -125,6 +151,7 @@ private:
             assert(val <= max_size<n_bytes * 8>::value);
 
             if (fromlevel == tolevel) {
+                isBin = false;
                 return strFromVal(val);
             }
         } else {
@@ -147,6 +174,7 @@ private:
             assert(val <= max_size<n_bytes * 8>::value);
 
             if (fromlevel == tolevel) {
+                isBin = false;
                 return strFromVal(val);
             }
         }
@@ -156,6 +184,39 @@ private:
       }
       default: assert(false);
       }
+    }
+    case TYPE_TEXT: {
+        switch (o) {
+        case oDET: {
+            // TODO: this is not cryptographically secure, but we use
+            // it for now, just to measure performance
+
+            if (fromlevel == SECLEVEL::PLAIN_DET) {
+                fromlevel  = increaseLevel(fromlevel, ft, oDET);
+                data = encrypt_string(data, cm->getKey(mkey, "join", fromlevel));
+                if (fromlevel == tolevel) {
+                    isBin = true;
+                    return data;
+                }
+            } else {
+                // no-op
+            }
+
+            if (fromlevel == SECLEVEL::DETJOIN) {
+                fromlevel = increaseLevel(fromlevel, ft, oDET);
+                data = encrypt_string(data, cm->getKey(mkey, fullfieldname, fromlevel));
+                if (fromlevel == tolevel) {
+                    isBin = true;
+                    return data;
+                }
+            }
+
+            // unsupported
+            assert(false);
+
+        }
+        default: assert(false);
+        }
     }
     default: assert(false);
     }
@@ -215,9 +276,39 @@ private:
             }
         }
       }
+
       default: assert(false);
       }
     }
+  case TYPE_TEXT: {
+    switch (o) {
+    case oDET: {
+        if (fromlevel == SECLEVEL::SEMANTIC_DET) {
+          // unsupported
+          assert(false);
+        }
+
+        if (fromlevel == SECLEVEL::DET) {
+            data = decrypt_string(data, cm->getKey(mkey, fullfieldname, fromlevel));
+            fromlevel  = decreaseLevel(fromlevel, ft, oDET);
+            if (fromlevel == tolevel) {
+                isBin = true;
+                return data;
+            }
+        }
+
+        if (fromlevel == SECLEVEL::DETJOIN) {
+            data = decrypt_string(data, cm->getKey(mkey, "join", fromlevel));
+            fromlevel = decreaseLevel(fromlevel, ft, oDET);
+            if (fromlevel == tolevel) {
+                isBin = true;
+                return data;
+            }
+        }
+    }
+    default: assert(false);
+    }
+  }
     default: assert(false);
     }
     return "";

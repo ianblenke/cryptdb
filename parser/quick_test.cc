@@ -37,9 +37,12 @@ int main(int argc, char **argv) {
         string ct = stub.crypt(cm.getmkey(), "34512", TYPE_INTEGER,
                                "my_field_name", SECLEVEL::PLAIN_DET, SECLEVEL::DET,
                                isBin, 12345);
+        assert(!isBin);
+        assert(resultFromStr<uint64_t>(ct) <= uint64_t(uint32_t(-1)));
         string pt = stub.crypt(cm.getmkey(), ct, TYPE_INTEGER,
                                "my_field_name", SECLEVEL::DET, SECLEVEL::PLAIN_DET,
                                isBin, 12345);
+        assert(!isBin);
         assert("34512" == pt);
     }
 
@@ -49,10 +52,13 @@ int main(int argc, char **argv) {
         string ct = stub.crypt<1>(cm.getmkey(), to_s(unsigned(c)), TYPE_INTEGER,
                                "my_field_name", SECLEVEL::PLAIN_DET, SECLEVEL::DET,
                                isBin, 12345);
+        assert(!isBin);
+        assert(resultFromStr<uint64_t>(ct) <= uint64_t(uint8_t(-1)));
         string pt = stub.crypt<1>(cm.getmkey(), ct, TYPE_INTEGER,
                                "my_field_name", SECLEVEL::DET, SECLEVEL::PLAIN_DET,
                                isBin, 12345);
 
+        assert(!isBin);
         uint64_t v = valFromStr(pt);
         assert(c == ((char)v));
     }
@@ -63,10 +69,25 @@ int main(int argc, char **argv) {
         string ct = stub.crypt<3>(cm.getmkey(), to_s(encoding), TYPE_INTEGER,
                                "my_field_name", SECLEVEL::PLAIN_DET, SECLEVEL::DET,
                                isBin, 12345);
+        assert(!isBin);
+        assert(resultFromStr<uint64_t>(ct) <= max_size<3 * 8>::value);
         string pt = stub.crypt<3>(cm.getmkey(), ct, TYPE_INTEGER,
                                "my_field_name", SECLEVEL::DET, SECLEVEL::PLAIN_DET,
                                isBin, 12345);
         assert(to_s(encoding) == pt);
+    }
+
+    // test str type
+    {
+        string teststr = "testing 123";
+        string ct = stub.crypt(cm.getmkey(), teststr, TYPE_TEXT,
+                               "my_field_name", SECLEVEL::PLAIN_DET, SECLEVEL::DET,
+                               isBin, 12345);
+        assert(ct.size() == teststr.size());
+        string pt = stub.crypt(cm.getmkey(), ct, TYPE_TEXT,
+                               "my_field_name", SECLEVEL::DET, SECLEVEL::PLAIN_DET,
+                               isBin, 12345);
+        assert(pt == teststr);
     }
 
     return 0;
