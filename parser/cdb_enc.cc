@@ -211,10 +211,53 @@ static void do_encrypt(size_t i,
         break;
     case DT_FLOAT:
         {
+            // TPC-H uses DECIMAL(15, 2) for all its floats
+            // which means the largest number (integer) we would have
+            // to store is
+            //   x = 999999999999999
+            // it requires 50 bits to represent the largest value. rounded
+            // to the nearest byte gives us a 7-byte number (which is actually
+            // the MySQL storage requirements of DECIMAL(15, 2)). We currently
+            // use a bigint (8-byte int) to store this in mysql, so we don't have
+            // to deal with binary types. but this means we waste 1 byte per decimal
+
             // TODO: fix precision
             double f = strtod(plaintext.c_str(), NULL);
-            long t = roundToLong(f * 100.0);
-            do_encrypt(i, DT_INTEGER, onions, to_s(t), enccols, cm, usenull);
+            int64_t t = roundToLong(f * 100.0);
+            assert(t >= 0);
+            assert(t < 999999999999999L); // see above
+
+            // DET, OPE, AGG
+            bool isBin;
+            if (DoDET(onions)) {
+                assert(OnlyOneBit(onions & DET_BITMASK));
+                SECLEVEL max = (onions & ONION_DET) ? SECLEVEL::DET : SECLEVEL::DETJOIN;
+                string encDET = cm_stub.crypt<7>(cm.getmkey(), plaintext, TYPE_INTEGER,
+                                         fieldname(i, "DET"),
+                                         getMin(oDET), max, isBin, 12345);
+                enccols.push_back(to_s(valFromStr(encDET)));
+            } else {
+                if (usenull) enccols.push_back("NULL");
+            }
+
+            if (DoOPE(onions)) {
+                string encOPE = cm_stub.crypt(cm.getmkey(), plaintext, TYPE_INTEGER,
+                                         fieldname(i, "OPE"),
+                                         getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
+                enccols.push_back(to_s(valFromStr(encOPE)));
+            } else {
+                if (usenull) enccols.push_back("NULL");
+            }
+
+            if (DoAGG(onions)) {
+                string encAGG = cm_stub.crypt(cm.getmkey(), plaintext, TYPE_INTEGER,
+                                         fieldname(i, "AGG"),
+                                         getMin(oAGG), SECLEVEL::SEMANTIC_AGG, isBin, 12345);
+                enccols.push_back(to_mysql_escape_varbin(encAGG, '\\', '|', '\n'));
+            } else {
+                if (usenull) enccols.push_back("NULL");;
+            }
+
         }
         break;
     case DT_CHAR:
@@ -266,7 +309,7 @@ static void do_encrypt(size_t i,
                 string encDET = cm_stub.crypt(cm.getmkey(), plaintext, TYPE_TEXT,
                                          fieldname(i, "DET"),
                                          getMin(oDET), max, isBin, 12345);
-                assert((encDET.size() % 16) == 0);
+                //assert((encDET.size() % 16) == 0);
                 enccols.push_back(to_mysql_escape_varbin(encDET, '\\', '|', '\n'));
             } else {
                 if (usenull) enccols.push_back("NULL");
