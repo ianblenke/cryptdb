@@ -24,7 +24,9 @@
 using namespace std;
 using namespace NTL;
 
-
+#ifdef NDEBUG
+#warning "assertions are turned off- quick_test will do nothing"
+#endif /* NDEBUG */
 
 int main(int argc, char **argv) {
     CryptoManager cm("12345");
@@ -107,6 +109,82 @@ int main(int argc, char **argv) {
                                isBin, 12345);
         assert(!isBin);
         assert(to_s(i) == pt);
+
+        uint32_t i1 = 1193254;
+        string ct1 = stub.crypt<4>(cm.getmkey(), to_s(i1), TYPE_INTEGER,
+                               "my_field_name", SECLEVEL::PLAIN_OPE, SECLEVEL::OPE,
+                               isBin, 12345);
+        assert(!isBin);
+        assert(resultFromStr<uint64_t>(ct1) <= uint64_t(-1));
+        string pt1 = stub.crypt<4>(cm.getmkey(), ct1, TYPE_INTEGER,
+                               "my_field_name", SECLEVEL::OPE, SECLEVEL::PLAIN_OPE,
+                               isBin, 12345);
+        assert(!isBin);
+        assert(to_s(i1) == pt1);
+
+        // test OPE properties
+        assert((i < i1) == (resultFromStr<uint64_t>(ct) < resultFromStr<uint64_t>(ct1)));
+    }
+
+    // test char type
+    {
+        char c = 'k';
+        string ct = stub.crypt<1>(cm.getmkey(), to_s(unsigned(c)), TYPE_INTEGER,
+                               "my_field_name", SECLEVEL::PLAIN_OPE, SECLEVEL::OPE,
+                               isBin, 12345);
+        assert(!isBin);
+        assert(resultFromStr<uint64_t>(ct) <= uint64_t(uint16_t(-1)));
+        string pt = stub.crypt<1>(cm.getmkey(), ct, TYPE_INTEGER,
+                               "my_field_name", SECLEVEL::OPE, SECLEVEL::PLAIN_OPE,
+                               isBin, 12345);
+
+        assert(!isBin);
+        uint64_t v = valFromStr(pt);
+        assert(c == ((char)v));
+
+        char c1 = 'q';
+        string ct1 = stub.crypt<1>(cm.getmkey(), to_s(unsigned(c1)), TYPE_INTEGER,
+                               "my_field_name", SECLEVEL::PLAIN_OPE, SECLEVEL::OPE,
+                               isBin, 12345);
+        assert(!isBin);
+        assert(resultFromStr<uint64_t>(ct1) <= uint64_t(uint16_t(-1)));
+        string pt1 = stub.crypt<1>(cm.getmkey(), ct1, TYPE_INTEGER,
+                               "my_field_name", SECLEVEL::OPE, SECLEVEL::PLAIN_OPE,
+                               isBin, 12345);
+
+        assert(!isBin);
+        uint64_t v1 = valFromStr(pt1);
+        assert(c1 == ((char)v1));
+
+        assert((c < c1) == (resultFromStr<uint64_t>(ct) < resultFromStr<uint64_t>(ct1)));
+    }
+
+    // test date type
+    {
+        int encoding = encode_yyyy_mm_dd("1988-12-10");
+        string ct = stub.crypt<3>(cm.getmkey(), to_s(encoding), TYPE_INTEGER,
+                               "my_field_name", SECLEVEL::PLAIN_OPE, SECLEVEL::OPE,
+                               isBin, 12345);
+        assert(!isBin);
+        assert(resultFromStr<uint64_t>(ct) <= max_size<3 * 8 * 2>::value);
+        string pt = stub.crypt<3>(cm.getmkey(), ct, TYPE_INTEGER,
+                               "my_field_name", SECLEVEL::OPE, SECLEVEL::PLAIN_OPE,
+                               isBin, 12345);
+        assert(to_s(encoding) == pt);
+
+        int encoding1 = encode_yyyy_mm_dd("1988-12-13");
+        string ct1 = stub.crypt<3>(cm.getmkey(), to_s(encoding1), TYPE_INTEGER,
+                               "my_field_name", SECLEVEL::PLAIN_OPE, SECLEVEL::OPE,
+                               isBin, 12345);
+        assert(!isBin);
+        assert(resultFromStr<uint64_t>(ct1) <= max_size<3 * 8 * 2>::value);
+        string pt1 = stub.crypt<3>(cm.getmkey(), ct1, TYPE_INTEGER,
+                               "my_field_name", SECLEVEL::OPE, SECLEVEL::PLAIN_OPE,
+                               isBin, 12345);
+        assert(to_s(encoding1) == pt1);
+
+        assert((encoding < encoding1) ==
+               (resultFromStr<uint64_t>(ct) < resultFromStr<uint64_t>(ct1)));
     }
 
     return 0;
