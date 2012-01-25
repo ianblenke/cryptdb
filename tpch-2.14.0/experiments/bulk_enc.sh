@@ -1,5 +1,6 @@
 #!/bin/bash
 set -x
+CDB_TOP=$HOME/cryptdb
 NPROCS=24
 if [ $# -ne 2 ]; then 
     echo "[USAGE]: $0 [flag] [filename]"
@@ -20,10 +21,11 @@ rm -f ${FNAME}_*
 split -d -l $LINES_PER_FILE $FNAME ${FNAME}_
 PIDS=()
 for i in ${FNAME}_*; do
-    obj/parser/cdb_enc $FLAG < $i > ${i}.enc &
+    $CDB_TOP/obj/parser/cdb_enc $FLAG < $i > ${i}.enc &
     PIDS+=($!)
 done
 for pid in "${PIDS[@]}"; do
     wait $pid
 done
 cat ${FNAME}_*.enc > ${FNAME}.enc
+rm -f ${FNAME}_*

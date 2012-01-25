@@ -116,7 +116,7 @@ static inline bool DoAny(int m)    { return DoDET(m) || DoOPE(m) || DoAGG(m) || 
 static inline bool OnlyOneBit(int m) { return m && !(m & (m-1)); }
 
 static inline string to_mysql_escape_varbin(
-        const string &buf, char escape, char fieldTerm, char newlineTerm) {
+        const string &buf, char escape = '\\', char fieldTerm = '|', char newlineTerm = '\n') {
     ostringstream s;
     for (size_t i = 0; i < buf.size(); i++) {
         char cur = buf[i];
@@ -126,6 +126,21 @@ static inline string to_mysql_escape_varbin(
         s << cur;
     }
     return s.str();
+}
+
+static inline void push_binary_string(
+        vector<string>& enccols, const string& binary, size_t n_slices = 1) {
+    // old strategy- it all goes into a single column
+    //enccols.push_back(to_mysql_escape_varbin(binary, '\\', '|', '\n'));
+
+    // new strategy- break up the binary into n_slices slots
+    assert(n_slices > 0);
+    assert((binary.size() % n_slices) == 0); // simplifying assumption
+    size_t slice_size = binary.size() / n_slices;
+    for (size_t i = 0; i < n_slices; i++) {
+        string slice = binary.substr(i * slice_size, slice_size);
+        enccols.push_back(to_mysql_escape_varbin(slice));
+    }
 }
 
 template <typename T, size_t WordsPerSlot>
@@ -182,7 +197,7 @@ static void do_encrypt(size_t i,
             if (DoDET(onions)) {
                 assert(OnlyOneBit(onions & DET_BITMASK));
                 SECLEVEL max = (onions & ONION_DET) ? SECLEVEL::DET : SECLEVEL::DETJOIN;
-                string encDET = cm_stub.crypt(cm.getmkey(), plaintext, TYPE_INTEGER,
+                string encDET = cm_stub.crypt<4>(cm.getmkey(), plaintext, TYPE_INTEGER,
                                          fieldname(i, "DET"),
                                          getMin(oDET), max, isBin, 12345);
                 enccols.push_back(to_s(valFromStr(encDET)));
@@ -191,7 +206,7 @@ static void do_encrypt(size_t i,
             }
 
             if (DoOPE(onions)) {
-                string encOPE = cm_stub.crypt(cm.getmkey(), plaintext, TYPE_INTEGER,
+                string encOPE = cm_stub.crypt<4>(cm.getmkey(), plaintext, TYPE_INTEGER,
                                          fieldname(i, "OPE"),
                                          getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
                 enccols.push_back(to_s(valFromStr(encOPE)));
@@ -203,7 +218,8 @@ static void do_encrypt(size_t i,
                 string encAGG = cm_stub.crypt(cm.getmkey(), plaintext, TYPE_INTEGER,
                                          fieldname(i, "AGG"),
                                          getMin(oAGG), SECLEVEL::SEMANTIC_AGG, isBin, 12345);
-                enccols.push_back(to_mysql_escape_varbin(encAGG, '\\', '|', '\n'));
+                assert(encAGG.size() == 256);
+                push_binary_string(enccols, encAGG, 8);
             } else {
                 if (usenull) enccols.push_back("NULL");;
             }
@@ -241,6 +257,7 @@ static void do_encrypt(size_t i,
             }
 
             if (DoOPE(onions)) {
+                // TODO: ope for float will need special handling
                 string encOPE = cm_stub.crypt(cm.getmkey(), plaintext, TYPE_INTEGER,
                                          fieldname(i, "OPE"),
                                          getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
@@ -253,7 +270,8 @@ static void do_encrypt(size_t i,
                 string encAGG = cm_stub.crypt(cm.getmkey(), plaintext, TYPE_INTEGER,
                                          fieldname(i, "AGG"),
                                          getMin(oAGG), SECLEVEL::SEMANTIC_AGG, isBin, 12345);
-                enccols.push_back(to_mysql_escape_varbin(encAGG, '\\', '|', '\n'));
+                assert(encAGG.size() == 256);
+                push_binary_string(enccols, encAGG);
             } else {
                 if (usenull) enccols.push_back("NULL");;
             }
@@ -280,7 +298,7 @@ static void do_encrypt(size_t i,
             }
 
             if (DoOPE(onions)) {
-                string encOPE = cm_stub.crypt(cm.getmkey(), pt, TYPE_INTEGER,
+                string encOPE = cm_stub.crypt<1>(cm.getmkey(), pt, TYPE_INTEGER,
                                          fieldname(i, "OPE"),
                                          getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
                 enccols.push_back(to_s(valFromStr(encOPE)));
@@ -292,7 +310,7 @@ static void do_encrypt(size_t i,
                 string encAGG = cm_stub.crypt(cm.getmkey(), pt, TYPE_INTEGER,
                                          fieldname(i, "AGG"),
                                          getMin(oAGG), SECLEVEL::SEMANTIC_AGG, isBin, 12345);
-                enccols.push_back(to_mysql_escape_varbin(encAGG, '\\', '|', '\n'));
+                push_binary_string(enccols, encAGG);
             } else {
                 if (usenull) enccols.push_back("NULL");;
             }
@@ -310,7 +328,7 @@ static void do_encrypt(size_t i,
                                          fieldname(i, "DET"),
                                          getMin(oDET), max, isBin, 12345);
                 //assert((encDET.size() % 16) == 0);
-                enccols.push_back(to_mysql_escape_varbin(encDET, '\\', '|', '\n'));
+                push_binary_string(enccols, encDET);
             } else {
                 if (usenull) enccols.push_back("NULL");
             }
@@ -328,7 +346,7 @@ static void do_encrypt(size_t i,
                 string encSWP = cm_stub.crypt(cm.getmkey(), plaintext, TYPE_TEXT,
                                          fieldname(i, "SWP"),
                                          getMin(oSWP), SECLEVEL::SWP, isBin, 12345);
-                enccols.push_back(to_mysql_escape_varbin(encSWP, '\\', '|', '\n'));
+                push_binary_string(enccols, encSWP);
             } else {
                 if (usenull) enccols.push_back("NULL");
             }
@@ -352,7 +370,7 @@ static void do_encrypt(size_t i,
           }
 
           if (DoOPE(onions)) {
-            string encOPE = cm_stub.crypt(cm.getmkey(), to_s(encoding), TYPE_INTEGER,
+            string encOPE = cm_stub.crypt<3>(cm.getmkey(), to_s(encoding), TYPE_INTEGER,
                 fieldname(i, "OPE"),
                 getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
               enccols.push_back(to_s(valFromStr(encOPE)));
@@ -382,7 +400,7 @@ public:
     assert(schema.size() == onions.size());
   }
 
-  ~table_encryptor() {}
+  virtual ~table_encryptor() {}
 
   inline bool shouldProcessRow() const { return processrow; }
 
@@ -391,11 +409,12 @@ public:
                   vector<string>       &enccols,
                   CryptoManager        &cm) {
     assert(tokens.size() >= schema.size());
+    preprocessRow(tokens, enccols, cm);
     for (size_t i = 0; i < schema.size(); i++) {
       do_encrypt(i, schema[i], onions[i], tokens[i], enccols, cm, usenull);
     }
     postprocessRow(tokens, enccols, cm);
-    writeSalt(tokens, enccols, cm);
+    //writeSalt(tokens, enccols, cm);
   }
 
   virtual
@@ -418,6 +437,11 @@ public:
   }
 
 protected:
+
+  virtual
+  void preprocessRow(const vector<string> &tokens,
+                     vector<string>       &enccols,
+                     CryptoManager        &cm) {}
 
   virtual
   void postprocessRow(const vector<string> &tokens,
@@ -686,7 +710,7 @@ protected:
         ZZ * zs[] = {&z1, &z2, &z3, &z4, &z5};
         for (size_t zs_i = 0; zs_i < NELEMS(zs); zs_i++) {
           string enc = cm.encrypt_Paillier(*zs[zs_i]);
-          enc_row.push_back(to_mysql_escape_varbin(enc, '\\', '|', '\n'));
+          push_binary_string(enc_row, enc);
         }
 
         enccols.push_back(enc_row);
@@ -735,7 +759,9 @@ protected:
           PSM::insert_into_slot(z, l_charge_int, 5);
 
           string enc = cm.encrypt_Paillier(z);
-          enccols.push_back(to_mysql_escape_varbin(enc, '\\', '|', '\n'));
+          assert(enc.size() <= 256);
+          if (enc.size() < 256) enc.resize(256); // pad the binary string
+          push_binary_string(enccols, enc, 8);
           break;
         }
       default: break;
@@ -904,7 +930,7 @@ public:
       vector<string> e;
       do_encrypt(0, DT_INTEGER, ONION_DETJOIN,
                  to_s(IraqNationKey), e, cm, false);
-      e.push_back(to_mysql_escape_varbin(enc, '\\', '|', '\n'));
+      push_binary_string(e, enc);
       enccols.push_back(e);
     }
   }

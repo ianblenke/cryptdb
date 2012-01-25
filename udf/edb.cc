@@ -79,6 +79,13 @@ my_bool  agg_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error);
 char *   agg(UDF_INIT *initid, UDF_ARGS *args, char *result,
              unsigned long *length, char *is_null, char *error);
 
+my_bool  agg8_init(UDF_INIT *initid, UDF_ARGS *args, char *message);
+void     agg8_deinit(UDF_INIT *initid);
+void     agg8_clear(UDF_INIT *initid, char *is_null, char *error);
+my_bool  agg8_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error);
+char *   agg8(UDF_INIT *initid, UDF_ARGS *args, char *result,
+             unsigned long *length, char *is_null, char *error);
+
 my_bool  agg_profile_init(UDF_INIT *initid, UDF_ARGS *args, char *message);
 void     agg_profile_deinit(UDF_INIT *initid);
 void     agg_profile_clear(UDF_INIT *initid, char *is_null, char *error);
@@ -579,6 +586,8 @@ searchSWP(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error)
 
 #if MYSQL_S
 
+// agg()
+
 struct agg_state {
     ZZ sum;
     ZZ n2;
@@ -643,6 +652,66 @@ agg(UDF_INIT *initid, UDF_ARGS *args, char *result,
     *length = CryptoManager::Paillier_len_bytes;
     return (char *) as->rbuf;
 }
+
+// agg8()
+
+my_bool
+agg8_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
+{
+    return agg_init(initid, args, message);
+}
+
+void
+agg8_deinit(UDF_INIT *initid)
+{
+    agg_deinit(initid);
+}
+
+void
+agg8_clear(UDF_INIT *initid, char *is_null, char *error)
+{
+    agg_clear(initid, is_null, error);
+}
+
+//args will be element to add, constant N2
+my_bool
+agg8_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error)
+{
+    // means we don't add
+    if (args->args[0] == NULL) return true;
+    SANITY(args->arg_count == (8 + 1));
+
+    uint8_t buf[CryptoManager::Paillier_len_bytes];
+
+    // copy args into buf
+    for (size_t i = 0; i < 8; i++) {
+        // each individual buffer is 32-bytes (8 * 32 = 256 = Paillier_len_bytes)
+        SANITY(args->lengths[i] == 32);
+        memcpy(buf + (i * 32), args->args[i], 32);
+    }
+
+    agg_state *as = (agg_state *) initid->ptr;
+    if (!as->n2_set) {
+        ZZFromBytes(as->n2, (const uint8_t *) args->args[8],
+                    args->lengths[8]);
+        as->n2_set = 1;
+    }
+
+    ZZ e;
+    ZZFromBytes(e, (const uint8_t *) buf, sizeof(buf));
+
+    MulMod(as->sum, as->sum, e, as->n2);
+    return true;
+}
+
+char *
+agg8(UDF_INIT *initid, UDF_ARGS *args, char *result,
+    unsigned long *length, char *is_null, char *error)
+{
+    return agg(initid, args, result, length, is_null, error);
+}
+
+// agg_profile()
 
 struct agg_profile_state {
   struct agg_state agg;

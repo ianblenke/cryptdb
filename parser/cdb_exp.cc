@@ -376,7 +376,12 @@ static void do_query_q1(Connect &conn,
     NamedTimer fcnTimer(__func__);
 
     ostringstream buf;
-    buf << "select SQL_NO_CACHE l_returnflag, l_linestatus, sum(l_quantity) as sum_qty, sum(l_extendedprice) as sum_base_price, sum(l_extendedprice * (1 - l_discount)) as sum_disc_price, sum(l_extendedprice * (1 - l_discount) * (1 + l_tax)) as sum_charge, avg(l_quantity) as avg_qty, avg(l_extendedprice) as avg_price, avg(l_discount) as avg_disc, count(*) as count_order from LINEITEM where l_shipdate <= date '" << year << "-1-1' group by l_returnflag, l_linestatus order by l_returnflag, l_linestatus";
+    buf << "select SQL_NO_CACHE l_returnflag, l_linestatus, sum(l_quantity) as sum_qty, sum(l_extendedprice) as sum_base_price, sum(l_extendedprice * (1 - l_discount)) as sum_disc_price, sum(l_extendedprice * (1 - l_discount) * (1 + l_tax)) as sum_charge, avg(l_quantity) as avg_qty, avg(l_extendedprice) as avg_price, avg(l_discount) as avg_disc, count(*) as count_order from LINEITEM "
+
+        << "where l_shipdate <= date '" << year << "-1-1' "
+        << "group by l_returnflag, l_linestatus order by l_returnflag, l_linestatus"
+
+        ;
     cerr << buf.str() << endl;
 
     DBResult * dbres;
@@ -587,7 +592,7 @@ static void do_query_q1_opt(Connect &conn,
 
     // l_shipdate <= date '[year]-01-01'
     bool isBin;
-    string encDATE = cm_stub.crypt(cm.getmkey(), strFromVal(EncodeDate(1, 1, year)),
+    string encDATE = cm_stub.crypt<3>(cm.getmkey(), strFromVal(EncodeDate(1, 1, year)),
                               TYPE_INTEGER, fieldname(lineitem::l_shipdate, "OPE"),
                               getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
 
@@ -595,16 +600,19 @@ static void do_query_q1_opt(Connect &conn,
 
     string pkinfo = marshallBinary(cm.getPKInfo());
     ostringstream s;
-    //s << "SELECT SQL_NO_CACHE "
-    //      << "l_returnflag_DET, "
-    //      << "l_linestatus_DET, "
-    //      << "agg(l_bitpacked_AGG, " << pkinfo << "), "
-    //      << "count(*) "
-    //  << "FROM lineitem_enc_3_proj "
-    //  << "WHERE l_shipdate_OPE < " << encDATE << " "
-    //  << "GROUP BY l_returnflag_OPE, l_linestatus_OPE "
-    //  << "ORDER BY l_returnflag_OPE, l_linestatus_OPE";
-    //cerr << s.str() << endl;
+    s << "SELECT SQL_NO_CACHE "
+          << "l_returnflag_DET, "
+          << "l_linestatus_DET, "
+          //<< "agg(l_bitpacked_AGG, " << pkinfo << "), "
+          << "agg8(l_bitpacked_AGG_0, l_bitpacked_AGG_1, l_bitpacked_AGG_2, l_bitpacked_AGG_3, "
+               << "l_bitpacked_AGG_4, l_bitpacked_AGG_5, l_bitpacked_AGG_6, l_bitpacked_AGG_7, " << pkinfo << "), "
+          << "count(*) "
+      << "FROM lineitem_enc "
+      << "WHERE l_shipdate_OPE <= " << encDATE << " "
+      << "GROUP BY l_returnflag_OPE, l_linestatus_OPE "
+      << "ORDER BY l_returnflag_OPE, l_linestatus_OPE"
+      ;
+    cerr << s.str() << endl;
 
     // attempt 1
     //
@@ -612,7 +620,7 @@ static void do_query_q1_opt(Connect &conn,
 
     //s << "SELECT SQL_NO_CACHE r1.l_returnflag_DET, r1.l_linestatus_DET, sum(length(r2.l_bitpacked_AGG)), count(*) FROM ( SELECT l_returnflag_DET, l_linestatus_DET, l_returnflag_OPE, l_linestatus_OPE, agg_ptr FROM lineitem_enc_2_proj WHERE l_shipdate_OPE < " << encDATE << " ) AS r1 JOIN lineitem_enc_agg_proj AS r2 ON r1.agg_ptr = r2.id GROUP BY r1.l_returnflag_OPE, r1.l_linestatus_OPE ORDER BY r1.l_returnflag_OPE, r1.l_linestatus_OPE";
 
-    s << "SELECT SQL_NO_CACHE r1.l_returnflag_DET, r1.l_linestatus_DET, agg(r2.l_bitpacked_AGG, " << pkinfo << "), count(*) FROM lineitem_enc_2_proj AS r1 JOIN lineitem_enc_agg_proj AS r2 ON r1.agg_ptr = r2.id WHERE r1.l_shipdate_OPE < " << encDATE << " GROUP BY r1.l_returnflag_OPE, r1.l_linestatus_OPE ORDER BY r1.l_returnflag_OPE, r1.l_linestatus_OPE";
+    //s << "SELECT SQL_NO_CACHE r1.l_returnflag_DET, r1.l_linestatus_DET, agg(r2.l_bitpacked_AGG, " << pkinfo << "), count(*) FROM lineitem_enc_2_proj AS r1 JOIN lineitem_enc_agg_proj AS r2 ON r1.agg_ptr = r2.id WHERE r1.l_shipdate_OPE < " << encDATE << " GROUP BY r1.l_returnflag_OPE, r1.l_linestatus_OPE ORDER BY r1.l_returnflag_OPE, r1.l_linestatus_OPE";
 
     {
       NamedTimer t(__func__, "execute");
@@ -1615,7 +1623,7 @@ static inline uint32_t random_year() {
 
 static void usage(char **argv) {
     cerr << "[USAGE]: " << argv[0] << " "
-         << "(((--orig-query1|--crypt-query1|--crypt-opt-query1) year)|(--orig-query11|--crypt-query11|--crypt-opt-query11|--crypt-opt-proj-query11 nation fraction)|((--orig-query2|--crypt-query2) size type name)|((--orig-query14|--crypt-opt-query14) year)) num_queries"
+         << "(((--orig-query1|--crypt-query1|--crypt-opt-query1) year)|(--orig-query11|--crypt-query11|--crypt-opt-query11|--crypt-opt-proj-query11 nation fraction)|((--orig-query2|--crypt-query2) size type name)|((--orig-query14|--crypt-opt-query14) year)) num_queries db_name"
 
          << endl;
 }
@@ -1631,7 +1639,7 @@ enum query_selection {
 
 int main(int argc, char **argv) {
     srand(time(NULL));
-    if (argc != 4 && argc != 5 && argc != 6) {
+    if (argc != 5 && argc != 6 && argc != 7) {
         usage(argv);
         return 1;
     }
@@ -1683,17 +1691,20 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    Connect conn("localhost", "root", "", "tpch-0.25");
+
     int input_nruns;
+    string db_name;
     switch (q) {
-      case query1: input_nruns = atoi(argv[3]); break;
-      case query2: input_nruns = atoi(argv[5]); break;
-      case query11: input_nruns = atoi(argv[4]); break;
-      case query14: input_nruns = atoi(argv[3]); break;
+      case query1: input_nruns = atoi(argv[3]); db_name = argv[4]; break;
+      case query2: input_nruns = atoi(argv[5]); db_name = argv[6]; break;
+      case query11: input_nruns = atoi(argv[4]); db_name = argv[5]; break;
+      case query14: input_nruns = atoi(argv[3]); db_name = argv[4]; break;
     }
     uint32_t nruns = (uint32_t) input_nruns;
 
     unsigned long ctr = 0;
+
+    Connect conn("localhost", "root", "", db_name, 3307);
     CryptoManager cm("12345");
 
 #define PRINT_RESULTS() \
