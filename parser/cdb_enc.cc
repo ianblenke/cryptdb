@@ -719,9 +719,9 @@ protected:
   }
 
   virtual
-  void postprocessRow(const vector<string> &tokens,
-                      vector<string>       &enccols,
-                      CryptoManager        &cm) {
+  void preprocessRow(const vector<string> &tokens,
+                     vector<string>       &enccols,
+                     CryptoManager        &cm) {
 
     switch (tpe) {
       case opt_type::normal:
