@@ -13,7 +13,7 @@ set -x
 
 DBGEN=../../tpch-2.14.0/dbgen/dbgen
 
-for scale in 0.05 0.25 0.5 0.75; do
+for scale in 0.05 0.25 0.50 0.75; do
   rm -rf scale-$scale
   mkdir  scale-$scale
   cd scale-$scale
