@@ -1,15 +1,5 @@
 create table lineitem_enc (
 
-  -- bitpacked
-  `l_bitpacked_AGG_0` binary(32) DEFAULT NULL,
-  `l_bitpacked_AGG_1` binary(32) DEFAULT NULL,
-  `l_bitpacked_AGG_2` binary(32) DEFAULT NULL,
-  `l_bitpacked_AGG_3` binary(32) DEFAULT NULL,
-  `l_bitpacked_AGG_4` binary(32) DEFAULT NULL,
-  `l_bitpacked_AGG_5` binary(32) DEFAULT NULL,
-  `l_bitpacked_AGG_6` binary(32) DEFAULT NULL,
-  `l_bitpacked_AGG_7` binary(32) DEFAULT NULL,
-
   -- field 0
   `l_orderkey_DET` integer unsigned DEFAULT NULL,
 
@@ -60,6 +50,8 @@ create table lineitem_enc (
 
   -- field 15
   `l_comment_DET` varbinary(44) DEFAULT NULL,
+
+  `l_bitpacked_AGG` varbinary(256) DEFAULT NULL,
 
   PRIMARY KEY (l_orderkey_DET, l_linenumber_DET)
 

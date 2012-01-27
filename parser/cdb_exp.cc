@@ -597,9 +597,9 @@ static void do_query_q1_opt(Connect &conn,
     s << "SELECT SQL_NO_CACHE "
           << "l_returnflag_DET, "
           << "l_linestatus_DET, "
-          //<< "agg(l_bitpacked_AGG, " << pkinfo << "), "
-          << "agg8(l_bitpacked_AGG_0, l_bitpacked_AGG_1, l_bitpacked_AGG_2, l_bitpacked_AGG_3, "
-               << "l_bitpacked_AGG_4, l_bitpacked_AGG_5, l_bitpacked_AGG_6, l_bitpacked_AGG_7, " << pkinfo << "), "
+          << "agg(l_bitpacked_AGG, " << pkinfo << "), "
+         // << "agg8(l_bitpacked_AGG_0, l_bitpacked_AGG_1, l_bitpacked_AGG_2, l_bitpacked_AGG_3, "
+         //      << "l_bitpacked_AGG_4, l_bitpacked_AGG_5, l_bitpacked_AGG_6, l_bitpacked_AGG_7, " << pkinfo << "), "
           << "count(*) "
       << "FROM lineitem_enc "
       << "WHERE l_shipdate_OPE <= " << encDATE << " "
@@ -1005,10 +1005,10 @@ static void do_query_q14_opt(Connect &conn,
     NamedTimer fcnTimer(__func__);
 
     bool isBin;
-    string encDateLower = cm_stub.crypt(cm.getmkey(), strFromVal(EncodeDate(1, 1, year)),
+    string encDateLower = cm_stub.crypt<3>(cm.getmkey(), strFromVal(EncodeDate(7, 1, year)),
                                    TYPE_INTEGER, fieldname(lineitem::l_shipdate, "OPE"),
                                    getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
-    string encDateUpper = cm_stub.crypt(cm.getmkey(), strFromVal(EncodeDate(2, 1, year)),
+    string encDateUpper = cm_stub.crypt<3>(cm.getmkey(), strFromVal(EncodeDate(8, 1, year)),
                                    TYPE_INTEGER, fieldname(lineitem::l_shipdate, "OPE"),
                                    getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
 
@@ -1018,6 +1018,7 @@ static void do_query_q14_opt(Connect &conn,
     ZZ zero(to_ZZ(0));
     string encZERO = cm.encrypt_Paillier(zero);
 
+    string pkinfo = marshallBinary(cm.getPKInfo());
     ostringstream s;
     s << "SELECT SQL_NO_CACHE "
         << "agg(CASE WHEN "
@@ -1026,8 +1027,8 @@ static void do_query_q14_opt(Connect &conn,
             << ", "
             << marshallBinary(string((char *)t.wordKey.content, t.wordKey.len))
             << ", p_type_SWP) = 1 "
-          << "THEN l_bitpacked_AGG ELSE " << marshallBinary(encZERO) << " END), "
-        << "agg(l_bitpacked_AGG) "
+          << "THEN l_bitpacked_AGG ELSE " << marshallBinary(encZERO) << " END, " << pkinfo << "), "
+        << "agg(l_bitpacked_AGG, " << pkinfo << ") "
       << "FROM lineitem_enc, part_enc "
       << "WHERE "
         << "l_partkey_DET = p_partkey_DET AND "
@@ -1068,7 +1069,7 @@ static void do_query_q14(Connect &conn,
     NamedTimer fcnTimer(__func__);
 
     ostringstream s;
-    s << "select 100.00 * sum(case when p_type like 'PROMO%' then l_extendedprice * (1 - l_discount) else 0 end) / sum(l_extendedprice * (1 - l_discount)) as promo_revenue from LINEITEM, PART where l_partkey = p_partkey and l_shipdate >= date '" << year << "-01-01' and l_shipdate < date '" << year << "-01-01' + interval '1' month";
+    s << "select 100.00 * sum(case when p_type like 'PROMO%' then l_extendedprice * (1 - l_discount) else 0 end) / sum(l_extendedprice * (1 - l_discount)) as promo_revenue from LINEITEM, PART where l_partkey = p_partkey and l_shipdate >= date '" << year << "-07-01' and l_shipdate < date '" << year << "-07-01' + interval '1' month";
 
     DBResult * dbres;
     {
