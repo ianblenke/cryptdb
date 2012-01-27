@@ -13,9 +13,9 @@ set -x
 
 DBGEN=../../tpch-2.14.0/dbgen/dbgen
 
-for scale in 0.05 0.25 0.50 0.75; do
-  rm -rf scale-$scale
-  mkdir  scale-$scale
+#for scale in 0.05 0.25 0.50 0.75 1.00 2.00; do
+for scale in 2.00; do
+  mkdir -p scale-$scale
   cd scale-$scale
   cp ../../tpch-2.14.0/dbgen/dists.dss .  #hack
   yes | $DBGEN -s $scale

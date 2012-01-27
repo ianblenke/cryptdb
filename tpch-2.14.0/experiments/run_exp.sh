@@ -1,8 +1,20 @@
 #!/bin/bash
 
-stty -echo
-read -p "sudo password: " PASSWORD; echo
-stty echo
+# must run from results folder
+PWD=`pwd`
+
+if [ `basename $PWD` != "results" ]; then
+    echo "Run from results folder"
+    exit 1
+fi
+
+if [ $# -eq 0 ]; then
+    stty -echo
+    read -p "sudo password: " PASSWORD; echo
+    stty echo
+else
+    PASSWORD=$1
+fi
 
 set -x
 CDB_TOP=$HOME/cryptdb
@@ -34,7 +46,7 @@ reset_exp() {
 
 reset_exp
 
-for factor in 0.50; do
+for factor in 1.00 2.00; do
 
     mkdir -p scale-$factor
     cd scale-$factor
