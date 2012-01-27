@@ -16,16 +16,16 @@
 
 using namespace std;
 
-static string fieldname(size_t fieldnum, const string &suffix) {
-    ostringstream s;
-    s << "field" << fieldnum << suffix;
-    return s.str();
-}
-
 template <typename T>
 inline string to_s(const T& t) {
     ostringstream s;
     s << t;
+    return s.str();
+}
+
+static string fieldname(size_t fieldnum, const string &suffix) {
+    ostringstream s;
+    s << "field" << fieldnum << suffix;
     return s.str();
 }
 

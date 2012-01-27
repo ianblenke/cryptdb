@@ -3,6 +3,8 @@
 #include <string>
 #include <stdio.h>
 
+#include <NTL/ZZ.h>
+
 /*
  *
  * These functions implement OPE (order-preserving encryption).
@@ -25,11 +27,15 @@ class OPE {
         unsigned int OPECiphertextSize);
     ~OPE();
 
+    std::string encrypt(const NTL::ZZ &plaintext);
+
     std::string encrypt(const std::string &plaintext);
     std::string decrypt(const std::string &ciphertext);
 
     uint64_t encrypt(uint32_t plaintext);
     uint32_t decrypt(uint64_t ciphertext);
+
+    uint64_t decryptToU64(const std::string &ciphertext);
 
  private:
     OPEInternals * iOPE;     //private methods and fields of OPE

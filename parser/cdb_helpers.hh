@@ -11,6 +11,8 @@
 
 #include <util/static_assert.hh>
 
+#include <NTL/ZZ.h>
+
 #define NELEMS(array) (sizeof(array) / sizeof(array[0]))
 
 template <typename R>
@@ -42,6 +44,50 @@ int encode_yyyy_mm_dd(const string &datestr) {
   assert(year >= 0);
   int encoding = day | (month << 5) | (year << 9);
   return encoding;
+}
+
+string join(const vector<string> &tokens, const string &sep);
+
+string join(const vector<string> &tokens, const string &sep) {
+    ostringstream s;
+    for (size_t i = 0; i < tokens.size(); i++) {
+        s << tokens[i];
+        if (i != tokens.size() - 1) s << sep;
+    }
+    return s.str();
+}
+
+string fieldname(size_t fieldnum, const string &suffix);
+
+string fieldname(size_t fieldnum, const string &suffix) {
+    ostringstream s;
+    s << "field" << fieldnum << suffix;
+    return s.str();
+}
+
+string to_mysql_escape_varbin(
+        const string &buf, char escape = '\\', char fieldTerm = '|', char newlineTerm = '\n');
+
+string to_mysql_escape_varbin(
+        const string &buf, char escape, char fieldTerm, char newlineTerm) {
+    ostringstream s;
+    for (size_t i = 0; i < buf.size(); i++) {
+        char cur = buf[i];
+        if (cur == escape || cur == fieldTerm || cur == newlineTerm) {
+            s << escape;
+        }
+        s << cur;
+    }
+    return s.str();
+}
+
+namespace {
+    inline string str_reverse(const string& orig) {
+        ostringstream buf;
+        for (string::const_reverse_iterator it = orig.rbegin();
+             it != orig.rend(); ++it) buf << *it;
+        return buf.str();
+    }
 }
 
 template <size_t n_bits>
@@ -219,14 +265,24 @@ private:
                 OPE ope(cm->getKey(mkey, fullfieldname, fromlevel),
                         n_bytes * 8,    /* plain text size (in bits) */
                         n_bytes * 8 * 2 /* cipher text size (in bits) */);
-                val = ope.encrypt(val);
 
-                assert(max_size<n_bytes * 8 * 2>::is_valid);
-                assert(val <= max_size<n_bytes * 8 * 2>::value);
-
-                if (fromlevel == tolevel) {
-                    isBin = false;
-                    return strFromVal(val);
+                if (n_bytes <= 4) {
+                    val = ope.encrypt(val);
+                    if (fromlevel == tolevel) {
+                        isBin = false;
+                        return strFromVal(val);
+                    }
+                } else {
+                    NTL::ZZ plaintext;
+                    _static_assert(sizeof(long) == sizeof(uint64_t));
+                    plaintext = val; // is only correct for 64-bit machines...
+                                     // TODO: fix
+                    string ciphertext = ope.encrypt(plaintext);
+                    if (fromlevel == tolevel) {
+                        // CT larger than long int, so need to use binary
+                        isBin = true;
+                        return ciphertext;
+                    }
                 }
             }
 
@@ -310,6 +366,7 @@ private:
 
             fromlevel = decreaseLevel(fromlevel, ft, oDET);
             if (fromlevel == tolevel) {
+                isBin = false;
                 return strFromVal(val);
             }
         }
@@ -328,6 +385,7 @@ private:
 
             fromlevel = decreaseLevel(fromlevel, ft, oDET);
             if (fromlevel == tolevel) {
+                isBin = false;
                 return strFromVal(val);
             }
         }
@@ -338,23 +396,40 @@ private:
             assert(false);
           }
 
-          uint64_t val = valFromStr(data);
+          uint64_t val;
           if (fromlevel == SECLEVEL::OPE) {
               OPE ope(cm->getKey(mkey, fullfieldname, fromlevel),
                       n_bytes * 8,    /* plain text size (in bits) */
                       n_bytes * 8 * 2 /* cipher text size (in bits) */);
-              val = ope.decrypt(val);
-              assert(max_size<n_bytes * 8>::is_valid);
-              assert(val <= max_size<n_bytes * 8>::value);
-              fromlevel = decreaseLevel(fromlevel, ft, oOPE);
-              if (fromlevel == tolevel) {
-                  return strFromVal(val);
+
+              if (n_bytes <= 4) {
+                  val = valFromStr(data);
+                  val = ope.decrypt(val);
+                  assert(max_size<n_bytes * 8>::is_valid);
+                  assert(val <= max_size<n_bytes * 8>::value);
+                  fromlevel = decreaseLevel(fromlevel, ft, oOPE);
+                  if (fromlevel == tolevel) {
+                      isBin = false;
+                      return strFromVal(val);
+                  }
+              } else {
+                  val = ope.decryptToU64(data);
+                  assert(max_size<n_bytes * 8>::is_valid);
+                  assert(val <= max_size<n_bytes * 8>::value);
+                  fromlevel = decreaseLevel(fromlevel, ft, oOPE);
+                  if (fromlevel == tolevel) {
+                      isBin = false;
+                      return strFromVal(val);
+                  }
               }
+          } else {
+              val = valFromStr(data);
           }
 
           if (fromlevel == SECLEVEL::OPEJOIN) {
               fromlevel = decreaseLevel(fromlevel, ft, oOPE);
               if (fromlevel == tolevel) {
+                  isBin = false;
                   return strFromVal(val);
               }
           }

@@ -27,7 +27,6 @@ using namespace NTL;
 static void tokenize(const string &s,
                      const string &delim,
                      vector<string> &tokens) {
-
     size_t i = 0;
     while (true) {
         size_t p = s.find(delim, i);
@@ -39,16 +38,6 @@ static void tokenize(const string &s,
     }
 }
 
-static inline string join(const vector<string> &tokens,
-                          const string &sep) {
-    ostringstream s;
-    for (size_t i = 0; i < tokens.size(); i++) {
-        s << tokens[i];
-        if (i != tokens.size() - 1) s << sep;
-    }
-    return s.str();
-}
-
 typedef enum datatypes {
     DT_INTEGER,
     DT_FLOAT,
@@ -56,12 +45,6 @@ typedef enum datatypes {
     DT_STRING,
     DT_DATE,
 } datatypes;
-
-static string fieldname(size_t fieldnum, const string &suffix) {
-    ostringstream s;
-    s << "field" << fieldnum << suffix;
-    return s.str();
-}
 
 template <typename T>
 inline string to_hex(const T& t) {
@@ -114,19 +97,6 @@ static inline bool DoSEARCH(int m) { return m & ONION_SEARCH; }
 static inline bool DoAny(int m)    { return DoDET(m) || DoOPE(m) || DoAGG(m) || DoSEARCH(m); }
 
 static inline bool OnlyOneBit(int m) { return m && !(m & (m-1)); }
-
-static inline string to_mysql_escape_varbin(
-        const string &buf, char escape = '\\', char fieldTerm = '|', char newlineTerm = '\n') {
-    ostringstream s;
-    for (size_t i = 0; i < buf.size(); i++) {
-        char cur = buf[i];
-        if (cur == escape || cur == fieldTerm || cur == newlineTerm) {
-            s << escape;
-        }
-        s << cur;
-    }
-    return s.str();
-}
 
 static inline void push_binary_string(
         vector<string>& enccols, const string& binary, size_t n_slices = 1) {
@@ -193,33 +163,38 @@ static void do_encrypt(size_t i,
     case DT_INTEGER:
         {
             // DET, OPE, AGG
-            bool isBin;
+            bool isBin = false;
             if (DoDET(onions)) {
                 assert(OnlyOneBit(onions & DET_BITMASK));
                 SECLEVEL max = (onions & ONION_DET) ? SECLEVEL::DET : SECLEVEL::DETJOIN;
                 string encDET = cm_stub.crypt<4>(cm.getmkey(), plaintext, TYPE_INTEGER,
                                          fieldname(i, "DET"),
                                          getMin(oDET), max, isBin, 12345);
-                enccols.push_back(to_s(valFromStr(encDET)));
+                assert(!isBin);
+                enccols.push_back(encDET);
             } else {
                 if (usenull) enccols.push_back("NULL");
             }
 
+            isBin = false;
             if (DoOPE(onions)) {
                 string encOPE = cm_stub.crypt<4>(cm.getmkey(), plaintext, TYPE_INTEGER,
                                          fieldname(i, "OPE"),
                                          getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
-                enccols.push_back(to_s(valFromStr(encOPE)));
+                assert(!isBin);
+                enccols.push_back(encOPE);
             } else {
                 if (usenull) enccols.push_back("NULL");
             }
 
+            isBin = false;
             if (DoAGG(onions)) {
                 string encAGG = cm_stub.crypt(cm.getmkey(), plaintext, TYPE_INTEGER,
                                          fieldname(i, "AGG"),
                                          getMin(oAGG), SECLEVEL::SEMANTIC_AGG, isBin, 12345);
-                assert(encAGG.size() == 256);
-                push_binary_string(enccols, encAGG, 8);
+                assert(isBin);
+                assert(encAGG.size() <= 256);
+                push_binary_string(enccols, encAGG);
             } else {
                 if (usenull) enccols.push_back("NULL");;
             }
@@ -240,37 +215,54 @@ static void do_encrypt(size_t i,
             // TODO: fix precision
             double f = strtod(plaintext.c_str(), NULL);
             int64_t t = roundToLong(f * 100.0);
-            assert(t >= 0);
+
+            //assert(t >= 0);
+            t = t < 0 ? -t : t; // TODO: supplier has an s_acctbal field which
+                                // contains neg #s. We should handle this properly
+                                // eventually, but for now just drop the neg...
             assert(t < 999999999999999L); // see above
 
             // DET, OPE, AGG
-            bool isBin;
+            bool isBin = false;
             if (DoDET(onions)) {
                 assert(OnlyOneBit(onions & DET_BITMASK));
                 SECLEVEL max = (onions & ONION_DET) ? SECLEVEL::DET : SECLEVEL::DETJOIN;
-                string encDET = cm_stub.crypt<7>(cm.getmkey(), plaintext, TYPE_INTEGER,
+                string encDET = cm_stub.crypt<7>(cm.getmkey(), to_s(t), TYPE_INTEGER,
                                          fieldname(i, "DET"),
                                          getMin(oDET), max, isBin, 12345);
-                enccols.push_back(to_s(valFromStr(encDET)));
+                assert(!isBin);
+                enccols.push_back(encDET);
             } else {
                 if (usenull) enccols.push_back("NULL");
             }
 
+            isBin = false;
             if (DoOPE(onions)) {
-                // TODO: ope for float will need special handling
-                string encOPE = cm_stub.crypt(cm.getmkey(), plaintext, TYPE_INTEGER,
+                string encOPE = cm_stub.crypt<7>(cm.getmkey(), to_s(t), TYPE_INTEGER,
                                          fieldname(i, "OPE"),
                                          getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
-                enccols.push_back(to_s(valFromStr(encOPE)));
+                assert(isBin);
+                assert(encOPE.size() <= (7 * 2));
+                // pad, b/c mysql repr will be binary(16)
+                encOPE.resize(16);
+
+                // reverse, because ZZ gives bytes in little endian order
+                // (and we want the most significant bytes at the beginning
+                // of the binary string, so that mysql's comparator does the
+                // correct thing)
+                encOPE = str_reverse(encOPE);
+                push_binary_string(enccols, encOPE);
             } else {
                 if (usenull) enccols.push_back("NULL");
             }
 
+            isBin = false;
             if (DoAGG(onions)) {
-                string encAGG = cm_stub.crypt(cm.getmkey(), plaintext, TYPE_INTEGER,
+                string encAGG = cm_stub.crypt(cm.getmkey(), to_s(t), TYPE_INTEGER,
                                          fieldname(i, "AGG"),
                                          getMin(oAGG), SECLEVEL::SEMANTIC_AGG, isBin, 12345);
-                assert(encAGG.size() == 256);
+                assert(isBin);
+                assert(encAGG.size() <= 256);
                 push_binary_string(enccols, encAGG);
             } else {
                 if (usenull) enccols.push_back("NULL");;
@@ -285,31 +277,36 @@ static void do_encrypt(size_t i,
 
             string pt = to_s(c);
 
-            bool isBin;
+            bool isBin = false;
             if (DoDET(onions)) {
                 assert(OnlyOneBit(onions & DET_BITMASK));
                 SECLEVEL max = (onions & ONION_DET) ? SECLEVEL::DET : SECLEVEL::DETJOIN;
                 string encDET = cm_stub.crypt<1>(cm.getmkey(), pt, TYPE_INTEGER,
                                          fieldname(i, "DET"),
                                          getMin(oDET), max, isBin, 12345);
-                enccols.push_back(to_s(valFromStr(encDET)));
+                assert(!isBin);
+                enccols.push_back(encDET);
             } else {
                 if (usenull) enccols.push_back("NULL");
             }
 
+            isBin = false;
             if (DoOPE(onions)) {
                 string encOPE = cm_stub.crypt<1>(cm.getmkey(), pt, TYPE_INTEGER,
                                          fieldname(i, "OPE"),
                                          getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
-                enccols.push_back(to_s(valFromStr(encOPE)));
+                assert(!isBin);
+                enccols.push_back(encOPE);
             } else {
                 if (usenull) enccols.push_back("NULL");
             }
 
+            isBin = false;
             if (DoAGG(onions)) {
                 string encAGG = cm_stub.crypt(cm.getmkey(), pt, TYPE_INTEGER,
                                          fieldname(i, "AGG"),
                                          getMin(oAGG), SECLEVEL::SEMANTIC_AGG, isBin, 12345);
+                assert(isBin);
                 push_binary_string(enccols, encAGG);
             } else {
                 if (usenull) enccols.push_back("NULL");;
@@ -320,7 +317,7 @@ static void do_encrypt(size_t i,
     case DT_STRING:
         {
             // DET, OPE, SWP
-            bool isBin;
+            bool isBin = false;
             if (DoDET(onions)) {
                 assert(OnlyOneBit(onions & DET_BITMASK));
                 SECLEVEL max = (onions & ONION_DET) ? SECLEVEL::DET : SECLEVEL::DETJOIN;
@@ -328,24 +325,31 @@ static void do_encrypt(size_t i,
                                          fieldname(i, "DET"),
                                          getMin(oDET), max, isBin, 12345);
                 //assert((encDET.size() % 16) == 0);
+                assert(encDET.size() == plaintext.size()); // length preserving
+                assert(isBin);
                 push_binary_string(enccols, encDET);
             } else {
                 if (usenull) enccols.push_back("NULL");
             }
 
+            isBin = false;
             if (DoOPE(onions)) {
                 string encOPE = cm_stub.crypt(cm.getmkey(), plaintext, TYPE_TEXT,
                                          fieldname(i, "OPE"),
                                          getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
-                enccols.push_back(to_s(valFromStr(encOPE)));
+                // NOT BINARY
+                assert(!isBin);
+                enccols.push_back(encOPE);
             } else {
                 if (usenull) enccols.push_back("NULL");
             }
 
+            isBin = false;
             if (DoSEARCH(onions)) {
                 string encSWP = cm_stub.crypt(cm.getmkey(), plaintext, TYPE_TEXT,
                                          fieldname(i, "SWP"),
                                          getMin(oSWP), SECLEVEL::SWP, isBin, 12345);
+                assert(isBin);
                 push_binary_string(enccols, encSWP);
             } else {
                 if (usenull) enccols.push_back("NULL");
@@ -354,32 +358,34 @@ static void do_encrypt(size_t i,
         break;
     case DT_DATE:
         {
-          // TODO: don't assume yyyy-mm-dd format
-          int encoding = encode_yyyy_mm_dd(plaintext);
+            // TODO: don't assume yyyy-mm-dd format
+            int encoding = encode_yyyy_mm_dd(plaintext);
 
-          bool isBin;
+            bool isBin = false;
+            if (DoDET(onions)) {
+                assert(!(onions & ONION_DETJOIN));
+                string encDET = cm_stub.crypt<3>(cm.getmkey(), to_s(encoding), TYPE_INTEGER,
+                        fieldname(i, "DET"),
+                        getMin(oDET), SECLEVEL::DET, isBin, 12345);
+                assert(!isBin);
+                enccols.push_back(encDET);
+            } else {
+                if (usenull) enccols.push_back("NULL");
+            }
 
-          if (DoDET(onions)) {
-            assert(!(onions & ONION_DETJOIN));
-              string encDET = cm_stub.crypt<3>(cm.getmkey(), to_s(encoding), TYPE_INTEGER,
-                  fieldname(i, "DET"),
-                  getMin(oDET), SECLEVEL::DET, isBin, 12345);
-              enccols.push_back(to_s(valFromStr(encDET)));
-          } else {
-            if (usenull) enccols.push_back("NULL");
-          }
+            isBin = false;
+            if (DoOPE(onions)) {
+                string encOPE = cm_stub.crypt<3>(cm.getmkey(), to_s(encoding), TYPE_INTEGER,
+                        fieldname(i, "OPE"),
+                        getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
+                assert(!isBin);
+                enccols.push_back(encOPE);
+            } else {
+                if (usenull) enccols.push_back("NULL");
+            }
 
-          if (DoOPE(onions)) {
-            string encOPE = cm_stub.crypt<3>(cm.getmkey(), to_s(encoding), TYPE_INTEGER,
-                fieldname(i, "OPE"),
-                getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
-              enccols.push_back(to_s(valFromStr(encOPE)));
-          } else {
-            if (usenull) enccols.push_back("NULL");
-          }
-
-          // agg over dates makes no sense for now...
-          assert(!DoAGG(onions));
+            // agg over dates makes no sense for now...
+            assert(!DoAGG(onions));
 
         }
         break;
@@ -719,9 +725,9 @@ protected:
   }
 
   virtual
-  void preprocessRow(const vector<string> &tokens,
-                     vector<string>       &enccols,
-                     CryptoManager        &cm) {
+  void postprocessRow(const vector<string> &tokens,
+                      vector<string>       &enccols,
+                      CryptoManager        &cm) {
 
     switch (tpe) {
       case opt_type::normal:
@@ -760,8 +766,7 @@ protected:
 
           string enc = cm.encrypt_Paillier(z);
           assert(enc.size() <= 256);
-          if (enc.size() < 256) enc.resize(256); // pad the binary string
-          push_binary_string(enccols, enc, 8);
+          push_binary_string(enccols, enc);
           break;
         }
       default: break;
@@ -874,7 +879,7 @@ public:
       case none:
       case normal:
         onions = PartSuppOnions;
-        usenull = true;
+        usenull = false;
         processrow = true;
         break;
       case projection:
@@ -950,7 +955,7 @@ protected:
                        vector<string>       &enccols,
                        CryptoManager        &cm) {
     long ps_value_int = psValueFromRow(tokens);
-    do_encrypt(schema.size(), DT_INTEGER, (ONION_DET | ONION_AGG | ONION_OPE),
+    do_encrypt(schema.size(), DT_INTEGER, ONION_AGG,
                to_s(ps_value_int), enccols, cm, usenull);
   }
 
@@ -1128,13 +1133,13 @@ static map<string, table_encryptor *> EncryptorMap = {
   {"partsupp-normal", new partsupp_encryptor(partsupp_encryptor::normal)},
   {"partsupp-projection", new partsupp_encryptor(partsupp_encryptor::projection)},
 
-  {"supplier-none", new table_encryptor(SupplierSchema, SupplierOnions, true, true)},
+  {"supplier-none", new table_encryptor(SupplierSchema, SupplierOnions, false, true)},
 
-  {"nation-none", new table_encryptor(NationSchema, NationOnions, true, true)},
+  {"nation-none", new table_encryptor(NationSchema, NationOnions, false, true)},
 
-  {"part-none", new table_encryptor(PartSchema, PartOnions, true, true)},
+  {"part-none", new table_encryptor(PartSchema, PartOnions, false, true)},
 
-  {"region-none", new table_encryptor(RegionSchema, RegionOnions, true, true)},
+  {"region-none", new table_encryptor(RegionSchema, RegionOnions, false, true)},
 };
 
 

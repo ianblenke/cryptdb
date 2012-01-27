@@ -241,6 +241,19 @@ OPE::~OPE()
     delete iOPE;
 }
 
+string
+OPE::encrypt(const ZZ& plaintext)
+{
+    ZZ m = plaintext;
+    ZZ lowD = to_ZZ(0);
+    ZZ highD = LeftShift(to_ZZ(1), iOPE->OPEPlaintextSize) - 1;
+    ZZ lowR = to_ZZ(0);
+    ZZ highR = LeftShift(to_ZZ(1), iOPE->OPECiphertextSize) - 1;
+
+    ZZ res = iOPE->encryptHelper(lowD, highD, lowR, highR, m);
+    return StringFromZZ(res);
+}
+
 // TODO: should these be ZZ to avoid the conversion once again == decrease nr
 // of conversions!
 /**
@@ -328,4 +341,25 @@ OPE::decrypt(const string &ciphertext)
     //cerr << "ZZ decryption is " << res << "\n";
 
     return StringFromZZ(res);
+}
+
+uint64_t
+OPE::decryptToU64(const string& ciphertext)
+{
+    //transform plaintext to ZZ
+    ZZ c = ZZFromBytes((const uint8_t *) ciphertext.data(),
+                       iOPE->OPECiphertextSize/bitsPerByte);
+
+    //cerr << "TO DECRYPT " << c << "\n";
+
+    ZZ lowD = to_ZZ(0);
+    ZZ highD = LeftShift(to_ZZ(1), iOPE->OPEPlaintextSize) - 1;
+    ZZ lowR = to_ZZ(0);
+    ZZ highR = LeftShift(to_ZZ(1), iOPE->OPECiphertextSize) - 1;
+
+    ZZ res = iOPE->decryptHelper(lowD, highD, lowR, highR, c);
+
+    //cerr << "ZZ decryption is " << res << "\n";
+
+    return uint64FromZZ(res);
 }
