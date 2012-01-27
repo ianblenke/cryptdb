@@ -955,8 +955,18 @@ protected:
                        vector<string>       &enccols,
                        CryptoManager        &cm) {
     double ps_value = psValueFromRow(tokens);
-    do_encrypt(schema.size(), DT_FLOAT, (ONION_DET | ONION_OPE | ONION_AGG),
+    do_encrypt(schema.size(), DT_FLOAT, (ONION_DET | ONION_OPE),
                to_s(ps_value), enccols, cm, usenull);
+
+    // manually encrypt agg...
+    long t = roundToLong(ps_value * 100.0);
+    assert(t > 0);
+    uint64_t ps_value_int = (uint64_t) t;
+    typedef PallierSlotManager<uint64_t, 2> PSM;
+    ZZ z = to_ZZ(0);
+    PSM::insert_into_slot(z, ps_value_int, 0);
+    string enc = cm.encrypt_Paillier(z);
+    push_binary_string(enccols, enc);
   }
 
   virtual

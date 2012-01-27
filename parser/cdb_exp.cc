@@ -1376,16 +1376,15 @@ static void do_query_q11_opt(Connect &conn,
         assert(res.rows.size() == 1);
 
         // ps_value
-        uint64_t ps_value_int = decryptRow<uint64_t>(
-                res.rows[0][0].data,
-                12345,
-                fieldname(partsupp::ps_value, "AGG"),
-                TYPE_INTEGER,
-                oAGG,
-                cm);
+        ZZ z;
+        cm.decrypt_Paillier(res.rows[0][0].data, z);
+        typedef PallierSlotManager<uint64_t, 2> PSM;
+        uint64_t ps_value_int = PSM::extract_from_slot<uint64_t>(z, 0);
         double ps_value = ((double)ps_value_int)/100.0;
         threshold = ps_value * fraction;
     }
+
+    cerr << "threshold: " << threshold << endl;
 
     // encrypt threshold for ps_value_OPE
     uint64_t threshold_int = (uint64_t) roundToLong(threshold * 100.0);
