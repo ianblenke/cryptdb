@@ -14,7 +14,7 @@ BULK_ENC=$CDB_TOP/tpch-2.14.0/experiments/bulk_enc.sh
 REG_ENC=$CDB_TOP/obj/parser/cdb_enc
 
 #for factor in 0.05 0.25 0.50 0.75; do
-for factor in 0.05; do
+for factor in 0.50; do
     mkdir -p scale-$factor
     cd scale-$factor
     #rm -f *.enc
