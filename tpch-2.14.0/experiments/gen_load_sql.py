@@ -89,5 +89,5 @@ FROM information_schema.TABLES WHERE table_schema = "tpch-#{scale}" order by low
     return script
 
 #for x in ['0.05', '0.25', '0.50', '0.75']:
-for x in ['2.00']:
+for x in ['0.05']:
     print mkScript(x)

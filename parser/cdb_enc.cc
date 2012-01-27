@@ -927,7 +927,8 @@ public:
         size_t idx = i * PSM::NumSlots + j;
         assert(idx < filtered.size());
         const vector<string> &v = filtered[idx];
-        uint32_t ps_value_int = (uint32_t) psValueFromRow(v);
+        double ps_value = psValueFromRow(v);
+        uint32_t ps_value_int = (uint32_t) roundToLong(ps_value * 100.0);
         PSM::insert_into_slot(z, ps_value_int, j);
         //assert(ps_value_int == PSM::extract_from_slot(z, j));
       }
@@ -942,21 +943,20 @@ public:
 
 protected:
 
-  long psValueFromRow(const vector<string> &tokens) {
+  double psValueFromRow(const vector<string> &tokens) {
     // ps_value = ps_supplycost * ps_availqty
     double ps_supplycost = resultFromStr<double>(tokens[partsupp::ps_supplycost]);
     double ps_availqty   = resultFromStr<double>(tokens[partsupp::ps_availqty]);
     double ps_value      = ps_supplycost * ps_availqty;
-    long   ps_value_int  = roundToLong(ps_value * 100.0);
-    return ps_value_int;
+    return ps_value;
   }
 
   void precomputeExprs(const vector<string> &tokens,
                        vector<string>       &enccols,
                        CryptoManager        &cm) {
-    long ps_value_int = psValueFromRow(tokens);
-    do_encrypt(schema.size(), DT_INTEGER, ONION_AGG,
-               to_s(ps_value_int), enccols, cm, usenull);
+    double ps_value = psValueFromRow(tokens);
+    do_encrypt(schema.size(), DT_FLOAT, (ONION_DET | ONION_OPE | ONION_AGG),
+               to_s(ps_value), enccols, cm, usenull);
   }
 
   virtual

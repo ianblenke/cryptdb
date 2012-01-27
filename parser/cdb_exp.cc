@@ -977,6 +977,7 @@ static void do_query_q11(Connect &conn,
         << "from PARTSUPP, SUPPLIER, NATION "
         << "where ps_suppkey = s_suppkey and s_nationkey = n_nationkey and n_name = '" << name << "') "
       << "order by value desc";
+    cerr << s.str() << endl;
 
     DBResult * dbres;
     {
@@ -1349,14 +1350,13 @@ static void do_query_q11_opt(Connect &conn,
     string pkinfo = marshallBinary(cm.getPKInfo());
     ostringstream s;
     s << "SELECT SQL_NO_CACHE "
-        << "ps_partkey_DET, "
         << "agg(ps_value_AGG, " << pkinfo << ") "
       << "FROM partsupp_enc, supplier_enc, nation_enc "
       << "WHERE "
         << "ps_suppkey_DET = s_suppkey_DET AND "
         << "s_nationkey_DET = n_nationkey_DET AND "
-        << "n_name_DET = " << marshallBinary(encNAME) << " "
-      << "GROUP BY ps_partkey_DET";
+        << "n_name_DET = " << marshallBinary(encNAME)
+        ;
     cerr << s.str() << endl;
 
     DBResult * dbres;
@@ -1371,49 +1371,280 @@ static void do_query_q11_opt(Connect &conn,
       assert(res.ok);
     }
 
-    double totalSum = 0.0;
+    double threshold;
     {
-      NamedTimer t(__func__, "decrypt");
-      results.reserve(res.rows.size());
-      for (auto row : res.rows) {
-
-        // ps_partkey
-        uint64_t ps_partkey = decryptRowFromTo<uint64_t>(
-                row[0].data,
-                12345,
-                fieldname(partsupp::ps_partkey, "DET"),
-                TYPE_INTEGER,
-                SECLEVEL::DETJOIN,
-                getMin(oDET),
-                cm);
+        assert(res.rows.size() == 1);
 
         // ps_value
         uint64_t ps_value_int = decryptRow<uint64_t>(
-                row[1].data,
+                res.rows[0][0].data,
                 12345,
                 fieldname(partsupp::ps_value, "AGG"),
                 TYPE_INTEGER,
                 oAGG,
                 cm);
         double ps_value = ((double)ps_value_int)/100.0;
+        threshold = ps_value * fraction;
+    }
 
-        totalSum += ps_value;
-        results.push_back(q11entry(ps_partkey, ps_value));
+    // encrypt threshold for ps_value_OPE
+    uint64_t threshold_int = (uint64_t) roundToLong(threshold * 100.0);
+
+    isBin = false;
+    string encVALUE = cm_stub.crypt<7>(cm.getmkey(), to_s(threshold_int), TYPE_INTEGER,
+                               fieldname(partsupp::ps_value, "OPE"),
+                               getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
+    assert(isBin);
+    assert(encVALUE.size() <= 14);
+    encVALUE.resize(16); // pad
+    encVALUE = str_reverse(encVALUE); // reverse
+
+    // do all the one element agg group cases first.
+    // this is a very hacky query where we try to do several things at the
+    // same time, while optimizing for minimum data sent back
+    ostringstream s1;
+    s1
+      << "SELECT SQL_NO_CACHE ps_partkey_DET, ps_value_DET, cnt, suppkeys FROM ("
+        << "SELECT "
+          << "ps_partkey_DET, ps_value_DET, "
+          << "COUNT(*) AS cnt, COUNT(*) > 1 OR ps_value_OPE > "
+            << marshallBinary(encVALUE) << " AS filter, "
+          << "CASE COUNT(*) WHEN 1 THEN NULL ELSE GROUP_CONCAT(ps_suppkey_DET) END AS suppkeys "
+        << "FROM partsupp_enc, supplier_enc, nation_enc "
+        << "WHERE "
+          << "ps_suppkey_DET = s_suppkey_DET AND "
+          << "s_nationkey_DET = n_nationkey_DET AND "
+          << "n_name_DET = " << marshallBinary(encNAME) << " "
+        << "GROUP BY ps_partkey_DET"
+      << ") AS __ANON__ WHERE filter = 1";
+    cerr << s1.str() << endl;
+
+    {
+      NamedTimer t(__func__, "execute_groups");
+      conn.execute(s1.str(), dbres);
+    }
+    {
+      NamedTimer t(__func__, "unpack_groups");
+      res = dbres->unpack();
+      assert(res.ok);
+    }
+
+    typedef pair<string, vector<string> > GroupEntry;
+    vector<GroupEntry> savedKeys;
+    results.reserve(res.rows.size());
+    {
+      NamedTimer t(__func__, "decrypt_groups");
+      for (auto row : res.rows) {
+        // first, check count(*). if count(*) == 1, go ahead
+        // and do the decryption. if count(*) > 1, then save ps_partkey_DET
+        // away for later (but do NOT decrypt it)
+
+        if (valFromStr(row[2].data) == 1) {
+          // ps_partkey
+          uint64_t ps_partkey = decryptRowFromTo<uint64_t, 4>(
+                  row[0].data,
+                  12345,
+                  fieldname(partsupp::ps_partkey, "DET"),
+                  TYPE_INTEGER,
+                  SECLEVEL::DETJOIN,
+                  getMin(oDET),
+                  cm);
+
+          // ps_value
+          uint64_t ps_value_int = decryptRow<uint64_t, 7>(
+                  row[1].data,
+                  12345,
+                  fieldname(partsupp::ps_value, "DET"),
+                  TYPE_INTEGER,
+                  oDET,
+                  cm);
+          double ps_value = ((double)ps_value_int)/100.0;
+          assert(ps_value_int > threshold_int);
+
+          results.push_back(q11entry(ps_partkey, ps_value));
+        } else {
+          vector<string> suppkeys;
+          tokenize(row[3].data, ",", suppkeys);
+          assert(suppkeys.size() > 1);
+          savedKeys.push_back(GroupEntry(row[0].data, suppkeys));
+        }
       }
+    }
+
+    // 1) map each GroupEntry into strings of
+    //  (ps_partkey_DET = X AND ps_suppkey IN (s1, s2, ..., sN))
+    // 2) join each of the strings from above with OR
+    struct gentry_mapper {
+      inline string operator()(const GroupEntry &e) const {
+        ostringstream o;
+        o << "(ps_partkey_DET = "
+          << e.first << " AND ps_suppkey_DET IN ("
+            << join(e.second, ",")
+          << "))";
+        return o.str();
+      }
+    };
+
+    vector<string> mapped;
+    mapped.resize(savedKeys.size());
+    transform(savedKeys.begin(), savedKeys.end(),
+              mapped.begin(), gentry_mapper());
+
+    if (!mapped.empty()) {
+
+        ostringstream s2;
+        s2
+          << "SELECT SQL_NO_CACHE "
+            << "ps_partkey_DET, ps_value_DET "
+          << "FROM partsupp_enc "
+          << "WHERE " << join(mapped, " OR ");
+
+        {
+          NamedTimer t(__func__, "execute_more_one_groups");
+          conn.execute(s2.str(), dbres);
+        }
+        {
+          NamedTimer t(__func__, "unpack_more_one_groups");
+          res = dbres->unpack();
+          assert(res.ok);
+        }
+
+        map<uint64_t, double> aggState;
+        {
+          NamedTimer t(__func__, "decrypt_more_one_groups");
+          for (auto row : res.rows) {
+
+            // ps_partkey
+            uint64_t ps_partkey = decryptRowFromTo<uint64_t, 4>(
+                    row[0].data,
+                    12345,
+                    fieldname(partsupp::ps_partkey, "DET"),
+                    TYPE_INTEGER,
+                    SECLEVEL::DETJOIN,
+                    getMin(oDET),
+                    cm);
+
+            // ps_value
+            uint64_t ps_value_int = decryptRow<uint64_t, 7>(
+                    row[1].data,
+                    12345,
+                    fieldname(partsupp::ps_value, "DET"),
+                    TYPE_INTEGER,
+                    oDET,
+                    cm);
+            double ps_value = ((double)ps_value_int)/100.0;
+
+            auto it = aggState.find(ps_partkey);
+            if (it == aggState.end()) {
+              aggState[ps_partkey] = ps_value;
+            } else {
+              it->second += ps_value;
+            }
+          }
+        }
+
+        results.reserve(results.size() + aggState.size());
+        for (map<uint64_t, double>::iterator it = aggState.begin();
+             it != aggState.end();
+             ++it) {
+          if (it->second > threshold) {
+            results.push_back(q11entry(it->first, it->second));
+          }
+        }
     }
 
     {
       NamedTimer t(__func__, "agg");
-      double threshold = totalSum * fraction;
-      // remove elements less than threshold, stl style
-      results.erase(
-          remove_if(results.begin(), results.end(), q11entry_remover(threshold)),
-          results.end());
-
       // sort
       sort(results.begin(), results.end(), q11entry_functor);
     }
 }
+
+//static void do_query_q11_opt(Connect &conn,
+//                             CryptoManager &cm,
+//                             const string &name,
+//                             double fraction,
+//                             vector<q11entry> &results) {
+//    crypto_manager_stub cm_stub(&cm);
+//    assert(name.size() <= 25);
+//    NamedTimer fcnTimer(__func__);
+//
+//    bool isBin = false;
+//    string encNAME = cm_stub.crypt(cm.getmkey(), name, TYPE_TEXT,
+//                              fieldname(nation::n_name, "DET"),
+//                              getMin(oDET), SECLEVEL::DET, isBin, 12345);
+//    assert(isBin);
+//    assert(encNAME.size() == name.size());
+//    encNAME.resize(25);
+//
+//    string pkinfo = marshallBinary(cm.getPKInfo());
+//    ostringstream s;
+//    s << "SELECT SQL_NO_CACHE "
+//        << "ps_partkey_DET, "
+//        << "agg(ps_value_AGG, " << pkinfo << ") "
+//      << "FROM partsupp_enc, supplier_enc, nation_enc "
+//      << "WHERE "
+//        << "ps_suppkey_DET = s_suppkey_DET AND "
+//        << "s_nationkey_DET = n_nationkey_DET AND "
+//        << "n_name_DET = " << marshallBinary(encNAME) << " "
+//      << "GROUP BY ps_partkey_DET";
+//    cerr << s.str() << endl;
+//
+//    DBResult * dbres;
+//    {
+//      NamedTimer t(__func__, "execute");
+//      conn.execute(s.str(), dbres);
+//    }
+//    ResType res;
+//    {
+//      NamedTimer t(__func__, "unpack");
+//      res = dbres->unpack();
+//      assert(res.ok);
+//    }
+//
+//    double totalSum = 0.0;
+//    {
+//      NamedTimer t(__func__, "decrypt");
+//      results.reserve(res.rows.size());
+//      for (auto row : res.rows) {
+//
+//        // ps_partkey
+//        uint64_t ps_partkey = decryptRowFromTo<uint64_t>(
+//                row[0].data,
+//                12345,
+//                fieldname(partsupp::ps_partkey, "DET"),
+//                TYPE_INTEGER,
+//                SECLEVEL::DETJOIN,
+//                getMin(oDET),
+//                cm);
+//
+//        // ps_value
+//        uint64_t ps_value_int = decryptRow<uint64_t>(
+//                row[1].data,
+//                12345,
+//                fieldname(partsupp::ps_value, "AGG"),
+//                TYPE_INTEGER,
+//                oAGG,
+//                cm);
+//        double ps_value = ((double)ps_value_int)/100.0;
+//
+//        totalSum += ps_value;
+//        results.push_back(q11entry(ps_partkey, ps_value));
+//      }
+//    }
+//
+//    {
+//      NamedTimer t(__func__, "agg");
+//      double threshold = totalSum * fraction;
+//      // remove elements less than threshold, stl style
+//      results.erase(
+//          remove_if(results.begin(), results.end(), q11entry_remover(threshold)),
+//          results.end());
+//
+//      // sort
+//      sort(results.begin(), results.end(), q11entry_functor);
+//    }
+//}
 
 static void do_query_q2(Connect &conn,
                         uint64_t size,
