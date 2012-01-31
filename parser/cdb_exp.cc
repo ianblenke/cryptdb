@@ -713,7 +713,7 @@ static void do_query_q1_noopt(Connect &conn,
           << "l_discount_DET, "
           << "l_tax_DET "
 
-      << "FROM lineitem_enc "
+      << "FROM lineitem_enc_noopt "
       << "WHERE l_shipdate_OPE < " << encDATE;
 
     {
@@ -751,7 +751,7 @@ static void do_query_q1_noopt(Connect &conn,
           string l_linestatus(1, l_linestatus_ch);
 
           // l_quantity
-          uint64_t l_quantity_int = decryptRow<uint64_t>(
+          uint64_t l_quantity_int = decryptRow<uint64_t, 7>(
                   row[2].data,
                   12345,
                   fieldname(lineitem::l_quantity, "DET"),
@@ -761,7 +761,7 @@ static void do_query_q1_noopt(Connect &conn,
           double l_quantity = ((double)l_quantity_int)/100.0;
 
           // l_extendedprice
-          uint64_t l_extendedprice_int = decryptRow<uint64_t>(
+          uint64_t l_extendedprice_int = decryptRow<uint64_t, 7>(
                   row[3].data,
                   12345,
                   fieldname(lineitem::l_extendedprice, "DET"),
@@ -771,7 +771,7 @@ static void do_query_q1_noopt(Connect &conn,
           double l_extendedprice = ((double)l_extendedprice_int)/100.0;
 
           // l_discount
-          uint64_t l_discount_int = decryptRow<uint64_t>(
+          uint64_t l_discount_int = decryptRow<uint64_t, 7>(
                   row[4].data,
                   12345,
                   fieldname(lineitem::l_discount, "DET"),
@@ -781,7 +781,7 @@ static void do_query_q1_noopt(Connect &conn,
           double l_discount = ((double)l_discount_int)/100.0;
 
           // l_tax
-          uint64_t l_tax_int = decryptRow<uint64_t>(
+          uint64_t l_tax_int = decryptRow<uint64_t, 7>(
                   row[5].data,
                   12345,
                   fieldname(lineitem::l_tax, "DET"),
@@ -873,7 +873,7 @@ static void do_query_q11_noopt(Connect &conn,
         << "ps_partkey_DET, "
         << "ps_supplycost_DET, "
         << "ps_availqty_DET "
-      << "FROM partsupp_enc, supplier_enc, nation_enc "
+      << "FROM partsupp_enc_noopt, supplier_enc, nation_enc "
       << "WHERE "
         << "ps_suppkey_DET = s_suppkey_DET AND "
         << "s_nationkey_DET = n_nationkey_DET AND "
@@ -898,7 +898,7 @@ static void do_query_q11_noopt(Connect &conn,
       for (auto row : res.rows) {
 
         // ps_partkey
-        uint64_t ps_partkey = decryptRowFromTo<uint64_t>(
+        uint64_t ps_partkey = decryptRowFromTo<uint64_t, 4>(
                 row[0].data,
                 12345,
                 fieldname(partsupp::ps_partkey, "DET"),
@@ -908,7 +908,7 @@ static void do_query_q11_noopt(Connect &conn,
                 cm);
 
         // ps_supplycost
-        uint64_t ps_supplycost_int = decryptRow<uint64_t>(
+        uint64_t ps_supplycost_int = decryptRow<uint64_t, 7>(
                 row[1].data,
                 12345,
                 fieldname(partsupp::ps_supplycost, "DET"),
@@ -918,7 +918,7 @@ static void do_query_q11_noopt(Connect &conn,
         double ps_supplycost = ((double)ps_supplycost_int)/100.0;
 
         // ps_availqty
-        uint64_t ps_availqty = decryptRow<uint64_t>(
+        uint64_t ps_availqty = decryptRow<uint64_t, 4>(
                 row[2].data,
                 12345,
                 fieldname(partsupp::ps_availqty, "DET"),
@@ -1064,13 +1064,86 @@ static void do_query_q14_opt(Connect &conn,
     }
 }
 
+static void do_query_q14_noopt(Connect &conn,
+                               CryptoManager &cm,
+                               uint32_t year,
+                               vector<q14entry> &results) {
+    crypto_manager_stub cm_stub(&cm);
+    NamedTimer fcnTimer(__func__);
+
+    bool isBin;
+    string encDateLower = cm_stub.crypt<3>(cm.getmkey(), strFromVal(EncodeDate(7, 1, year)),
+            TYPE_INTEGER, fieldname(lineitem::l_shipdate, "OPE"),
+            getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
+    string encDateUpper = cm_stub.crypt<3>(cm.getmkey(), strFromVal(EncodeDate(8, 1, year)),
+            TYPE_INTEGER, fieldname(lineitem::l_shipdate, "OPE"),
+            getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
+    ostringstream s;
+    s << "SELECT SQL_NO_CACHE p_type, l_extendedprice, l_discount "
+        << "FROM lineitem_enc_noopt, part_enc "
+        << "WHERE l_partkey_DET = p_partkey_DET AND "
+        << "l_shipdate_OPE >= " << encDateLower << " AND "
+        << "l_shipdate_OPE < " << encDateUpper;
+
+    DBResult * dbres;
+    {
+        NamedTimer t(__func__, "execute");
+        conn.execute(s.str(), dbres);
+    }
+    ResType res;
+    {
+        NamedTimer t(__func__, "unpack");
+        res = dbres->unpack();
+        assert(res.ok);
+    }
+
+    double running_numer = 0.0;
+    double running_denom = 0.0;
+    for (auto row : res.rows) {
+        // l_extendedprice * (1 - l_discount)
+        uint64_t l_extendedprice_int = decryptRow<uint64_t, 7>(
+                row[1].data,
+                12345,
+                fieldname(lineitem::l_extendedprice, "DET"),
+                TYPE_INTEGER,
+                oDET,
+                cm);
+        double l_extendedprice = ((double)l_extendedprice_int)/100.0;
+
+        uint64_t l_discount_int = decryptRow<uint64_t, 7>(
+                row[2].data,
+                12345,
+                fieldname(lineitem::l_discount, "DET"),
+                TYPE_INTEGER,
+                oDET,
+                cm);
+        double l_discount = ((double)l_discount_int)/100.0;
+
+        double value = l_extendedprice * (1.0 - l_discount);
+        running_denom += value;
+
+        // decrypt p_type, to check if matches
+        string p_type = decryptRow<string>(
+                row[0].data,
+                12345,
+                fieldname(part::p_type, "DET"),
+                TYPE_TEXT,
+                oDET,
+                cm);
+        if (strncmp(p_type.c_str(), "PROMO", sizeof("PROMO")) == 0) {
+            running_numer += value;
+        }
+    }
+    results.push_back(100.0 * running_numer / running_denom);
+}
+
 static void do_query_q14(Connect &conn,
                          uint32_t year,
                          vector<q14entry> &results) {
     NamedTimer fcnTimer(__func__);
 
     ostringstream s;
-    s << "select 100.00 * sum(case when p_type like 'PROMO%' then l_extendedprice * (1 - l_discount) else 0 end) / sum(l_extendedprice * (1 - l_discount)) as promo_revenue from LINEITEM, PART where l_partkey = p_partkey and l_shipdate >= date '" << year << "-07-01' and l_shipdate < date '" << year << "-07-01' + interval '1' month";
+    s << "select SQL_NO_CACHE 100.00 * sum(case when p_type like 'PROMO%' then l_extendedprice * (1 - l_discount) else 0 end) / sum(l_extendedprice * (1 - l_discount)) as promo_revenue from LINEITEM, PART where l_partkey = p_partkey and l_shipdate >= date '" << year << "-07-01' and l_shipdate < date '" << year << "-07-01' + interval '1' month";
 
     DBResult * dbres;
     {
@@ -1906,6 +1979,7 @@ int main(int argc, char **argv) {
 
     static const char * Query14Strings[] = {
         "--orig-query14",
+        "--crypt-query14",
         "--crypt-opt-query14",
     };
     std::set<string> Query14Modes
@@ -2065,6 +2139,13 @@ int main(int argc, char **argv) {
           if (mode == "orig-query14") {
             for (size_t i = 0; i < nruns; i++) {
               do_query_q14(conn, year, results);
+              ctr += results.size();
+              PRINT_RESULTS();
+              results.clear();
+            }
+          } else if (mode == "crypt-query14") {
+            for (size_t i = 0; i < nruns; i++) {
+              do_query_q14_noopt(conn, cm, year, results);
               ctr += results.size();
               PRINT_RESULTS();
               results.clear();

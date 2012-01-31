@@ -3,6 +3,17 @@
 # the big button
 # MUST RUN FROM THE TOP OF THE cryptdb SOURCE TREE
 
+CDB_TOP=$HOME/cryptdb
+CDB_EXP_FOLDER=$CDB_TOP/tpch-2.14.0/experiments
+
+if [ ! -e $CDB_EXP_FOLDER/scales.sh ]; then
+    echo "Could not find scales.sh file"
+    exit 1
+fi
+
+source $CDB_EXP_FOLDER/scales.sh
+echo "Running experiments for scales: $SCALES"
+
 stty -echo
 read -p "sudo password: " PASSWORD; echo
 stty echo
@@ -22,13 +33,10 @@ set +x
 echo $PASSWORD | sudo -S sh -c 'echo testing sudo password'
 set -x
 
-CDB_TOP=$HOME/cryptdb
-CDB_EXP_FOLDER=$CDB_TOP/tpch-2.14.0/experiments
-
 # generate all the datas
 mkdir -p $CDB_TOP/enc-data
 cd $CDB_TOP/enc-data
-#$CDB_EXP_FOLDER/gen_data.sh
+$CDB_EXP_FOLDER/gen_data.sh
 cd $CDB_TOP
 
 # encrypt all the datas
@@ -37,7 +45,7 @@ $CDB_EXP_FOLDER/gen_enc_data.sh
 cd $CDB_TOP
 
 # load all the datas
-python $CDB_EXP_FOLDER/gen_load_sql.py > load.sql
+python $CDB_EXP_FOLDER/gen_load_sql.py $SCALES > load.sql
 echo '\. load.sql' | mysql -uroot --socket=$MYSQL_SOCK
 
 # run the exps

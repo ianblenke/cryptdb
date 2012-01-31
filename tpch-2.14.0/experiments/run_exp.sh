@@ -8,6 +8,11 @@ if [ `basename $PWD` != "results" ]; then
     exit 1
 fi
 
+if [ ! -x $HOME/start_mysql.sh ]; then
+    echo "No start_mysql.sh file found in homedir"
+    exit 1
+fi
+
 if [ $# -eq 0 ]; then
     stty -echo
     read -p "sudo password: " PASSWORD; echo
@@ -46,7 +51,9 @@ reset_exp() {
 
 reset_exp
 
-for factor in 1.00 2.00; do
+source $CDB_TOP/tpch-2.14.0/experiments/scales.sh
+
+for factor in $SCALES; do
 
     mkdir -p scale-$factor
     cd scale-$factor
