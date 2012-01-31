@@ -9,7 +9,7 @@ PARSERPROGOBJS	:= $(patsubst %,$(OBJDIR)/parser/%,$(PARSERPROGS))
 all:	$(PARSERPROGOBJS) $(OBJDIR)/libedbparser.so
 
 $(PARSERPROGOBJS): %: %.o $(OBJDIR)/libedbparser.so  $(OBJDIR)/libedbutil.so
-	$(CXX) $< -o $@ -ledbparser  $(LDFLAGS) -ledbutil -lcryptdb -ledbcrypto -lmysqlclient
+	$(CXX) $< -o $@ -ledbparser  $(LDFLAGS) -ledbutil -lcryptdb -ledbcrypto -ledbcrypto2 -lmysqlclient
 
 EDBPARSER_OBJS	:= $(patsubst %.cc,$(OBJDIR)/parser/%.o,$(PARSERSRC))
 $(OBJDIR)/libedbparser.so: $(EDBPARSER_OBJS) $(OBJDIR)/libedbutil.so $(OBJDIR)/libedbcrypto.so \
