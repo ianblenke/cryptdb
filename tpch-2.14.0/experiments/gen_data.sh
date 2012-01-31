@@ -11,14 +11,14 @@ fi
 
 set -x
 
-DBGEN=../../tpch-2.14.0/dbgen/dbgen
-source ../../tpch-2.14.0/experiments/scales.sh
+source ../tpch-2.14.0/experiments/scales.sh
 
 for scale in $SCALES; do
-  mkdir -p scale-$scale
-  cd scale-$scale
-  cp ../../tpch-2.14.0/dbgen/dists.dss .  #hack
-  yes | $DBGEN -s $scale
-  rm dists.dss
-  cd ..
+    mkdir -p scale-$scale
+    cd scale-$scale
+    DBGEN=../../tpch-2.14.0/dbgen/dbgen
+    cp ../../tpch-2.14.0/dbgen/dists.dss .  #hack
+    yes | $DBGEN -s $scale
+    rm dists.dss
+    cd ..
 done

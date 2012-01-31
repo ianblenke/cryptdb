@@ -696,7 +696,7 @@ static void do_query_q1_noopt(Connect &conn,
 
     // l_shipdate <= date '[year]-01-01'
     bool isBin;
-    string encDATE = cm_stub.crypt(cm.getmkey(), strFromVal(EncodeDate(1, 1, year)),
+    string encDATE = cm_stub.crypt<3>(cm.getmkey(), strFromVal(EncodeDate(1, 1, year)),
                               TYPE_INTEGER, fieldname(lineitem::l_shipdate, "OPE"),
                               getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
 
@@ -714,7 +714,7 @@ static void do_query_q1_noopt(Connect &conn,
           << "l_tax_DET "
 
       << "FROM lineitem_enc_noopt "
-      << "WHERE l_shipdate_OPE < " << encDATE;
+      << "WHERE l_shipdate_OPE <= " << encDATE;
 
     {
       NamedTimer t(__func__, "execute");
@@ -731,7 +731,7 @@ static void do_query_q1_noopt(Connect &conn,
       NamedTimer t(__func__, "decrypt");
       for (auto row : res.rows) {
           // l_returnflag
-          unsigned char l_returnflag_ch = (unsigned char) decryptRow<uint32_t>(
+          unsigned char l_returnflag_ch = (unsigned char) decryptRow<uint32_t, 1>(
                   row[0].data,
                   12345,
                   fieldname(lineitem::l_returnflag, "DET"),
@@ -741,7 +741,7 @@ static void do_query_q1_noopt(Connect &conn,
           string l_returnflag(1, l_returnflag_ch);
 
           // l_linestatus
-          unsigned char l_linestatus_ch = (unsigned char) decryptRow<uint32_t>(
+          unsigned char l_linestatus_ch = (unsigned char) decryptRow<uint32_t, 1>(
                   row[1].data,
                   12345,
                   fieldname(lineitem::l_linestatus, "DET"),
@@ -861,12 +861,16 @@ static void do_query_q11_noopt(Connect &conn,
                                double fraction,
                                vector<q11entry> &results) {
     crypto_manager_stub cm_stub(&cm);
+    assert(name.size() <= 25);
     NamedTimer fcnTimer(__func__);
 
-    bool isBin;
+    bool isBin = false;
     string encNAME = cm_stub.crypt(cm.getmkey(), name, TYPE_TEXT,
                               fieldname(nation::n_name, "DET"),
                               getMin(oDET), SECLEVEL::DET, isBin, 12345);
+    assert(isBin);
+    assert(encNAME.size() == name.size());
+    encNAME.resize(25);
 
     ostringstream s;
     s << "SELECT SQL_NO_CACHE "
@@ -878,6 +882,7 @@ static void do_query_q11_noopt(Connect &conn,
         << "ps_suppkey_DET = s_suppkey_DET AND "
         << "s_nationkey_DET = n_nationkey_DET AND "
         << "n_name_DET = " << marshallBinary(encNAME);
+    cerr << s.str() << endl;
 
     DBResult * dbres;
     {
@@ -1079,11 +1084,12 @@ static void do_query_q14_noopt(Connect &conn,
             TYPE_INTEGER, fieldname(lineitem::l_shipdate, "OPE"),
             getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
     ostringstream s;
-    s << "SELECT SQL_NO_CACHE p_type, l_extendedprice, l_discount "
+    s << "SELECT SQL_NO_CACHE p_type_DET, l_extendedprice_DET, l_discount_DET "
         << "FROM lineitem_enc_noopt, part_enc "
         << "WHERE l_partkey_DET = p_partkey_DET AND "
         << "l_shipdate_OPE >= " << encDateLower << " AND "
         << "l_shipdate_OPE < " << encDateUpper;
+    cerr << s.str() << endl;
 
     DBResult * dbres;
     {
@@ -1130,7 +1136,7 @@ static void do_query_q14_noopt(Connect &conn,
                 TYPE_TEXT,
                 oDET,
                 cm);
-        if (strncmp(p_type.c_str(), "PROMO", sizeof("PROMO")) == 0) {
+        if (strncmp(p_type.c_str(), "PROMO", strlen("PROMO")) == 0) {
             running_numer += value;
         }
     }

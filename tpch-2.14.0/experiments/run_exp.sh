@@ -64,6 +64,8 @@ for factor in $SCALES; do
         reset_exp
         /usr/bin/time -f '%e' -o crypt.query1 -a $CDB_EXP --crypt-opt-query1 1998 1 tpch-$factor
         reset_exp
+        /usr/bin/time -f '%e' -o crypt.noopt.query1 -a $CDB_EXP --crypt-query1 1998 1 tpch-$factor
+        reset_exp
 
         /usr/bin/time -f '%e' -o orig.query2 -a $CDB_EXP --orig-query2 36 STEEL ASIA 1 tpch-$factor
         reset_exp
@@ -74,10 +76,14 @@ for factor in $SCALES; do
         reset_exp
         /usr/bin/time -f '%e' -o crypt.query11 -a $CDB_EXP --crypt-opt-query11 ARGENTINA 0.0001 1 tpch-$factor
         reset_exp
+        /usr/bin/time -f '%e' -o crypt.noopt.query11 -a $CDB_EXP --crypt-query11 ARGENTINA 0.0001 1 tpch-$factor
+        reset_exp
 
         /usr/bin/time -f '%e' -o orig.query14 -a $CDB_EXP --orig-query14 1996 1 tpch-$factor
         reset_exp
         /usr/bin/time -f '%e' -o crypt.query14 -a $CDB_EXP --crypt-opt-query14 1996 1 tpch-$factor
+        reset_exp
+        /usr/bin/time -f '%e' -o crypt.noopt.query14 -a $CDB_EXP --crypt-query14 1996 1 tpch-$factor
         reset_exp
     done
 

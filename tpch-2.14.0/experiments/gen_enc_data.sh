@@ -18,9 +18,8 @@ source $CDB_EXP_FOLDER/scales.sh
 for factor in $SCALES; do
     mkdir -p scale-$factor
     cd scale-$factor
-    #rm -f *.enc
 
-    #$BULK_ENC --lineitem-normal lineitem.tbl
+    $BULK_ENC --lineitem-normal lineitem.tbl
 
     # This file is only 25 lines long (regardless of scale)
     # so use reg enc

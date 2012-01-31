@@ -33,6 +33,15 @@ set +x
 echo $PASSWORD | sudo -S sh -c 'echo testing sudo password'
 set -x
 
+# compile the dbgen program
+cd $CDB_TOP/tpch-2.14.0/dbgen
+make -j8
+if [ ! -x ./dbgen ]; then
+    echo "Did not compile dbgen properly"
+    exit 1
+fi
+cd $CDB_TOP
+
 # generate all the datas
 mkdir -p $CDB_TOP/enc-data
 cd $CDB_TOP/enc-data
