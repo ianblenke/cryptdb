@@ -1072,7 +1072,8 @@ static void do_query_q14_opt(Connect &conn,
 static void do_query_q14_noopt(Connect &conn,
                                CryptoManager &cm,
                                uint32_t year,
-                               vector<q14entry> &results) {
+                               vector<q14entry> &results,
+                               bool use_opt_table = false) {
     crypto_manager_stub cm_stub(&cm);
     NamedTimer fcnTimer(__func__);
 
@@ -1085,7 +1086,8 @@ static void do_query_q14_noopt(Connect &conn,
             getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
     ostringstream s;
     s << "SELECT SQL_NO_CACHE p_type_DET, l_extendedprice_DET, l_discount_DET "
-        << "FROM lineitem_enc_noopt, part_enc "
+        << "FROM " << string(use_opt_table ? "lineitem_enc" : "lineitem_enc_noopt")
+          << ", part_enc "
         << "WHERE l_partkey_DET = p_partkey_DET AND "
         << "l_shipdate_OPE >= " << encDateLower << " AND "
         << "l_shipdate_OPE < " << encDateUpper;
@@ -1986,6 +1988,7 @@ int main(int argc, char **argv) {
     static const char * Query14Strings[] = {
         "--orig-query14",
         "--crypt-query14",
+        "--crypt-opt-tables-query14",
         "--crypt-opt-query14",
     };
     std::set<string> Query14Modes
@@ -2151,7 +2154,14 @@ int main(int argc, char **argv) {
             }
           } else if (mode == "crypt-query14") {
             for (size_t i = 0; i < nruns; i++) {
-              do_query_q14_noopt(conn, cm, year, results);
+              do_query_q14_noopt(conn, cm, year, results, false);
+              ctr += results.size();
+              PRINT_RESULTS();
+              results.clear();
+            }
+          } else if (mode == "crypt-opt-tables-query14") {
+            for (size_t i = 0; i < nruns; i++) {
+              do_query_q14_noopt(conn, cm, year, results, true);
               ctr += results.size();
               PRINT_RESULTS();
               results.clear();
