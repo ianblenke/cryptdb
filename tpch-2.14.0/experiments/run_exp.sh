@@ -85,6 +85,9 @@ for factor in $SCALES; do
         reset_exp
         /usr/bin/time -f '%e' -o crypt.noopt.query14 -a $CDB_EXP --crypt-query14 1996 1 tpch-$factor
         reset_exp
+        /usr/bin/time -f '%e' -o crypt.noopt.opttables.query14 -a $CDB_EXP --crypt-opt-tables-query14 1996 1 tpch-$factor
+        reset_exp
+
     done
 
     cd ..
