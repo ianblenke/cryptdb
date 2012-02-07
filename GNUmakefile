@@ -52,6 +52,7 @@ include crypto/Makefrag
 include crypto-old/Makefrag
 include edb/Makefrag
 include parser/Makefrag
+include estimators/Makefrag
 include test/Makefrag
 include util/Makefrag
 include udf/Makefrag
