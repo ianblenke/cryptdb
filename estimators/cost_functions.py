@@ -202,7 +202,7 @@ def query1_cost_functions(numrows):
         return (
             add_terms_l([encrypt_expr, rtt_expr, seek_expr, seq_scan_expr,
                          sort_expr, agg_expr, xfer_expr, decrypt_expr]),
-            set(['l_shipdate_ope', 'l_pack0_agg']))
+            set(['l_returnflag_ope', 'l_linestatus_ope','l_shipdate_ope', 'l_pack0_agg']))
 
     return [plan1(), plan2()]
 
@@ -298,19 +298,37 @@ if __name__ == '__main__':
             b_lt.append( -1 )
 
     # emit cost function file (cost_function.m)
+    # matlab is index from 1, not zero
     fp = open('cost_function.m', 'w')
     print >>fp, 'function [ cost ] = cost_function ( x )'
     for entry in a + b:
-        print >>fp, '  %s = x(%d);' % (entry[0], key[entry[0]])
+        print >>fp, '  %s = x(%d);' % (entry[0], key[entry[0]] + 1)
     for query_plans, qid in zip(cost_fcns, xrange(len(cost_fcns))):
         for plan, pid in zip(query_plans, xrange(len(query_plans))):
             vname = 'P%d%d' % (qid, pid)
-            print >>fp, '  %s = x(%d);' % (vname, key[vname])
+            print >>fp, '  %s = x(%d);' % (vname, key[vname] + 1)
     cost_fcn_expr = add_terms_l(queries)
     print >>fp, '  cost = %s;' % cost_fcn_expr
     print >>fp, 'end'
     fp.close()
 
+    query_vars = []
+    for query_plans, qid in zip(cost_fcns, xrange(len(cost_fcns))):
+        for plan, pid in zip(query_plans, xrange(len(query_plans))):
+            vname = 'P%d%d' % (qid, pid)
+            query_vars.append(vname)
+
+    # emit the interpretation script
+    fp = open('interpret_results.m', 'w')
+    print >>fp, 'function [] = interpret_results ( x )'
+    print >>fp, '  name = {%s};' % ','.join(["'%s'" % s for s in ([entry[0] for entry in a + b] + query_vars)])
+    print >>fp, '  for i=[1:length(x)]'
+    print >>fp, "    disp(sprintf('%%s: %%f', %s, %s));" % ('name{i}', 'x(i)')
+    print >>fp, '  end'
+    print >>fp, 'end'
+    fp.close()
+
+    # emit the script to run
     fp = open('opt_problem.m', 'w')
     print >>fp, 'x0 = %s;' % matlabify(mkZeroRow())
     print >>fp, 'A = %s;' % matlabify(a_lt)
@@ -319,5 +337,7 @@ if __name__ == '__main__':
     print >>fp, 'beq = %s;' % matlabify(b_eq)
     print >>fp, 'lb = %s;' % matlabify(mkZeroRow())
     print >>fp, 'ub = %s;' % matlabify(mkOneRow())
-    print >>fp, 'x = fmincon(@cost_function,x0,A,b,Aeq,beq,lb,ub)'
+    print >>fp, "opts = optimset('Algorithm', 'active-set');"
+    print >>fp, 'x = fmincon(@cost_function,x0,A,b,Aeq,beq,lb,ub,[],opts);'
+    print >>fp, 'interpret_results(x);'
     fp.close()
