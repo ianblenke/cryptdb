@@ -39,6 +39,17 @@ using namespace NTL;
 #define TEST_SNIPPET(name) \
     static void name(size_t numOps, CryptoManager& cm)
 
+static Token* t = NULL;
+
+static void init_static_data(CryptoManager& cm) {
+    if (t) return;
+    t = new Token;
+    Binary key(cm.getKey(cm.getmkey(), fieldname(4, "SWP"), SECLEVEL::SWP));
+    Token t0 = CryptoManager::token(key, Binary("promo"));
+    t->ciph = t0.ciph;
+    t->wordKey = t0.wordKey;
+}
+
 TEST_SNIPPET(det_encrypt) {
     crypto_manager_stub cm_stub(&cm);
     REPEAT(numOps) {
@@ -124,13 +135,33 @@ TEST_SNIPPET(agg_add) {
     }
 }
 
-// extern, so GCC doesn't try to pre-compute rand(), and
-// copy-prop it into int_add()
-extern const int32_t RAND_INT = (rand() % 10);
+TEST_SNIPPET(swp_encrypt_for_query) {
+    size_t cnt = 0;
+    REPEAT(numOps) {
+        Binary key(cm.getKey(cm.getmkey(), "my_field_SWP", SECLEVEL::SWP));
+        Token t = CryptoManager::token(key, Binary("foobar"));
+        cnt += t.ciph.len; // just so we can use Token (prevent optimization)
+    }
+}
+
+TEST_SNIPPET(swp_search) {
+    assert(t);
+    size_t n_matches = 0;
+    REPEAT(numOps) {
+        Binary overallciph = Binary(SWP_DATA_0);
+        if (CryptoManager::searchExists(*t, overallciph)) n_matches++;
+    }
+}
+
+extern int32_t RAND_INT(void);
+
+int32_t RAND_INT(void) {
+    return (rand() % 10);
+}
 
 TEST_SNIPPET(int_add) {
     int32_t sum = 0;
-    int32_t a = RAND_INT;
+    int32_t a = RAND_INT();
     REPEAT(numOps) {
         // use some inline assembly, so GCC doesn't optimize the
         // loop addition away
@@ -139,18 +170,19 @@ TEST_SNIPPET(int_add) {
                              :"a"(sum), "b"(a)
                              );
     }
-    assert(sum == (RAND_INT * static_cast<int32_t>(numOps)));
+    assert(sum == (a * static_cast<int32_t>(numOps)));
 }
+
+static CryptoManager CRYPTO_MANAGER("12345");
 
 static void time_snippet(
         const char *snippet_name,
         void (*fcn)(size_t, CryptoManager&),
         size_t numOps) {
-    CryptoManager cm("12345");
     double tt;
     {
         Timer t;
-        fcn(numOps, cm);
+        fcn(numOps, CRYPTO_MANAGER);
         tt = (t.lap_ms()) / static_cast<double>(numOps);
     }
     cout.setf(ios::fixed, ios::floatfield);
@@ -162,6 +194,8 @@ static void time_snippet(
 // list of key: value pairs, where key is the operator, and value is the time
 // to perform a single operation (in ms)
 int main(int argc, char** argv) {
+
+    init_static_data(CRYPTO_MANAGER);
 
 #define TIME_SNIPPET(name, numOps) \
     time_snippet(#name, name, numOps)
@@ -187,6 +221,13 @@ int main(int argc, char** argv) {
         TIME_SNIPPET(agg_add,     100);
 
     } // end AGG
+
+    { // begin SWP
+
+        TIME_SNIPPET(swp_encrypt_for_query, 500);
+        TIME_SNIPPET(swp_search,            500);
+
+    } // end SWP
 
     { // begin NO-CRYPTO
 
