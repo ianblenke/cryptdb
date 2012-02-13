@@ -17,6 +17,8 @@ PARTSUPP = 0x1 << 3
 REGION   = 0x1 << 4
 SUPPLIER = 0x1 << 5
 
+TABLE_PREFIXES = ['l', 'n', 'p', 'ps', 'r', 's']
+
 ### generate the x variables ###
 ORIG_COLUMNS = [
     ### LINEITEM table ###
@@ -84,6 +86,9 @@ VIRTUAL_COLUMNS = [
     ### PARTSUPP table ###
     ('ps_pack0', AGG_FLAG, 256),
 ]
+
+def get_orig_table_row_size(prefix):
+    return sum([x[2] for x in ORIG_COLUMNS if x[0].startswith(prefix + '_')])
 
 _cachedColumnSizeLookup = None
 def get_column_size(cname):
@@ -655,15 +660,17 @@ def query14_cost_functions(table_sizes):
 
     return [plan1(), plan2(), plan3()]
 
-def get_cost_functions():
+def get_cost_functions(scale_factor):
+
     table_sizes = {
-        LINEITEM : 6000000,
-        NATION   : 2,
-        PART     : 200000,
-        PARTSUPP : 800000,
+        LINEITEM : scale_factor * 6001215,
+        NATION   : 25,
+        PART     : scale_factor * 200000,
+        PARTSUPP : scale_factor * 800000,
         REGION   : 5,
-        SUPPLIER : 10000,
+        SUPPLIER : scale_factor * 10000,
     }
+
     return [
              query1_cost_functions(table_sizes),
              query2_cost_functions(table_sizes),
@@ -673,7 +680,9 @@ def get_cost_functions():
 
 if __name__ == '__main__':
 
-    cost_fcns = get_cost_functions()
+    cost_fcns = get_cost_functions(10.0)
+
+    S = 6.0
 
     # assign each variable an ID from 0 to len(vars) - 1
     a, b = gen_all_variables()
@@ -766,6 +775,19 @@ if __name__ == '__main__':
 
             c_lt.append('-(%s_det^2) - (%s_ope^2) + 1' % (entry[0], entry[0]))
 
+    # space budget constraint
+    b_rhs = 0
+    a0 = mkZeroRow()
+    for tbl in TABLE_PREFIXES:
+        b_rhs += S * get_orig_table_row_size(tbl)
+        for entry in gen_variables_for_table(tbl):
+            if entry[0] == '1':
+                b_rhs -= entry[1]
+            else:
+                a0[key[entry[0]]] = entry[1]
+        a_lt.append( a0    )
+        b_lt.append( b_rhs )
+
     def output_all_vars(fp):
         for entry in a + b:
             print >>fp, '  %s = x(%d);' % (entry[0], key[entry[0]] + 1)
@@ -789,9 +811,10 @@ if __name__ == '__main__':
     fp = open('cost_function.m', 'w')
     print >>fp, 'function [ cost ] = cost_function ( x )'
 
+    print >>fp, '  bias = @(t) -10000.0 * (t - 0.5).^2 + 2500.0;'
     output_all_vars(fp)
     cost_fcn_expr = add_terms_l(queries)
-    print >>fp, '  cost = %s;' % cost_fcn_expr
+    print >>fp, '  cost = sum(bias(x)) + %s;' % cost_fcn_expr
 
     print >>fp, 'end'
     fp.close()
@@ -812,7 +835,11 @@ if __name__ == '__main__':
 
     # emit the script to run
     fp = open('opt_problem.m', 'w')
-    print >>fp, 'x0 = %s;' % matlabify(mkOneRow())
+
+    #print >>fp, 'x0 = %s;' % matlabify(mkOneRow())
+    print >>fp, 'x0 = zeros(1, %d);' % len(mkOneRow())
+    print >>fp, 'x0(:) = 0.5;' # start everything at 1/2
+
     print >>fp, 'A = %s;' % matlabify(a_lt)
     print >>fp, 'b = %s;' % matlabify(b_lt)
     print >>fp, 'Aeq = %s;' % matlabify(a_eq)
@@ -823,14 +850,14 @@ if __name__ == '__main__':
     print >>fp, 'x = fmincon(@cost_function,x0,A,b,Aeq,beq,lb,ub,@mycon,opts);'
     print >>fp, '[x, fval, exitflag] = fmincon(@cost_function,x0,A,b,Aeq,beq,lb,ub,@mycon,opts);'
     print >>fp, 'N_TRIES=3;'
-    print >>fp, 'while exitflag ~= 1 && N_TRIES > 0'
+    print >>fp, 'i=N_TRIES;'
+    print >>fp, 'while exitflag ~= 1 && i > 0'
     print >>fp, '    [x, fval, exitflag] = fmincon(@cost_function,x,A,b,Aeq,beq,lb,ub,@mycon,opts);'
-    print >>fp, '    N_TRIES = N_TRIES - 1;'
+    print >>fp, '    i = i - 1;'
     print >>fp, 'end'
+    print >>fp, 'interpret_results(x);'
     print >>fp, 'if exitflag ~= 1'
-    print >>fp, "    disp(sprintf('did not converge after %d iterations', N_TRIES));"
-    print >>fp, 'else'
-    print >>fp, '    interpret_results(x);'
+    print >>fp, "    disp(sprintf('WARNING: Did not converge after %d iterations', N_TRIES));"
     print >>fp, 'end'
     fp.close()
 
