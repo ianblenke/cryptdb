@@ -8,6 +8,8 @@ OPE_FLAG = 0x1 << 1
 SWP_FLAG = 0x1 << 2
 AGG_FLAG = 0x1 << 3
 
+PK_FLAG = 0x1 << 4
+
 LINEITEM = 0x1
 NATION   = 0x1 << 1
 PART     = 0x1 << 2
@@ -53,8 +55,8 @@ ORIG_COLUMNS = [
     ('p_comment', DET_FLAG, 23),
 
     ### PARTSUPP table ###
-    ('ps_partkey', DET_FLAG, 4),
-    ('ps_suppkey', DET_FLAG, 4),
+    ('ps_partkey', DET_FLAG | PK_FLAG, 4),
+    ('ps_suppkey', DET_FLAG | PK_FLAG, 4),
     ('ps_availqty', DET_FLAG, 4),
     ('ps_supplycost', DET_FLAG | OPE_FLAG, 8),
     ('ps_comment', DET_FLAG, 199),
@@ -80,7 +82,7 @@ VIRTUAL_COLUMNS = [
     ('l_pack0', AGG_FLAG, 256),
 
     ### PARTSUPP table ###
-    ('ps_supplycost', AGG_FLAG, 256),
+    ('ps_pack0', AGG_FLAG, 256),
 ]
 
 _cachedColumnSizeLookup = None
@@ -164,6 +166,24 @@ def gen_variables_for_table(tblprefix):
     cands = [x for x in ORIG_COLUMNS + VIRTUAL_COLUMNS if x[0].startswith(tblprefix + '_')]
     vs = [gen_variables_from_entry(x) for x in cands]
     return flatten(vs)
+
+def gen_table_size_expr(numrows, prefix):
+    tbl_vars        = gen_variables_for_table(prefix)
+    row_length_expr = add_terms_l([mult_terms(x[0], str(x[1])) for x in tbl_vars])
+    return mult_terms(str(numrows), row_length_expr)
+
+# TODO: right now, assumes the index is over the DET column
+# (even if the OPE column was chosen)
+def gen_index_scan_size_expr(numrows, prefix):
+    fill_factor = 2.0 / 3.0 # TODO: not sure if this is a good number to use
+
+    pk_entries = [x for x in ORIG_COLUMNS if x[0].startswith(prefix + '_') and x[1] & PK_FLAG]
+
+    assert len(pk_entries) > 0
+
+    pk_entry = sum([x[2] for x in pk_entries])
+
+    return str(pk_entry * numrows * (1.0 / fill_factor))
 
 def compute_sort_cost(nelems, entry_size):
     NumFilesortPages = (nelems * entry_size) / INNODB_PAGE_SIZE
@@ -422,6 +442,103 @@ def query2_cost_functions(table_sizes):
 
     return [plan1(), plan2(), plan3()]
 
+
+
+### Query 11 ###
+def query11_cost_functions(table_sizes):
+    '''
+    returns a list of (cost expr, set(required variables))
+    '''
+
+    ps_table_size_expr = gen_table_size_expr(table_sizes[PARTSUPP], 'ps')
+
+    def plan1():
+        '''
+        the det only plan:
+
+        query:
+        SELECT
+          ps_partkey_DET, ps_supplycost_DET, ps_availqty_DET
+        FROM partsupp_enc_noopt, supplier_enc, nation_enc
+        WHERE
+          ps_suppkey_DET = s_suppkey_DET AND
+          s_nationkey_DET = n_nationkey_DET AND
+          n_name_DET = X
+
+        (partsupp is the outer-most join table)
+
+        the rest is done server side processing:
+        '''
+
+        ### perfect statistics ###
+        ResultSetNRows = 33040
+
+        ResultSetEntry = ['ps_partkey_det', 'ps_supplycost_det', 'ps_availqty_det']
+
+        ProjRecordLength = entry_size(ResultSetEntry)
+
+        DataSentBack = ResultSetNRows * ProjRecordLength
+
+        encrypt_expr  = str(DET_ENC)
+        rtt_expr      = str(RTT)
+        seek_expr     = str(SEEK)
+        seq_scan_expr = mult_terms(str(1.0 / READ_BW), ps_table_size_expr)
+        xfer_expr     = str((1.0 / NETWORK_BW) * DataSentBack)
+        decrypt_expr  = str((len(ResultSetEntry) * DET_DEC) * ResultSetNRows)
+
+        return (
+            add_terms_l([encrypt_expr, rtt_expr, seek_expr, seq_scan_expr,
+                         xfer_expr, decrypt_expr]),
+            set(require_all_det_tbls(['ps', 's', 'n'])).intersection(set(ResultSetEntry)))
+
+    def plan2():
+        '''
+        the optimized plan
+
+        query:
+        SELECT
+          ps_partkey_DET, agg(ps_pack0)
+        FROM partsupp_enc, supplier_enc, nation_enc
+        WHERE
+          ps_suppkey_DET = s_suppkey_DET AND
+          s_nationkey_DET = n_nationkey_DET AND
+          n_name_DET = X
+        GROUP BY ps_partkey_DET
+
+        NOTE: our cost estimate assumes the outer relation (partsupp)
+        is scanned via index scan. therefore no sorting is needed.
+
+        '''
+
+        ### perfect statistics ###
+        ResultSetNRows = 31110
+
+        ResultSetEntry = ['ps_partkey_det', 'ps_pack0_agg']
+
+        ProjRecordLength = entry_size(ResultSetEntry)
+
+        DataSentBack = ResultSetNRows * ProjRecordLength
+
+        encrypt_expr  = str(DET_ENC)
+        rtt_expr      = str(RTT)
+
+        ### TODO: not sure which one is right to use here ###
+
+        #index_seek_expr = 4.0 * str(SEEK) # TODO: don't just assume 4
+        #index_scan_expr = mult_terms(str(1.0 / READ_BW), gen_index_scan_size_expr(table_sizes[PARTSUPP], 'ps'))
+        seek_expr     = str(SEEK)
+        seq_scan_expr = mult_terms(str(1.0 / READ_BW), ps_table_size_expr)
+
+        xfer_expr     = str((1.0 / NETWORK_BW) * DataSentBack)
+        decrypt_expr  = str(( DET_DEC + AGG_DEC ) * ResultSetNRows)
+
+        return (
+            add_terms_l([encrypt_expr, rtt_expr, seek_expr, seq_scan_expr,
+                         xfer_expr, decrypt_expr]),
+            set(require_all_det_tbls(['ps', 's', 'n'])).intersection(set(ResultSetEntry)))
+
+    return [plan1(), plan2()]
+
 def get_cost_functions():
     table_sizes = {
         LINEITEM : 6000000,
@@ -434,6 +551,7 @@ def get_cost_functions():
     return [
              query1_cost_functions(table_sizes),
              query2_cost_functions(table_sizes),
+             query11_cost_functions(table_sizes),
            ]
 
 if __name__ == '__main__':
@@ -478,6 +596,9 @@ if __name__ == '__main__':
     a_eq = []
     b_eq = []
 
+    c_lt = []
+    c_eq = []
+
     def matlabify(m):
         if not len(m): return '[]';
         if hasattr(m[0], '__iter__'):
@@ -503,12 +624,16 @@ if __name__ == '__main__':
 
         # each query must pick exactly one plan
         # sum Pij = 1
-        a0 = mkZeroRow()
-        for pid in xrange(len(query_plans)):
-            vname = 'P%d%d' % (qid, pid)
-            a0[key[vname]] = 1
-        a_eq.append( a0 )
-        b_eq.append( 1  )
+        #a0 = mkZeroRow()
+        #for pid in xrange(len(query_plans)):
+        #    vname = 'P%d%d' % (qid, pid)
+        #    a0[key[vname]] = 1
+        #a_eq.append( a0 )
+        #b_eq.append( 1  )
+
+        # squares constraint
+        c_eq.append(add_terms_l(['P%d%d^2' % (qid, pid) for pid in xrange(len(query_plans))] + ['-1']))
+
 
     # if given choice, x_DET/x_OPE must be at least one
     for entry in ORIG_COLUMNS:
@@ -516,32 +641,47 @@ if __name__ == '__main__':
         if hasAllBits(entry[1], DET_FLAG | OPE_FLAG):
             # x_DET + x_OPE >= 1
             # => -x_DET + -x_OPE <= -1
-            a0 = mkZeroRow()
-            a0[key['%s_det' % entry[0]]] = -1
-            a0[key['%s_ope' % entry[0]]] = -1
-            a_lt.append( a0 )
-            b_lt.append( -1 )
+            #a0 = mkZeroRow()
+            #a0[key['%s_det' % entry[0]]] = -1
+            #a0[key['%s_ope' % entry[0]]] = -1
+            #a_lt.append( a0 )
+            #b_lt.append( -1 )
+
+            c_lt.append('-(%s_det^2) - (%s_ope^2) + 1' % (entry[0], entry[0]))
+
+    def output_all_vars(fp):
+        for entry in a + b:
+            print >>fp, '  %s = x(%d);' % (entry[0], key[entry[0]] + 1)
+        for query_plans, qid in zip(cost_fcns, xrange(len(cost_fcns))):
+            for plan, pid in zip(query_plans, xrange(len(query_plans))):
+                vname = 'P%d%d' % (qid, pid)
+                print >>fp, '  %s = x(%d);' % (vname, key[vname] + 1)
+
+    fp = open('mycon.m', 'w')
+    print >>fp, 'function [ c, ceq ] = cost_function ( x )'
+
+    output_all_vars(fp)
+    print >>fp, '  c   = %s;' % matlabify(c_lt)
+    print >>fp, '  ceq = %s;' % matlabify(c_eq)
+
+    print >>fp, 'end'
+    fp.close()
 
     # emit cost function file (cost_function.m)
     # matlab is index from 1, not zero
     fp = open('cost_function.m', 'w')
     print >>fp, 'function [ cost ] = cost_function ( x )'
-    for entry in a + b:
-        print >>fp, '  %s = x(%d);' % (entry[0], key[entry[0]] + 1)
-    for query_plans, qid in zip(cost_fcns, xrange(len(cost_fcns))):
-        for plan, pid in zip(query_plans, xrange(len(query_plans))):
-            vname = 'P%d%d' % (qid, pid)
-            print >>fp, '  %s = x(%d);' % (vname, key[vname] + 1)
+
+    output_all_vars(fp)
     cost_fcn_expr = add_terms_l(queries)
     print >>fp, '  cost = %s;' % cost_fcn_expr
+
     print >>fp, 'end'
     fp.close()
 
-    query_vars = []
-    for query_plans, qid in zip(cost_fcns, xrange(len(cost_fcns))):
-        for plan, pid in zip(query_plans, xrange(len(query_plans))):
-            vname = 'P%d%d' % (qid, pid)
-            query_vars.append(vname)
+    query_vars = \
+        ['P%d%d' % (qid, pid) for query_plans, qid in zip(cost_fcns, xrange(len(cost_fcns))) \
+                              for plan, pid in zip(query_plans, xrange(len(query_plans)))]
 
     # emit the interpretation script
     fp = open('interpret_results.m', 'w')
@@ -555,7 +695,7 @@ if __name__ == '__main__':
 
     # emit the script to run
     fp = open('opt_problem.m', 'w')
-    print >>fp, 'x0 = %s;' % matlabify(mkZeroRow())
+    print >>fp, 'x0 = %s;' % matlabify(mkOneRow())
     print >>fp, 'A = %s;' % matlabify(a_lt)
     print >>fp, 'b = %s;' % matlabify(b_lt)
     print >>fp, 'Aeq = %s;' % matlabify(a_eq)
@@ -563,8 +703,18 @@ if __name__ == '__main__':
     print >>fp, 'lb = %s;' % matlabify(mkZeroRow())
     print >>fp, 'ub = %s;' % matlabify(mkOneRow())
     print >>fp, "opts = optimset('Algorithm', 'active-set');"
-    print >>fp, 'x = fmincon(@cost_function,x0,A,b,Aeq,beq,lb,ub,[],opts);'
-    print >>fp, 'interpret_results(x);'
+    print >>fp, 'x = fmincon(@cost_function,x0,A,b,Aeq,beq,lb,ub,@mycon,opts);'
+    print >>fp, '[x, fval, exitflag] = fmincon(@cost_function,x0,A,b,Aeq,beq,lb,ub,@mycon,opts);'
+    print >>fp, 'N_TRIES=3;'
+    print >>fp, 'while exitflag ~= 1 && N_TRIES > 0'
+    print >>fp, '    [x, fval, exitflag] = fmincon(@cost_function,x,A,b,Aeq,beq,lb,ub,@mycon,opts);'
+    print >>fp, '    N_TRIES = N_TRIES - 1;'
+    print >>fp, 'end'
+    print >>fp, 'if exitflag ~= 1'
+    print >>fp, "    disp(sprintf('did not converge after %d iterations', N_TRIES));"
+    print >>fp, 'else'
+    print >>fp, '    interpret_results(x);'
+    print >>fp, 'end'
     fp.close()
 
 # vim: set sw=4
