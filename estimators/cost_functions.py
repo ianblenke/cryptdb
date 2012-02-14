@@ -10,14 +10,21 @@ AGG_FLAG = 0x1 << 3
 
 PK_FLAG = 0x1 << 4
 
-LINEITEM = 0x1
-NATION   = 0x1 << 1
-PART     = 0x1 << 2
-PARTSUPP = 0x1 << 3
-REGION   = 0x1 << 4
-SUPPLIER = 0x1 << 5
+LINEITEM = 0
+NATION   = 1
+PART     = 2
+PARTSUPP = 3
+REGION   = 4
+SUPPLIER = 5
 
-TABLE_PREFIXES = ['l', 'n', 'p', 'ps', 'r', 's']
+TABLE_PREFIXES = [
+    ('l',  LINEITEM),
+    ('n',  NATION),
+    ('p',  PART),
+    ('ps', PARTSUPP),
+    ('r',  REGION),
+    ('s',  SUPPLIER)
+  ]
 
 ### generate the x variables ###
 ORIG_COLUMNS = [
@@ -47,7 +54,7 @@ ORIG_COLUMNS = [
 
     ### PART table ###
     ('p_partkey', DET_FLAG | OPE_FLAG, 4),
-    ('p_name', DET_FLAG, 55),
+    ('p_name', DET_FLAG | SWP_FLAG, 55),
     ('p_mfgr', DET_FLAG, 25),
     ('p_brand', DET_FLAG, 10),
     ('p_type', DET_FLAG | SWP_FLAG, 25),
@@ -69,7 +76,7 @@ ORIG_COLUMNS = [
     ('r_comment', DET_FLAG, 152),
 
     ## SUPPLIER table ###
-    ('s_suppkey', DET_FLAG, 4),
+    ('s_suppkey', DET_FLAG | PK_FLAG, 4),
     ('s_name', DET_FLAG | OPE_FLAG, 25),
     ('s_address', DET_FLAG, 40),
     ('s_nationkey', DET_FLAG, 4),
@@ -660,29 +667,294 @@ def query14_cost_functions(table_sizes):
 
     return [plan1(), plan2(), plan3()]
 
-def get_cost_functions(scale_factor):
+### Query 20 ###
+def query20_cost_functions(table_sizes):
+    '''
+    returns a list of (cost expr, set(required variables))
+    '''
+    p_table_size_expr = gen_table_size_expr(table_sizes[PART], 'p')
+    l_table_size_expr = gen_table_size_expr(table_sizes[LINEITEM], 'l')
+    s_table_size_expr = gen_table_size_expr(table_sizes[SUPPLIER], 's')
 
-    table_sizes = {
-        LINEITEM : scale_factor * 6001215,
-        NATION   : 25,
-        PART     : scale_factor * 200000,
-        PARTSUPP : scale_factor * 800000,
-        REGION   : 5,
-        SUPPLIER : scale_factor * 10000,
-    }
+    def plan1():
+        '''
+        the det only plan:
 
+        Here, we apply a greedy heuristic in generating this det-only plan,
+        which says greedily evaluate sub-queries independently, if possible
+
+        query1:
+        select p_partkey_DET from PART;
+
+        query2:
+        select ps_partkey_DET, ps_suppkey_DET, ps_availqty_DET, l_shipdate_DET
+        from PARTSUPP, LINEITEM
+        where
+          ps_partkey_DET = l_partkey_DET and
+          ps_suppkey_DET = l_suppkey_DET and
+          ps_partkey_DET in (x0, x1, ..., xN) and
+
+        (lineitem is the outer-most join table)
+
+        query3:
+        select s_name_DET, s_address_DET from SUPPLIER, NATION
+        where
+          s_suppkey_DET in (x0, x1, ..., xN) and
+          s_nationkey_DET = n_nationkey_DET and
+          n_name_DET = X
+
+        the rest is done server side processing:
+        '''
+
+        def q1_expr():
+            ResultSetNRows = table_sizes[PART]
+            ResultSetEntry = ['p_partkey_det']
+            ProjRecordLength = entry_size(ResultSetEntry)
+            DataSentBack = ResultSetNRows * ProjRecordLength
+
+            rtt_expr      = str(RTT)
+            seek_expr     = str(SEEK)
+            seq_scan_expr = mult_terms(str(1.0 / READ_BW), p_table_size_expr)
+            xfer_expr     = str((1.0 / NETWORK_BW) * DataSentBack)
+            decrypt_expr  = str(DET_DEC * ResultSetNRows)
+
+            return add_terms_l([rtt_expr, seek_expr, seq_scan_expr, xfer_expr, decrypt_expr])
+
+        def q2_expr():
+            ### perfect statistics ###
+            NumPartKeys      = 2143
+            ResultSetNRows   = 64460
+            ResultSetEntry   = ['ps_partkey_det', 'ps_suppkey_det', 'ps_availqty_det', 'l_shipdate_det']
+            ProjRecordLength = entry_size(ResultSetEntry)
+            DataSentBack     = ResultSetNRows * ProjRecordLength
+
+            encrypt_expr  = str(DET_ENC * NumPartKeys)
+            rtt_expr      = str(RTT)
+            seek_expr     = str(SEEK)
+            seq_scan_expr = mult_terms(str(1.0 / READ_BW), l_table_size_expr)
+            xfer_expr     = str((1.0 / NETWORK_BW) * DataSentBack)
+            decrypt_expr  = str(len(ResultSetEntry) * DET_DEC * ResultSetNRows)
+
+            return add_terms_l([encrypt_expr, rtt_expr, seek_expr, seq_scan_expr, xfer_expr, decrypt_expr])
+
+        def q3_expr():
+            ### perfect statistics ###
+            NumSuppKeys      = 5789
+            ResultSetNRows   = 177
+            ResultSetEntry   = ['s_name_det', 's_address_det']
+            ProjRecordLength = entry_size(ResultSetEntry)
+            DataSentBack     = ResultSetNRows * ProjRecordLength
+
+            rtt_expr      = str(RTT)
+            idx_seek_expr = str(4.0 * SEEK) # assume 4 seeks to leaf node
+            idx_scan_expr = mult_terms(str(1.0 / READ_BW), gen_index_scan_size_expr(table_sizes[SUPPLIER], 's'))
+            xfer_expr     = str((1.0 / NETWORK_BW) * DataSentBack)
+            decrypt_expr  = str((2.0 * DET_DEC) * ResultSetNRows)
+
+            return add_terms_l([rtt_expr, idx_seek_expr, idx_scan_expr, xfer_expr, decrypt_expr])
+
+        return (
+            add_terms_l([q1_expr(), q2_expr(), q3_expr()]),
+            set(require_all_det_tbls(['p', 'ps', 'l', 's', 'n'])).intersection(
+              set(['p_partkey_det',
+                   'ps_partkey_det', 'ps_suppkey_det', 'ps_availqty_det', 'l_shipdate_det',
+                   'l_partkey_det', 'l_suppkey_det', 's_name_det', 's_address_det',
+                   's_suppkey_det', 's_nationkey_det', 'n_nationkey_det', 'n_name_det'])))
+
+    def plan2():
+        '''
+        the optimized plan (minus agg)
+
+        query1:
+        select ps_partkey_DET, ps_suppkey_DET, ps_availqty_DET, l_quantity_DET
+        from PARTSUPP, LINEITEM
+        where
+            ps_partkey_DET = l_partkey_DET and
+            ps_suppkey_DET = l_suppkey_DET and
+            ps_partkey_DET in (
+              select p_partkey_DET from PART where searchSWP(.., ..., p_name_SWP) = 1
+            )
+            and l_shipdate_OPE >= X
+            and l_shipdate_OPE < Y
+
+        lineitem is the outer join table
+
+        query2:
+        select s_name_DET, s_address_DET
+        from SUPPLIER, NATION
+        where
+          s_suppkey_DET in (x0, x1, ..., xN) and
+          s_nationkey_DET = n_nationkey_DET and
+          n_name_DET = X
+        order by s_name_OPE
+
+        '''
+
+        def q1_expr():
+            ### perfect statistics ###
+            ResultSetNRows   = 9645
+            ResultSetEntry   = ['ps_partkey_det', 'ps_suppkey_det', 'ps_availqty_det', 'l_quantity_det']
+            ProjRecordLength = entry_size(ResultSetEntry)
+            DataSentBack     = ResultSetNRows * ProjRecordLength
+
+            encrypt_expr  = str(OPE_ENC * 2)
+            rtt_expr      = str(RTT)
+
+            # inner query
+            seek_expr     = str(SEEK)
+            seq_scan_expr = mult_terms(str(1.0 / READ_BW), p_table_size_expr)
+            search_expr   = str(table_sizes[PART] * SWP_SEARCH)
+
+            # outer query
+            seek_expr1     = str(SEEK)
+            seq_scan_expr1 = mult_terms(str(1.0 / READ_BW), l_table_size_expr)
+
+            xfer_expr     = str((1.0 / NETWORK_BW) * DataSentBack)
+            decrypt_expr  = str(len(ResultSetEntry) * DET_DEC * ResultSetNRows)
+
+            return add_terms_l([ encrypt_expr, rtt_expr, seek_expr, seq_scan_expr, search_expr,
+                                 seek_expr1, seq_scan_expr1, xfer_expr, decrypt_expr ])
+
+        def q2_expr():
+            ### perfect statistics ###
+            NumSuppKeys      = 5789
+            ResultSetNRows   = 177
+            ResultSetEntry   = ['s_name_det', 's_address_det']
+            ProjRecordLength = entry_size(ResultSetEntry)
+            DataSentBack     = ResultSetNRows * ProjRecordLength
+
+            rtt_expr      = str(RTT)
+            idx_seek_expr = str(4.0 * SEEK) # assume 4 seeks to leaf node
+            idx_scan_expr = mult_terms(str(1.0 / READ_BW), gen_index_scan_size_expr(table_sizes[SUPPLIER], 's'))
+            xfer_expr     = str((1.0 / NETWORK_BW) * DataSentBack)
+            decrypt_expr  = str((2.0 * DET_DEC) * ResultSetNRows)
+
+            # TODO: currently ignoring sort cost (since it should be relatively cheap)
+
+            return add_terms_l([rtt_expr, idx_seek_expr, idx_scan_expr, xfer_expr, decrypt_expr])
+
+        return (
+            add_terms_l([q1_expr(), q2_expr()]),
+            set(require_all_det_tbls(['p', 'ps', 'l', 's', 'n'])).intersection(
+              set(['p_partkey_det',
+                   'ps_partkey_det', 'ps_suppkey_det', 'ps_availqty_det', 'l_quantity_det',
+                   'l_partkey_det', 'l_suppkey_det', 's_name_det', 's_address_det',
+                   's_suppkey_det', 's_nationkey_det', 'n_nationkey_det', 'n_name_det'])).union(set(
+                  ['p_name_swp', 'l_shipdate_ope', 's_name_ope'])))
+
+    def plan3():
+        '''
+        the optimized plan (including agg)
+
+        query1:
+        select ps_suppkey_DET, ps_availqty_DET, agg(l_pack0_AGG,...)
+        from PARTSUPP, LINEITEM
+        where
+            ps_partkey_DET = l_partkey_DET and
+            ps_suppkey_DET = l_suppkey_DET and
+            ps_partkey_DET in (
+              select p_partkey_DET from PART where searchSWP(.., ..., p_name_SWP) = 1
+            )
+            and l_shipdate_OPE >= X
+            and l_shipdate_OPE < Y
+        group by ps_partkey_DET, ps_suppkey_DET
+
+        lineitem is the outer join table
+
+        query2:
+        select s_name_DET, s_address_DET
+        from SUPPLIER, NATION
+        where
+          s_suppkey_DET in (x0, x1, ..., xN) and
+          s_nationkey_DET = n_nationkey_DET and
+          n_name_DET = X
+        order by s_name_OPE
+
+        '''
+
+        def q1_expr():
+            ### perfect statistics ###
+            ResultSetNRows   = 5798
+            ResultSetEntry   = ['ps_suppkey_det', 'ps_availqty_det', 'l_pack0_agg']
+            ProjRecordLength = entry_size(ResultSetEntry)
+            DataSentBack     = ResultSetNRows * ProjRecordLength
+
+            SortEntry    = ['ps_partkey_det', 'ps_suppkey_det', 'ps_availqty_det', 'l_pack0_agg']
+            SortNEntries = 9645
+
+            encrypt_expr  = str(OPE_ENC * 2)
+            rtt_expr      = str(RTT)
+
+            # inner query
+            seek_expr     = str(SEEK)
+            seq_scan_expr = mult_terms(str(1.0 / READ_BW), p_table_size_expr)
+            search_expr   = str(table_sizes[PART] * SWP_SEARCH)
+
+            # outer query
+            seek_expr1     = str(SEEK)
+            seq_scan_expr1 = mult_terms(str(1.0 / READ_BW), l_table_size_expr)
+            sort_expr1     = str(compute_sort_cost(SortNEntries, entry_size(SortEntry)))
+
+            xfer_expr     = str((1.0 / NETWORK_BW) * DataSentBack)
+            decrypt_expr  = str((2 * DET_DEC + AGG_DEC) * ResultSetNRows)
+
+            return add_terms_l([ encrypt_expr, rtt_expr, seek_expr, seq_scan_expr, search_expr,
+                                 seek_expr1, seq_scan_expr1, sort_expr1, xfer_expr, decrypt_expr ])
+
+        def q2_expr():
+            ### perfect statistics ###
+            NumSuppKeys      = 5789
+            ResultSetNRows   = 177
+            ResultSetEntry   = ['s_name_det', 's_address_det']
+            ProjRecordLength = entry_size(ResultSetEntry)
+            DataSentBack     = ResultSetNRows * ProjRecordLength
+
+            rtt_expr      = str(RTT)
+            idx_seek_expr = str(4.0 * SEEK) # assume 4 seeks to leaf node
+            idx_scan_expr = mult_terms(str(1.0 / READ_BW), gen_index_scan_size_expr(table_sizes[SUPPLIER], 's'))
+            xfer_expr     = str((1.0 / NETWORK_BW) * DataSentBack)
+            decrypt_expr  = str((2.0 * DET_DEC) * ResultSetNRows)
+
+            # TODO: currently ignoring sort cost (since it should be relatively cheap)
+
+            return add_terms_l([rtt_expr, idx_seek_expr, idx_scan_expr, xfer_expr, decrypt_expr])
+
+        return (
+            add_terms_l([q1_expr(), q2_expr()]),
+            set(require_all_det_tbls(['p', 'ps', 'l', 's', 'n'])).intersection(
+              set(['p_partkey_det',
+                   'ps_partkey_det', 'ps_suppkey_det', 'ps_availqty_det', 'l_quantity_det',
+                   'l_partkey_det', 'l_suppkey_det', 's_name_det', 's_address_det',
+                   's_suppkey_det', 's_nationkey_det', 'n_nationkey_det', 'n_name_det'])).union(set(
+                  ['p_name_swp', 'l_shipdate_ope', 's_name_ope', 'l_pack0_agg'])))
+
+    return [plan1(), plan2(), plan3()]
+
+def get_cost_functions(table_sizes):
     return [
              query1_cost_functions(table_sizes),
              query2_cost_functions(table_sizes),
              query11_cost_functions(table_sizes),
              query14_cost_functions(table_sizes),
+             query20_cost_functions(table_sizes),
            ]
 
 if __name__ == '__main__':
 
-    cost_fcns = get_cost_functions(10.0)
+    TPCH_SCALE = 10.0
 
-    S = 6.0
+    table_sizes = {
+        LINEITEM : TPCH_SCALE * 6001215,
+        NATION   : 25,
+        PART     : TPCH_SCALE * 200000,
+        PARTSUPP : TPCH_SCALE * 800000,
+        REGION   : 5,
+        SUPPLIER : TPCH_SCALE * 10000,
+    }
+
+    cost_fcns = get_cost_functions(table_sizes)
+
+    S = 3.0
 
     # assign each variable an ID from 0 to len(vars) - 1
     a, b = gen_all_variables()
@@ -778,15 +1050,17 @@ if __name__ == '__main__':
     # space budget constraint
     b_rhs = 0
     a0 = mkZeroRow()
-    for tbl in TABLE_PREFIXES:
-        b_rhs += S * get_orig_table_row_size(tbl)
+    total_rows = sum(table_sizes.values())
+    for tbl, tbl_id in TABLE_PREFIXES:
+        nf = table_sizes[tbl_id] / total_rows
+        b_rhs += S * get_orig_table_row_size(tbl) * nf
         for entry in gen_variables_for_table(tbl):
             if entry[0] == '1':
-                b_rhs -= entry[1]
+                b_rhs -= entry[1] * nf
             else:
-                a0[key[entry[0]]] = entry[1]
-        a_lt.append( a0    )
-        b_lt.append( b_rhs )
+                a0[key[entry[0]]] = entry[1] * nf
+    a_lt.append( a0    )
+    b_lt.append( b_rhs )
 
     def output_all_vars(fp):
         for entry in a + b:
@@ -795,6 +1069,23 @@ if __name__ == '__main__':
             for plan, pid in zip(query_plans, xrange(len(query_plans))):
                 vname = 'P%d%d' % (qid, pid)
                 print >>fp, '  %s = x(%d);' % (vname, key[vname] + 1)
+
+    fp = open('table_size_test.m', 'w')
+    print >>fp, 'function [ size_orig, size_enc ] = cost_function ( x )'
+
+    print >>fp, '  size_orig =', sum([get_orig_table_row_size(tbl) * table_sizes[tbl_id] for tbl, tbl_id in TABLE_PREFIXES]), ';'
+
+    output_all_vars(fp)
+
+    print >>fp, '  size_enc =', add_terms_l([
+      mult_terms(
+        entry[0],
+        str(entry[1] * table_sizes[tbl_id]))
+      for tbl, tbl_id in TABLE_PREFIXES \
+      for entry in gen_variables_for_table(tbl)]), ';'
+
+    print >>fp, 'end'
+    fp.close()
 
     fp = open('mycon.m', 'w')
     print >>fp, 'function [ c, ceq ] = cost_function ( x )'
