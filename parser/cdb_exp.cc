@@ -2053,33 +2053,6 @@ static void do_query_q20_opt_noagg(Connect &conn,
     cerr << s.str() << endl;
 
     DBResult * dbres;
-
-    //{
-    //    ostringstream s;
-    //    s<<"      select p_partkey_DET, p_name_DET from part_enc where searchSWP("
-    //      << marshallBinary(string((char *)t.ciph.content, t.ciph.len))
-    //      << ", "
-    //      << marshallBinary(string((char *)t.wordKey.content, t.wordKey.len))
-    //      << ", p_name_SWP) = 1 ";
-
-    //    conn.execute(s.str(), dbres);
-    //    ResType res;
-    //    res = dbres->unpack();
-    //    assert(res.ok);
-
-    //    for (auto row : res.rows) {
-    //        string p_name = decryptRow<string>(
-    //                row[1].data,
-    //                12345,
-    //                fieldname(part::p_name, "DET"),
-    //                TYPE_TEXT,
-    //                oDET,
-    //                cm);
-    //        cout << p_name << endl;
-    //    }
-    //}
-
-
     {
         NamedTimer t(__func__, "execute");
         conn.execute(s.str(), dbres);
@@ -2196,11 +2169,137 @@ static void do_query_q20_opt(Connect &conn,
                              const string &p_name,
                              const string &n_name,
                              vector<q20entry> &results) {
+    crypto_manager_stub cm_stub(&cm);
     NamedTimer fcnTimer(__func__);
 
+    assert(n_name.size() <= 25);
+
+    string lowerpname(lower_s(p_name));
+
+    bool isBin = false;
+    string encDATE_START = cm_stub.crypt<3>(cm.getmkey(), strFromVal(EncodeDate(1, 1, year)),
+                              TYPE_INTEGER, fieldname(lineitem::l_shipdate, "OPE"),
+                              getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
+    assert(!isBin);
+    string encDATE_END = cm_stub.crypt<3>(cm.getmkey(), strFromVal(EncodeDate(1, 1, year + 1)),
+                              TYPE_INTEGER, fieldname(lineitem::l_shipdate, "OPE"),
+                              getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
+    assert(!isBin);
+
+    string encNAME = cm_stub.crypt(cm.getmkey(), n_name, TYPE_TEXT,
+                              fieldname(nation::n_name, "DET"),
+                              getMin(oDET), SECLEVEL::DET, isBin, 12345);
+    assert(n_name.size() == encNAME.size());
+    assert(isBin);
+
+    // right-pad encNAME with 0's
+    encNAME.resize(25);
+
+    Binary key(cm.getKey(cm.getmkey(), fieldname(part::p_name, "SWP"), SECLEVEL::SWP));
+    Token t = CryptoManager::token(key, Binary(lowerpname));
+
+    string pkinfo = marshallBinary(cm.getPKInfo());
     ostringstream s;
+    s <<
+        "select SQL_NO_CACHE ps_suppkey_DET, ps_availqty_DET, agg(l_bitpacked_AGG, " << pkinfo << ") "
+        "from partsupp_enc, lineitem_enc "
+        "where "
+        "    ps_partkey_DET = l_partkey_DET and "
+        "    ps_suppkey_DET = l_suppkey_DET and "
+        "    ps_partkey_DET in ( "
+        "      select p_partkey_DET from part_enc where searchSWP("
+          << marshallBinary(string((char *)t.ciph.content, t.ciph.len))
+          << ", "
+          << marshallBinary(string((char *)t.wordKey.content, t.wordKey.len))
+          << ", p_name_SWP) = 1 "
+        "    ) "
+        "    and l_shipdate_OPE >= " << encDATE_START <<
+        "    and l_shipdate_OPE < " << encDATE_END << " "
+        "group by ps_partkey_DET, ps_suppkey_DET";
+    cerr << s.str() << endl;
 
+    DBResult * dbres;
+    {
+        NamedTimer t(__func__, "execute");
+        conn.execute(s.str(), dbres);
+    }
+    ResType res;
+    {
+        NamedTimer t(__func__, "unpack");
+        res = dbres->unpack();
+        assert(res.ok);
+    }
 
+    vector<string> s_suppkeys;
+    {
+        NamedTimer t(__func__, "decrypt");
+        for (auto row : res.rows) {
+            // decrypt availqty
+            uint64_t ps_availqty = decryptRow<uint64_t>(
+                row[1].data,
+                12345,
+                fieldname(partsupp::ps_availqty, "DET"),
+                TYPE_INTEGER,
+                oDET,
+                cm);
+
+            // decrypt l_quantity
+            ZZ z;
+            cm.decrypt_Paillier(row[2].data, z);
+            long sum_qty_int = extract_from_slot(z, 0);
+            double sum_qty = ((double)sum_qty_int)/100.0;
+
+            if ((double)ps_availqty > 0.5 * sum_qty) {
+                s_suppkeys.push_back(row[0].data);
+            }
+        }
+    }
+
+    std::set<string> s_suppkeys_set(s_suppkeys.begin(), s_suppkeys.end());
+    s_suppkeys.clear();
+    s_suppkeys.insert(s_suppkeys.begin(), s_suppkeys_set.begin(), s_suppkeys_set.end());
+
+    assert(!s_suppkeys.empty());
+
+    ostringstream s1;
+    s1 <<
+        "select s_name_DET, s_address_DET "
+        "from supplier_enc, nation_enc "
+        "where "
+        "  s_suppkey_DET in (" << join(s_suppkeys, ", ") << ") and "
+        "  s_nationkey_DET = n_nationkey_DET and "
+        "  n_name_DET = " << marshallBinary(encNAME) << " "
+        "order by s_name_OPE";
+    //cerr << s1.str() << endl;
+
+    {
+      NamedTimer t(__func__, "execute");
+      conn.execute(s1.str(), dbres);
+    }
+    {
+      NamedTimer t(__func__, "unpack");
+      res = dbres->unpack();
+      assert(res.ok);
+    }
+
+    results.reserve(res.rows.size());
+    for (auto row : res.rows) {
+        string s_name = decryptRow<string>(
+                row[0].data,
+                12345,
+                fieldname(supplier::s_name, "DET"),
+                TYPE_TEXT,
+                oDET,
+                cm);
+        string s_address = decryptRow<string>(
+                row[1].data,
+                12345,
+                fieldname(supplier::s_address, "DET"),
+                TYPE_TEXT,
+                oDET,
+                cm);
+        results.push_back(q20entry(s_name, s_address));
+    }
 }
 
 static inline uint32_t random_year() {
