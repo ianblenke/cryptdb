@@ -466,6 +466,81 @@ protected:
 };
 
 //----------------------------------------------------------------------------
+// customer
+
+enum customer {
+    c_custkey     ,
+    c_name        ,
+    c_address     ,
+    c_nationkey   ,
+    c_phone       ,
+    c_acctbal     ,
+    c_mktsegment  ,
+    c_comment     ,
+};
+
+static const vector<datatypes> CustSchema = {
+    DT_INTEGER,
+    DT_STRING,
+    DT_STRING,
+    DT_INTEGER,
+    DT_STRING,
+    DT_FLOAT,
+    DT_STRING,
+    DT_STRING,
+};
+
+static const vector<int> CustOnions = {
+    ONION_DETJOIN,
+    ONION_DET,
+    ONION_DET,
+    ONION_DET,
+    ONION_DET,
+    ONION_DET,
+    ONION_DET,
+    ONION_DET,
+};
+
+//----------------------------------------------------------------------------
+// orders
+
+enum orders {
+    o_orderkey       ,
+    o_custkey        ,
+    o_orderstatus    ,
+    o_totalprice     ,
+    o_orderdate      ,
+    o_orderpriority  ,
+    o_clerk          ,
+    o_shippriority   ,
+    o_comment        ,
+};
+
+static const vector<datatypes> OrdersSchema = {
+    DT_INTEGER,
+    DT_INTEGER,
+    DT_CHAR,
+    DT_FLOAT,
+    DT_DATE,
+    DT_STRING,
+    DT_STRING,
+    DT_INTEGER,
+    DT_STRING,
+};
+
+static const vector<int> OrdersOnions = {
+    ONION_DETJOIN,
+    ONION_DETJOIN,
+    ONION_DET,
+    ONION_DET | ONION_OPE,
+    ONION_DET | ONION_OPE,
+    ONION_DET,
+    ONION_DET,
+    ONION_DET,
+    ONION_DET,
+};
+
+//----------------------------------------------------------------------------
 // lineitem
 
 enum lineitem {
@@ -1150,6 +1225,10 @@ static map<string, table_encryptor *> EncryptorMap = {
   {"part-none", new table_encryptor(PartSchema, PartOnions, false, true)},
 
   {"region-none", new table_encryptor(RegionSchema, RegionOnions, false, true)},
+
+  {"orders-none", new table_encryptor(OrdersSchema, OrdersOnions, false, true)},
+
+  {"customer-none", new table_encryptor(CustSchema, CustOnions, false, true)},
 };
 
 
