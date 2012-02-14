@@ -8,6 +8,15 @@ OPE_FLAG = 0x1 << 1
 SWP_FLAG = 0x1 << 2
 AGG_FLAG = 0x1 << 3
 
+PK_FLAG = 0x1 << 4
+
+LINEITEM = 0x1
+NATION   = 0x1 << 1
+PART     = 0x1 << 2
+PARTSUPP = 0x1 << 3
+REGION   = 0x1 << 4
+SUPPLIER = 0x1 << 5
+
 ### generate the x variables ###
 ORIG_COLUMNS = [
     ### LINEITEM table ###
@@ -46,8 +55,8 @@ ORIG_COLUMNS = [
     ('p_comment', DET_FLAG, 23),
 
     ### PARTSUPP table ###
-    ('ps_partkey', DET_FLAG, 4),
-    ('ps_suppkey', DET_FLAG, 4),
+    ('ps_partkey', DET_FLAG | PK_FLAG, 4),
+    ('ps_suppkey', DET_FLAG | PK_FLAG, 4),
     ('ps_availqty', DET_FLAG, 4),
     ('ps_supplycost', DET_FLAG | OPE_FLAG, 8),
     ('ps_comment', DET_FLAG, 199),
@@ -73,13 +82,24 @@ VIRTUAL_COLUMNS = [
     ('l_pack0', AGG_FLAG, 256),
 
     ### PARTSUPP table ###
-    ('ps_supplycost', AGG_FLAG, 256),
+    ('ps_pack0', AGG_FLAG, 256),
 ]
+
+_cachedColumnSizeLookup = None
+def get_column_size(cname):
+    global _cachedColumnSizeLookup
+    if not _cachedColumnSizeLookup:
+        _cachedColumnSizeLookup = {}
+        for entry in ORIG_COLUMNS + VIRTUAL_COLUMNS:
+            entries = gen_variables_from_entry(entry, False)
+            for entry in entries:
+                _cachedColumnSizeLookup[entry[0]] = entry[1]
+    return _cachedColumnSizeLookup[cname]
 
 def hasAllBits(x, mask):
     return (x & mask) == mask
 
-def gen_variables_from_entry(entry):
+def gen_variables_from_entry(entry, allowForceDet=True):
     '''
     Takes a ('orig col name', flags, size) entry, and returns
     a (non-empty) list of ( ('1' | variables name), size )
@@ -99,7 +119,7 @@ def gen_variables_from_entry(entry):
         AGG_FLAG : lambda x: 256,
     }
 
-    ForceDet = True
+    ForceDet = allowForceDet
     if hasAllBits(entry[1], DET_FLAG | OPE_FLAG):
         # we have a choice
         ForceDet = False
@@ -113,23 +133,23 @@ def gen_variables_from_entry(entry):
     return ret
 
 def mult_terms(lhs, rhs):
-	return "(%s) * (%s)" % (lhs, rhs)
+    return "(%s) * (%s)" % (lhs, rhs)
 
 def add_terms(lhs, rhs):
-	return "(%s) + (%s)" % (lhs, rhs)
+    return "(%s) + (%s)" % (lhs, rhs)
 
 def add_terms_l(terms):
     return ' + '.join(['(%s)' % x for x in terms])
 
 def scale(s, terms):
-	return [mult_terms(s, x) for x in terms]
+    return [mult_terms(s, x) for x in terms]
 
 def flatten(lists):
-	ret = []
-	for l in lists:
-		for e in l:
-			ret.append(e)
-	return ret
+    ret = []
+    for l in lists:
+        for e in l:
+            ret.append(e)
+    return ret
 
 def gen_all_variables():
     '''
@@ -147,20 +167,68 @@ def gen_variables_for_table(tblprefix):
     vs = [gen_variables_from_entry(x) for x in cands]
     return flatten(vs)
 
+def gen_table_size_expr(numrows, prefix):
+    tbl_vars        = gen_variables_for_table(prefix)
+    row_length_expr = add_terms_l([mult_terms(x[0], str(x[1])) for x in tbl_vars])
+    return mult_terms(str(numrows), row_length_expr)
+
+# TODO: right now, assumes the index is over the DET column
+# (even if the OPE column was chosen)
+def gen_index_scan_size_expr(numrows, prefix):
+    fill_factor = 2.0 / 3.0 # TODO: not sure if this is a good number to use
+
+    pk_entries = [x for x in ORIG_COLUMNS if x[0].startswith(prefix + '_') and x[1] & PK_FLAG]
+
+    assert len(pk_entries) > 0
+
+    pk_entry = sum([x[2] for x in pk_entries])
+
+    return str(pk_entry * numrows * (1.0 / fill_factor))
+
+def compute_sort_cost(nelems, entry_size):
+    NumFilesortPages = (nelems * entry_size) / INNODB_PAGE_SIZE
+
+    SortEstimatePageIOs = \
+        NumFilesortPages * log(NumFilesortPages, N_MERGE_BUFFERS)
+
+    SortNumBytesXF = SortEstimatePageIOs * INNODB_PAGE_SIZE
+
+    return (1.0 / ((READ_BW + WRITE_BW) / 2.0)) * SortNumBytesXF
+
+def entry_size(column_names):
+    return sum([get_column_size(c) for c in column_names])
+
+def require_all_det_tbl(tbl):
+    return [x[0] for x in gen_variables_for_table(tbl) if x[0].endswith('_det')]
+
+def require_all_det_tbls(tbl_list):
+    return flatten([require_all_det_tbl(t) for t in tbl_list])
+
 ### Query 1 ###
-def query1_cost_functions(numrows):
+def query1_cost_functions(table_sizes):
     '''
     returns a list of (cost expr, set(required variables))
     '''
+
+    numrows = table_sizes[LINEITEM]
 
     lineitem_vars = gen_variables_for_table('l')
     row_length_expr = add_terms_l([mult_terms(x[0], str(x[1])) for x in lineitem_vars])
     table_size_expr = mult_terms(str(numrows), row_length_expr)
 
     def plan1():
-        '''the naive plan'''
+        '''
+        the det-only plan
 
-        ProjRecordLength = 34
+        SELECT l_returnflag_DET, l_linestatus_DET, l_quantity_DET, l_extendedprice_DET, l_discount_DET, l_tax_DET, l_shipdate_DET
+        FROM lineitem_enc_noopt
+        '''
+
+        ResultSetEntry = ['l_returnflag_det', 'l_linestatus_det', 'l_quantity_det',
+             'l_extendedprice_det', 'l_discount_det', 'l_tax_det',
+             'l_shipdate_det']
+
+        ProjRecordLength = entry_size(ResultSetEntry)
         DataSentBack = numrows * ProjRecordLength
 
         # formulate expr for row length
@@ -173,43 +241,435 @@ def query1_cost_functions(numrows):
 
         return (
             add_terms_l([encrypt_expr, rtt_expr, seek_expr, seq_scan_expr, xfer_expr, decrypt_expr]),
-            set(['l_shipdate_ope']))
+            set(require_all_det_tbl('l')).intersection(set(ResultSetEntry)))
 
-    def plan2():
-        '''the optimized plan'''
+    def plan_opt(send_back_det):
+        '''
+        the optimized plan
 
-        ProjRecordLength = 262
+        SELECT
+          (l_returnflag_DET | l_returnflag_OPE),
+          (l_linestatus_DET | l_linestatus_OPE),
+          agg(l_bitpacked_AGG, X), count(*)
+        FROM lineitem_enc
+        WHERE l_shipdate_OPE <= Y
+        GROUP BY l_returnflag_OPE, l_linestatus_OPE
+        ORDER BY l_returnflag_OPE, l_linestatus_OPE
+        '''
+
+        ### Perfect statistics ###
         ResultCardinality = 10
+
+        ProjRecordLength = entry_size(
+            ['l_returnflag_det', 'l_linestatus_det', 'l_pack0_agg'] if send_back_det else \
+            ['l_returnflag_ope', 'l_linestatus_ope', 'l_pack0_agg'])
+
         DataSentBack = ResultCardinality * ProjRecordLength
-
-        NumFilesortPages = (numrows * 258.0) / INNODB_PAGE_SIZE
-
-        SortEstimatePageIOs = \
-            NumFilesortPages * log(NumFilesortPages, N_MERGE_BUFFERS)
-
-        SortNumBytesXF = SortEstimatePageIOs * INNODB_PAGE_SIZE
 
         # formulate expr for row length
         encrypt_expr  = str(OPE_ENC)
         rtt_expr      = str(RTT)
         seek_expr     = str(SEEK)
         seq_scan_expr = mult_terms(str(1.0 / READ_BW), table_size_expr)
-        sort_expr     = str((1.0 / ((READ_BW + WRITE_BW) / 2.0)) * SortNumBytesXF)
+        sort_expr     = str(compute_sort_cost(numrows, 258))
         agg_expr      = str(numrows * AGG_ADD)
         xfer_expr     = str((1.0 / NETWORK_BW) * DataSentBack)
-        decrypt_expr  = str((2.0 * DET_DEC + AGG_DEC) * ResultCardinality)
+        decrypt_expr  = \
+            str((2.0 * DET_DEC + AGG_DEC) * ResultCardinality) if send_back_det else \
+            str((2.0 * OPE_DEC + AGG_DEC) * ResultCardinality)
 
         return (
             add_terms_l([encrypt_expr, rtt_expr, seek_expr, seq_scan_expr,
                          sort_expr, agg_expr, xfer_expr, decrypt_expr]),
-            set(['l_returnflag_ope', 'l_linestatus_ope','l_shipdate_ope', 'l_pack0_agg']))
+            set(
+              ['l_returnflag_det', 'l_linestatus_det',
+               'l_returnflag_ope', 'l_linestatus_ope',
+               'l_shipdate_ope', 'l_pack0_agg'] if send_back_det else \
+              ['l_returnflag_ope', 'l_linestatus_ope',
+               'l_shipdate_ope', 'l_pack0_agg']
+              ))
+
+    def plan2(): return plan_opt(False)
+    def plan3(): return plan_opt(True)
+
+    return [plan1(), plan2(), plan3()]
+
+### Query 2 ###
+def query2_cost_functions(table_sizes):
+    '''
+    returns a list of (cost expr, set(required variables))
+    '''
+
+    part_vars       = gen_variables_for_table('p')
+    row_length_expr = add_terms_l([mult_terms(x[0], str(x[1])) for x in part_vars])
+    table_size_expr = mult_terms(str(table_sizes[PART]), row_length_expr)
+
+    def plan1():
+        '''
+        the det only plan:
+
+        query:
+        select
+          s_acctbal, s_name, n_name, p_partkey, p_mfgr,
+          s_address, s_phone, s_comment, [p_size, p_type, ps_supplycost]
+        from
+          part, supplier, partsupp, nation, region
+        where
+          p_partkey = ps_partkey
+          and s_suppkey = ps_suppkey
+          and s_nationkey = n_nationkey
+          and n_regionkey = r_regionkey
+          and r_name = 'ASIA'
+
+        the rest is done server side processing:
+
+        '''
+
+        ### perfect statistics ###
+        ResultSetNRows = 160240
+
+        # we model (imperfectly) as a single sequential scan over
+        # the outer-most join table ( use query opt to determine
+        # join ordering )
+
+        # in this case, explain tells us that PART will be sequentially scanned
+
+        ResultSetEntry = [
+              's_acctbal_det',
+              's_name_det',
+              'n_name_det',
+              'p_partkey_det',
+              'p_mfgr_det',
+              's_address_det',
+              's_phone_det',
+              's_comment_det',
+              'p_size_det',
+              'p_type_det',
+              'ps_supplycost_det']
+
+        ProjRecordLength = entry_size(ResultSetEntry)
+
+        DataSentBack = ResultSetNRows * ProjRecordLength
+
+        encrypt_expr  = str(DET_ENC)
+        rtt_expr      = str(RTT)
+        seek_expr     = str(SEEK)
+        seq_scan_expr = mult_terms(str(1.0 / READ_BW), table_size_expr)
+        xfer_expr     = str((1.0 / NETWORK_BW) * DataSentBack)
+        decrypt_expr  = str((11.0 * DET_DEC) * ResultSetNRows)
+
+        return (
+            add_terms_l([encrypt_expr, rtt_expr, seek_expr, seq_scan_expr,
+                         xfer_expr, decrypt_expr]),
+            set(require_all_det_tbls(['p', 's', 'ps', 'n', 'r'])).intersection(set(ResultSetEntry) ))
+
+    def plan_opt(send_back_det):
+        '''
+        the "translate all ops" plan
+
+        SELECT
+          (s_acctbal_DET | s_acctbal_OPE),
+          (s_name_DET | s_name_OPE),
+          (n_name_DET | n_name_OPE),
+          (p_partkey_DET | p_partkey_OPE),
+          p_mfgr_DET, s_address_DET, s_phone_DET, s_comment_DET, p_type_DET
+        FROM part_enc, supplier_enc, partsupp_enc, nation_enc, region_enc
+        WHERE
+          p_partkey_DET = ps_partkey_DET AND
+          s_suppkey_DET = ps_suppkey_DET AND
+          p_size_DET =   A   AND
+          searchSWP(X, Y, p_type_SWP) = 1 AND
+          s_nationkey_DET = n_nationkey_DET AND
+          n_regionkey_DET = r_regionkey_DET AND
+          r_name_DET = Z AND
+          ps_supplycost_OPE = (
+            SELECT
+              min(ps_supplycost_OPE)
+            FROM partsupp_enc, supplier_enc, nation_enc, region_enc
+            WHERE
+              p_partkey_DET = ps_partkey_DET AND
+              s_suppkey_DET = ps_suppkey_DET AND
+              s_nationkey_DET = n_nationkey_DET AND
+              n_regionkey_DET = r_regionkey_DET AND
+              r_name_DET =   Z  )
+        ORDER BY
+          s_acctbal_OPE DESC, n_name_OPE, s_name_OPE, p_partkey_OPE
+        LIMIT 100
+
+        note, once again, we model this query as only doing a single
+        sequential scan over the part_enc table, and then
+        doing a merge-sort (filesort) on the joined result.
+        '''
+
+        ### Perfect statistics ###
+        NMatchingRows = 443
+        # comes from ORDER BY clause
+        SortEntrySize = entry_size(['s_acctbal_ope', 'n_name_ope', 's_name_ope', 'p_partkey_ope'])
+
+        ResultSetEntry = \
+           ['s_acctbal_det', 's_name_det', 'n_name_det', 'p_partkey_det',
+            'p_mfgr_det', 's_address_det', 's_phone_det', 's_comment_det',
+            'p_type_det'] if send_back_det else \
+           ['s_acctbal_ope', 's_name_ope', 'n_name_ope', 'p_partkey_ope',
+            'p_mfgr_det', 's_address_det', 's_phone_det', 's_comment_det',
+            'p_type_det']
+
+        ResultSetEntrySize = entry_size(ResultSetEntry)
+
+        encrypt_expr  = str( 2 * DET_ENC + SWP_ENC )
+        rtt_expr      = str(RTT)
+        seek_expr     = str(SEEK)
+        seq_scan_expr = mult_terms(str(1.0 / READ_BW), table_size_expr)
+        search_expr   = str( SWP_SEARCH * table_sizes[PART] )
+        sort_expr     = str(compute_sort_cost(NMatchingRows, SortEntrySize))
+        xfer_expr     = str((1.0 / NETWORK_BW) * ResultSetEntrySize * 100.0)
+        decrypt_expr  = \
+            str((9.0 * DET_DEC) * 100.0) if send_back_det else \
+            str((4.0 * OPE_DEC + 5.0 * DET_DEC) * 100.0)
+
+        return (
+            add_terms_l([encrypt_expr, rtt_expr, seek_expr, seq_scan_expr,
+                         search_expr, sort_expr, xfer_expr, decrypt_expr]),
+            set(['p_type_swp', 'ps_supplycost_ope',
+                 's_acctbal_ope', 'n_name_ope', 's_name_ope', 'p_partkey_ope',
+                 's_acctbal_det', 'n_name_det', 's_name_det', 'p_partkey_det']) \
+              if send_back_det else \
+            set(['p_type_swp', 'ps_supplycost_ope',
+                 's_acctbal_ope', 'n_name_ope', 's_name_ope', 'p_partkey_ope']))
+
+    def plan2(): return plan_opt(False)
+    def plan3(): return plan_opt(True)
+
+    return [plan1(), plan2(), plan3()]
+
+### Query 11 ###
+def query11_cost_functions(table_sizes):
+    '''
+    returns a list of (cost expr, set(required variables))
+    '''
+
+    ps_table_size_expr = gen_table_size_expr(table_sizes[PARTSUPP], 'ps')
+
+    def plan1():
+        '''
+        the det only plan:
+
+        query:
+        SELECT
+          ps_partkey_DET, ps_supplycost_DET, ps_availqty_DET
+        FROM partsupp_enc_noopt, supplier_enc, nation_enc
+        WHERE
+          ps_suppkey_DET = s_suppkey_DET AND
+          s_nationkey_DET = n_nationkey_DET AND
+          n_name_DET = X
+
+        (partsupp is the outer-most join table)
+
+        the rest is done server side processing:
+        '''
+
+        ### perfect statistics ###
+        ResultSetNRows = 33040
+
+        ResultSetEntry = ['ps_partkey_det', 'ps_supplycost_det', 'ps_availqty_det']
+
+        ProjRecordLength = entry_size(ResultSetEntry)
+
+        DataSentBack = ResultSetNRows * ProjRecordLength
+
+        encrypt_expr  = str(DET_ENC)
+        rtt_expr      = str(RTT)
+        seek_expr     = str(SEEK)
+        seq_scan_expr = mult_terms(str(1.0 / READ_BW), ps_table_size_expr)
+        xfer_expr     = str((1.0 / NETWORK_BW) * DataSentBack)
+        decrypt_expr  = str((len(ResultSetEntry) * DET_DEC) * ResultSetNRows)
+
+        return (
+            add_terms_l([encrypt_expr, rtt_expr, seek_expr, seq_scan_expr,
+                         xfer_expr, decrypt_expr]),
+            set(require_all_det_tbls(['ps', 's', 'n'])).intersection(set(ResultSetEntry)))
+
+    def plan2():
+        '''
+        the optimized plan
+
+        query:
+        SELECT
+          ps_partkey_DET, agg(ps_pack0)
+        FROM partsupp_enc, supplier_enc, nation_enc
+        WHERE
+          ps_suppkey_DET = s_suppkey_DET AND
+          s_nationkey_DET = n_nationkey_DET AND
+          n_name_DET = X
+        GROUP BY ps_partkey_DET
+
+        NOTE: our cost estimate assumes the outer relation (partsupp)
+        is scanned via index scan. therefore no sorting is needed.
+
+        '''
+
+        ### perfect statistics ###
+        ResultSetNRows = 31110
+
+        ResultSetEntry = ['ps_partkey_det', 'ps_pack0_agg']
+
+        ProjRecordLength = entry_size(ResultSetEntry)
+
+        DataSentBack = ResultSetNRows * ProjRecordLength
+
+        encrypt_expr  = str(DET_ENC)
+        rtt_expr      = str(RTT)
+
+        ### TODO: not sure which one is right to use here ###
+
+        #index_seek_expr = 4.0 * str(SEEK) # TODO: don't just assume 4
+        #index_scan_expr = mult_terms(str(1.0 / READ_BW), gen_index_scan_size_expr(table_sizes[PARTSUPP], 'ps'))
+        seek_expr     = str(SEEK)
+        seq_scan_expr = mult_terms(str(1.0 / READ_BW), ps_table_size_expr)
+
+        xfer_expr     = str((1.0 / NETWORK_BW) * DataSentBack)
+        decrypt_expr  = str(( DET_DEC + AGG_DEC ) * ResultSetNRows)
+
+        return (
+            add_terms_l([encrypt_expr, rtt_expr, seek_expr, seq_scan_expr,
+                         xfer_expr, decrypt_expr]),
+            set(require_all_det_tbls(['ps', 's', 'n'])).intersection(set(ResultSetEntry)))
 
     return [plan1(), plan2()]
 
+### Query 14 ###
+def query14_cost_functions(table_sizes):
+    '''
+    returns a list of (cost expr, set(required variables))
+    '''
+
+    l_table_size_expr = gen_table_size_expr(table_sizes[LINEITEM], 'l')
+
+    def plan1():
+        '''
+        the det only plan:
+
+        query:
+        SELECT p_type_DET, l_extendedprice_DET, l_discount_DET, l_shipdate_DET
+        FROM lineitem_enc_noopt, part_enc
+        WHERE
+          l_partkey_DET = p_partkey_DET
+
+        (lineitem is the outer-most join table)
+
+        the rest is done server side processing:
+        '''
+
+        ### perfect statistics ###
+        ResultSetNRows = 6001215
+
+        ResultSetEntry = ['p_type_det', 'l_extendedprice_det', 'l_discount_det', 'l_shipdate_det']
+
+        ProjRecordLength = entry_size(ResultSetEntry)
+
+        DataSentBack = ResultSetNRows * ProjRecordLength
+
+        rtt_expr      = str(RTT)
+        seek_expr     = str(SEEK)
+        seq_scan_expr = mult_terms(str(1.0 / READ_BW), l_table_size_expr)
+        xfer_expr     = str((1.0 / NETWORK_BW) * DataSentBack)
+        decrypt_expr  = str(( 4.0 * DET_DEC ) * ResultSetNRows)
+
+        return (
+            add_terms_l([rtt_expr, seek_expr, seq_scan_expr,
+                         xfer_expr, decrypt_expr]),
+            set(require_all_det_tbls(['p', 'l'])).intersection(set(ResultSetEntry + ['p_partkey_det'])))
+
+    def plan2():
+        '''
+        the no-agg (but all other opts) plan
+
+        query:
+        SELECT p_type_DET, l_extendedprice_DET, l_discount_DET
+        FROM lineitem_enc_noopt, part_enc
+        WHERE
+          l_partkey_DET = p_partkey_DET AND
+          l_shipdate_OPE >= X AND l_shipdate_OPE < Y
+
+        (lineitem is the outer-most join table)
+
+        the rest is done server side processing:
+        '''
+
+        ### perfect statistics ###
+        ResultSetNRows = 76969
+
+        ResultSetEntry = ['p_type_det', 'l_extendedprice_det', 'l_discount_det']
+
+        ProjRecordLength = entry_size(ResultSetEntry)
+
+        DataSentBack = ResultSetNRows * ProjRecordLength
+
+        encrypt_expr  = str(2.0 * OPE_ENC)
+        rtt_expr      = str(RTT)
+        seek_expr     = str(SEEK)
+        seq_scan_expr = mult_terms(str(1.0 / READ_BW), l_table_size_expr)
+        xfer_expr     = str((1.0 / NETWORK_BW) * DataSentBack)
+        decrypt_expr  = str(( 3.0 * DET_DEC ) * ResultSetNRows)
+
+        return (
+            add_terms_l([encrypt_expr, rtt_expr, seek_expr, seq_scan_expr,
+                         xfer_expr, decrypt_expr]),
+            set(list(set(require_all_det_tbls(['p', 'l'])).intersection(set(ResultSetEntry + ['p_partkey_det']))) + ['l_shipdate_ope']))
+
+    def plan3():
+        '''
+        the optimized plan
+
+        query:
+        SELECT
+          agg(CASE WHEN searchSWP(..., ..., p_type_SWP) = 1 THEN l_pack0_AGG ELSE NULL END, ...),
+          agg(l_pack0_AGG, ...)
+        FROM lineitem_enc, part_enc
+        WHERE
+          l_partkey_DET = p_partkey_DET AND
+          l_shipdate_OPE >= X AND
+          l_shipdate_OPE < Y
+
+        '''
+
+        ### perfect statistics ###
+        IntermediateNRows = 76969
+
+        ResultSetNRows = 1
+        ProjRecordLength = 512
+        DataSentBack = ResultSetNRows * ProjRecordLength
+
+        encrypt_expr  = str(2.0 * OPE_ENC + SWP_ENC)
+        rtt_expr      = str(RTT)
+        seek_expr     = str(SEEK)
+        seq_scan_expr = mult_terms(str(1.0 / READ_BW), l_table_size_expr)
+        agg_expr      = str(( 2.0 * AGG_ADD + SWP_SEARCH ) * IntermediateNRows)
+        xfer_expr     = str((1.0 / NETWORK_BW) * DataSentBack)
+        decrypt_expr  = str(( 2.0 * AGG_DEC ) * ResultSetNRows)
+
+        return (
+            add_terms_l([encrypt_expr, rtt_expr, seek_expr, seq_scan_expr,
+                         agg_expr, xfer_expr, decrypt_expr]),
+            set(['p_type_swp', 'l_pack0_agg', 'l_shipdate_ope', 'p_partkey_det']))
+
+    return [plan1(), plan2(), plan3()]
+
 def get_cost_functions():
-    return [ query1_cost_functions(6000000) ]
-
-
+    table_sizes = {
+        LINEITEM : 6000000,
+        NATION   : 2,
+        PART     : 200000,
+        PARTSUPP : 800000,
+        REGION   : 5,
+        SUPPLIER : 10000,
+    }
+    return [
+             query1_cost_functions(table_sizes),
+             query2_cost_functions(table_sizes),
+             query11_cost_functions(table_sizes),
+             query14_cost_functions(table_sizes),
+           ]
 
 if __name__ == '__main__':
 
@@ -253,6 +713,9 @@ if __name__ == '__main__':
     a_eq = []
     b_eq = []
 
+    c_lt = []
+    c_eq = []
+
     def matlabify(m):
         if not len(m): return '[]';
         if hasattr(m[0], '__iter__'):
@@ -278,12 +741,16 @@ if __name__ == '__main__':
 
         # each query must pick exactly one plan
         # sum Pij = 1
-        a0 = mkZeroRow()
-        for pid in xrange(len(query_plans)):
-            vname = 'P%d%d' % (qid, pid)
-            a0[key[vname]] = 1
-        a_eq.append( a0 )
-        b_eq.append( 1  )
+        #a0 = mkZeroRow()
+        #for pid in xrange(len(query_plans)):
+        #    vname = 'P%d%d' % (qid, pid)
+        #    a0[key[vname]] = 1
+        #a_eq.append( a0 )
+        #b_eq.append( 1  )
+
+        # squares constraint
+        c_eq.append(add_terms_l(['P%d%d^2' % (qid, pid) for pid in xrange(len(query_plans))] + ['-1']))
+
 
     # if given choice, x_DET/x_OPE must be at least one
     for entry in ORIG_COLUMNS:
@@ -291,32 +758,47 @@ if __name__ == '__main__':
         if hasAllBits(entry[1], DET_FLAG | OPE_FLAG):
             # x_DET + x_OPE >= 1
             # => -x_DET + -x_OPE <= -1
-            a0 = mkZeroRow()
-            a0[key['%s_det' % entry[0]]] = -1
-            a0[key['%s_ope' % entry[0]]] = -1
-            a_lt.append( a0 )
-            b_lt.append( -1 )
+            #a0 = mkZeroRow()
+            #a0[key['%s_det' % entry[0]]] = -1
+            #a0[key['%s_ope' % entry[0]]] = -1
+            #a_lt.append( a0 )
+            #b_lt.append( -1 )
+
+            c_lt.append('-(%s_det^2) - (%s_ope^2) + 1' % (entry[0], entry[0]))
+
+    def output_all_vars(fp):
+        for entry in a + b:
+            print >>fp, '  %s = x(%d);' % (entry[0], key[entry[0]] + 1)
+        for query_plans, qid in zip(cost_fcns, xrange(len(cost_fcns))):
+            for plan, pid in zip(query_plans, xrange(len(query_plans))):
+                vname = 'P%d%d' % (qid, pid)
+                print >>fp, '  %s = x(%d);' % (vname, key[vname] + 1)
+
+    fp = open('mycon.m', 'w')
+    print >>fp, 'function [ c, ceq ] = cost_function ( x )'
+
+    output_all_vars(fp)
+    print >>fp, '  c   = %s;' % matlabify(c_lt)
+    print >>fp, '  ceq = %s;' % matlabify(c_eq)
+
+    print >>fp, 'end'
+    fp.close()
 
     # emit cost function file (cost_function.m)
     # matlab is index from 1, not zero
     fp = open('cost_function.m', 'w')
     print >>fp, 'function [ cost ] = cost_function ( x )'
-    for entry in a + b:
-        print >>fp, '  %s = x(%d);' % (entry[0], key[entry[0]] + 1)
-    for query_plans, qid in zip(cost_fcns, xrange(len(cost_fcns))):
-        for plan, pid in zip(query_plans, xrange(len(query_plans))):
-            vname = 'P%d%d' % (qid, pid)
-            print >>fp, '  %s = x(%d);' % (vname, key[vname] + 1)
+
+    output_all_vars(fp)
     cost_fcn_expr = add_terms_l(queries)
     print >>fp, '  cost = %s;' % cost_fcn_expr
+
     print >>fp, 'end'
     fp.close()
 
-    query_vars = []
-    for query_plans, qid in zip(cost_fcns, xrange(len(cost_fcns))):
-        for plan, pid in zip(query_plans, xrange(len(query_plans))):
-            vname = 'P%d%d' % (qid, pid)
-            query_vars.append(vname)
+    query_vars = \
+        ['P%d%d' % (qid, pid) for query_plans, qid in zip(cost_fcns, xrange(len(cost_fcns))) \
+                              for plan, pid in zip(query_plans, xrange(len(query_plans)))]
 
     # emit the interpretation script
     fp = open('interpret_results.m', 'w')
@@ -330,7 +812,7 @@ if __name__ == '__main__':
 
     # emit the script to run
     fp = open('opt_problem.m', 'w')
-    print >>fp, 'x0 = %s;' % matlabify(mkZeroRow())
+    print >>fp, 'x0 = %s;' % matlabify(mkOneRow())
     print >>fp, 'A = %s;' % matlabify(a_lt)
     print >>fp, 'b = %s;' % matlabify(b_lt)
     print >>fp, 'Aeq = %s;' % matlabify(a_eq)
@@ -338,6 +820,18 @@ if __name__ == '__main__':
     print >>fp, 'lb = %s;' % matlabify(mkZeroRow())
     print >>fp, 'ub = %s;' % matlabify(mkOneRow())
     print >>fp, "opts = optimset('Algorithm', 'active-set');"
-    print >>fp, 'x = fmincon(@cost_function,x0,A,b,Aeq,beq,lb,ub,[],opts);'
-    print >>fp, 'interpret_results(x);'
+    print >>fp, 'x = fmincon(@cost_function,x0,A,b,Aeq,beq,lb,ub,@mycon,opts);'
+    print >>fp, '[x, fval, exitflag] = fmincon(@cost_function,x0,A,b,Aeq,beq,lb,ub,@mycon,opts);'
+    print >>fp, 'N_TRIES=3;'
+    print >>fp, 'while exitflag ~= 1 && N_TRIES > 0'
+    print >>fp, '    [x, fval, exitflag] = fmincon(@cost_function,x,A,b,Aeq,beq,lb,ub,@mycon,opts);'
+    print >>fp, '    N_TRIES = N_TRIES - 1;'
+    print >>fp, 'end'
+    print >>fp, 'if exitflag ~= 1'
+    print >>fp, "    disp(sprintf('did not converge after %d iterations', N_TRIES));"
+    print >>fp, 'else'
+    print >>fp, '    interpret_results(x);'
+    print >>fp, 'end'
     fp.close()
+
+# vim: set sw=4
