@@ -4,6 +4,7 @@ CREATE TABLE part_enc (
   `p_partkey_OPE` bigint(20) unsigned DEFAULT NULL,
 
   `p_name_DET` varbinary(55) DEFAULT NULL,
+  `p_name_SWP` varbinary(255) DEFAULT NULL,
 
   `p_mfgr_DET` varbinary(25) DEFAULT NULL,
 
