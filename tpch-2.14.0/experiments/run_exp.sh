@@ -57,7 +57,7 @@ for factor in $SCALES; do
 
     mkdir -p scale-$factor
     cd scale-$factor
-    rm -f {orig,crypt}.query{1,2,11,14}
+    rm -f {orig,crypt}.*query{1,2,11,14,20}
 
     for i in {1..5}; do
         /usr/bin/time -f '%e' -o orig.query1 -a $CDB_EXP --orig-query1 1998 1 tpch-$factor
@@ -86,6 +86,13 @@ for factor in $SCALES; do
         /usr/bin/time -f '%e' -o crypt.noopt.query14 -a $CDB_EXP --crypt-query14 1996 1 tpch-$factor
         reset_exp
         /usr/bin/time -f '%e' -o crypt.noopt.opttables.query14 -a $CDB_EXP --crypt-opt-tables-query14 1996 1 tpch-$factor
+        reset_exp
+
+        /usr/bin/time -f '%e' -o orig.query20 -a $CDB_EXP --orig-query20 1997 khaki ALGERIA 1 tpch-$factor
+        reset_exp
+        /usr/bin/time -f '%e' -o crypt.noagg.query20 -a $CDB_EXP --crypt-noagg-query20 1997 khaki ALGERIA 1 tpch-$factor
+        reset_exp
+        /usr/bin/time -f '%e' -o crypt.agg.query20 -a $CDB_EXP --crypt-agg-query20 1997 khaki ALGERIA 1 tpch-$factor
         reset_exp
 
     done
