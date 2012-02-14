@@ -350,6 +350,19 @@ struct q2entry {
   string s_comment;
 };
 
+struct q20entry {
+    q20entry(const string& s_name,
+             const string& s_address)
+        : s_name(s_name), s_address(s_address) {}
+    string s_name;
+    string s_address;
+};
+
+inline ostream& operator<<(ostream &o, const q20entry &q) {
+    o << q.s_name << "|" << q.s_address;
+    return o;
+}
+
 inline ostream& operator<<(ostream &o, const q2entry &q) {
   o << q.s_acctbal << "|"
     << q.s_name << "|"
@@ -715,6 +728,7 @@ static void do_query_q1_noopt(Connect &conn,
 
       << "FROM lineitem_enc_noopt "
       << "WHERE l_shipdate_OPE <= " << encDATE;
+    cerr << s.str() << endl;
 
     {
       NamedTimer t(__func__, "execute");
@@ -1040,6 +1054,7 @@ static void do_query_q14_opt(Connect &conn,
         << "l_partkey_DET = p_partkey_DET AND "
         << "l_shipdate_OPE >= " << encDateLower << " AND "
         << "l_shipdate_OPE < " << encDateUpper;
+    cerr << s.str() << endl;
 
     DBResult * dbres;
     {
@@ -1152,6 +1167,7 @@ static void do_query_q14(Connect &conn,
 
     ostringstream s;
     s << "select SQL_NO_CACHE 100.00 * sum(case when p_type like 'PROMO%' then l_extendedprice * (1 - l_discount) else 0 end) / sum(l_extendedprice * (1 - l_discount)) as promo_revenue from LINEITEM, PART where l_partkey = p_partkey and l_shipdate >= date '" << year << "-07-01' and l_shipdate < date '" << year << "-07-01' + interval '1' month";
+    cerr << s.str() << endl;
 
     DBResult * dbres;
     {
@@ -1931,6 +1947,262 @@ static void do_query_q2_noopt(Connect &conn,
     }
 }
 
+static void do_query_q20(Connect &conn,
+                         uint64_t year,
+                         const string &p_name,
+                         const string &n_name,
+                         vector<q20entry> &results) {
+    NamedTimer fcnTimer(__func__);
+
+    ostringstream s;
+
+    s <<
+    "select SQL_NO_CACHE s_name, s_address from SUPPLIER, NATION "
+    "where s_suppkey in ( "
+        "select ps_suppkey from ( "
+        "select ps_suppkey, ps_availqty from PARTSUPP, LINEITEM "
+        " where "
+        "     ps_partkey = l_partkey and "
+        "     ps_suppkey = l_suppkey and "
+        "     ps_partkey in ( "
+        // TODO: this is slight deviation from TPC-H query, but it makes
+        // the comparison more fair (like 'token%' is probably implemented
+        // efficiently as a prefix scan)
+        "       select p_partkey from PART where p_name like '%" << p_name << "%' "
+        "     ) "
+        "     and l_shipdate >= date '" << year << "-01-01'"
+        "     and l_shipdate < date '" << year << "-01-01' + interval '1' year"
+        " group by ps_partkey, ps_suppkey "
+        " having ps_availqty > 0.5 * sum(l_quantity) "
+        ") as __anon__ "
+    ") "
+    "and s_nationkey = n_nationkey "
+    "and n_name = '" << n_name << "' "
+    "order by s_name";
+    cerr << s.str() << endl;
+
+    DBResult * dbres;
+    {
+      NamedTimer t(__func__, "execute");
+      conn.execute(s.str(), dbres);
+    }
+    ResType res;
+    {
+      NamedTimer t(__func__, "unpack");
+      res = dbres->unpack();
+      assert(res.ok);
+    }
+
+    results.reserve(res.rows.size());
+    for (auto row : res.rows) {
+      results.push_back(q20entry(row[0].data, row[1].data));
+    }
+}
+
+static void do_query_q20_opt_noagg(Connect &conn,
+                                   CryptoManager& cm,
+                                   uint64_t year,
+                                   const string &p_name,
+                                   const string &n_name,
+                                   vector<q20entry> &results) {
+    crypto_manager_stub cm_stub(&cm);
+    NamedTimer fcnTimer(__func__);
+
+    assert(n_name.size() <= 25);
+
+    string lowerpname(lower_s(p_name));
+
+    bool isBin = false;
+    string encDATE_START = cm_stub.crypt<3>(cm.getmkey(), strFromVal(EncodeDate(1, 1, year)),
+                              TYPE_INTEGER, fieldname(lineitem::l_shipdate, "OPE"),
+                              getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
+    assert(!isBin);
+    string encDATE_END = cm_stub.crypt<3>(cm.getmkey(), strFromVal(EncodeDate(1, 1, year + 1)),
+                              TYPE_INTEGER, fieldname(lineitem::l_shipdate, "OPE"),
+                              getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
+    assert(!isBin);
+
+    string encNAME = cm_stub.crypt(cm.getmkey(), n_name, TYPE_TEXT,
+                              fieldname(nation::n_name, "DET"),
+                              getMin(oDET), SECLEVEL::DET, isBin, 12345);
+    assert(n_name.size() == encNAME.size());
+    assert(isBin);
+
+    // right-pad encNAME with 0's
+    encNAME.resize(25);
+
+    Binary key(cm.getKey(cm.getmkey(), fieldname(part::p_name, "SWP"), SECLEVEL::SWP));
+    Token t = CryptoManager::token(key, Binary(lowerpname));
+
+    ostringstream s;
+    s <<
+        "select SQL_NO_CACHE ps_partkey_DET, ps_suppkey_DET, ps_availqty_DET, l_quantity_DET "
+        "from partsupp_enc, lineitem_enc "
+        "where "
+        "    ps_partkey_DET = l_partkey_DET and "
+        "    ps_suppkey_DET = l_suppkey_DET and "
+        "    ps_partkey_DET in ( "
+        "      select p_partkey_DET from part_enc where searchSWP("
+          << marshallBinary(string((char *)t.ciph.content, t.ciph.len))
+          << ", "
+          << marshallBinary(string((char *)t.wordKey.content, t.wordKey.len))
+          << ", p_name_SWP) = 1 "
+        "    ) "
+        "    and l_shipdate_OPE >= " << encDATE_START <<
+        "    and l_shipdate_OPE < " << encDATE_END;
+    cerr << s.str() << endl;
+
+    DBResult * dbres;
+
+    //{
+    //    ostringstream s;
+    //    s<<"      select p_partkey_DET, p_name_DET from part_enc where searchSWP("
+    //      << marshallBinary(string((char *)t.ciph.content, t.ciph.len))
+    //      << ", "
+    //      << marshallBinary(string((char *)t.wordKey.content, t.wordKey.len))
+    //      << ", p_name_SWP) = 1 ";
+
+    //    conn.execute(s.str(), dbres);
+    //    ResType res;
+    //    res = dbres->unpack();
+    //    assert(res.ok);
+
+    //    for (auto row : res.rows) {
+    //        string p_name = decryptRow<string>(
+    //                row[1].data,
+    //                12345,
+    //                fieldname(part::p_name, "DET"),
+    //                TYPE_TEXT,
+    //                oDET,
+    //                cm);
+    //        cout << p_name << endl;
+    //    }
+    //}
+
+
+    {
+        NamedTimer t(__func__, "execute");
+        conn.execute(s.str(), dbres);
+    }
+    ResType res;
+    {
+        NamedTimer t(__func__, "unpack");
+        res = dbres->unpack();
+        assert(res.ok);
+    }
+
+    typedef pair<string, string> MapKey;
+    typedef pair<uint64_t, double> MapValue;
+    typedef map<MapKey, MapValue> AggMap;
+    AggMap groupBy;
+    {
+        NamedTimer t(__func__, "decrypt");
+
+        for (auto row : res.rows) {
+            // decrypt availqty
+            uint64_t ps_availqty = decryptRow<uint64_t>(
+                row[2].data,
+                12345,
+                fieldname(partsupp::ps_availqty, "DET"),
+                TYPE_INTEGER,
+                oDET,
+                cm);
+
+            // decrypt l_quantity
+            uint64_t l_quantity_int = decryptRow<uint64_t, 7>(
+                    row[3].data,
+                    12345,
+                    fieldname(lineitem::l_quantity, "DET"),
+                    TYPE_INTEGER,
+                    oDET,
+                    cm);
+            double l_quantity = ((double)l_quantity_int)/100.0;
+
+            pair<AggMap::iterator, bool> res =
+                groupBy.insert(make_pair(
+                            make_pair(row[0].data, row[1].data),
+                            make_pair(ps_availqty, l_quantity)));
+
+            if (!res.second) {
+                // not inserted, need to update group
+                assert(res.first->second.first == ps_availqty);
+                res.first->second.second += l_quantity;
+            } else {
+                // inserted, nothing to do
+            }
+        }
+    }
+
+    // filter out the necessary ps_suppkeys
+    vector<string> s_suppkeys;
+    s_suppkeys.reserve(groupBy.size());
+    for (AggMap::iterator it = groupBy.begin();
+         it != groupBy.end(); ++it) {
+        if ((double)it->second.first > 0.5 * it->second.second) {
+            s_suppkeys.push_back(it->first.second);
+        }
+    }
+
+    std::set<string> s_suppkeys_set(s_suppkeys.begin(), s_suppkeys.end());
+    s_suppkeys.clear();
+    s_suppkeys.insert(s_suppkeys.begin(), s_suppkeys_set.begin(), s_suppkeys_set.end());
+
+    assert(!s_suppkeys.empty());
+
+    ostringstream s1;
+    s1 <<
+        "select s_name_DET, s_address_DET "
+        "from supplier_enc, nation_enc "
+        "where "
+        "  s_suppkey_DET in (" << join(s_suppkeys, ", ") << ") and "
+        "  s_nationkey_DET = n_nationkey_DET and "
+        "  n_name_DET = " << marshallBinary(encNAME) << " "
+        "order by s_name_OPE";
+    //cerr << s1.str() << endl;
+
+    {
+      NamedTimer t(__func__, "execute");
+      conn.execute(s1.str(), dbres);
+    }
+    {
+      NamedTimer t(__func__, "unpack");
+      res = dbres->unpack();
+      assert(res.ok);
+    }
+
+    results.reserve(res.rows.size());
+    for (auto row : res.rows) {
+        string s_name = decryptRow<string>(
+                row[0].data,
+                12345,
+                fieldname(supplier::s_name, "DET"),
+                TYPE_TEXT,
+                oDET,
+                cm);
+        string s_address = decryptRow<string>(
+                row[1].data,
+                12345,
+                fieldname(supplier::s_address, "DET"),
+                TYPE_TEXT,
+                oDET,
+                cm);
+        results.push_back(q20entry(s_name, s_address));
+    }
+}
+
+static void do_query_q20_opt(Connect &conn,
+                             CryptoManager& cm,
+                             uint64_t year,
+                             const string &p_name,
+                             const string &n_name,
+                             vector<q20entry> &results) {
+    NamedTimer fcnTimer(__func__);
+
+    ostringstream s;
+
+
+}
+
 static inline uint32_t random_year() {
     static const uint32_t gap = 1999 - 1993 + 1;
     return 1993 + (rand() % gap);
@@ -1951,6 +2223,7 @@ enum query_selection {
   query2,
   query11,
   query14,
+  query20,
 };
 
 int main(int argc, char **argv) {
@@ -1994,6 +2267,14 @@ int main(int argc, char **argv) {
     std::set<string> Query14Modes
       (Query14Strings, Query14Strings + NELEMS(Query14Strings));
 
+    static const char * Query20Strings[] = {
+        "--orig-query20",
+        "--crypt-noagg-query20",
+        "--crypt-agg-query20",
+    };
+    std::set<string> Query20Modes
+      (Query20Strings, Query20Strings + NELEMS(Query20Strings));
+
     enum query_selection q;
 
     if (Query1Modes.find(argv[1]) != Query1Modes.end()) {
@@ -2004,6 +2285,8 @@ int main(int argc, char **argv) {
         q = query11;
     } else if (Query14Modes.find(argv[1]) != Query14Modes.end()) {
         q = query14;
+    } else if (Query20Modes.find(argv[1]) != Query20Modes.end()) {
+        q = query20;
     } else {
         usage(argv);
         return 1;
@@ -2017,6 +2300,7 @@ int main(int argc, char **argv) {
       case query2: input_nruns = atoi(argv[5]); db_name = argv[6]; break;
       case query11: input_nruns = atoi(argv[4]); db_name = argv[5]; break;
       case query14: input_nruns = atoi(argv[3]); db_name = argv[4]; break;
+      case query20: input_nruns = atoi(argv[5]); db_name = argv[6]; break;
     }
     uint32_t nruns = (uint32_t) input_nruns;
 
@@ -2169,6 +2453,39 @@ int main(int argc, char **argv) {
           } else if (mode == "crypt-opt-query14") {
             for (size_t i = 0; i < nruns; i++) {
               do_query_q14_opt(conn, cm, year, results);
+              ctr += results.size();
+              PRINT_RESULTS();
+              results.clear();
+            }
+          } else assert(false);
+        }
+        break;
+      case query20:
+        {
+          int input_year = atoi(argv[2]);
+          assert(input_year >= 0);
+          uint32_t year = (uint32_t) input_year;
+          string p_name = argv[3];
+          string n_name = argv[4];
+          vector<q20entry> results;
+
+          if (mode == "orig-query20") {
+            for (size_t i = 0; i < nruns; i++) {
+              do_query_q20(conn, year, p_name, n_name, results);
+              ctr += results.size();
+              PRINT_RESULTS();
+              results.clear();
+            }
+          } else if (mode == "crypt-noagg-query20") {
+            for (size_t i = 0; i < nruns; i++) {
+              do_query_q20_opt_noagg(conn, cm, year, p_name, n_name, results);
+              ctr += results.size();
+              PRINT_RESULTS();
+              results.clear();
+            }
+          } else if (mode == "crypt-agg-query20") {
+            for (size_t i = 0; i < nruns; i++) {
+              do_query_q20_opt(conn, cm, year, p_name, n_name, results);
               ctr += results.size();
               PRINT_RESULTS();
               results.clear();

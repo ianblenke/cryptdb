@@ -1101,7 +1101,7 @@ static const vector<datatypes> PartSchema = {
 
 static const vector<int> PartOnions = {
   ONION_DETJOIN | ONION_OPE,
-  ONION_DET,
+  ONION_DET | ONION_SEARCH,
   ONION_DET,
   ONION_DET,
   ONION_DET | ONION_SEARCH,
