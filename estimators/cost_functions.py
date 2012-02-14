@@ -722,25 +722,22 @@ def query20_cost_functions(table_sizes):
 
         def q2_expr():
             ### perfect statistics ###
-            NumPartKeys      = 2143
-            ResultSetNRows   = 64460
+            ResultSetNRows   = 321993
             ResultSetEntry   = ['ps_partkey_det', 'ps_suppkey_det', 'ps_availqty_det', 'l_shipdate_det']
             ProjRecordLength = entry_size(ResultSetEntry)
             DataSentBack     = ResultSetNRows * ProjRecordLength
 
-            encrypt_expr  = str(DET_ENC * NumPartKeys)
             rtt_expr      = str(RTT)
             seek_expr     = str(SEEK)
             seq_scan_expr = mult_terms(str(1.0 / READ_BW), l_table_size_expr)
             xfer_expr     = str((1.0 / NETWORK_BW) * DataSentBack)
-            decrypt_expr  = str(len(ResultSetEntry) * DET_DEC * ResultSetNRows)
+            decrypt_expr  = str(2.0 * DET_DEC * ResultSetNRows)
 
-            return add_terms_l([encrypt_expr, rtt_expr, seek_expr, seq_scan_expr, xfer_expr, decrypt_expr])
+            return add_terms_l([rtt_expr, seek_expr, seq_scan_expr, xfer_expr, decrypt_expr])
 
         def q3_expr():
             ### perfect statistics ###
-            NumSuppKeys      = 5789
-            ResultSetNRows   = 177
+            ResultSetNRows   = 404
             ResultSetEntry   = ['s_name_det', 's_address_det']
             ProjRecordLength = entry_size(ResultSetEntry)
             DataSentBack     = ResultSetNRows * ProjRecordLength
@@ -792,12 +789,12 @@ def query20_cost_functions(table_sizes):
 
         def q1_expr():
             ### perfect statistics ###
-            ResultSetNRows   = 9645
+            ResultSetNRows   = 48822
             ResultSetEntry   = ['ps_partkey_det', 'ps_suppkey_det', 'ps_availqty_det', 'l_quantity_det']
             ProjRecordLength = entry_size(ResultSetEntry)
             DataSentBack     = ResultSetNRows * ProjRecordLength
 
-            encrypt_expr  = str(OPE_ENC * 2)
+            encrypt_expr  = str(SWP_ENC + OPE_ENC * 2)
             rtt_expr      = str(RTT)
 
             # inner query
@@ -810,15 +807,14 @@ def query20_cost_functions(table_sizes):
             seq_scan_expr1 = mult_terms(str(1.0 / READ_BW), l_table_size_expr)
 
             xfer_expr     = str((1.0 / NETWORK_BW) * DataSentBack)
-            decrypt_expr  = str(len(ResultSetEntry) * DET_DEC * ResultSetNRows)
+            decrypt_expr  = str(2.0 * DET_DEC * ResultSetNRows)
 
             return add_terms_l([ encrypt_expr, rtt_expr, seek_expr, seq_scan_expr, search_expr,
                                  seek_expr1, seq_scan_expr1, xfer_expr, decrypt_expr ])
 
         def q2_expr():
             ### perfect statistics ###
-            NumSuppKeys      = 5789
-            ResultSetNRows   = 177
+            ResultSetNRows   = 404
             ResultSetEntry   = ['s_name_det', 's_address_det']
             ProjRecordLength = entry_size(ResultSetEntry)
             DataSentBack     = ResultSetNRows * ProjRecordLength
@@ -874,15 +870,15 @@ def query20_cost_functions(table_sizes):
 
         def q1_expr():
             ### perfect statistics ###
-            ResultSetNRows   = 5798
+            ResultSetNRows   = 29096
             ResultSetEntry   = ['ps_suppkey_det', 'ps_availqty_det', 'l_pack0_agg']
             ProjRecordLength = entry_size(ResultSetEntry)
             DataSentBack     = ResultSetNRows * ProjRecordLength
 
             SortEntry    = ['ps_partkey_det', 'ps_suppkey_det', 'ps_availqty_det', 'l_pack0_agg']
-            SortNEntries = 9645
+            SortNEntries = 48822
 
-            encrypt_expr  = str(OPE_ENC * 2)
+            encrypt_expr  = str(SWP_ENC + OPE_ENC * 2)
             rtt_expr      = str(RTT)
 
             # inner query
@@ -896,15 +892,14 @@ def query20_cost_functions(table_sizes):
             sort_expr1     = str(compute_sort_cost(SortNEntries, entry_size(SortEntry)))
 
             xfer_expr     = str((1.0 / NETWORK_BW) * DataSentBack)
-            decrypt_expr  = str((2 * DET_DEC + AGG_DEC) * ResultSetNRows)
+            decrypt_expr  = str((DET_DEC + AGG_DEC) * ResultSetNRows)
 
             return add_terms_l([ encrypt_expr, rtt_expr, seek_expr, seq_scan_expr, search_expr,
                                  seek_expr1, seq_scan_expr1, sort_expr1, xfer_expr, decrypt_expr ])
 
         def q2_expr():
             ### perfect statistics ###
-            NumSuppKeys      = 5789
-            ResultSetNRows   = 177
+            ResultSetNRows   = 404
             ResultSetEntry   = ['s_name_det', 's_address_det']
             ProjRecordLength = entry_size(ResultSetEntry)
             DataSentBack     = ResultSetNRows * ProjRecordLength
