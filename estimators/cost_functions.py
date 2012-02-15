@@ -16,6 +16,8 @@ PART     = 2
 PARTSUPP = 3
 REGION   = 4
 SUPPLIER = 5
+CUSTOMER = 6
+ORDERS   = 7
 
 TABLE_PREFIXES = [
     ('l',  LINEITEM),
@@ -23,7 +25,9 @@ TABLE_PREFIXES = [
     ('p',  PART),
     ('ps', PARTSUPP),
     ('r',  REGION),
-    ('s',  SUPPLIER)
+    ('s',  SUPPLIER),
+    ('c',  CUSTOMER),
+    ('o',  ORDERS),
   ]
 
 ### generate the x variables ###
@@ -75,7 +79,7 @@ ORIG_COLUMNS = [
     ('r_name', DET_FLAG, 25),
     ('r_comment', DET_FLAG, 152),
 
-    ## SUPPLIER table ###
+    ### SUPPLIER table ###
     ('s_suppkey', DET_FLAG | PK_FLAG, 4),
     ('s_name', DET_FLAG | OPE_FLAG, 25),
     ('s_address', DET_FLAG, 40),
@@ -83,6 +87,27 @@ ORIG_COLUMNS = [
     ('s_phone', DET_FLAG, 15),
     ('s_acctbal', DET_FLAG | OPE_FLAG, 8),
     ('s_comment', DET_FLAG, 101),
+
+    ### CUSTOMER table ###
+    ('c_custkey', DET_FLAG | PK_FLAG, 4),
+    ('c_name', DET_FLAG, 25),
+    ('c_address', DET_FLAG, 40),
+    ('c_nationkey', DET_FLAG, 4),
+    ('c_phone', DET_FLAG, 15),
+    ('c_acctbal', DET_FLAG, 8),
+    ('c_mktsegment', DET_FLAG, 10),
+    ('c_comment', DET_FLAG, 117),
+
+    ### ORDERS table ###
+    ('o_orderkey', DET_FLAG | PK_FLAG, 4),
+    ('o_custkey', DET_FLAG, 4),
+    ('o_orderstatus', DET_FLAG, 1),
+    ('o_totalprice', DET_FLAG | OPE_FLAG, 8),
+    ('o_orderdate', DET_FLAG | OPE_FLAG, 3),
+    ('o_orderpriority', DET_FLAG, 15),
+    ('o_clerk', DET_FLAG, 15),
+    ('o_shippriority', DET_FLAG, 4),
+    ('o_comment', DET_FLAG, 79),
 ]
 
 ### generate the y variables ###
@@ -667,6 +692,173 @@ def query14_cost_functions(table_sizes):
 
     return [plan1(), plan2(), plan3()]
 
+### Query 18 ###
+def query18_cost_functions(table_sizes):
+    '''
+    returns a list of (cost expr, set(required variables))
+    '''
+
+    l_table_size_expr = gen_table_size_expr(table_sizes[LINEITEM], 'l')
+    o_table_size_expr = gen_table_size_expr(table_sizes[ORDERS], 'o')
+
+    def plan1():
+        '''
+        query1:
+        select l_orderkey_DET, l_quantity_DET from lineitem
+
+        query2:
+        select
+            c_name_DET, c_custkey_DET, o_orderkey_DET,
+            o_orderdate_DET, o_totalprice_DET, agg(l_pack0_AGG, ...)
+        from
+            customer, orders, lineitem
+        where
+            o_orderkey_DET in (...)
+            and c_custkey_DET = o_custkey_DET
+            and o_orderkey_DET = l_orderkey_DET
+        group by
+            c_name_DET,
+            c_custkey_DET,
+            o_orderkey_DET,
+            o_orderdate_DET,
+            o_totalprice_DET
+        order by
+            o_totalprice_OPE desc,
+            o_orderdate_OPE
+        limit 100
+
+        (orders is outer-join table)
+        '''
+
+        def q1_expr():
+            ResultSetEntry = ['l_orderkey_det', 'l_quantity_det']
+            ResultSetEntrySize = entry_size(ResultSetEntry)
+
+            rtt_expr      = str(RTT)
+            seek_expr     = str(SEEK)
+            seq_scan_expr = mult_terms(str(1.0 / READ_BW), l_table_size_expr)
+            xfer_expr     = str((1.0 / NETWORK_BW) * ResultSetEntrySize * table_sizes[LINEITEM])
+            decrypt_expr  = str(DET_DEC * table_sizes[LINEITEM])
+
+            return add_terms_l([rtt_expr, seek_expr, seq_scan_expr, xfer_expr, decrypt_expr])
+
+        def q2_expr():
+            ### perfect statistics ###
+            ResultSetNElems = 9
+            NSortEntries = 63
+
+            ResultSetEntry = [
+                'c_name_det', 'c_custkey_det', 'o_orderkey_det',
+                'o_orderdate_det', 'o_totalprice_det', 'l_pack0_agg' ]
+            ResultSetEntrySize = entry_size(ResultSetEntry)
+
+            SortEntry = [
+                'o_totalprice_ope',
+                'o_orderdate_ope',
+                'c_name_det',
+                'c_custkey_det',
+                'o_orderkey_det',
+                'l_pack0_agg',
+            ]
+            SortEntrySize = entry_size(SortEntry)
+
+            rtt_expr      = str(RTT)
+            seek_expr     = str(SEEK)
+            seq_scan_expr = mult_terms(str(1.0 / READ_BW), o_table_size_expr)
+            sort_expr     = str(compute_sort_cost(NSortEntries, SortEntrySize))
+            xfer_expr     = str((1.0 / NETWORK_BW) * ResultSetEntrySize * ResultSetNElems)
+            decrypt_expr  = str((5.0 * DET_DEC + AGG_DEC)*ResultSetNElems)
+
+            return add_terms_l([rtt_expr, seek_expr, seq_scan_expr, sort_expr, xfer_expr, decrypt_expr])
+
+        return (
+            add_terms(q1_expr(), q2_expr()),
+            set(require_all_det_tbls(['l', 'o', 'c'])).intersection(
+              set(['l_orderkey_det', 'l_quantity_det',
+                   'c_name_det', 'c_custkey_det', 'o_orderkey_det',
+                   'o_orderdate_det', 'o_totalprice_det', 'o_custkey_det'])))
+
+    def plan2():
+        '''
+        query1:
+        select l_orderkey_DET, agg(l_pack0_AGG, ...) from lineitem group by l_orderkey_DET
+
+        query2:
+        select
+            c_name_DET, c_custkey_DET, o_orderkey_DET,
+            o_orderdate_DET, o_totalprice_DET, agg(l_pack0_AGG, ...)
+        from
+            customer, orders, lineitem
+        where
+            o_orderkey_DET in (...)
+            and c_custkey_DET = o_custkey_DET
+            and o_orderkey_DET = l_orderkey_DET
+        group by
+            c_name_DET,
+            c_custkey_DET,
+            o_orderkey_DET,
+            o_orderdate_DET,
+            o_totalprice_DET
+        order by
+            o_totalprice_OPE desc,
+            o_orderdate_OPE
+        limit 100
+        '''
+
+        def q1_expr():
+            ### perfect statistics ###
+            ResultSetNElems = 1500000
+
+            ResultSetEntry = ['l_orderkey_det', 'l_pack0_agg']
+            ResultSetEntrySize = entry_size(ResultSetEntry)
+
+            rtt_expr      = str(RTT)
+            seek_expr     = str(SEEK)
+            seq_scan_expr = mult_terms(str(1.0 / READ_BW), l_table_size_expr)
+            agg_expr      = str(AGG_ADD * table_sizes[LINEITEM])
+            xfer_expr     = str((1.0 / NETWORK_BW) * ResultSetEntrySize * ResultSetNElems)
+            decrypt_expr  = str(AGG_DEC * ResultSetNElems)
+
+            return add_terms_l([rtt_expr, seek_expr, seq_scan_expr, agg_expr, xfer_expr, decrypt_expr])
+
+        def q2_expr():
+            ### perfect statistics ###
+            ResultSetNElems = 9
+            NSortEntries = 63
+
+            ResultSetEntry = [
+                'c_name_det', 'c_custkey_det', 'o_orderkey_det',
+                'o_orderdate_det', 'o_totalprice_det', 'l_pack0_agg' ]
+            ResultSetEntrySize = entry_size(ResultSetEntry)
+
+            SortEntry = [
+                'o_totalprice_ope',
+                'o_orderdate_ope',
+                'c_name_det',
+                'c_custkey_det',
+                'o_orderkey_det',
+                'l_pack0_agg',
+            ]
+            SortEntrySize = entry_size(SortEntry)
+
+            rtt_expr      = str(RTT)
+            seek_expr     = str(SEEK)
+            seq_scan_expr = mult_terms(str(1.0 / READ_BW), o_table_size_expr)
+            sort_expr     = str(compute_sort_cost(NSortEntries, SortEntrySize))
+            xfer_expr     = str((1.0 / NETWORK_BW) * ResultSetEntrySize * ResultSetNElems)
+            decrypt_expr  = str((5.0 * DET_DEC + AGG_DEC)*ResultSetNElems)
+
+            return add_terms_l([rtt_expr, seek_expr, seq_scan_expr, sort_expr, xfer_expr, decrypt_expr])
+
+        return (
+            add_terms(q1_expr(), q2_expr()),
+            set(require_all_det_tbls(['l', 'o', 'c'])).intersection(
+              set(['l_orderkey_det', 'l_quantity_det',
+                   'c_name_det', 'c_custkey_det', 'o_orderkey_det',
+                   'o_orderdate_det', 'o_totalprice_det', 'o_custkey_det'])))
+
+    return [plan1(), plan2()]
+
 ### Query 20 ###
 def query20_cost_functions(table_sizes):
     '''
@@ -931,12 +1123,13 @@ def get_cost_functions(table_sizes):
              query2_cost_functions(table_sizes),
              query11_cost_functions(table_sizes),
              query14_cost_functions(table_sizes),
+             query18_cost_functions(table_sizes),
              query20_cost_functions(table_sizes),
            ]
 
 if __name__ == '__main__':
 
-    TPCH_SCALE = 10.0
+    TPCH_SCALE = 1.0
 
     table_sizes = {
         LINEITEM : TPCH_SCALE * 6001215,
@@ -945,6 +1138,8 @@ if __name__ == '__main__':
         PARTSUPP : TPCH_SCALE * 800000,
         REGION   : 5,
         SUPPLIER : TPCH_SCALE * 10000,
+        CUSTOMER : TPCH_SCALE * 150000,
+        ORDERS   : TPCH_SCALE * 1500000,
     }
 
     cost_fcns = get_cost_functions(table_sizes)
