@@ -88,6 +88,11 @@ for factor in $SCALES; do
         /usr/bin/time -f '%e' -o crypt.noopt.opttables.query14 -a $CDB_EXP --crypt-opt-tables-query14 1996 1 tpch-$factor
         reset_exp
 
+        /usr/bin/time -f '%e' -o orig.query18 -a $CDB_EXP --orig-query18 315 1 tpch-$factor
+        reset_exp
+        /usr/bin/time -f '%e' -o crypt.query18 -a $CDB_EXP --crypt-query18 315 1 tpch-$factor
+        reset_exp
+
         /usr/bin/time -f '%e' -o orig.query20 -a $CDB_EXP --orig-query20 1997 khaki ALGERIA 1 tpch-$factor
         reset_exp
         /usr/bin/time -f '%e' -o crypt.noagg.query20 -a $CDB_EXP --crypt-noagg-query20 1997 khaki ALGERIA 1 tpch-$factor
