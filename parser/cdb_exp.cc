@@ -2090,6 +2090,8 @@ static void do_query_q18_crypt(Connect &conn,
                                vector<q18entry> &results) {
     NamedTimer fcnTimer(__func__);
 
+    double L_QUANTITY_MAX = 50.0; // comes from statistics
+
     ostringstream s;
 
     // query 1
@@ -2108,26 +2110,40 @@ static void do_query_q18_crypt(Connect &conn,
     }
 
     vector<string> l_orderkeys;
-    for (auto row : res.rows) {
-        vector<string> ciphers;
-        tokenize(row[1].data, ",", ciphers);
-        assert(!ciphers.empty());
+    {
+        NamedTimer t(__func__, "aggregating");
+        for (auto row : res.rows) {
+            vector<string> ciphers;
+            tokenize(row[1].data, ",", ciphers);
+            assert(!ciphers.empty());
 
-        double sum = 0.0;
-        for (vector<string>::iterator it = ciphers.begin();
-             it != ciphers.end(); ++it) {
-            uint64_t l_quantity_int = decryptRow<uint64_t, 7>(
-                    *it,
-                    12345,
-                    fieldname(lineitem::l_quantity, "DET"),
-                    TYPE_INTEGER,
-                    oDET,
-                    cm);
-            double l_quantity = ((double)l_quantity_int)/100.0;
-            sum += l_quantity;
+            double sum = 0.0;
+            for (vector<string>::iterator it = ciphers.begin();
+                 it != ciphers.end(); ++it) {
+                uint64_t l_quantity_int = decryptRow<uint64_t, 7>(
+                        *it,
+                        12345,
+                        fieldname(lineitem::l_quantity, "DET"),
+                        TYPE_INTEGER,
+                        oDET,
+                        cm);
+                double l_quantity = ((double)l_quantity_int)/100.0;
+                sum += l_quantity;
+
+                // short circuit evaluations:
+
+                // if we are already past the threshold, then quit
+                if (sum > (double) threshold) break;
+
+                // if its impossible to reach the threshold even if assuming
+                // the remaining entries are all L_QUANTITY_MAX, then we can
+                // just quit now, w/o decrypting the rest of the entries
+                if ((sum + ((double)(ciphers.end() - (it + 1))) * L_QUANTITY_MAX) <=
+                    (double) threshold) break;
+            }
+
+            if (sum > (double) threshold) l_orderkeys.push_back(row[0].data);
         }
-
-        if (sum > (double) threshold) l_orderkeys.push_back(row[0].data);
     }
 
     ostringstream s1;
