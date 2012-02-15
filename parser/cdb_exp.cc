@@ -2092,10 +2092,17 @@ static void do_query_q18_crypt(Connect &conn,
 
     double L_QUANTITY_MAX = 50.0; // comes from statistics
 
+    size_t minGroupCount = (size_t)ceil(double(threshold)/L_QUANTITY_MAX);
+    assert(minGroupCount >= 1);
+
     ostringstream s;
 
     // query 1
-    s << "select l_orderkey_DET, group_concat(l_quantity_DET) from lineitem_enc group by l_orderkey_DET";
+    s <<
+        "select l_orderkey_DET, group_concat(l_quantity_DET) "
+        "from lineitem_enc "
+        "group by l_orderkey_DET "
+        "having count(*) >= " << minGroupCount;
 
     DBResult * dbres;
     {
