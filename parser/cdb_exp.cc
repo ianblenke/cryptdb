@@ -259,6 +259,29 @@ enum supplier {
   s_comment,
 };
 
+enum customer {
+    c_custkey     ,
+    c_name        ,
+    c_address     ,
+    c_nationkey   ,
+    c_phone       ,
+    c_acctbal     ,
+    c_mktsegment  ,
+    c_comment     ,
+};
+
+enum orders {
+    o_orderkey       ,
+    o_custkey        ,
+    o_orderstatus    ,
+    o_totalprice     ,
+    o_orderdate      ,
+    o_orderpriority  ,
+    o_clerk          ,
+    o_shippriority   ,
+    o_comment        ,
+};
+
 struct q1entry {
     q1entry(string l_returnflag,
             string l_linestatus,
@@ -349,6 +372,39 @@ struct q2entry {
   string s_phone;
   string s_comment;
 };
+
+struct q18entry {
+    q18entry(
+        const string& c_name,
+        uint64_t c_custkey,
+        uint64_t o_orderkey,
+        uint64_t o_orderdate,
+        double o_totalprice,
+        double sum_l_quantity) :
+    c_name(c_name),
+    c_custkey(c_custkey),
+    o_orderkey(o_orderkey),
+    o_orderdate(o_orderdate),
+    o_totalprice(o_totalprice),
+    sum_l_quantity(sum_l_quantity) {}
+
+    string c_name;
+    uint64_t c_custkey;
+    uint64_t o_orderkey;
+    uint64_t o_orderdate;
+    double o_totalprice;
+    double sum_l_quantity;
+};
+
+inline ostream& operator<<(ostream &o, const q18entry &q) {
+    o << q.c_name << "|" <<
+         q.c_custkey << "|" <<
+         q.o_orderkey << "|" <<
+         q.o_orderdate << "|" <<
+         q.o_totalprice << "|" <<
+         q.sum_l_quantity;
+    return o;
+}
 
 struct q20entry {
     q20entry(const string& s_name,
@@ -611,8 +667,6 @@ static void do_query_q1_opt(Connect &conn,
           << "l_returnflag_DET, "
           << "l_linestatus_DET, "
           << "agg(l_bitpacked_AGG, " << pkinfo << "), "
-         // << "agg8(l_bitpacked_AGG_0, l_bitpacked_AGG_1, l_bitpacked_AGG_2, l_bitpacked_AGG_3, "
-         //      << "l_bitpacked_AGG_4, l_bitpacked_AGG_5, l_bitpacked_AGG_6, l_bitpacked_AGG_7, " << pkinfo << "), "
           << "count(*) "
       << "FROM lineitem_enc "
       << "WHERE l_shipdate_OPE <= " << encDATE << " "
@@ -1947,6 +2001,401 @@ static void do_query_q2_noopt(Connect &conn,
     }
 }
 
+static void do_query_q18(Connect &conn,
+                         uint64_t threshold,
+                         vector<q18entry> &results) {
+    NamedTimer fcnTimer(__func__);
+
+    ostringstream s0;
+    s0 <<
+        "select "
+        "    l_orderkey "
+        "from "
+        "    LINEITEM "
+        "group by "
+        "    l_orderkey having "
+        "        sum(l_quantity) > " << threshold;
+
+    vector<string> l_orderkeys;
+    {
+        DBResult * dbres;
+        {
+            NamedTimer t(__func__, "execute");
+            conn.execute(s0.str(), dbres);
+        }
+        ResType res;
+        {
+            NamedTimer t(__func__, "unpack");
+            res = dbres->unpack();
+            assert(res.ok);
+        }
+        l_orderkeys.reserve(res.rows.size());
+        for (auto row : res.rows) {
+            l_orderkeys.push_back(row[0].data);
+        }
+    }
+
+    ostringstream s;
+    s <<
+        "select "
+        "    c_name, c_custkey, o_orderkey, "
+        "    o_orderdate, o_totalprice, sum(l_quantity) "
+        "from "
+        "    CUSTOMER, ORDERS, LINEITEM "
+        "where "
+        "    o_orderkey in ( "
+        << join(l_orderkeys, ",") <<
+        "    ) "
+        "    and c_custkey = o_custkey "
+        "    and o_orderkey = l_orderkey "
+        "group by "
+        "    c_name, "
+        "    c_custkey, "
+        "    o_orderkey, "
+        "    o_orderdate, "
+        "    o_totalprice "
+        "order by "
+        "    o_totalprice desc, "
+        "    o_orderdate "
+        "limit 100";
+
+    DBResult * dbres;
+    {
+        NamedTimer t(__func__, "execute");
+        conn.execute(s.str(), dbres);
+    }
+    ResType res;
+    {
+        NamedTimer t(__func__, "unpack");
+        res = dbres->unpack();
+        assert(res.ok);
+    }
+
+    results.reserve(res.rows.size());
+    for (auto row : res.rows) {
+        results.push_back(
+            q18entry(
+                row[0].data,
+                resultFromStr<uint64_t>(row[1].data),
+                resultFromStr<uint64_t>(row[2].data),
+                0,
+                resultFromStr<double>(row[4].data),
+                resultFromStr<double>(row[5].data)));
+    }
+}
+
+static void do_query_q18_crypt(Connect &conn,
+                               CryptoManager& cm,
+                               uint64_t threshold,
+                               vector<q18entry> &results) {
+    NamedTimer fcnTimer(__func__);
+
+    ostringstream s;
+
+    // query 1
+    s << "select l_orderkey_DET, group_concat(l_quantity_DET) from lineitem_enc group by l_orderkey_DET";
+
+    DBResult * dbres;
+    {
+        NamedTimer t(__func__, "execute");
+        conn.execute(s.str(), dbres);
+    }
+    ResType res;
+    {
+        NamedTimer t(__func__, "unpack");
+        res = dbres->unpack();
+        assert(res.ok);
+    }
+
+    vector<string> l_orderkeys;
+    for (auto row : res.rows) {
+        vector<string> ciphers;
+        tokenize(row[1].data, ",", ciphers);
+        assert(!ciphers.empty());
+
+        double sum = 0.0;
+        for (vector<string>::iterator it = ciphers.begin();
+             it != ciphers.end(); ++it) {
+            uint64_t l_quantity_int = decryptRow<uint64_t, 7>(
+                    *it,
+                    12345,
+                    fieldname(lineitem::l_quantity, "DET"),
+                    TYPE_INTEGER,
+                    oDET,
+                    cm);
+            double l_quantity = ((double)l_quantity_int)/100.0;
+            sum += l_quantity;
+        }
+
+        if (sum > (double) threshold) l_orderkeys.push_back(row[0].data);
+    }
+
+    ostringstream s1;
+    // query 2
+
+    assert(!l_orderkeys.empty());
+    string pkinfo = marshallBinary(cm.getPKInfo());
+    s1 <<
+        "select "
+        "    c_name_DET, c_custkey_DET, o_orderkey_DET, "
+        "    o_orderdate_DET, o_totalprice_DET, agg(l_bitpacked_AGG, " << pkinfo << ") "
+        "from "
+        "    customer_enc, orders_enc, lineitem_enc "
+        "where "
+        "    o_orderkey_DET in ( "
+        << join(l_orderkeys, ",") <<
+        "    ) "
+        "    and c_custkey_DET = o_custkey_DET "
+        "    and o_orderkey_DET = l_orderkey_DET "
+        "group by "
+        "    c_name_DET, "
+        "    c_custkey_DET, "
+        "    o_orderkey_DET, "
+        "    o_orderdate_DET, "
+        "    o_totalprice_DET "
+        "order by "
+        "    o_totalprice_OPE desc, "
+        "    o_orderdate_OPE "
+        "limit 100";
+
+    {
+        DBResult * dbres;
+        {
+            NamedTimer t(__func__, "execute");
+            conn.execute(s1.str(), dbres);
+        }
+        ResType res;
+        {
+            NamedTimer t(__func__, "unpack");
+            res = dbres->unpack();
+            assert(res.ok);
+        }
+
+        for (auto row : res.rows) {
+
+            string c_name = decryptRow<string>(
+                    row[0].data,
+                    12345,
+                    fieldname(customer::c_name, "DET"),
+                    TYPE_TEXT,
+                    oDET,
+                    cm);
+
+            uint64_t c_custkey = decryptRowFromTo<uint64_t, 4>(
+                    row[1].data,
+                    12345,
+                    fieldname(customer::c_custkey, "DET"),
+                    TYPE_INTEGER,
+                    SECLEVEL::DETJOIN,
+                    getMin(oDET),
+                    cm);
+
+            uint64_t o_orderkey = decryptRowFromTo<uint64_t, 4>(
+                    row[2].data,
+                    12345,
+                    fieldname(customer::c_custkey, "DET"),
+                    TYPE_INTEGER,
+                    SECLEVEL::DETJOIN,
+                    getMin(oDET),
+                    cm);
+
+            uint64_t o_orderdate = decryptRow<uint64_t, 3>(
+                    row[3].data,
+                    12345,
+                    fieldname(orders::o_orderdate, "DET"),
+                    TYPE_INTEGER,
+                    oDET,
+                    cm);
+
+            uint64_t o_totalprice_int = decryptRow<uint64_t, 7>(
+                    row[4].data,
+                    12345,
+                    fieldname(orders::o_totalprice, "DET"),
+                    TYPE_INTEGER,
+                    oDET,
+                    cm);
+            double o_totalprice = ((double)o_totalprice_int)/100.0;
+
+            ZZ z;
+            cm.decrypt_Paillier(row[5].data, z);
+            long sum_qty_int = extract_from_slot(z, 0);
+            double sum_qty = ((double)sum_qty_int)/100.0;
+
+            results.push_back(
+                q18entry(
+                    c_name,
+                    c_custkey,
+                    o_orderkey,
+                    o_orderdate,
+                    o_totalprice,
+                    sum_qty));
+        }
+    }
+}
+
+static void do_query_q18_crypt_opt(Connect &conn,
+                                   CryptoManager& cm,
+                                   uint64_t threshold,
+                                   vector<q18entry> &results) {
+    NamedTimer fcnTimer(__func__);
+
+    ostringstream s;
+
+    // query 1
+    string pkinfo = marshallBinary(cm.getPKInfo());
+    s <<
+        "select "
+            "l_orderkey_DET, "
+            "CASE count(*) WHEN 1 THEN l_quantity_DET ELSE NULL END, "
+            "CASE count(*) WHEN 1 THEN NULL ELSE agg(l_bitpacked_AGG, " << pkinfo << ") END "
+        "from lineitem_enc group by l_orderkey_DET";
+
+    DBResult * dbres;
+    {
+        NamedTimer t(__func__, "execute");
+        conn.execute(s.str(), dbres);
+    }
+    ResType res;
+    {
+        NamedTimer t(__func__, "unpack");
+        res = dbres->unpack();
+        assert(res.ok);
+    }
+
+    vector<string> l_orderkeys;
+    for (auto row : res.rows) {
+        if (!row[1].null) {
+            assert(row[2].null);
+
+            uint64_t l_quantity_int = decryptRow<uint64_t, 7>(
+                    row[1].data,
+                    12345,
+                    fieldname(lineitem::l_quantity, "DET"),
+                    TYPE_INTEGER,
+                    oDET,
+                    cm);
+            double l_quantity = ((double)l_quantity_int)/100.0;
+
+            if (l_quantity > (double) threshold) {
+                l_orderkeys.push_back(row[0].data);
+            }
+        } else {
+            assert(!row[2].null);
+
+            ZZ z;
+            cm.decrypt_Paillier(row[2].data, z);
+            long sum_qty_int = extract_from_slot(z, 0);
+            double sum_qty = ((double)sum_qty_int)/100.0;
+
+            if (sum_qty > (double) threshold) {
+                l_orderkeys.push_back(row[0].data);
+            }
+        }
+    }
+
+
+    ostringstream s1;
+    // query 2
+
+    assert(!l_orderkeys.empty());
+    s1 <<
+        "select "
+        "    c_name_DET, c_custkey_DET, o_orderkey_DET, "
+        "    o_orderdate_DET, o_totalprice_DET, agg(l_bitpacked_AGG, " << pkinfo << ") "
+        "from "
+        "    customer_enc, orders_enc, lineitem_enc "
+        "where "
+        "    o_orderkey_DET in ( "
+        << join(l_orderkeys, ",") <<
+        "    ) "
+        "    and c_custkey_DET = o_custkey_DET "
+        "    and o_orderkey_DET = l_orderkey_DET "
+        "group by "
+        "    c_name_DET, "
+        "    c_custkey_DET, "
+        "    o_orderkey_DET, "
+        "    o_orderdate_DET, "
+        "    o_totalprice_DET "
+        "order by "
+        "    o_totalprice_OPE desc, "
+        "    o_orderdate_OPE "
+        "limit 100";
+
+    {
+        DBResult * dbres;
+        {
+            NamedTimer t(__func__, "execute");
+            conn.execute(s1.str(), dbres);
+        }
+        ResType res;
+        {
+            NamedTimer t(__func__, "unpack");
+            res = dbres->unpack();
+            assert(res.ok);
+        }
+
+        for (auto row : res.rows) {
+
+            string c_name = decryptRow<string>(
+                    row[0].data,
+                    12345,
+                    fieldname(customer::c_name, "DET"),
+                    TYPE_TEXT,
+                    oDET,
+                    cm);
+
+            uint64_t c_custkey = decryptRowFromTo<uint64_t, 4>(
+                    row[1].data,
+                    12345,
+                    fieldname(customer::c_custkey, "DET"),
+                    TYPE_INTEGER,
+                    SECLEVEL::DETJOIN,
+                    getMin(oDET),
+                    cm);
+
+            uint64_t o_orderkey = decryptRowFromTo<uint64_t, 4>(
+                    row[2].data,
+                    12345,
+                    fieldname(customer::c_custkey, "DET"),
+                    TYPE_INTEGER,
+                    SECLEVEL::DETJOIN,
+                    getMin(oDET),
+                    cm);
+
+            uint64_t o_orderdate = decryptRow<uint64_t>(
+                    row[3].data,
+                    12345,
+                    fieldname(orders::o_orderdate, "DET"),
+                    TYPE_INTEGER,
+                    oDET,
+                    cm);
+
+            uint64_t o_totalprice_int = decryptRow<uint64_t, 7>(
+                    row[4].data,
+                    12345,
+                    fieldname(orders::o_totalprice, "DET"),
+                    TYPE_INTEGER,
+                    oDET,
+                    cm);
+            double o_totalprice = ((double)o_totalprice_int)/100.0;
+
+            ZZ z;
+            cm.decrypt_Paillier(row[5].data, z);
+            long sum_qty_int = extract_from_slot(z, 0);
+            double sum_qty = ((double)sum_qty_int)/100.0;
+
+            results.push_back(
+                q18entry(
+                    c_name,
+                    c_custkey,
+                    o_orderkey,
+                    o_orderdate,
+                    o_totalprice,
+                    sum_qty));
+        }
+    }
+}
+
 static void do_query_q20(Connect &conn,
                          uint64_t year,
                          const string &p_name,
@@ -2322,6 +2771,7 @@ enum query_selection {
   query2,
   query11,
   query14,
+  query18,
   query20,
 };
 
@@ -2366,6 +2816,14 @@ int main(int argc, char **argv) {
     std::set<string> Query14Modes
       (Query14Strings, Query14Strings + NELEMS(Query14Strings));
 
+    static const char * Query18Strings[] = {
+        "--orig-query18",
+        "--crypt-query18",
+        "--crypt-opt-query18",
+    };
+    std::set<string> Query18Modes
+      (Query18Strings, Query18Strings + NELEMS(Query18Strings));
+
     static const char * Query20Strings[] = {
         "--orig-query20",
         "--crypt-noagg-query20",
@@ -2384,6 +2842,8 @@ int main(int argc, char **argv) {
         q = query11;
     } else if (Query14Modes.find(argv[1]) != Query14Modes.end()) {
         q = query14;
+    } else if (Query18Modes.find(argv[1]) != Query18Modes.end()) {
+        q = query18;
     } else if (Query20Modes.find(argv[1]) != Query20Modes.end()) {
         q = query20;
     } else {
@@ -2399,6 +2859,7 @@ int main(int argc, char **argv) {
       case query2: input_nruns = atoi(argv[5]); db_name = argv[6]; break;
       case query11: input_nruns = atoi(argv[4]); db_name = argv[5]; break;
       case query14: input_nruns = atoi(argv[3]); db_name = argv[4]; break;
+      case query18: input_nruns = atoi(argv[3]); db_name = argv[4]; break;
       case query20: input_nruns = atoi(argv[5]); db_name = argv[6]; break;
     }
     uint32_t nruns = (uint32_t) input_nruns;
@@ -2552,6 +3013,38 @@ int main(int argc, char **argv) {
           } else if (mode == "crypt-opt-query14") {
             for (size_t i = 0; i < nruns; i++) {
               do_query_q14_opt(conn, cm, year, results);
+              ctr += results.size();
+              PRINT_RESULTS();
+              results.clear();
+            }
+          } else assert(false);
+        }
+        break;
+      case query18:
+        {
+          int input_threshold = atoi(argv[2]);
+          assert(input_threshold >= 0);
+          uint32_t threshold = (uint32_t) input_threshold;
+
+          vector<q18entry> results;
+
+          if (mode == "orig-query18") {
+            for (size_t i = 0; i < nruns; i++) {
+              do_query_q18(conn, threshold, results);
+              ctr += results.size();
+              PRINT_RESULTS();
+              results.clear();
+            }
+          } else if (mode == "crypt-query18") {
+            for (size_t i = 0; i < nruns; i++) {
+              do_query_q18_crypt(conn, cm, threshold, results);
+              ctr += results.size();
+              PRINT_RESULTS();
+              results.clear();
+            }
+          } else if (mode == "crypt-opt-query18") {
+            for (size_t i = 0; i < nruns; i++) {
+              do_query_q18_crypt_opt(conn, cm, threshold, results);
               ctr += results.size();
               PRINT_RESULTS();
               results.clear();

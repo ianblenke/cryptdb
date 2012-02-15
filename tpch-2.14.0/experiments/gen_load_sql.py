@@ -21,6 +21,8 @@ DROP TABLE IF EXISTS PART;
 DROP TABLE IF EXISTS PARTSUPP;
 DROP TABLE IF EXISTS REGION;
 DROP TABLE IF EXISTS SUPPLIER;
+DROP TABLE IF EXISTS CUSTOMER;
+DROP TABLE IF EXISTS ORDERS;
 
 DROP TABLE IF EXISTS lineitem_enc;
 DROP TABLE IF EXISTS lineitem_enc_noopt;
@@ -30,6 +32,8 @@ DROP TABLE IF EXISTS partsupp_enc;
 DROP TABLE IF EXISTS partsupp_enc_noopt;
 DROP TABLE IF EXISTS region_enc;
 DROP TABLE IF EXISTS supplier_enc;
+DROP TABLE IF EXISTS customer_enc;
+DROP TABLE IF EXISTS orders_enc;
 
 \. tpch-2.14.0/experiments/final-schema/lineitem-enc-noopt.sql
 \. tpch-2.14.0/experiments/final-schema/lineitem-enc.sql
@@ -45,6 +49,10 @@ DROP TABLE IF EXISTS supplier_enc;
 \. tpch-2.14.0/experiments/final-schema/region.sql
 \. tpch-2.14.0/experiments/final-schema/supplier-enc.sql
 \. tpch-2.14.0/experiments/final-schema/supplier.sql
+\. tpch-2.14.0/experiments/final-schema/customer-enc.sql
+\. tpch-2.14.0/experiments/final-schema/customer.sql
+\. tpch-2.14.0/experiments/final-schema/orders-enc.sql
+\. tpch-2.14.0/experiments/final-schema/orders.sql
 
 -- Encrypted data
 
@@ -97,6 +105,12 @@ OPTIMIZE TABLE region_enc;
 LOAD DATA LOCAL INFILE 'enc-data/scale-#{scale}/supplier.tbl.enc' INTO TABLE supplier_enc FIELDS TERMINATED BY '|' ESCAPED BY '\\';
 OPTIMIZE TABLE supplier_enc;
 
+LOAD DATA LOCAL INFILE 'enc-data/scale-#{scale}/customer.tbl.enc' INTO TABLE customer_enc FIELDS TERMINATED BY '|' ESCAPED BY '\\';
+OPTIMIZE TABLE customer_enc;
+
+LOAD DATA LOCAL INFILE 'enc-data/scale-#{scale}/orders.tbl.enc' INTO TABLE orders_enc FIELDS TERMINATED BY '|' ESCAPED BY '\\';
+OPTIMIZE TABLE orders_enc;
+
 -- Regular data
 
 LOAD DATA LOCAL INFILE 'enc-data/scale-#{scale}/lineitem.tbl' INTO TABLE LINEITEM FIELDS TERMINATED BY '|' ESCAPED BY '\\';
@@ -116,6 +130,12 @@ OPTIMIZE TABLE REGION;
 
 LOAD DATA LOCAL INFILE 'enc-data/scale-#{scale}/supplier.tbl' INTO TABLE SUPPLIER FIELDS TERMINATED BY '|' ESCAPED BY '\\';
 OPTIMIZE TABLE SUPPLIER;
+
+LOAD DATA LOCAL INFILE 'enc-data/scale-#{scale}/customer.tbl' INTO TABLE CUSTOMER FIELDS TERMINATED BY '|' ESCAPED BY '\\';
+OPTIMIZE TABLE CUSTOMER;
+
+LOAD DATA LOCAL INFILE 'enc-data/scale-#{scale}/orders.tbl' INTO TABLE ORDERS FIELDS TERMINATED BY '|' ESCAPED BY '\\';
+OPTIMIZE TABLE ORDERS;
 
 -- Display table sizes
 SELECT lower(TABLE_NAME), table_rows, data_length, index_length, avg_row_length, round(((data_length + index_length) / 1024 / 1024),2) AS Size_in_MB
