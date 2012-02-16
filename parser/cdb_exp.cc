@@ -2782,8 +2782,7 @@ static inline uint32_t random_year() {
 
 static void usage(char **argv) {
     cerr << "[USAGE]: " << argv[0] << " "
-         << "(((--orig-query1|--crypt-query1|--crypt-opt-query1) year)|(--orig-query11|--crypt-query11|--crypt-opt-query11|--crypt-opt-proj-query11 nation fraction)|((--orig-query2|--crypt-query2) size type name)|((--orig-query14|--crypt-opt-query14) year)) num_queries db_name"
-
+         << "(query_flag args) num_queries db_name hostname"
          << endl;
 }
 
@@ -2800,7 +2799,7 @@ enum query_selection {
 
 int main(int argc, char **argv) {
     srand(time(NULL));
-    if (argc != 5 && argc != 6 && argc != 7) {
+    if (argc != 5 && argc != 6 && argc != 7 && argc != 8) {
         usage(argv);
         return 1;
     }
@@ -2877,19 +2876,20 @@ int main(int argc, char **argv) {
 
     int input_nruns;
     string db_name;
+    string hostname;
     switch (q) {
-      case query1: input_nruns = atoi(argv[3]); db_name = argv[4]; break;
-      case query2: input_nruns = atoi(argv[5]); db_name = argv[6]; break;
-      case query11: input_nruns = atoi(argv[4]); db_name = argv[5]; break;
-      case query14: input_nruns = atoi(argv[3]); db_name = argv[4]; break;
-      case query18: input_nruns = atoi(argv[3]); db_name = argv[4]; break;
-      case query20: input_nruns = atoi(argv[5]); db_name = argv[6]; break;
+      case query1:  input_nruns = atoi(argv[3]); db_name = argv[4]; hostname = argv[5]; break;
+      case query2:  input_nruns = atoi(argv[5]); db_name = argv[6]; hostname = argv[7]; break;
+      case query11: input_nruns = atoi(argv[4]); db_name = argv[5]; hostname = argv[6]; break;
+      case query14: input_nruns = atoi(argv[3]); db_name = argv[4]; hostname = argv[5]; break;
+      case query18: input_nruns = atoi(argv[3]); db_name = argv[4]; hostname = argv[5]; break;
+      case query20: input_nruns = atoi(argv[5]); db_name = argv[6]; hostname = argv[7]; break;
     }
     uint32_t nruns = (uint32_t) input_nruns;
 
     unsigned long ctr = 0;
 
-    Connect conn("localhost", "root", "", db_name, 3307);
+    Connect conn(hostname, "root", "", db_name, 3307);
     CryptoManager cm("12345");
 
 #define PRINT_RESULTS() \
