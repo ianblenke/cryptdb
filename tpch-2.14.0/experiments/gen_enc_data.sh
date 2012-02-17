@@ -34,5 +34,9 @@ for factor in $SCALES; do
 
     $BULK_ENC --supplier-none supplier.tbl
 
+    $BULK_ENC --orders-none orders.tbl
+
+    $BULK_ENC --customer-none customer.tbl
+
     cd ..
 done
