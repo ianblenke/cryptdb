@@ -20,94 +20,99 @@ CUSTOMER = 6
 ORDERS   = 7
 
 TABLE_PREFIXES = [
-    ('l',  LINEITEM),
-    ('n',  NATION),
-    ('p',  PART),
-    ('ps', PARTSUPP),
-    ('r',  REGION),
-    ('s',  SUPPLIER),
-    ('c',  CUSTOMER),
-    ('o',  ORDERS),
+    ('l',  LINEITEM, 'LINEITEM'),
+    ('n',  NATION, 'NATION'),
+    ('p',  PART, 'PART'),
+    ('ps', PARTSUPP, 'PARTSUPP'),
+    ('r',  REGION, 'REGION'),
+    ('s',  SUPPLIER, 'SUPPLIER'),
+    ('c',  CUSTOMER, 'CUSTOMER'),
+    ('o',  ORDERS, 'ORDERS'),
   ]
+
+TYPE_INT  = 0
+TYPE_DBL  = 1
+TYPE_STR  = 2
+TYPE_DATE = 3
 
 ### generate the x variables ###
 ORIG_COLUMNS = [
     ### LINEITEM table ###
-    ('l_orderkey', DET_FLAG, 4),
-    ('l_partkey', DET_FLAG, 4),
-    ('l_suppkey', DET_FLAG, 4),
-    ('l_linenumber', DET_FLAG, 4),
-    ('l_quantity', DET_FLAG, 8),
-    ('l_extendedprice', DET_FLAG, 8),
-    ('l_discount', DET_FLAG, 8),
-    ('l_tax', DET_FLAG, 8),
-    ('l_returnflag', DET_FLAG | OPE_FLAG, 1),
-    ('l_linestatus', DET_FLAG | OPE_FLAG, 1),
-    ('l_shipdate', DET_FLAG | OPE_FLAG, 3),
-    ('l_commitdate', DET_FLAG, 3),
-    ('l_receiptdate', DET_FLAG, 3),
-    ('l_shipinstruct', DET_FLAG, 25),
-    ('l_shipmode', DET_FLAG, 10),
-    ('l_comment', DET_FLAG, 44),
+    ('l_orderkey', DET_FLAG, 4, TYPE_INT),
+    ('l_partkey', DET_FLAG, 4, TYPE_INT),
+    ('l_suppkey', DET_FLAG, 4, TYPE_INT),
+    ('l_linenumber', DET_FLAG, 4, TYPE_INT),
+    ('l_quantity', DET_FLAG, 8, TYPE_DBL),
+    ('l_extendedprice', DET_FLAG, 8, TYPE_DBL),
+    ('l_discount', DET_FLAG, 8, TYPE_DBL),
+    ('l_tax', DET_FLAG, 8, TYPE_DBL),
+    ('l_returnflag', DET_FLAG | OPE_FLAG, 1, TYPE_STR),
+    ('l_linestatus', DET_FLAG | OPE_FLAG, 1, TYPE_STR),
+    ('l_shipdate', DET_FLAG | OPE_FLAG, 3, TYPE_DATE),
+    ('l_commitdate', DET_FLAG, 3, TYPE_DATE),
+    ('l_receiptdate', DET_FLAG, 3, TYPE_DATE),
+    ('l_shipinstruct', DET_FLAG, 25, TYPE_STR),
+    ('l_shipmode', DET_FLAG, 10, TYPE_STR),
+    ('l_comment', DET_FLAG, 44, TYPE_STR),
 
     ### NATION table ###
-    ('n_nationkey', DET_FLAG, 4),
-    ('n_name', DET_FLAG | OPE_FLAG, 25),
-    ('n_regionkey', DET_FLAG, 4),
-    ('n_comment', DET_FLAG, 152),
+    ('n_nationkey', DET_FLAG, 4, TYPE_INT),
+    ('n_name', DET_FLAG | OPE_FLAG, 25, TYPE_STR),
+    ('n_regionkey', DET_FLAG, 4, TYPE_INT),
+    ('n_comment', DET_FLAG, 152, TYPE_STR),
 
     ### PART table ###
-    ('p_partkey', DET_FLAG | OPE_FLAG, 4),
-    ('p_name', DET_FLAG | SWP_FLAG, 55),
-    ('p_mfgr', DET_FLAG, 25),
-    ('p_brand', DET_FLAG, 10),
-    ('p_type', DET_FLAG | SWP_FLAG, 25),
-    ('p_size', DET_FLAG, 4),
-    ('p_container', DET_FLAG, 10),
-    ('p_retailprice', DET_FLAG, 8),
-    ('p_comment', DET_FLAG, 23),
+    ('p_partkey', DET_FLAG | OPE_FLAG, 4, TYPE_INT),
+    ('p_name', DET_FLAG | SWP_FLAG, 55, TYPE_STR),
+    ('p_mfgr', DET_FLAG, 25, TYPE_STR),
+    ('p_brand', DET_FLAG, 10, TYPE_STR),
+    ('p_type', DET_FLAG | SWP_FLAG, 25, TYPE_STR),
+    ('p_size', DET_FLAG, 4, TYPE_INT),
+    ('p_container', DET_FLAG, 10, TYPE_STR),
+    ('p_retailprice', DET_FLAG, 8, TYPE_DBL),
+    ('p_comment', DET_FLAG, 23, TYPE_STR),
 
     ### PARTSUPP table ###
-    ('ps_partkey', DET_FLAG | PK_FLAG, 4),
-    ('ps_suppkey', DET_FLAG | PK_FLAG, 4),
-    ('ps_availqty', DET_FLAG, 4),
-    ('ps_supplycost', DET_FLAG | OPE_FLAG, 8),
-    ('ps_comment', DET_FLAG, 199),
+    ('ps_partkey', DET_FLAG | PK_FLAG, 4, TYPE_INT),
+    ('ps_suppkey', DET_FLAG | PK_FLAG, 4, TYPE_INT),
+    ('ps_availqty', DET_FLAG, 4, TYPE_INT),
+    ('ps_supplycost', DET_FLAG | OPE_FLAG, 8, TYPE_DBL),
+    ('ps_comment', DET_FLAG, 199, TYPE_STR),
 
     ### REGION table ###
-    ('r_regionkey', DET_FLAG, 4),
-    ('r_name', DET_FLAG, 25),
-    ('r_comment', DET_FLAG, 152),
+    ('r_regionkey', DET_FLAG, 4, TYPE_INT),
+    ('r_name', DET_FLAG, 25, TYPE_STR),
+    ('r_comment', DET_FLAG, 152, TYPE_STR),
 
     ### SUPPLIER table ###
-    ('s_suppkey', DET_FLAG | PK_FLAG, 4),
-    ('s_name', DET_FLAG | OPE_FLAG, 25),
-    ('s_address', DET_FLAG, 40),
-    ('s_nationkey', DET_FLAG, 4),
-    ('s_phone', DET_FLAG, 15),
-    ('s_acctbal', DET_FLAG | OPE_FLAG, 8),
-    ('s_comment', DET_FLAG, 101),
+    ('s_suppkey', DET_FLAG | PK_FLAG, 4, TYPE_INT),
+    ('s_name', DET_FLAG | OPE_FLAG, 25, TYPE_STR),
+    ('s_address', DET_FLAG, 40, TYPE_STR),
+    ('s_nationkey', DET_FLAG, 4, TYPE_INT),
+    ('s_phone', DET_FLAG, 15, TYPE_STR),
+    ('s_acctbal', DET_FLAG | OPE_FLAG, 8, TYPE_DBL),
+    ('s_comment', DET_FLAG, 101, TYPE_STR),
 
     ### CUSTOMER table ###
-    ('c_custkey', DET_FLAG | PK_FLAG, 4),
-    ('c_name', DET_FLAG, 25),
-    ('c_address', DET_FLAG, 40),
-    ('c_nationkey', DET_FLAG, 4),
-    ('c_phone', DET_FLAG, 15),
-    ('c_acctbal', DET_FLAG, 8),
-    ('c_mktsegment', DET_FLAG, 10),
-    ('c_comment', DET_FLAG, 117),
+    ('c_custkey', DET_FLAG | PK_FLAG, 4, TYPE_INT),
+    ('c_name', DET_FLAG, 25, TYPE_STR),
+    ('c_address', DET_FLAG, 40, TYPE_STR),
+    ('c_nationkey', DET_FLAG, 4, TYPE_INT),
+    ('c_phone', DET_FLAG, 15, TYPE_STR),
+    ('c_acctbal', DET_FLAG, 8, TYPE_DBL),
+    ('c_mktsegment', DET_FLAG, 10, TYPE_STR),
+    ('c_comment', DET_FLAG, 117, TYPE_STR),
 
     ### ORDERS table ###
-    ('o_orderkey', DET_FLAG | PK_FLAG, 4),
-    ('o_custkey', DET_FLAG, 4),
-    ('o_orderstatus', DET_FLAG, 1),
-    ('o_totalprice', DET_FLAG | OPE_FLAG, 8),
-    ('o_orderdate', DET_FLAG | OPE_FLAG, 3),
-    ('o_orderpriority', DET_FLAG, 15),
-    ('o_clerk', DET_FLAG, 15),
-    ('o_shippriority', DET_FLAG, 4),
-    ('o_comment', DET_FLAG, 79),
+    ('o_orderkey', DET_FLAG | PK_FLAG, 4, TYPE_INT),
+    ('o_custkey', DET_FLAG, 4, TYPE_INT),
+    ('o_orderstatus', DET_FLAG, 1, TYPE_STR),
+    ('o_totalprice', DET_FLAG | OPE_FLAG, 8, TYPE_DBL),
+    ('o_orderdate', DET_FLAG | OPE_FLAG, 3, TYPE_DATE),
+    ('o_orderpriority', DET_FLAG, 15, TYPE_STR),
+    ('o_clerk', DET_FLAG, 15, TYPE_STR),
+    ('o_shippriority', DET_FLAG, 4, TYPE_INT),
+    ('o_comment', DET_FLAG, 79, TYPE_STR),
 ]
 
 ### generate the y variables ###
@@ -1241,7 +1246,7 @@ if __name__ == '__main__':
     b_rhs = 0
     a0 = mkZeroRow()
     total_rows = sum(table_sizes.values())
-    for tbl, tbl_id in TABLE_PREFIXES:
+    for tbl, tbl_id, tbl_name in TABLE_PREFIXES:
         nf = table_sizes[tbl_id] / total_rows
         b_rhs += S * get_orig_table_row_size(tbl) * nf
         for entry in gen_variables_for_table(tbl):
@@ -1263,7 +1268,7 @@ if __name__ == '__main__':
     fp = open('table_size_test.m', 'w')
     print >>fp, 'function [ size_orig, size_enc ] = cost_function ( x )'
 
-    print >>fp, '  size_orig =', sum([get_orig_table_row_size(tbl) * table_sizes[tbl_id] for tbl, tbl_id in TABLE_PREFIXES]), ';'
+    print >>fp, '  size_orig =', sum([get_orig_table_row_size(tbl) * table_sizes[tbl_id] for tbl, tbl_id, tbl_name in TABLE_PREFIXES]), ';'
 
     output_all_vars(fp)
 
@@ -1271,7 +1276,7 @@ if __name__ == '__main__':
       mult_terms(
         entry[0],
         str(entry[1] * table_sizes[tbl_id]))
-      for tbl, tbl_id in TABLE_PREFIXES \
+      for tbl, tbl_id, tbl_name in TABLE_PREFIXES \
       for entry in gen_variables_for_table(tbl)]), ';'
 
     print >>fp, 'end'
