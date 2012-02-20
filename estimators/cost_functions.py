@@ -3,6 +3,13 @@
 from constants import *
 from math import log
 
+import datetime
+
+# most accurate for 1.0, since the table stats are based off 1.0
+TPCH_SCALE = 1.0
+
+PERFECT_STATS=False
+
 DET_FLAG = 0x1
 OPE_FLAG = 0x1 << 1
 SWP_FLAG = 0x1 << 2
@@ -124,6 +131,9 @@ VIRTUAL_COLUMNS = [
     ('ps_pack0', AGG_FLAG, 256),
 ]
 
+def mysqlEncode(d):
+    return d.day | (d.month << 5) | (d.year << 9)
+
 def get_orig_table_row_size(prefix):
     return sum([x[2] for x in ORIG_COLUMNS if x[0].startswith(prefix + '_')])
 
@@ -137,6 +147,17 @@ def get_column_size(cname):
             for entry in entries:
                 _cachedColumnSizeLookup[entry[0]] = entry[1]
     return _cachedColumnSizeLookup[cname]
+
+_cachedHistograms = None
+def get_table_histogram(tbl_id):
+    global _cachedHistograms
+    if not _cachedHistograms:
+        # load from tpch_1.00_histograms.pickle
+        # TODO: stats based on scale?
+        with open('tpch_1.00_histograms.pickle', 'r') as fp:
+            import cPickle
+            _cachedHistograms = cPickle.load(fp)
+    return _cachedHistograms[tbl_id]
 
 def hasAllBits(x, mask):
     return (x & mask) == mask
@@ -299,8 +320,13 @@ def query1_cost_functions(table_sizes):
         ORDER BY l_returnflag_OPE, l_linestatus_OPE
         '''
 
-        ### Perfect statistics ###
-        ResultCardinality = 10
+        ### statistics ###
+        if PERFECT_STATS:
+            ResultCardinality = 10
+        else:
+            l_hists = get_table_histogram(LINEITEM)
+            ResultCardinality = int(l_hists['l_returnflag'].distinct_values() *
+                                    l_hists['l_linestatus'].distinct_values() * TPCH_SCALE)
 
         ProjRecordLength = entry_size(
             ['l_returnflag_det', 'l_linestatus_det', 'l_pack0_agg'] if send_back_det else \
@@ -367,8 +393,20 @@ def query2_cost_functions(table_sizes):
 
         '''
 
-        ### perfect statistics ###
-        ResultSetNRows = 160240
+        ### statistics ###
+
+        if PERFECT_STATS:
+            ResultSetNRows = 160240
+        else:
+            # mysql gives us the estimated cardinality of the
+            # joined result set as:
+            # table_sizes[PART] * 2 * 1 * 1 * 5
+            # we use our statistics to estimate selectivity of r_name = 'ASIA'
+
+            r_hists = get_table_histogram(REGION)
+
+            ResultSetNRows = \
+                    int(table_sizes[PART] * 2 * 1 * 1 * 5 * r_hists['r_name'].eq_search('ASIA'))
 
         # we model (imperfectly) as a single sequential scan over
         # the outer-most join table ( use query opt to determine
@@ -443,8 +481,16 @@ def query2_cost_functions(table_sizes):
         doing a merge-sort (filesort) on the joined result.
         '''
 
-        ### Perfect statistics ###
-        NMatchingRows = 443
+        ### statistics ###
+        if PERFECT_STATS:
+            NMatchingRows = 443
+        else:
+            r_hists = get_table_histogram(REGION)
+            p_hists = get_table_histogram(PART)
+            NMatchingRows = \
+                    int(table_sizes[PART] * 2 * 1 * 1 * 5 * \
+                        r_hists['r_name'].eq_search('ASIA') * p_hists['p_size'].eq_search(36))
+
         # comes from ORDER BY clause
         SortEntrySize = entry_size(['s_acctbal_ope', 'n_name_ope', 's_name_ope', 'p_partkey_ope'])
 
@@ -510,8 +556,12 @@ def query11_cost_functions(table_sizes):
         the rest is done server side processing:
         '''
 
-        ### perfect statistics ###
-        ResultSetNRows = 33040
+        ### statistics ###
+        if PERFECT_STATS:
+            ResultSetNRows = 33040
+        else:
+            n_hists = get_table_histogram(NATION)
+            ResultSetNRows = table_sizes[PARTSUPP] * 1 * 1 * n_hists['n_name'].eq_search('ARGENTINA')
 
         ResultSetEntry = ['ps_partkey_det', 'ps_supplycost_det', 'ps_availqty_det']
 
@@ -550,8 +600,15 @@ def query11_cost_functions(table_sizes):
 
         '''
 
-        ### perfect statistics ###
-        ResultSetNRows = 31110
+        ### statistics ###
+        if PERFECT_STATS:
+            ResultSetNRows = 31110
+            RowsNeedToAgg = 33040
+        else:
+            ps_hists = get_table_histogram(PARTSUPP)
+            n_hists  = get_table_histogram(NATION)
+            ResultSetNRows = int(ps_hists['ps_partkey'].distinct_values() * TPCH_SCALE)
+            RowsNeedToAgg = table_sizes[PARTSUPP] * 1 * 1 * n_hists['n_name'].eq_search('ARGENTINA')
 
         ResultSetEntry = ['ps_partkey_det', 'ps_pack0_agg']
 
@@ -568,12 +625,12 @@ def query11_cost_functions(table_sizes):
         #index_scan_expr = mult_terms(str(1.0 / READ_BW), gen_index_scan_size_expr(table_sizes[PARTSUPP], 'ps'))
         seek_expr     = str(SEEK)
         seq_scan_expr = mult_terms(str(1.0 / READ_BW), ps_table_size_expr)
-
+        agg_expr      = str( RowsNeedToAgg * AGG_ADD )
         xfer_expr     = str((1.0 / NETWORK_BW) * DataSentBack)
         decrypt_expr  = str(( DET_DEC + AGG_DEC ) * ResultSetNRows)
 
         return (
-            add_terms_l([encrypt_expr, rtt_expr, seek_expr, seq_scan_expr,
+            add_terms_l([encrypt_expr, rtt_expr, seek_expr, seq_scan_expr, agg_expr,
                          xfer_expr, decrypt_expr]),
             set(require_all_det_tbls(['ps', 's', 'n'])).intersection(set(ResultSetEntry)))
 
@@ -602,8 +659,8 @@ def query14_cost_functions(table_sizes):
         the rest is done server side processing:
         '''
 
-        ### perfect statistics ###
-        ResultSetNRows = 6001215
+        ### (perfect) statistics ###
+        ResultSetNRows = table_sizes[LINEITEM] * 1
 
         ResultSetEntry = ['p_type_det', 'l_extendedprice_det', 'l_discount_det', 'l_shipdate_det']
 
@@ -638,8 +695,16 @@ def query14_cost_functions(table_sizes):
         the rest is done server side processing:
         '''
 
-        ### perfect statistics ###
-        ResultSetNRows = 76969
+        ### statistics ###
+        if PERFECT_STATS:
+            ResultSetNRows = 76969
+        else:
+            start_date = mysqlEncode(datetime.date(1996, 7, 1))
+            end_date   = mysqlEncode(datetime.date(1996, 8, 1))
+
+            l_hists = get_table_histogram(LINEITEM)
+            ResultSetNRows = \
+                    int(table_sizes[LINEITEM] * 1 * l_hists['l_shipdate'].range_search(start_date, end_date))
 
         ResultSetEntry = ['p_type_det', 'l_extendedprice_det', 'l_discount_det']
 
@@ -675,8 +740,16 @@ def query14_cost_functions(table_sizes):
 
         '''
 
-        ### perfect statistics ###
-        IntermediateNRows = 76969
+        ### statistics ###
+        if PERFECT_STATS:
+            IntermediateNRows = 76969
+        else:
+            start_date = mysqlEncode(datetime.date(1996, 7, 1))
+            end_date   = mysqlEncode(datetime.date(1996, 8, 1))
+
+            l_hists = get_table_histogram(LINEITEM)
+            IntermediateNRows = \
+                int(table_sizes[LINEITEM] * 1 * l_hists['l_shipdate'].range_search(start_date, end_date))
 
         ResultSetNRows = 1
         ProjRecordLength = 512
@@ -748,9 +821,24 @@ def query18_cost_functions(table_sizes):
             return add_terms_l([rtt_expr, seek_expr, seq_scan_expr, xfer_expr, decrypt_expr])
 
         def q2_expr():
-            ### perfect statistics ###
-            ResultSetNElems = 9
-            NSortEntries = 63
+            ### statistics ###
+            if PERFECT_STATS:
+                ResultSetNElems = 9
+                NSortEntries = 63
+            else:
+                c_hists = get_table_histogram(CUSTOMER)
+                o_hists = get_table_histogram(ORDERS)
+
+                ResultSetNElems = \
+                    min(
+                        c_hists['c_name'].distinct_values() *
+                        c_hists['c_custkey'].distinct_values() *
+                        o_hists['o_orderkey'].distinct_values() *
+                        o_hists['o_orderdate'].distinct_values() *
+                        o_hists['o_totalprice'].distinct_values(),
+                        100)
+
+                NSortEntries = table_sizes[ORDERS] * 1 * 1 # this is really bad (off)
 
             ResultSetEntry = [
                 'c_name_det', 'c_custkey_det', 'o_orderkey_det',
@@ -811,8 +899,12 @@ def query18_cost_functions(table_sizes):
         '''
 
         def q1_expr():
-            ### perfect statistics ###
-            ResultSetNElems = 1500000
+            ### statistics ###
+            if PERFECT_STATS:
+                ResultSetNElems = 1500000
+            else:
+                l_hists = get_table_histogram(LINEITEM)
+                ResultSetNElems = int(l_hists['l_orderkey'].distinct_values() * TPCH_SCALE)
 
             ResultSetEntry = ['l_orderkey_det', 'l_pack0_agg']
             ResultSetEntrySize = entry_size(ResultSetEntry)
@@ -827,9 +919,24 @@ def query18_cost_functions(table_sizes):
             return add_terms_l([rtt_expr, seek_expr, seq_scan_expr, agg_expr, xfer_expr, decrypt_expr])
 
         def q2_expr():
-            ### perfect statistics ###
-            ResultSetNElems = 9
-            NSortEntries = 63
+            ### statistics ###
+            if PERFECT_STATS:
+                ResultSetNElems = 9
+                NSortEntries = 63
+            else:
+                c_hists = get_table_histogram(CUSTOMER)
+                o_hists = get_table_histogram(ORDERS)
+
+                ResultSetNElems = \
+                    min(
+                        c_hists['c_name'].distinct_values() *
+                        c_hists['c_custkey'].distinct_values() *
+                        o_hists['o_orderkey'].distinct_values() *
+                        o_hists['o_orderdate'].distinct_values() *
+                        o_hists['o_totalprice'].distinct_values(),
+                        100)
+
+                NSortEntries = table_sizes[ORDERS] * 1 * 1 # this is really bad (off)
 
             ResultSetEntry = [
                 'c_name_det', 'c_custkey_det', 'o_orderkey_det',
@@ -918,8 +1025,12 @@ def query20_cost_functions(table_sizes):
             return add_terms_l([rtt_expr, seek_expr, seq_scan_expr, xfer_expr, decrypt_expr])
 
         def q2_expr():
-            ### perfect statistics ###
-            ResultSetNRows   = 321993
+            ### statistics ###
+            if PERFECT_STATS:
+                ResultSetNRows   = 321993
+            else:
+                ResultSetNRows = table_sizes[LINEITEM] * 1 # terrible stats
+
             ResultSetEntry   = ['ps_partkey_det', 'ps_suppkey_det', 'ps_availqty_det', 'l_shipdate_det']
             ProjRecordLength = entry_size(ResultSetEntry)
             DataSentBack     = ResultSetNRows * ProjRecordLength
@@ -933,8 +1044,13 @@ def query20_cost_functions(table_sizes):
             return add_terms_l([rtt_expr, seek_expr, seq_scan_expr, xfer_expr, decrypt_expr])
 
         def q3_expr():
-            ### perfect statistics ###
-            ResultSetNRows   = 404
+            ### statistics ###
+            if PERFECT_STATS:
+                ResultSetNRows   = 404
+            else:
+                n_hists = get_table_histogram(NATION)
+                ResultSetNRows = int( table_sizes[SUPPLIER] * 1 * n_hists['n_name'].eq_search('ALGERIA') )
+
             ResultSetEntry   = ['s_name_det', 's_address_det']
             ProjRecordLength = entry_size(ResultSetEntry)
             DataSentBack     = ResultSetNRows * ProjRecordLength
@@ -985,8 +1101,18 @@ def query20_cost_functions(table_sizes):
         '''
 
         def q1_expr():
-            ### perfect statistics ###
-            ResultSetNRows   = 48822
+            ### statistics ###
+            if PERFECT_STATS:
+                ResultSetNRows   = 48822
+            else:
+                l_hists = get_table_histogram(LINEITEM)
+
+                start_date = mysqlEncode(datetime.date(1997, 1, 1))
+                end_date   = mysqlEncode(datetime.date(1998, 1, 1))
+
+                ResultSetNRows = \
+                    int( table_sizes[LINEITEM] * 1 * l_hists['l_shipdate'].range_search(start_date, end_date) )
+
             ResultSetEntry   = ['ps_partkey_det', 'ps_suppkey_det', 'ps_availqty_det', 'l_quantity_det']
             ProjRecordLength = entry_size(ResultSetEntry)
             DataSentBack     = ResultSetNRows * ProjRecordLength
@@ -1010,8 +1136,14 @@ def query20_cost_functions(table_sizes):
                                  seek_expr1, seq_scan_expr1, xfer_expr, decrypt_expr ])
 
         def q2_expr():
-            ### perfect statistics ###
-            ResultSetNRows   = 404
+            ### statistics ###
+            if PERFECT_STATS:
+                ResultSetNRows   = 404
+            else:
+                n_hists = get_table_histogram(NATION)
+                ResultSetNRows = \
+                    int( table_sizes[SUPPLIER] * 1 * n_hists['n_name'].eq_search('ALGERIA') )
+
             ResultSetEntry   = ['s_name_det', 's_address_det']
             ProjRecordLength = entry_size(ResultSetEntry)
             DataSentBack     = ResultSetNRows * ProjRecordLength
@@ -1066,14 +1198,26 @@ def query20_cost_functions(table_sizes):
         '''
 
         def q1_expr():
-            ### perfect statistics ###
-            ResultSetNRows   = 29096
+            ### statistics ###
+            if PERFECT_STATS:
+                ResultSetNRows   = 29096
+                SortNEntries = 48822
+            else:
+                l_hists  = get_table_histogram(LINEITEM)
+                ps_hists = get_table_histogram(PARTSUPP)
+                ResultSetNRows = int(
+                    ps_hists['ps_partkey'].distinct_values() *
+                    ps_hists['ps_suppkey'].distinct_values() * TPCH_SCALE )
+                start_date = mysqlEncode(datetime.date(1997, 1, 1))
+                end_date   = mysqlEncode(datetime.date(1998, 1, 1))
+                SortNEntries = int(
+                    table_sizes[LINEITEM] * 1 * l_hists['l_shipdate'].range_search(start_date, end_date))
+
             ResultSetEntry   = ['ps_suppkey_det', 'ps_availqty_det', 'l_pack0_agg']
             ProjRecordLength = entry_size(ResultSetEntry)
             DataSentBack     = ResultSetNRows * ProjRecordLength
 
             SortEntry    = ['ps_partkey_det', 'ps_suppkey_det', 'ps_availqty_det', 'l_pack0_agg']
-            SortNEntries = 48822
 
             encrypt_expr  = str(SWP_ENC + OPE_ENC * 2)
             rtt_expr      = str(RTT)
@@ -1095,8 +1239,14 @@ def query20_cost_functions(table_sizes):
                                  seek_expr1, seq_scan_expr1, sort_expr1, xfer_expr, decrypt_expr ])
 
         def q2_expr():
-            ### perfect statistics ###
-            ResultSetNRows   = 404
+            ### statistics ###
+            if PERFECT_STATS:
+                ResultSetNRows   = 404
+            else:
+                n_hists = get_table_histogram(NATION)
+                ResultSetNRows = \
+                    int( table_sizes[SUPPLIER] * 1 * n_hists['n_name'].eq_search('ALGERIA') )
+
             ResultSetEntry   = ['s_name_det', 's_address_det']
             ProjRecordLength = entry_size(ResultSetEntry)
             DataSentBack     = ResultSetNRows * ProjRecordLength
@@ -1133,8 +1283,6 @@ def get_cost_functions(table_sizes):
            ]
 
 if __name__ == '__main__':
-
-    TPCH_SCALE = 1.0
 
     table_sizes = {
         LINEITEM : TPCH_SCALE * 6001215,

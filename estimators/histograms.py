@@ -47,6 +47,9 @@ class NumericHistogram:
 
         return float(sum([ self.bins[i] for i in xrange(lhs_idx, rhs_idx + 1) ])) / float(self._binSum())
 
+    def distinct_values(self):
+        return len([1 for x in self.bins if x])
+
     def _binSum(self):
         return sum(self.bins)
 
