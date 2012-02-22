@@ -8,7 +8,7 @@ import datetime
 # most accurate for 1.0, since the table stats are based off 1.0
 TPCH_SCALE = 1.0
 
-PERFECT_STATS=False
+PERFECT_STATS=True
 
 DET_FLAG = 0x1
 OPE_FLAG = 0x1 << 1
@@ -248,15 +248,81 @@ def gen_index_scan_size_expr(numrows, prefix):
 
     return str(pk_entry * numrows * (1.0 / fill_factor))
 
-def compute_sort_cost(nelems, entry_size):
-    NumFilesortPages = (nelems * entry_size) / INNODB_PAGE_SIZE
+def compute_sort_cost(ntuples, tuplesize):
+    '''
+    simulate the IO cost of running filesort on ntuples
 
-    SortEstimatePageIOs = \
-        NumFilesortPages * log(NumFilesortPages, N_MERGE_BUFFERS)
+    see: http://dev.mysql.com/doc/refman/5.5/en/order-by-optimization.html
 
-    SortNumBytesXF = SortEstimatePageIOs * INNODB_PAGE_SIZE
+    (we assume the modified filesort algorithm)
+    '''
 
-    return (1.0 / ((READ_BW + WRITE_BW) / 2.0)) * SortNumBytesXF
+    ntuples   = int(ntuples)
+    tuplesize = int(tuplesize)
+
+    assert ntuples >= 0
+    assert tuplesize > 0 and tuplesize <= MYSQL_MAX_LENGTH_FOR_SORT_DATA
+
+    cost = 0.0
+
+    # For each row, store a pair of values in a buffer (the sort key and the
+    # row pointer). The size of the buffer is the value of the sort_buffer_size
+    # system variable.
+
+    # compute the number of sorted blocks we start with
+    tuples_per_block = \
+      (MYSQL_SORT_BUFFER_SIZE / tuplesize) \
+          if tuplesize <= MYSQL_SORT_BUFFER_SIZE else 1
+    assert tuples_per_block >= 1
+
+    sorted_blocks = \
+      (ntuples / tuples_per_block) + (1 if (ntuples % tuples_per_block) != 0 else 0)
+
+    if sorted_blocks > 1:
+      # if it didn't all fit in 1 block, then we need to write the
+      # sorted blocks to disk
+      cost += ntuples * tuplesize * (1.0 / WRITE_BW)
+    else:
+      # otherwise, sort is all in memory
+      return 0.0
+
+    # Repeat until there is only 1 sorted block left
+    while sorted_blocks > 1:
+      # Do a multi-merge of up to MERGEBUFF (7) regions to one block in another
+      # temporary file. Repeat until all blocks from the first file are in the
+      # second file.
+
+      num_merges = (sorted_blocks / N_MERGE_BUFFERS) + \
+          (1 if (sorted_blocks % N_MERGE_BUFFERS) != 0 else 0)
+
+      assert num_merges >= 1
+
+      # treat each multi-merge as a period of sequential reads
+      # followed by a period of sequential writes
+      cost += (num_merges - 1) * (
+          N_MERGE_BUFFERS * (tuples_per_block * tuplesize) * (1.0 / READ_BW) +
+          N_MERGE_BUFFERS * (tuples_per_block * tuplesize) * (1.0 / WRITE_BW)
+        )
+
+      last_num_bufs = \
+        N_MERGE_BUFFERS if (sorted_blocks % N_MERGE_BUFFERS) == 0 else \
+          sorted_blocks % N_MERGE_BUFFERS
+      last_num_tuples = \
+        tuples_per_block if (ntuples % tuples_per_block) == 0 else \
+          ntuples % tuples_per_block
+
+      assert last_num_bufs >= 1
+
+      cost += (
+          ((last_num_bufs - 1) * (tuples_per_block * tuplesize) + (last_num_tuples * tuplesize)) * (1.0 / READ_BW) +
+          ((last_num_bufs - 1) * (tuples_per_block * tuplesize) + (last_num_tuples * tuplesize)) * (1.0 / WRITE_BW)
+        )
+
+      sorted_blocks    = num_merges
+      tuples_per_block = N_MERGE_BUFFERS * tuples_per_block
+
+    # done
+    return cost
 
 def entry_size(column_names):
     return sum([get_column_size(c) for c in column_names])
@@ -1346,12 +1412,22 @@ if __name__ == '__main__':
             return '[%s]' % ';'.join([matlabify(x) for x in m])
         return '[%s]' % ','.join([str(x) for x in m])
 
+    def output_all_vars(fp):
+        for entry in a + b:
+            print >>fp, '  %s = x(%d);' % (entry[0], key[entry[0]] + 1)
+        for query_plans, qid in zip(cost_fcns, xrange(len(cost_fcns))):
+            for plan, pid in zip(query_plans, xrange(len(query_plans))):
+                vname = 'P%d%d' % (qid, pid)
+                print >>fp, '  %s = x(%d);' % (vname, key[vname] + 1)
+
     # list of ( query_cost_function_expr )
     queries = []
     for query_plans, qid in zip(cost_fcns, xrange(len(cost_fcns))):
+        local_options = []
         for plan, pid in zip(query_plans, xrange(len(query_plans))):
             vname = 'P%d%d' % (qid, pid)
             queries.append( mult_terms(vname, plan[0]) )
+            local_options.append( mult_terms(vname, plan[0]) )
 
             # each Pij requires some of the variables to be true
             for var in plan[1]:
@@ -1375,6 +1451,13 @@ if __name__ == '__main__':
         # squares constraint
         c_eq.append(add_terms_l(['P%d%d^2' % (qid, pid) for pid in xrange(len(query_plans))] + ['-1']))
 
+        # output the individual query cost function
+        with open('cost_function_q%s.m' % qid, 'w') as fp:
+            print >>fp, 'function [ cost ] = cost_function_q%s ( x )' % qid
+            output_all_vars(fp)
+            cost_fcn_expr = add_terms_l(local_options)
+            print >>fp, '  cost = %s;' % cost_fcn_expr
+            print >>fp, 'end'
 
     # if given choice, x_DET/x_OPE must be at least one
     for entry in ORIG_COLUMNS:
@@ -1405,13 +1488,6 @@ if __name__ == '__main__':
     a_lt.append( a0    )
     b_lt.append( b_rhs )
 
-    def output_all_vars(fp):
-        for entry in a + b:
-            print >>fp, '  %s = x(%d);' % (entry[0], key[entry[0]] + 1)
-        for query_plans, qid in zip(cost_fcns, xrange(len(cost_fcns))):
-            for plan, pid in zip(query_plans, xrange(len(query_plans))):
-                vname = 'P%d%d' % (qid, pid)
-                print >>fp, '  %s = x(%d);' % (vname, key[vname] + 1)
 
     fp = open('table_size_test.m', 'w')
     print >>fp, 'function [ size_orig, size_enc ] = cost_function ( x )'
@@ -1464,6 +1540,18 @@ if __name__ == '__main__':
     print >>fp, '  for i=[1:length(x)]'
     print >>fp, "    disp(sprintf('%%s: %%f', %s, %s));" % ('name{i}', 'x(i)')
     print >>fp, '  end'
+
+    last_qid, last_pid = len(cost_fcns) - 1, len(cost_fcns[-1]) - 1
+    range_begin = key['P00'] + 1
+    range_end   = key['P%d%d' % (last_qid, last_pid)] + 1
+
+    for query_plans, qid in zip(cost_fcns, xrange(len(cost_fcns))):
+        for pid in xrange(len(query_plans)):
+            name = 'P%d%d' % (qid, pid)
+            print >>fp, '  x(%d:%d) = 0;' % (range_begin, range_end)
+            print >>fp, '  x(%d) = 1;' % (key[name] + 1)
+            print >>fp, "  disp(sprintf('%s cost: %%f', cost_function_q%d(x)));" % (name, qid)
+
     print >>fp, 'end'
     fp.close()
 
