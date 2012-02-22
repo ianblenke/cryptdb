@@ -22,6 +22,8 @@
 #include <sys/time.h>
 #include <time.h>
 
+#include <map>
+
 #include <gmp.h>
 #include <pthread.h>
 #include <tbb/concurrent_queue.h>
@@ -31,8 +33,8 @@ using namespace std;
 using namespace NTL;
 using namespace tbb;
 
-#define LIKELY(pred)   __builtin_expect((pred), true)
-#define UNLIKELY(pred) __builtin_expect((pred), false)
+#define LIKELY(pred)   __builtin_expect(!!(pred), true)
+#define UNLIKELY(pred) __builtin_expect(!!(pred), false)
 
 #define TRACE()
 #define SANITY(x) assert(x)
@@ -77,6 +79,20 @@ void     agg_deinit(UDF_INIT *initid);
 void     agg_clear(UDF_INIT *initid, char *is_null, char *error);
 my_bool  agg_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error);
 char *   agg(UDF_INIT *initid, UDF_ARGS *args, char *result,
+             unsigned long *length, char *is_null, char *error);
+
+my_bool  sum_char2_init(UDF_INIT *initid, UDF_ARGS *args, char *message);
+void     sum_char2_deinit(UDF_INIT *initid);
+void     sum_char2_clear(UDF_INIT *initid, char *is_null, char *error);
+my_bool  sum_char2_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error);
+char *   sum_char2(UDF_INIT *initid, UDF_ARGS *args, char *result,
+             unsigned long *length, char *is_null, char *error);
+
+my_bool  agg_char2_init(UDF_INIT *initid, UDF_ARGS *args, char *message);
+void     agg_char2_deinit(UDF_INIT *initid);
+void     agg_char2_clear(UDF_INIT *initid, char *is_null, char *error);
+my_bool  agg_char2_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error);
+char *   agg_char2(UDF_INIT *initid, UDF_ARGS *args, char *result,
              unsigned long *length, char *is_null, char *error);
 
 my_bool  agg8_init(UDF_INIT *initid, UDF_ARGS *args, char *message);
@@ -650,6 +666,196 @@ agg(UDF_INIT *initid, UDF_ARGS *args, char *result,
     BytesFromZZ((uint8_t *) as->rbuf, as->sum,
                 CryptoManager::Paillier_len_bytes);
     *length = CryptoManager::Paillier_len_bytes;
+    return (char *) as->rbuf;
+}
+
+struct sum_char2_state {
+    std::map<uint16_t, std::pair<uint64_t, double> > aggs;
+    void *rbuf;
+};
+
+my_bool
+sum_char2_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
+{
+    sum_char2_state *as = new sum_char2_state;
+    as->rbuf = NULL;
+    initid->ptr = (char *) as;
+    args->arg_type[2] = REAL_RESULT; // coerce DECIMAL to REAL
+    return 0;
+}
+
+void
+sum_char2_deinit(UDF_INIT *initid)
+{
+    sum_char2_state *as = (sum_char2_state *) initid->ptr;
+    free(as->rbuf);
+    delete as;
+}
+
+void
+sum_char2_clear(UDF_INIT *initid, char *is_null, char *error)
+{
+    sum_char2_state *as = (sum_char2_state *) initid->ptr;
+    as->aggs.clear();
+}
+
+my_bool
+sum_char2_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error)
+{
+    sum_char2_state *as = (sum_char2_state *) initid->ptr;
+
+    long long p0, p1;
+    p0 = *((long long *) args->args[0]);
+    p1 = *((long long *) args->args[1]);
+
+    //assert(p0 >= 0 && p0 <= 0xFF);
+    //assert(p1 >= 0 && p1 <= 0xFF);
+
+    uint16_t key = (uint8_t(p0) << 8) | uint8_t(p1);
+
+    std::map<uint16_t, std::pair<uint64_t, double> >::iterator it =
+        as->aggs.find(key);
+
+    double real_val = *((double*) args->args[2]);
+
+    if (UNLIKELY(it == as->aggs.end())) {
+        std::pair<uint64_t, double>& p = as->aggs[key]; // creates on demand
+        p.first  = 1;
+        p.second = real_val;
+    } else {
+        it->second.first++;
+        it->second.second += real_val;
+    }
+    return true;
+}
+
+char *
+sum_char2(UDF_INIT *initid, UDF_ARGS *args, char *result,
+    unsigned long *length, char *is_null, char *error)
+{
+    sum_char2_state *as = (sum_char2_state *) initid->ptr;
+    *length = (2 + sizeof(uint64_t) + sizeof(double)) * as->aggs.size();
+    as->rbuf = malloc(*length);
+    assert(as->rbuf); // TODO: handle OOM
+    uint8_t* ptr = (uint8_t *) as->rbuf;
+    for (std::map<uint16_t, std::pair<uint64_t, double> >::iterator it = as->aggs.begin();
+         it != as->aggs.end(); ++it) {
+        *ptr++ = (uint8_t) ((it->first >> 8) & 0xFF);
+        *ptr++ = (uint8_t) (it->first & 0xFF);
+        uint64_t *iptr = (uint64_t *) ptr;
+        *iptr = it->second.first;
+        ptr += sizeof(uint64_t);
+        double *dptr = (double *)ptr;
+        *dptr = it->second.second;
+        ptr += sizeof(double);
+    }
+    return (char *) as->rbuf;
+}
+
+struct agg_char2_state {
+    std::map<uint16_t, std::pair<uint64_t, ZZ> > aggs;
+    ZZ n2;
+    //bool n2_set;
+    void *rbuf;
+};
+
+my_bool
+agg_char2_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
+{
+    agg_char2_state *as = new agg_char2_state;
+    as->rbuf = NULL;
+
+    if (args->args[3] == NULL) {
+        strcpy(message, "need to provide PK");
+        return 1;
+    }
+
+    ZZFromBytes(as->n2, (const uint8_t *) args->args[3],
+                args->lengths[3]);
+    //as->n2_set = 1;
+
+    initid->ptr = (char *) as;
+    return 0;
+}
+
+void
+agg_char2_deinit(UDF_INIT *initid)
+{
+    agg_char2_state *as = (agg_char2_state *) initid->ptr;
+    free(as->rbuf);
+    delete as;
+}
+
+void
+agg_char2_clear(UDF_INIT *initid, char *is_null, char *error)
+{
+    agg_char2_state *as = (agg_char2_state *) initid->ptr;
+    as->aggs.clear();
+}
+
+my_bool
+agg_char2_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error)
+{
+    agg_char2_state *as = (agg_char2_state *) initid->ptr;
+    //if (!as->n2_set) {
+    //    ZZFromBytes(as->n2, (const uint8_t *) args->args[3],
+    //                args->lengths[3]);
+    //    as->n2_set = 1;
+    //}
+
+    long long p0, p1;
+    p0 = *((long long *) args->args[0]);
+    p1 = *((long long *) args->args[1]);
+
+    //assert(p0 >= 0 && p0 <= 0xFF);
+    //assert(p1 >= 0 && p1 <= 0xFF);
+
+    uint16_t key = (uint8_t(p0) << 8) | uint8_t(p1);
+
+    std::map<uint16_t, std::pair<uint64_t, ZZ> >::iterator it =
+        as->aggs.find(key);
+    ZZ* sum = NULL;
+    if (UNLIKELY(it == as->aggs.end())) {
+        std::pair<uint64_t, ZZ>& p = as->aggs[key]; // creates on demand
+        p.first  = 1;
+        p.second = to_ZZ(1);
+        sum = &p.second;
+
+        //assert(as->aggs[key].first == 1);
+        //assert(as->aggs[key].second == to_ZZ(1));
+    } else {
+        it->second.first++;
+        sum = &it->second.second;
+    }
+    //assert(sum);
+
+    ZZ e;
+    ZZFromBytes(e, (const uint8_t *) args->args[2], args->lengths[2]);
+
+    MulMod(*sum, *sum, e, as->n2);
+    return true;
+}
+
+char *
+agg_char2(UDF_INIT *initid, UDF_ARGS *args, char *result,
+    unsigned long *length, char *is_null, char *error)
+{
+    agg_char2_state *as = (agg_char2_state *) initid->ptr;
+    *length = (2 + sizeof(uint64_t) + CryptoManager::Paillier_len_bytes) * as->aggs.size();
+    as->rbuf = malloc(*length);
+    assert(as->rbuf); // TODO: handle OOM
+    uint8_t* ptr = (uint8_t *) as->rbuf;
+    for (std::map<uint16_t, std::pair<uint64_t, ZZ> >::iterator it = as->aggs.begin();
+         it != as->aggs.end(); ++it) {
+        *ptr++ = (uint8_t) ((it->first >> 8) & 0xFF);
+        *ptr++ = (uint8_t) (it->first & 0xFF);
+        uint64_t *iptr = (uint64_t *) ptr;
+        *iptr = it->second.first;
+        ptr += sizeof(uint64_t);
+        BytesFromZZ(ptr, it->second.second,
+                    CryptoManager::Paillier_len_bytes);
+        ptr += CryptoManager::Paillier_len_bytes;
+    }
     return (char *) as->rbuf;
 }
 

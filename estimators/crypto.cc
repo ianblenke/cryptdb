@@ -122,14 +122,26 @@ TEST_SNIPPET(agg_decrypt) {
 }
 
 TEST_SNIPPET(agg_add) {
-    const string& a = AGG_DATA_1;
+    const string* aggs[] = {
+        &AGG_DATA_0,
+        &AGG_DATA_1,
+        &AGG_DATA_2,
+        &AGG_DATA_3,
+        &AGG_DATA_4,
+        &AGG_DATA_5,
+        &AGG_DATA_6,
+        &AGG_DATA_7,
+        &AGG_DATA_8,
+        &AGG_DATA_9,
+    };
     string pkinfo = cm.getPKInfo();
     ZZ n2;
     ZZFromBytes(n2, (const uint8_t *) pkinfo.data(), pkinfo.size());
 
-    ZZ sum = to_ZZ(0);
+    ZZ sum = to_ZZ(1);
     REPEAT(numOps) {
         ZZ e;
+        const string& a = *aggs[_i % NELEMS(aggs)];
         ZZFromBytes(e, (const uint8_t *) a.data(), a.size());
         MulMod(sum, sum, e, n2);
     }
@@ -218,7 +230,7 @@ int main(int argc, char** argv) {
 
         TIME_SNIPPET(agg_encrypt, 100);
         TIME_SNIPPET(agg_decrypt, 100);
-        TIME_SNIPPET(agg_add,     100);
+        TIME_SNIPPET(agg_add,     5000);
 
     } // end AGG
 
