@@ -19,7 +19,7 @@ ope_encrypt           : 13.3586000000
 ope_decrypt           : 9.4752400000
 agg_encrypt           : 9.9578400000
 agg_decrypt           : 0.6981700000
-agg_add               : 0.0005200000
+agg_add               : 0.0052300000
 swp_encrypt_for_query : 0.0037320000
 swp_search            : 0.0035200000
 """
@@ -30,7 +30,7 @@ DET_DEC    = 0.0173  / 1000.0
 OPE_ENC    = 13.359  / 1000.0
 OPE_DEC    = 9.475   / 1000.0
 AGG_DEC    = 0.6982  / 1000.0
-AGG_ADD    = 0.00052 / 1000.0
+AGG_ADD    = 0.00523 / 1000.0
 SWP_ENC    = 0.00373 / 1000.0
 SWP_SEARCH = 0.00352 / 1000.0
 
