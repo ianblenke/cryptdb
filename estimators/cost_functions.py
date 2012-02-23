@@ -5,8 +5,9 @@ from math import log
 
 import datetime
 
-# most accurate for 1.0, since the table stats are based off 1.0
-TPCH_SCALE = 1.0
+# most accurate for 1, since the table stats are based off 1
+# MUST BE INT
+TPCH_SCALE = 1
 
 PERFECT_STATS=True
 
@@ -462,7 +463,7 @@ def query2_cost_functions(table_sizes):
         ### statistics ###
 
         if PERFECT_STATS:
-            ResultSetNRows = 160240
+            ResultSetNRows = int(160240 * TPCH_SCALE)
         else:
             # mysql gives us the estimated cardinality of the
             # joined result set as:
@@ -549,7 +550,7 @@ def query2_cost_functions(table_sizes):
 
         ### statistics ###
         if PERFECT_STATS:
-            NMatchingRows = 443
+            NMatchingRows = int(443 * TPCH_SCALE)
         else:
             r_hists = get_table_histogram(REGION)
             p_hists = get_table_histogram(PART)
@@ -624,7 +625,7 @@ def query11_cost_functions(table_sizes):
 
         ### statistics ###
         if PERFECT_STATS:
-            ResultSetNRows = 33040
+            ResultSetNRows = int(33040 * TPCH_SCALE)
         else:
             n_hists = get_table_histogram(NATION)
             ResultSetNRows = table_sizes[PARTSUPP] * 1 * 1 * n_hists['n_name'].eq_search('ARGENTINA')
@@ -668,8 +669,8 @@ def query11_cost_functions(table_sizes):
 
         ### statistics ###
         if PERFECT_STATS:
-            ResultSetNRows = 31110
-            RowsNeedToAgg = 33040
+            ResultSetNRows = int(31110 * TPCH_SCALE)
+            RowsNeedToAgg  = int(33040 * TPCH_SCALE)
         else:
             ps_hists = get_table_histogram(PARTSUPP)
             n_hists  = get_table_histogram(NATION)
@@ -763,7 +764,7 @@ def query14_cost_functions(table_sizes):
 
         ### statistics ###
         if PERFECT_STATS:
-            ResultSetNRows = 76969
+            ResultSetNRows = int(76969 * TPCH_SCALE)
         else:
             start_date = mysqlEncode(datetime.date(1996, 7, 1))
             end_date   = mysqlEncode(datetime.date(1996, 8, 1))
@@ -808,7 +809,7 @@ def query14_cost_functions(table_sizes):
 
         ### statistics ###
         if PERFECT_STATS:
-            IntermediateNRows = 76969
+            IntermediateNRows = int(76969 * TPCH_SCALE)
         else:
             start_date = mysqlEncode(datetime.date(1996, 7, 1))
             end_date   = mysqlEncode(datetime.date(1996, 8, 1))
@@ -889,8 +890,8 @@ def query18_cost_functions(table_sizes):
         def q2_expr():
             ### statistics ###
             if PERFECT_STATS:
-                ResultSetNElems = 9
-                NSortEntries = 63
+                ResultSetNElems = int(9  * TPCH_SCALE)
+                NSortEntries    = int(63 * TPCH_SCALE)
             else:
                 c_hists = get_table_histogram(CUSTOMER)
                 o_hists = get_table_histogram(ORDERS)
@@ -967,7 +968,7 @@ def query18_cost_functions(table_sizes):
         def q1_expr():
             ### statistics ###
             if PERFECT_STATS:
-                ResultSetNElems = 1500000
+                ResultSetNElems = int(1500000 * TPCH_SCALE)
             else:
                 l_hists = get_table_histogram(LINEITEM)
                 ResultSetNElems = int(l_hists['l_orderkey'].distinct_values() * TPCH_SCALE)
@@ -987,8 +988,8 @@ def query18_cost_functions(table_sizes):
         def q2_expr():
             ### statistics ###
             if PERFECT_STATS:
-                ResultSetNElems = 9
-                NSortEntries = 63
+                ResultSetNElems = int(9  * TPCH_SCALE)
+                NSortEntries    = int(63 * TPCH_SCALE)
             else:
                 c_hists = get_table_histogram(CUSTOMER)
                 o_hists = get_table_histogram(ORDERS)
@@ -1093,7 +1094,7 @@ def query20_cost_functions(table_sizes):
         def q2_expr():
             ### statistics ###
             if PERFECT_STATS:
-                ResultSetNRows   = 321993
+                ResultSetNRows = int(321993 * TPCH_SCALE)
             else:
                 ResultSetNRows = table_sizes[LINEITEM] * 1 # terrible stats
 
@@ -1112,7 +1113,7 @@ def query20_cost_functions(table_sizes):
         def q3_expr():
             ### statistics ###
             if PERFECT_STATS:
-                ResultSetNRows   = 404
+                ResultSetNRows = int(404 * TPCH_SCALE)
             else:
                 n_hists = get_table_histogram(NATION)
                 ResultSetNRows = int( table_sizes[SUPPLIER] * 1 * n_hists['n_name'].eq_search('ALGERIA') )
@@ -1169,7 +1170,7 @@ def query20_cost_functions(table_sizes):
         def q1_expr():
             ### statistics ###
             if PERFECT_STATS:
-                ResultSetNRows   = 48822
+                ResultSetNRows = int(48822 * TPCH_SCALE)
             else:
                 l_hists = get_table_histogram(LINEITEM)
 
@@ -1204,7 +1205,7 @@ def query20_cost_functions(table_sizes):
         def q2_expr():
             ### statistics ###
             if PERFECT_STATS:
-                ResultSetNRows   = 404
+                ResultSetNRows = int(404 * TPCH_SCALE)
             else:
                 n_hists = get_table_histogram(NATION)
                 ResultSetNRows = \
@@ -1266,8 +1267,8 @@ def query20_cost_functions(table_sizes):
         def q1_expr():
             ### statistics ###
             if PERFECT_STATS:
-                ResultSetNRows   = 29096
-                SortNEntries = 48822
+                ResultSetNRows = int(29096 * TPCH_SCALE)
+                SortNEntries   = int(48822 * TPCH_SCALE)
             else:
                 l_hists  = get_table_histogram(LINEITEM)
                 ps_hists = get_table_histogram(PARTSUPP)
@@ -1307,7 +1308,7 @@ def query20_cost_functions(table_sizes):
         def q2_expr():
             ### statistics ###
             if PERFECT_STATS:
-                ResultSetNRows   = 404
+                ResultSetNRows = int(404 * TPCH_SCALE)
             else:
                 n_hists = get_table_histogram(NATION)
                 ResultSetNRows = \
@@ -1420,6 +1421,10 @@ if __name__ == '__main__':
                 vname = 'P%d%d' % (qid, pid)
                 print >>fp, '  %s = x(%d);' % (vname, key[vname] + 1)
 
+    last_qid, last_pid = len(cost_fcns) - 1, len(cost_fcns[-1]) - 1
+    range_begin = key['P00'] + 1
+    range_end   = key['P%d%d' % (last_qid, last_pid)] + 1
+
     # list of ( query_cost_function_expr )
     queries = []
     for query_plans, qid in zip(cost_fcns, xrange(len(cost_fcns))):
@@ -1452,12 +1457,22 @@ if __name__ == '__main__':
         c_eq.append(add_terms_l(['P%d%d^2' % (qid, pid) for pid in xrange(len(query_plans))] + ['-1']))
 
         # output the individual query cost function
-        with open('cost_function_q%s.m' % qid, 'w') as fp:
-            print >>fp, 'function [ cost ] = cost_function_q%s ( x )' % qid
+        with open('cost_function_q%d_s%d.m' % (qid, TPCH_SCALE), 'w') as fp:
+            print >>fp, 'function [ cost ] = cost_function_q%d_s%d ( x )' % (qid, TPCH_SCALE)
             output_all_vars(fp)
             cost_fcn_expr = add_terms_l(local_options)
             print >>fp, '  cost = %s;' % cost_fcn_expr
             print >>fp, 'end'
+
+        # output the query plan wrappers
+        for pid in xrange(len(query_plans)):
+            with open('cost_function_q%d_p%d_s%d.m' % (qid, pid, TPCH_SCALE), 'w') as fp:
+                name = 'P%d%d' % (qid, pid)
+                print >>fp, 'function [ cost ] = cost_function_q%d_p%d_s%d ( x )' % (qid, pid, TPCH_SCALE)
+                print >>fp, '  x(%d:%d) = 0;' % (range_begin, range_end)
+                print >>fp, '  x(%d) = 1;' % (key[name] + 1)
+                print >>fp, '  cost = cost_function_q%d_s%d(x);' % (qid, TPCH_SCALE)
+                print >>fp, 'end'
 
     # if given choice, x_DET/x_OPE must be at least one
     for entry in ORIG_COLUMNS:
@@ -1489,25 +1504,25 @@ if __name__ == '__main__':
     b_lt.append( b_rhs )
 
 
-    fp = open('table_size_test.m', 'w')
-    print >>fp, 'function [ size_orig, size_enc ] = cost_function ( x )'
+    #fp = open('table_size_test.m', 'w')
+    #print >>fp, 'function [ size_orig, size_enc ] = table_size_test ( x )'
 
-    print >>fp, '  size_orig =', sum([get_orig_table_row_size(tbl) * table_sizes[tbl_id] for tbl, tbl_id, tbl_name in TABLE_PREFIXES]), ';'
+    #print >>fp, '  size_orig =', sum([get_orig_table_row_size(tbl) * table_sizes[tbl_id] for tbl, tbl_id, tbl_name in TABLE_PREFIXES]), ';'
 
-    output_all_vars(fp)
+    #output_all_vars(fp)
 
-    print >>fp, '  size_enc =', add_terms_l([
-      mult_terms(
-        entry[0],
-        str(entry[1] * table_sizes[tbl_id]))
-      for tbl, tbl_id, tbl_name in TABLE_PREFIXES \
-      for entry in gen_variables_for_table(tbl)]), ';'
+    #print >>fp, '  size_enc =', add_terms_l([
+    #  mult_terms(
+    #    entry[0],
+    #    str(entry[1] * table_sizes[tbl_id]))
+    #  for tbl, tbl_id, tbl_name in TABLE_PREFIXES \
+    #  for entry in gen_variables_for_table(tbl)]), ';'
 
-    print >>fp, 'end'
-    fp.close()
+    #print >>fp, 'end'
+    #fp.close()
 
-    fp = open('mycon.m', 'w')
-    print >>fp, 'function [ c, ceq ] = cost_function ( x )'
+    fp = open('mycon_s%d.m' % TPCH_SCALE, 'w')
+    print >>fp, 'function [ c, ceq ] = mycon_s%d ( x )' % TPCH_SCALE
 
     output_all_vars(fp)
     print >>fp, '  c   = %s;' % matlabify(c_lt)
@@ -1516,10 +1531,10 @@ if __name__ == '__main__':
     print >>fp, 'end'
     fp.close()
 
-    # emit cost function file (cost_function.m)
+    # emit cost function file
     # matlab is index from 1, not zero
-    fp = open('cost_function.m', 'w')
-    print >>fp, 'function [ cost ] = cost_function ( x )'
+    fp = open('cost_function_s%d.m' % TPCH_SCALE, 'w')
+    print >>fp, 'function [ cost ] = cost_function_s%d ( x )' % TPCH_SCALE
 
     print >>fp, '  bias = @(t) -10000.0 * (t - 0.5).^2 + 2500.0;'
     output_all_vars(fp)
@@ -1534,29 +1549,24 @@ if __name__ == '__main__':
                               for plan, pid in zip(query_plans, xrange(len(query_plans)))]
 
     # emit the interpretation script
-    fp = open('interpret_results.m', 'w')
-    print >>fp, 'function [] = interpret_results ( x )'
+    fp = open('interpret_results_s%d.m' % TPCH_SCALE, 'w')
+    print >>fp, 'function [] = interpret_results_s%d ( x )' % TPCH_SCALE
     print >>fp, '  name = {%s};' % ','.join(["'%s'" % s for s in ([entry[0] for entry in a + b] + query_vars)])
     print >>fp, '  for i=[1:length(x)]'
     print >>fp, "    disp(sprintf('%%s: %%f', %s, %s));" % ('name{i}', 'x(i)')
     print >>fp, '  end'
 
-    last_qid, last_pid = len(cost_fcns) - 1, len(cost_fcns[-1]) - 1
-    range_begin = key['P00'] + 1
-    range_end   = key['P%d%d' % (last_qid, last_pid)] + 1
-
     for query_plans, qid in zip(cost_fcns, xrange(len(cost_fcns))):
         for pid in xrange(len(query_plans)):
             name = 'P%d%d' % (qid, pid)
-            print >>fp, '  x(%d:%d) = 0;' % (range_begin, range_end)
-            print >>fp, '  x(%d) = 1;' % (key[name] + 1)
-            print >>fp, "  disp(sprintf('%s cost: %%f', cost_function_q%d(x)));" % (name, qid)
+            print >>fp, "  disp(sprintf('%s cost: %%f', cost_function_q%d_p%d_s%d(x)));" % (
+                name, qid, pid, TPCH_SCALE)
 
     print >>fp, 'end'
     fp.close()
 
     # emit the script to run
-    fp = open('opt_problem.m', 'w')
+    fp = open('opt_problem_s%d.m' % TPCH_SCALE, 'w')
 
     #print >>fp, 'x0 = %s;' % matlabify(mkOneRow())
     print >>fp, 'x0 = zeros(1, %d);' % len(mkOneRow())
@@ -1569,15 +1579,16 @@ if __name__ == '__main__':
     print >>fp, 'lb = %s;' % matlabify(mkZeroRow())
     print >>fp, 'ub = %s;' % matlabify(mkOneRow())
     print >>fp, "opts = optimset('Algorithm', 'active-set');"
-    print >>fp, 'x = fmincon(@cost_function,x0,A,b,Aeq,beq,lb,ub,@mycon,opts);'
-    print >>fp, '[x, fval, exitflag] = fmincon(@cost_function,x0,A,b,Aeq,beq,lb,ub,@mycon,opts);'
+    print >>fp, '[x, fval, exitflag] = fmincon(@cost_function_s%d,x0,A,b,Aeq,beq,lb,ub,@mycon_s%d,opts);' % (
+        TPCH_SCALE, TPCH_SCALE)
     print >>fp, 'N_TRIES=3;'
     print >>fp, 'i=N_TRIES;'
     print >>fp, 'while exitflag ~= 1 && i > 0'
-    print >>fp, '    [x, fval, exitflag] = fmincon(@cost_function,x,A,b,Aeq,beq,lb,ub,@mycon,opts);'
+    print >>fp, '    [x, fval, exitflag] = fmincon(@cost_function_s%d,x,A,b,Aeq,beq,lb,ub,@mycon_s%d,opts);' % (
+        TPCH_SCALE, TPCH_SCALE)
     print >>fp, '    i = i - 1;'
     print >>fp, 'end'
-    print >>fp, 'interpret_results(x);'
+    print >>fp, 'interpret_results_s%d(x);' % TPCH_SCALE
     print >>fp, 'if exitflag ~= 1'
     print >>fp, "    disp(sprintf('WARNING: Did not converge after %d iterations', N_TRIES));"
     print >>fp, 'end'
