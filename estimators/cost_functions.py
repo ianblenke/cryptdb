@@ -427,7 +427,41 @@ def query1_cost_functions(table_sizes):
     def plan2(): return plan_opt(False)
     def plan3(): return plan_opt(True)
 
-    return [plan1(), plan2(), plan3()]
+    def plan4():
+        '''
+        compute with hash aggregation
+
+        SELECT agg_char2(l_returnflag_DET, l_linestatus_DET, l_pack0, ...)
+        FROM lineitem_enc
+        WHERE l_shipdate_OPE <= Y
+
+        (sort done locally)
+        '''
+
+        ### statistics ###
+        if PERFECT_STATS:
+            NGroups = 10
+        else:
+            l_hists = get_table_histogram(LINEITEM)
+            NGroups = int(l_hists['l_returnflag'].distinct_values() *
+                          l_hists['l_linestatus'].distinct_values() * TPCH_SCALE)
+
+        DataSentBack = NGroups * (2 + 256)
+
+        encrypt_expr  = str(OPE_ENC)
+        rtt_expr      = str(RTT)
+        seek_expr     = str(SEEK)
+        seq_scan_expr = mult_terms(str(1.0 / READ_BW), table_size_expr)
+        agg_expr      = str(numrows * AGG_ADD)
+        xfer_expr     = str((1.0 / NETWORK_BW) * DataSentBack)
+        decrypt_expr  = str((2.0 * DET_ENC + AGG_DEC) * NGroups)
+
+        return (
+            add_terms_l([encrypt_expr, rtt_expr, seek_expr, seq_scan_expr,
+                         agg_expr, xfer_expr, decrypt_expr]),
+            set(require_all_det_tbls(['l'])).intersection(set(['l_returnflag_det', 'l_linestatus_det'])).union(['l_shipdate_ope', 'l_pack0_agg']))
+
+    return [plan1(), plan2(), plan3(), plan4()]
 
 ### Query 2 ###
 def query2_cost_functions(table_sizes):
