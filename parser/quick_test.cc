@@ -181,10 +181,10 @@ int main(int argc, char **argv) {
         test_big_ope(99999999999999UL, 88888888888888UL);
         test_big_ope(88888888888888UL, 99999999999999UL);
         test_big_ope(12234542345UL, 823982315UL);
-        test_big_ope(13932UL, 1UL); // fails decrypt
+        test_big_ope(13932UL, 1UL);
         test_big_ope(9084234534UL, 9023859023UL);
-        test_big_ope(1UL, 2UL); // fails decrypt
-        test_big_ope(18328954UL, 289345808UL); // fails decrypt
+        test_big_ope(1UL, 2UL);
+        test_big_ope(18328954UL, 289345808UL);
         test_big_ope(9085908UL, 23285230346UL);
         test_big_ope(123UL, 123UL);
     }
