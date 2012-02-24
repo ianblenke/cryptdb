@@ -46,6 +46,7 @@ static void test_big_ope(uint64_t a, uint64_t b, bool test_decrypt = true)
                                "my_field_name", SECLEVEL::OPE, SECLEVEL::PLAIN_OPE,
                                isBin, 12345);
         assert(!isBin);
+        //cerr << "i: " << i << ", pt: " << pt << endl;
         assert(to_s(i) == pt);
     }
 
@@ -180,12 +181,12 @@ int main(int argc, char **argv) {
         test_big_ope(99999999999999UL, 88888888888888UL);
         test_big_ope(88888888888888UL, 99999999999999UL);
         test_big_ope(12234542345UL, 823982315UL);
-        test_big_ope(13932UL, 1UL, false); // fails decrypt
+        test_big_ope(13932UL, 1UL); // fails decrypt
         test_big_ope(9084234534UL, 9023859023UL);
-        test_big_ope(1UL, 2UL, false); // fails decrypt
-        test_big_ope(18328954UL, 289345808UL, false); // fails decrypt
-        test_big_ope(9085908UL, 23285230346UL, false);
-        test_big_ope(123UL, 123UL, false);
+        test_big_ope(1UL, 2UL); // fails decrypt
+        test_big_ope(18328954UL, 289345808UL); // fails decrypt
+        test_big_ope(9085908UL, 23285230346UL);
+        test_big_ope(123UL, 123UL);
     }
 
     // test char type

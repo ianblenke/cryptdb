@@ -25,6 +25,7 @@
 
 using namespace std;
 using namespace NTL;
+using namespace ope;
 
 template<class T>
 void
@@ -384,7 +385,7 @@ test_online_ope()
         cout << "online-ope ct:  " << hex << ct << dec << endl;
 
 	//print_tree(ope_serv.root);
-	
+
         auto pt2 = ope_clnt.decrypt(ct);
         cout << "online-ope pt2: " << pt2 << endl;
 
@@ -443,7 +444,7 @@ main(int ac, char **av)
     cout << u.rand<int64_t>() << endl;
 
     test_online_ope_rebalance();
-    
+
     test_bn();
     test_ecjoin();
     test_search();

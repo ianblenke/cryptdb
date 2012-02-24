@@ -14,6 +14,8 @@
 using namespace std;
 using namespace NTL;
 
+namespace ope {
+
 /*
  * A gap is represented by the next integer value _above_ the gap.
  */
@@ -141,3 +143,5 @@ OPE::decrypt(const ZZ &ctext)
         search([&ctext](const ZZ &, const ZZ &r) { return ctext < r; });
     return dr.d;
 }
+
+} // namespace ope

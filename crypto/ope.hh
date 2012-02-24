@@ -7,6 +7,8 @@
 #include <crypto/sha.hh>
 #include <NTL/ZZ.h>
 
+namespace ope { // to avoid collision with old OPE class
+
 class ope_domain_range {
  public:
     ope_domain_range(const NTL::ZZ &d_arg,
@@ -45,3 +47,5 @@ class OPE {
                                  const NTL::ZZ &r_lo, const NTL::ZZ &r_hi,
                                  CB go_low, blockrng<AES> *prng);
 };
+
+} // namespace ope
