@@ -27,9 +27,11 @@ static vector<size_t> sort_keys;
 
 static bool interpret_as_int = false;
 
-static void process_row(const vector<string>& row) {
-    rows.push_back(row);
-}
+static const size_t MAX_INMEM_ROWS = 1000000;
+
+static bool merge_sort = false;
+
+static size_t run_ids = 0;
 
 struct sorter_functor {
     inline bool
@@ -54,15 +56,153 @@ struct sorter_functor {
     }
 };
 
-static void sort_and_output() {
-    sort(rows.begin(), rows.end(), sorter_functor());
-    for (auto r : rows) {
-        vector<string> n;
-        n.reserve(r.size());
-        for (size_t i = 0; i < r.size(); i++) {
-            n.push_back(to_mysql_escape_varbin(r[i]));
+static inline string tmp_file_name(size_t id) {
+    ostringstream s;
+    s << "/tmp/sorted_run_" << id;
+    return s.str();
+}
+
+static inline string next_tmp_file_name() {
+    return tmp_file_name(run_ids++);
+}
+
+static void emit_row(ostream& o, const vector<string>& row) {
+    vector<string> n;
+    n.reserve(row.size());
+    for (size_t i = 0; i < row.size(); i++) {
+        n.push_back(to_mysql_escape_varbin(row[i]));
+    }
+    o << join(n, "|") << endl;
+}
+
+struct process_row {
+    void operator()(const vector<string>& row) const {
+        rows.push_back(row);
+        if (rows.size() == MAX_INMEM_ROWS) {
+            merge_sort = true;
+            FlushAndClearRows();
         }
-        cout << join(n, "|") << endl;
+    }
+    static void FlushAndClearRows() {
+        // write this file as a sorted run to disk
+        if (rows.empty() || !merge_sort) return;
+
+        string tmpname = next_tmp_file_name();
+        ofstream f;
+        f.open(tmpname.c_str());
+        assert(f.is_open());
+
+        sort(rows.begin(), rows.end(), sorter_functor());
+        for (auto r : rows) emit_row(f, r);
+        f.flush();
+        rows.clear();
+    }
+};
+
+struct appender {
+    appender(vector<vector<string> >& buf) : buf(buf) {}
+    void operator()(const vector<string>& elem) { buf.push_back(elem); }
+    vector<vector<string> >& buf;
+};
+
+template <typename T>
+size_t read_elems_from_stream(
+    istream& input, ssize_t nelems, T functor) {
+    vector<string> elems;
+    string cur_elem;
+    bool onescape = false;
+    size_t read = 0;
+    assert(nelems == -1 || nelems >= 0);
+    while (input.good() && (nelems == -1 || read < ((size_t)nelems))) {
+        char c = input.get();
+        if (input.eof()) break;
+        if (onescape) {
+            cur_elem.push_back(c);
+            onescape = false;
+            continue;
+        }
+        switch (c) {
+        case '\\':
+            onescape = true;
+            break;
+        case '|':
+            elems.push_back(cur_elem);
+            cur_elem.clear();
+            break;
+        case '\n':
+            elems.push_back(cur_elem);
+            cur_elem.clear();
+            //assert(elems.size() > maxSortKey);
+            functor(elems);
+            read++;
+            elems.clear();
+            break;
+        default:
+            cur_elem.push_back(c);
+            break;
+        }
+    }
+    assert(!onescape);
+    assert(nelems == -1 || read <= ((size_t)nelems));
+    return read;
+}
+
+static void sort_and_output() {
+    if (merge_sort) {
+        size_t n_ways = run_ids;
+        //cerr << n_ways << endl;
+        assert(n_ways >= 1);
+
+        typedef vector<string> elem;
+        typedef vector<elem> buffer;
+
+        vector<buffer> buffers(n_ways);
+        vector<ssize_t> positions(n_ways);
+        vector<ifstream> streams(n_ways);
+        for (size_t i = 0; i < n_ways; i++) {
+            streams[i].open(tmp_file_name(i));
+            assert(!streams[i].fail());
+
+            appender app(buffers[i]);
+            size_t read = read_elems_from_stream(streams[i], 4096, app);
+            assert(read > 0);
+            positions[i] = 0;
+        }
+
+        sorter_functor f;
+        while (true) {
+            // take min from buffer
+            elem* minSoFar = NULL;
+            ssize_t idxSoFar = -1;
+            for (size_t i = 0; i < n_ways; i++) {
+                if (positions[i] == -1) continue;
+                elem& test = buffers[i][positions[i]];
+                //cerr << "buffer " << i << " has pos " << positions[i] << endl;
+                if (idxSoFar == -1 || f(test, *minSoFar)) {
+                    minSoFar = &test;
+                    idxSoFar = i;
+                }
+            }
+
+            if (idxSoFar == -1) break; // done!
+            emit_row(cout, *minSoFar);
+
+            positions[idxSoFar]++; // advance cursor
+            if (((size_t)positions[idxSoFar]) == buffers[idxSoFar].size()) {
+                // need to load more stuff
+                buffers[idxSoFar].clear();
+                appender app(buffers[idxSoFar]);
+                size_t read = read_elems_from_stream(streams[idxSoFar], 4096, app);
+                if (read == 0) { // file is all processed
+                    positions[idxSoFar] = -1;
+                } else { // reset cursor
+                    positions[idxSoFar] = 0;
+                }
+            }
+        }
+    } else {
+        sort(rows.begin(), rows.end(), sorter_functor());
+        for (auto r : rows) emit_row(cout, r);
     }
 }
 
@@ -79,41 +219,9 @@ int main(int argc, char** argv) {
         if ((size_t) arg > maxSortKey) maxSortKey = (size_t) arg;
     }
     assert(!sort_keys.empty());
-
-    char buf[4096];
-    vector<string> elems;
-    string cur_elem;
-    bool onescape = false;
-    while (cin.good()) {
-        cin.read(buf, sizeof(buf));
-        for (streamsize i = 0; i < cin.gcount(); i++) {
-            if (onescape) {
-                cur_elem.push_back(buf[i]);
-                onescape = false;
-                continue;
-            }
-            switch (buf[i]) {
-            case '\\':
-                onescape = true;
-                break;
-            case '|':
-                elems.push_back(cur_elem);
-                cur_elem.clear();
-                break;
-            case '\n':
-                elems.push_back(cur_elem);
-                cur_elem.clear();
-                assert(elems.size() > maxSortKey);
-                process_row(elems);
-                elems.clear();
-                break;
-            default:
-                cur_elem.push_back(buf[i]);
-                break;
-            }
-        }
-    }
-    assert(!onescape);
+    /*size_t r = */read_elems_from_stream(cin, -1, process_row());
+    //cerr << r << endl;
+    process_row::FlushAndClearRows();
     sort_and_output();
     return 0;
 }
