@@ -283,8 +283,9 @@ enum orders {
 };
 
 struct q1entry {
-    q1entry(string l_returnflag,
-            string l_linestatus,
+    q1entry() {} // for map
+    q1entry(const string& l_returnflag,
+            const string& l_linestatus,
             double sum_qty,
             double sum_base_price,
             double sum_disc_price,
@@ -644,6 +645,128 @@ static void do_query_q1_packed_opt(Connect &conn,
       }
     }
 
+}
+
+static void do_query_q1_opt_nosort(Connect &conn,
+                                   CryptoManager &cm,
+                                   uint32_t year,
+                                   vector<q1entry> &results) {
+    crypto_manager_stub cm_stub(&cm);
+    NamedTimer fcnTimer(__func__);
+
+    // l_shipdate <= date '[year]-01-01'
+    bool isBin;
+    string encDATE = cm_stub.crypt<3>(cm.getmkey(), strFromVal(EncodeDate(1, 1, year)),
+                              TYPE_INTEGER, fieldname(lineitem::l_shipdate, "OPE"),
+                              getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
+
+    DBResult * dbres;
+
+    string pkinfo = marshallBinary(cm.getPKInfo());
+    ostringstream s;
+    s <<
+      "SELECT SQL_NO_CACHE agg_char2("
+      "l_returnflag_DET, l_linestatus_DET, l_bitpacked_AGG, " << pkinfo <<
+      ") FROM lineitem_enc WHERE l_shipdate_OPE <= " << encDATE;
+    cerr << s.str() << endl;
+
+    {
+      NamedTimer t(__func__, "execute");
+      conn.execute(s.str(), dbres);
+    }
+    ResType res;
+    {
+      NamedTimer t(__func__, "unpack");
+      res = dbres->unpack();
+      assert(res.ok);
+    }
+
+    {
+      NamedTimer t(__func__, "decrypt");
+      assert(res.rows.size() == 1);
+
+      string data = res.rows[0][0].data;
+
+      // format of data is
+      // [ l_returnflag_DET (1 byte) | l_linestatus_DET (1 byte) |
+      //   count(*) (8 bytes) | agg(l_bitpacked_AGG) (256 bytes) ]*
+
+      assert((data.size() % (1 + 1 + 8 + 256)) == 0);
+
+      typedef map< pair<unsigned char, unsigned char>, q1entry > GroupMap;
+      GroupMap groups;
+
+      const uint8_t *p   = (const uint8_t *) data.data();
+      const uint8_t *end = (const uint8_t *) data.data() + data.size();
+      while (p < end) {
+
+        unsigned char l_returnflag_DET = *p++;
+        unsigned char l_linestatus_DET = *p++;
+
+        // l_returnflag
+        unsigned char l_returnflag_ch = (unsigned char) decryptRow<uint32_t, 1>(
+                to_s((int)l_returnflag_DET),
+                12345,
+                fieldname(lineitem::l_returnflag, "DET"),
+                TYPE_INTEGER,
+                oDET,
+                cm);
+
+        // l_linestatus
+        unsigned char l_linestatus_ch = (unsigned char) decryptRow<uint32_t, 1>(
+                to_s((int)l_linestatus_DET),
+                12345,
+                fieldname(lineitem::l_linestatus, "DET"),
+                TYPE_INTEGER,
+                oDET,
+                cm);
+
+        // warning: endianness on DB machine must be same as this machine
+        const uint64_t *u64p = (const uint64_t *) p;
+        uint64_t count_order = *u64p;
+
+        p += sizeof(uint64_t);
+
+        ZZ m;
+        cm.decrypt_Paillier(string((const char *) p, 256), m);
+        long sum_qty_int = extract_from_slot(m, 0);
+        long sum_base_price_int = extract_from_slot(m, 1);
+        long sum_discount_int = extract_from_slot(m, 2);
+        //long sum_tax_int = extract_from_slot(m, 3);
+        long sum_disc_price_int = extract_from_slot(m, 4);
+        long sum_charge_int = extract_from_slot(m, 5);
+
+        double sum_qty = ((double)sum_qty_int)/100.0;
+        double sum_base_price = ((double)sum_base_price_int)/100.0;
+        double sum_discount = ((double)sum_discount_int)/100.0;
+        double sum_disc_price = ((double)sum_disc_price_int)/100.0;
+        double sum_charge = ((double)sum_charge_int)/100.0;
+
+        double avg_qty = sum_qty / ((double)count_order);
+        double avg_price = sum_base_price / ((double)count_order);
+        double avg_disc = sum_discount / ((double)count_order);
+
+        p += 256;
+
+        groups[make_pair( l_returnflag_ch, l_linestatus_ch )] = q1entry(
+              string(1, (char) l_returnflag_ch),
+              string(1, (char) l_linestatus_ch),
+              sum_qty,
+              sum_base_price,
+              sum_disc_price,
+              sum_charge,
+              avg_qty,
+              avg_price,
+              avg_disc,
+              count_order);
+      }
+
+      results.reserve(groups.size());
+      for (GroupMap::iterator it = groups.begin();
+           it != groups.end(); ++it) {
+        results.push_back(it->second);
+      }
+    }
 }
 
 static void do_query_q1_opt(Connect &conn,
@@ -1089,9 +1212,6 @@ static void do_query_q14_opt(Connect &conn,
     Binary key(cm.getKey(cm.getmkey(), fieldname(part::p_type, "SWP"), SECLEVEL::SWP));
     Token t = CryptoManager::token(key, Binary("promo"));
 
-    ZZ zero(to_ZZ(0));
-    string encZERO = cm.encrypt_Paillier(zero);
-
     string pkinfo = marshallBinary(cm.getPKInfo());
     ostringstream s;
     s << "SELECT SQL_NO_CACHE "
@@ -1101,7 +1221,7 @@ static void do_query_q14_opt(Connect &conn,
             << ", "
             << marshallBinary(string((char *)t.wordKey.content, t.wordKey.len))
             << ", p_type_SWP) = 1 "
-          << "THEN l_bitpacked_AGG ELSE " << marshallBinary(encZERO) << " END, " << pkinfo << "), "
+          << "THEN l_bitpacked_AGG ELSE NULL END, " << pkinfo << "), "
         << "agg(l_bitpacked_AGG, " << pkinfo << ") "
       << "FROM lineitem_enc, part_enc "
       << "WHERE "
@@ -2809,6 +2929,7 @@ int main(int argc, char **argv) {
         "--crypt-query1",
         "--crypt-opt-query1",
         "--crypt-opt-packed-query1",
+        "--crypt-opt-nosort-query1",
     };
     std::set<string> Query1Modes
       (Query1Strings, Query1Strings + NELEMS(Query1Strings));
@@ -2936,6 +3057,13 @@ int main(int argc, char **argv) {
           } else if (mode == "crypt-opt-packed-query1") {
             for (size_t i = 0; i < nruns; i++) {
               do_query_q1_packed_opt(conn, cm, year, results);
+              ctr += results.size();
+              PRINT_RESULTS();
+              results.clear();
+            }
+          } else if (mode == "crypt-opt-nosort-query1") {
+            for (size_t i = 0; i < nruns; i++) {
+              do_query_q1_opt_nosort(conn, cm, year, results);
               ctr += results.size();
               PRINT_RESULTS();
               results.clear();
