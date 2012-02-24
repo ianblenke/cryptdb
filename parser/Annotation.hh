@@ -19,6 +19,11 @@ typedef struct PrincType {
     std::string column;
 } PrincType;
 
+void end_prune(std::string &s, char c);
+void start_prune(std::string &s, char c);
+void prune(std::string &s, char c);
+std::list<std::string> split(std::string &s, char c);
+
 /*
  * Types of Annotations:
  *  CRYPTDB PRINCTYPE princtypename;

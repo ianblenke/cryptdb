@@ -311,8 +311,8 @@ marshallBinary(const string &s)
 void
 printRes(const ResType & r) {
 
-    if (!cryptdb_logger::enabled(log_group::log_edb_v))
-        return;
+    //if (!cryptdb_logger::enabled(log_group::log_edb_v))
+    //return;
 
     stringstream ssn;
     for (unsigned int i = 0; i < r.names.size(); i++) {
@@ -320,6 +320,7 @@ printRes(const ResType & r) {
         snprintf(buf, sizeof(buf), "%-20s", r.names[i].c_str());
         ssn << buf;
     }
+    cerr << ssn.str() << endl;
     LOG(edb_v) << ssn.str();
 
     /* next, print out the rows */
@@ -327,9 +328,11 @@ printRes(const ResType & r) {
         stringstream ss;
         for (unsigned int j = 0; j < r.rows[i].size(); j++) {
             char buf[400];
+            cerr << r.rows[i][j].data << "\t";
             snprintf(buf, sizeof(buf), "%-20s", r.rows[i][j].to_string().c_str());
             ss << buf;
         }
+        cerr << endl;
         LOG(edb_v) << ss.str();
     }
 }

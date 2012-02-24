@@ -4,15 +4,30 @@ using namespace std;
 
 //removes character c from the end of s, if it's the last character
 // if c isn't the last character, returns without doing anything
-static void
+void
 end_prune(string &str, char c) {
     if (*str.rbegin() == c) {
         str.erase(str.length() - 1);
     }
 }
 
+//removes character c from the beginning of s, if it's the first character
+// if c isn't the first character, returns without doing anything
+void
+start_prune(string &str, char c) {
+    if (*str.begin() == c) {
+        str.erase(0, 1);
+    }
+}
+
+void
+prune(string &str, char c) {
+    start_prune(str, c);
+    end_prune(str, c);
+}
+
 //splits string s into a list of words deliminated by c
-static list<string>
+list<string>
 split(string &str, char c) {
     string s = str;
     list<string> result;

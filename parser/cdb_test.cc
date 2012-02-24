@@ -62,6 +62,7 @@ main(int ac, char **av)
             "--character-set-server=utf8",
             "--language=" MYSQL_BUILD_DIR "/sql/share/"
     };
+    cerr << dir_arg << endl;
     assert(0 == mysql_library_init(sizeof(mysql_av) / sizeof(mysql_av[0]),
             (char**) mysql_av, 0));
     assert(0 == mysql_thread_init());
@@ -73,7 +74,7 @@ main(int ac, char **av)
     string db(av[2]);
     //HACK (cat_red) currently hard-coding other db information
     ConnectionData cd = ConnectionData("localhost", "root", "letmein", db);
-    Rewriter r(cd, cd, Multi);
+    Rewriter r(cd, Multi);
     r.setMasterKey("2392834");
 
     cerr << "connecting to localhost db cryptdbtest user root pass letmein" << "\n";

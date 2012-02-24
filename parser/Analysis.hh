@@ -120,6 +120,7 @@ extern "C" void *create_embedded_thd(int client_flag);
 
 typedef struct ReturnField {
     bool is_salt;
+    std::string field_called;
     ItemMeta *im;
     int pos_salt; //position of salt of this field in the query results,
                   // or -1 if such salt was not requested

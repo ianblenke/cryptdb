@@ -43,7 +43,7 @@ You will need g++ version 4.6 or higher to build CryptDB.  Ubuntu Oneiric
 You will need to build mysql-5.5.14, because we use its parser in our
 newer implementation:
 
-  % wget http://yuma.csail.mit.edu/mysql-5.5.14.tar.gz
+  % wget http://es.csail.mit.edu/mysql-5.5.14.tar.gz
   % tar zxf mysql-5.5.14.tar.gz
   % cp -R .../cryptdb/parser/mysql_mods/* mysql-5.5.14/
   % rm mysql-5.5.14/sql/sql_yacc.{cc,h}

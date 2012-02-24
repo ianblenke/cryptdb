@@ -2,6 +2,8 @@
 
 #include <string>
 #include <cstring>
+#include <crypto/cbc.hh>
+
 
 template<class BlockCipher>
 void
@@ -16,9 +18,7 @@ cmc_encrypt(const BlockCipher *c,
     memset(x, 0, BlockCipher::blocksize);
     for (size_t i = 0; i < ptext.size(); i += BlockCipher::blocksize) {
         uint8_t y[BlockCipher::blocksize];
-        for (size_t j = 0; j < BlockCipher::blocksize; j++)
-            y[j] = ptext[i+j] ^ x[j];
-
+        xor_block<BlockCipher>(y, &ptext[i], x);
         c->block_encrypt(y, &(*ctext)[i]);
         memcpy(x, &(*ctext)[i], BlockCipher::blocksize);
     }
@@ -33,10 +33,9 @@ cmc_encrypt(const BlockCipher *c,
     }
     m[BlockCipher::blocksize-1] |= carry;
 
-    for (size_t i = 0; i < ptext.size(); i += BlockCipher::blocksize) {
+    for (size_t i = 0; i < ptext.size(); i += BlockCipher::blocksize)
         for (size_t j = 0; j < BlockCipher::blocksize; j++)
             (*ctext)[i+j] ^= m[j];
-    }
 
     memset(x, 0, BlockCipher::blocksize);
     for (size_t i = ptext.size(); i != 0; i -= BlockCipher::blocksize) {
@@ -44,8 +43,7 @@ cmc_encrypt(const BlockCipher *c,
         c->block_encrypt(&(*ctext)[i - BlockCipher::blocksize], y);
 
         uint8_t z[BlockCipher::blocksize];
-        for (size_t j = 0; j < BlockCipher::blocksize; j++)
-            z[j] = y[j] ^ x[j];
+        xor_block<BlockCipher>(z, y, x);
 
         memcpy(x, &(*ctext)[i - BlockCipher::blocksize], BlockCipher::blocksize);
         memcpy(&(*ctext)[i - BlockCipher::blocksize], z, BlockCipher::blocksize);
@@ -65,9 +63,7 @@ cmc_decrypt(const BlockCipher *c,
     memset(x, 0, BlockCipher::blocksize);
     for (size_t i = ctext.size(); i != 0; i -= BlockCipher::blocksize) {
         uint8_t y[BlockCipher::blocksize];
-        for (size_t j = 0; j < BlockCipher::blocksize; j++)
-            y[j] = ctext[i - BlockCipher::blocksize + j] ^ x[j];
-
+        xor_block<BlockCipher>(y, &ctext[i-BlockCipher::blocksize], x);
         c->block_decrypt(y, &(*ptext)[i - BlockCipher::blocksize]);
         memcpy(x, &(*ptext)[i - BlockCipher::blocksize], BlockCipher::blocksize);
     }
@@ -93,8 +89,7 @@ cmc_decrypt(const BlockCipher *c,
         c->block_decrypt(&(*ptext)[i], y);
 
         uint8_t z[BlockCipher::blocksize];
-        for (size_t j = 0; j < BlockCipher::blocksize; j++)
-            z[j] = y[j] ^ x[j];
+        xor_block<BlockCipher>(z, y, x);
 
         memcpy(x, &(*ptext)[i], BlockCipher::blocksize);
         memcpy(&(*ptext)[i], z, BlockCipher::blocksize);

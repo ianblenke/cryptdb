@@ -465,8 +465,14 @@ getEqualityExpr(list<string>::iterator & it, list<string> & query,
 
 }
 
+bool
+MultiPrinc::hasEncFor(string field)
+{
+    return mkm.reverseEncFor.find(field) != mkm.reverseEncFor.end();
+}
+
 void
-MultiPrinc::getEncForFromFilter(command comm, list<string> query, TMKM & tmkm,
+MultiPrinc::getEncForFromFilter(command comm, list<string> query, TMKM &tmkm,
                                 QueryMeta & qm, map<string,
                                                     TableMetadata *> &
                                 tableMetaMap)
@@ -526,7 +532,6 @@ MultiPrinc::getEncForFromFilter(command comm, list<string> query, TMKM & tmkm,
     }
 }
 
-// extracts enc-for principals from queries
 void
 MultiPrinc::prepareSelect(list<string> & words, TMKM & tmkm, QueryMeta & qm,
                           map<string,
@@ -567,7 +572,8 @@ MultiPrinc::prepareSelect(list<string> & words, TMKM & tmkm, QueryMeta & qm,
 
 string
 MultiPrinc::selectEncFor(string table, string field, QueryMeta & qm,
-                         TMKM & tmkm, TableMetadata * tm,
+                         TMKM & tmkm,
+                         TableMetadata * tm,
                          FieldMetadata * fm)
 {
     //ANON_REGION(__func__, &perf_cg);
@@ -590,7 +596,7 @@ MultiPrinc::selectEncFor(string table, string field, QueryMeta & qm,
 // should not be returned to the user
 void
 MultiPrinc::processReturnedField(unsigned int index, bool nextIsSalt, string fullname, onion o,
-                                 TMKM & tmkm,
+                                 TMKM &tmkm,
                                  bool & ignore)
 {
     //ANON_REGION(__func__, &perf_cg);
@@ -690,10 +696,40 @@ MultiPrinc::checkPsswd(LEX *lex) {
         resacc = accMan->insertPsswd(Prin(type, uname), password);
         assert_s(resacc >= 0, "access manager insert password failed");
         return true;
-    } else {
-        assert_s(false, "query should not have gone mp->checkPsswd");
     }
 
+    if (lex->sql_command == SQLCOM_DELETE) {
+        //HACK!!!
+        //TODO (cat_red): make this less dependant on the form Rewriter turns out
+        assert_s(lex->select_lex.where, "logout requires that a username be specified");
+        stringstream ss;
+        ss << *(lex->select_lex.where) << endl;
+        string s = ss.str();
+        list<string> q = split(s, ' ');
+        auto it = q.begin();
+        for (; it != q.end(); it++) {
+            if (*it == "=") {
+                break;
+            }
+        }
+        assert_s(it != q.begin() && it != q.end(), "improperly formatted logout query");
+        type = *(--it);
+        start_prune(type, '(');
+        prune(type, '`');
+        type = fullName(type, pw_table);
+        it++;
+        assert_s(*it == "=", "logic fail in checkPsswd");
+        uname = *(++it);
+        end_prune(uname, '\n');
+        end_prune(uname, ')');
+        prune(uname, '\'');
+
+        resacc = accMan->removePsswd(Prin(type, uname));
+        assert_s(resacc >= 0, "access manager delete password failed");
+        return true;
+    }
+
+    assert_s(false, "query should not have gone to mp->checkPsswd");
     return false;
 }
 
@@ -794,7 +830,7 @@ MultiPrinc::checkPredicate(const AccessRelation & accRel, map<string, string> & 
 }
 
 void
-MultiPrinc::insertLex(LEX *lex, Analysis &a, TMKM & tmkm) {
+MultiPrinc::insertLex(LEX *lex, Analysis &a, TMKM &tmkm) {
     assert_s(lex->sql_command == SQLCOM_INSERT, "insertLex should only get insert commands");
     string table = lex->select_lex.table_list.first->table_name;
     if (!lex->many_values.head()) {
@@ -872,8 +908,7 @@ MultiPrinc::insertLex(LEX *lex, Analysis &a, TMKM & tmkm) {
 //TODO pass values as pointers, rather than copying them
 void
 MultiPrinc::insertRelations(const list<pair<string, bool> > & values, string table,
-                            list<string> fields,
-                            TMKM & tmkm)
+                            list<string> fields, TMKM &tmkm) 
 {
     //ANON_REGION(__func__, &perf_cg);
 
@@ -978,10 +1013,10 @@ MultiPrinc::get_key(string fieldName, TempMKM & tmkm)
                  fieldName) != mkm.encForMap.end(),
              "cryptappgetkey gets unencrypted field <"+fieldName+">");
     string encForField = mkm.encForMap[fieldName];
-
+    cerr << "looking for encForField " << encForField << " in size " << tmkm.encForVal.size() << endl;
     if (tmkm.encForVal.find(encForField) != tmkm.encForVal.end()) {
         if (VERBOSE_G) {LOG(mp) << "asking get key for " << encForField <<
-                        " <" << tmkm.encForVal[encForField] << "> \n"; }
+                " <" << tmkm.encForVal[encForField] << "> \n"; }
         string key =
             accMan->getKey(Prin(encForField,
                                 removeApostrophe(tmkm.encForVal[encForField])));
@@ -999,8 +1034,7 @@ MultiPrinc::get_key(string fieldName, TempMKM & tmkm)
 }
 
 string
-MultiPrinc::get_key(string fieldName, TMKM & tmkm,
-                    const vector<SqlItem> &res)
+MultiPrinc::get_key(string fieldName, TMKM & tmkm, const vector<SqlItem> &res)
 {
     //ANON_REGION(__func__, &perf_cg);
 
@@ -1008,7 +1042,7 @@ MultiPrinc::get_key(string fieldName, TMKM & tmkm,
                  fieldName) != mkm.encForMap.end(),
              "cryptappgetkey gets unencrypted field <"+fieldName+">");
     string encForField = mkm.encForMap[fieldName];
-
+    cerr << "looking for encForField " << encForField << " in size " << tmkm.encForVal.size() << endl;
     if (tmkm.encForVal.find(encForField) != tmkm.encForVal.end()) {
         string key =
             accMan->getKey(Prin(encForField,
@@ -1024,7 +1058,7 @@ MultiPrinc::get_key(string fieldName, TMKM & tmkm,
         assert_s(key.length() > 0, "access manager does not have key\n");
         return key;
     }
-
+    cerr << "not encForVal; use encForReturned size " << tmkm.encForReturned.size() << endl;
     if (tmkm.encForReturned.find(encForField) != tmkm.encForReturned.end()) {
         string val = res[tmkm.encForReturned[encForField]].data;
         string key = accMan->getKey(Prin(encForField, removeApostrophe(val)));

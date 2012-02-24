@@ -72,33 +72,19 @@ OPE::search(CB go_low)
 }
 
 ZZ
-OPE::encrypt(const ZZ &ptext, int offset)
+OPE::encrypt(const ZZ &ptext)
 {
     ope_domain_range dr =
         search([&ptext](const ZZ &d, const ZZ &) { return ptext < d; });
 
-    blockrng<AES> aesrand(aesk);
     auto v = sha256::hash(StringFromZZ(ptext));
     v.resize(16);
+
+    blockrng<AES> aesrand(aesk);
     aesrand.set_ctr(v);
 
     ZZ nrange = dr.r_hi - dr.r_lo + 1;
-    if (nrange < 4 || det)
-        return dr.r_lo + aesrand.rand_zz_mod(nrange);
-
-    ZZ nrquad = nrange / 4;
-    static urandom urand;
-
-    switch (offset) {
-    case -1:
-        return dr.r_lo + urand.rand_zz_mod(nrquad);
-    case 0:
-        return dr.r_lo + nrquad + urand.rand_zz_mod(nrquad * 2);
-    case 1:
-        return dr.r_lo + nrquad * 3 + urand.rand_zz_mod(nrquad);
-    default:
-        assert(0);
-    }
+    return dr.r_lo + aesrand.rand_zz_mod(nrange);
 }
 
 ZZ

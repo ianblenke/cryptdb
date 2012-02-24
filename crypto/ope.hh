@@ -18,19 +18,10 @@ class ope_domain_range {
 
 class OPE {
  public:
-    OPE(const std::string &keyarg, size_t plainbits, size_t cipherbits,
-        bool detarg = false)
-    : key(keyarg), pbits(plainbits), cbits(cipherbits), det(detarg),
-      aesk(aeskey(key)) {}
+    OPE(const std::string &keyarg, size_t plainbits, size_t cipherbits)
+    : key(keyarg), pbits(plainbits), cbits(cipherbits), aesk(aeskey(key)) {}
 
-    /*
-     * Randomized OPE.
-     *
-     * Return an encryption of ptext, if offset = 0.
-     * Return an encryption between E(ptext-1) and E(ptext) if offset = -1.
-     * Return an encryption between E(ptext) and E(ptext+1) if offset = 1.
-     */
-    NTL::ZZ encrypt(const NTL::ZZ &ptext, int offset = 0);
+    NTL::ZZ encrypt(const NTL::ZZ &ptext);
     NTL::ZZ decrypt(const NTL::ZZ &ctext);
 
  private:
@@ -42,7 +33,6 @@ class OPE {
 
     std::string key;
     size_t pbits, cbits;
-    bool det;
 
     AES aesk;
     std::map<NTL::ZZ, NTL::ZZ> dgap_cache;

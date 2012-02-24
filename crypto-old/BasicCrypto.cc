@@ -144,9 +144,9 @@ static vector<unsigned char>
 unpad(vector<unsigned char> data)
 {
     size_t len = data.size();
-    // cerr << "padding to remove " << (int)data[len-1] << "\n";
+    //cerr << "padding to remove " << (int)data[len-1] << "\n";
     size_t actualLen = len - (int)data[len-1];
-    // cerr << " len is " << len << " and data[len-1] " << (int)data[len-1] << "\n";
+    //cerr << " len is " << len << " and data[len-1] " << (int)data[len-1] << "\n";
     assert_s(data[len-1] <= len, "invalid pad value when unpadding");
     vector<unsigned char> res(actualLen);
     memcpy(&res[0], &data[0], actualLen);

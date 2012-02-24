@@ -48,7 +48,7 @@ class MultiPrinc {
 
     //returns a map from encrypted field name to the value of field for which
     // it is encrypted e.g. text - 5 (val of gid)
-    void getEncForFromFilter(command comm, std::list<std::string> query, TMKM & tmkm,
+    void getEncForFromFilter(command comm, std::list<std::string> query, TMKM &tmkm,
                              QueryMeta & qm, std::map<std::string,
                                                  TableMetadata *> &
                              tableMetaMap);
@@ -58,17 +58,18 @@ class MultiPrinc {
     // returns any additional fields that need to be requested from the DB
     // when table.field is requested
     std::string selectEncFor(std::string table, std::string field, QueryMeta & qm,
-                        TMKM & tmkm, TableMetadata * tm,
-                        FieldMetadata * fm);
+                             TMKM & tmkm, TableMetadata * tm,
+                             FieldMetadata * fm);
 
     void prepareSelect(std::list<std::string> & words, TMKM & tmkm, QueryMeta & qm,
                        std::map<std::string,
-                           TableMetadata *> & tm);
+                                TableMetadata *> & tm);
+    bool hasEncFor(std::string field);
 
     // fills tmkm.encForReturned and decides if the next field was added by us
     // and should not be returned to the user
     void processReturnedField(unsigned int index, bool isNextSalt, std::string fullname, onion o,
-                              TMKM & tmkm,
+                              TMKM &tmkm,
                               bool & ignore);
 
     bool checkPredicate(const AccessRelation & accRel, std::map<std::string, std::string> & vals);
@@ -79,7 +80,7 @@ class MultiPrinc {
     //wordsIt points to the first value
     void insertRelations(const std::list<std::pair<std::string, bool> > & values, std::string table,
                          std::list<std::string> fields,
-                         TMKM & tmkm);
+                         TMKM &tmkm);
 
     /*** OTHER ***/
 

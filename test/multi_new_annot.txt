@@ -22,6 +22,42 @@ insert into users values ('bob', 2);
 insert into privmsg values (1, 2, 1);
 insert into msgs values (1, 'hello!');
 
+select * from privmsg;
+select * from users;
+select msgid, msgtext from msgs;
+
+select * from users where username = 'alice';
+select sendid from privmsg where msgid = 1;
+select * from msgs where msgid = 1;
+select * from msgs where msgid = 1 and msgtext = 'hello!';
+
+insert into privmsg values (2, 1, 2);
+insert into msgs values (2, 'hello!');
+select * from msgs;
+select * from msgs where msgid = 1 and msgtext = 'hello!';
+select * from msgs where msgtext = 'hello!' and msgid = 2;
+
+delete from pwdcryptdb__users where username = 'alice';
+delete from pwdcryptdb__users where username = 'bob';
+select * from msgs;
+
+insert into pwdcryptdb__users (username, psswd) values ('bob', 'secretbob');
+select * from msgs;
+delete from pwdcryptdb__users where username = 'bob';
+insert into pwdcryptdb__users (username, psswd) values ('alice', 'secretalice');
+select * from msgs;
+
+delete from msgs where msgid=1;
+select * from msgs;
+delete from msgs where msgid=2 and msgtext='hello!'
+select * from msgs;
+
+insert into msgs values (1, 'hi there');
+insert into msgs values (2, 'hi to you too');
+select * from msgs;
+
+update msgs set msgtext='hello!' where msgid = 1;
+select * from msgs;
 
 drop table privmsg;
 drop table msgs;
