@@ -51,7 +51,7 @@ static void init_static_data(CryptoManager& cm) {
 }
 
 TEST_SNIPPET(det_encrypt) {
-    crypto_manager_stub cm_stub(&cm);
+    crypto_manager_stub cm_stub(&cm, false);
     REPEAT(numOps) {
         bool isBin;
         string encDET =
@@ -64,7 +64,7 @@ TEST_SNIPPET(det_encrypt) {
 }
 
 TEST_SNIPPET(det_decrypt) {
-    crypto_manager_stub cm_stub(&cm);
+    crypto_manager_stub cm_stub(&cm, false);
     REPEAT(numOps) {
         bool isBin;
         string res =
@@ -78,7 +78,7 @@ TEST_SNIPPET(det_decrypt) {
 }
 
 TEST_SNIPPET(ope_encrypt) {
-    crypto_manager_stub cm_stub(&cm);
+    crypto_manager_stub cm_stub(&cm, false);
     REPEAT(numOps) {
         bool isBin;
         string encOPE =
@@ -91,11 +91,11 @@ TEST_SNIPPET(ope_encrypt) {
 }
 
 TEST_SNIPPET(ope_decrypt) {
-    crypto_manager_stub cm_stub(&cm);
+    crypto_manager_stub cm_stub(&cm, false);
     REPEAT(numOps) {
         bool isBin;
         string res =
-            cm_stub.crypt<4>(cm.getmkey(), "234387332552407", TYPE_INTEGER,
+            cm_stub.crypt<4>(cm.getmkey(), "233963315384007", TYPE_INTEGER,
                              "my_field_OPE",
                              SECLEVEL::OPE, getMin(oOPE), isBin, 12345);
         assert(!isBin);

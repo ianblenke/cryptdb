@@ -118,10 +118,26 @@ struct max_size {
 class crypto_manager_stub {
 public:
 
-  crypto_manager_stub(CryptoManager* cm) : cm(cm) {}
+  crypto_manager_stub(CryptoManager* cm, bool Profile = true)
+      : cm(cm), Profile(Profile) {}
   ~crypto_manager_stub() {
       for (ope_cache_map::iterator it = ope_cache.begin();
            it != ope_cache.end(); ++it) delete it->second;
+
+      // write enc stats to stderr
+      if (Profile) {
+          for (timer_stats_map::iterator it = encryption_stats.begin();
+               it != encryption_stats.end(); ++it) {
+              for (std::map<onion, stat_entry>::iterator iit = it->second.begin();
+                   iit != it->second.end(); iit++) {
+                  std::cerr
+                      << fieldtype_to_string(it->first) << ":"
+                      << onion_to_string(iit->first) << ":"
+                      << iit->second.first << ":"
+                      << iit->second.second << std::endl;
+              }
+          }
+      }
   }
 
   template <size_t n_bytes = 4>
@@ -138,6 +154,7 @@ public:
 
     if (fromlevel < tolevel) {
       // encryption
+      measure_time t(ft, getOnion(fromlevel), encryption_stats, Profile);
       if (specialize) {
         return encrypt_stub<n_bytes>(
             mkey, data, ft, fullfieldname, fromlevel, tolevel, isBin, salt);
@@ -153,7 +170,47 @@ public:
     }
   }
 
+  std::string encrypt_Paillier(uint64_t val) {
+      measure_time t(TYPE_INTEGER, oAGG, encryption_stats, Profile);
+      return cm->encrypt_Paillier(val);
+
+  }
+
+  std::string encrypt_Paillier(const NTL::ZZ& val) {
+      measure_time t(TYPE_INTEGER, oAGG, encryption_stats, Profile);
+      return cm->encrypt_Paillier(val);
+  }
+
 private:
+
+    // timer stats
+    // (field type -> (onion -> (n times, total enc (ms))))
+    typedef std::pair< uint64_t, double > stat_entry;
+    typedef std::map<
+        fieldType,
+        std::map<onion, stat_entry> > timer_stats_map;
+
+    timer_stats_map encryption_stats;
+
+    struct measure_time {
+        measure_time(fieldType f, onion o, timer_stats_map& stats, bool Profile)
+            : f(f), o(o), stats(&stats), Profile(Profile) {}
+
+        ~measure_time() {
+            if (Profile) {
+                double elp = t.lap_ms();
+                std::pair< uint64_t, double >& p = stats->operator[](f)[o];
+                p.first++;
+                p.second += elp;
+            }
+        }
+
+        Timer t;
+        const fieldType f;
+        const onion o;
+        timer_stats_map* const stats;
+        const bool Profile;
+    };
 
     typedef ope::OPE new_ope;
     typedef std::pair<string, size_t> ope_cache_key;
@@ -647,7 +704,11 @@ private:
 
   }
 
+public:
   CryptoManager* cm;
+
+private:
+  const bool Profile;
 };
 
 

@@ -155,10 +155,10 @@ static void do_encrypt(size_t i,
                        int onions,
                        const string &plaintext,
                        vector<string> &enccols,
-                       CryptoManager &cm,
+                       crypto_manager_stub &cm_stub,
                        bool usenull = true) {
 
-    crypto_manager_stub cm_stub(&cm);
+    CryptoManager& cm = *cm_stub.cm;
     switch (dt) {
     case DT_INTEGER:
         {
@@ -413,7 +413,7 @@ public:
   virtual
   void encryptRow(const vector<string> &tokens,
                   vector<string>       &enccols,
-                  CryptoManager        &cm) {
+                  crypto_manager_stub        &cm) {
     assert(tokens.size() >= schema.size());
     preprocessRow(tokens, enccols, cm);
     for (size_t i = 0; i < schema.size(); i++) {
@@ -426,7 +426,7 @@ public:
   virtual
   void encryptBatch(const vector<vector<string> > &tokens,
                     vector<vector<string> >       &enccols,
-                    CryptoManager &cm) {
+                    crypto_manager_stub &cm) {
     for (size_t i = 0; i < tokens.size(); i++) {
       const vector<string> &v = tokens[i];
       vector<string> e;
@@ -438,7 +438,7 @@ public:
 
   virtual void writeSalt(const vector<string> &tokens,
                          vector<string>       &enccols,
-                         CryptoManager        &cm) {
+                         crypto_manager_stub        &cm) {
     enccols.push_back("12345");
   }
 
@@ -447,17 +447,17 @@ protected:
   virtual
   void preprocessRow(const vector<string> &tokens,
                      vector<string>       &enccols,
-                     CryptoManager        &cm) {}
+                     crypto_manager_stub        &cm) {}
 
   virtual
   void postprocessRow(const vector<string> &tokens,
                       vector<string>       &enccols,
-                      CryptoManager        &cm) {}
+                      crypto_manager_stub        &cm) {}
 
   virtual
   void postprocessBatch(const vector<vector<string> > &tokens,
                         vector<vector<string> >       &enccols,
-                        CryptoManager &cm) {}
+                        crypto_manager_stub &cm) {}
 
   vector<datatypes> schema;
   vector<int>       onions;
@@ -609,7 +609,7 @@ protected:
   /*
   void precomputeExprs(const vector<string> &tokens,
                        vector<string>       &enccols,
-                       CryptoManager        &cm) {
+                       crypto_manager_stub        &cm) {
     // l_disc_price = l_extendedprice * (1 - l_discount)
     double l_extendedprice  = resultFromStr<double>(tokens[lineitem::l_extendedprice]);
     double l_discount       = resultFromStr<double>(tokens[lineitem::l_discount]);
@@ -630,7 +630,7 @@ protected:
   virtual
   void encryptBatch(const vector<vector<string> > &tokens,
                     vector<vector<string> >       &enccols,
-                    CryptoManager &cm) {
+                    crypto_manager_stub &cm) {
     assert(tpe == opt_type::packed);
 
     // sort into (l_returnflag, l_linestatus)
@@ -802,7 +802,7 @@ protected:
   virtual
   void postprocessRow(const vector<string> &tokens,
                       vector<string>       &enccols,
-                      CryptoManager        &cm) {
+                      crypto_manager_stub        &cm) {
 
     switch (tpe) {
       case opt_type::normal:
@@ -980,7 +980,7 @@ public:
   virtual
   void encryptBatch(const vector<vector<string> > &tokens,
                     vector<vector<string> >       &enccols,
-                    CryptoManager &cm) {
+                    crypto_manager_stub &cm) {
     typedef PallierSlotManager<uint32_t, 2> PSM;
     assert(tpe == projection);
     assert(!IraqNationKeySet.empty());
@@ -1028,7 +1028,7 @@ protected:
 
   void precomputeExprs(const vector<string> &tokens,
                        vector<string>       &enccols,
-                       CryptoManager        &cm) {
+                       crypto_manager_stub        &cm) {
     double ps_value = psValueFromRow(tokens);
     do_encrypt(schema.size(), DT_FLOAT, (ONION_DET | ONION_OPE),
                to_s(ps_value), enccols, cm, usenull);
@@ -1047,7 +1047,7 @@ protected:
   virtual
   void postprocessRow(const vector<string> &tokens,
                       vector<string>       &enccols,
-                      CryptoManager        &cm) {
+                      crypto_manager_stub        &cm) {
     switch (tpe) {
       case opt_type::normal:
         precomputeExprs(tokens, enccols, cm);
@@ -1233,7 +1233,7 @@ static map<string, table_encryptor *> EncryptorMap = {
 
 
 
-static inline string process_input(const string &s, CryptoManager &cm, table_encryptor *tenc) {
+static inline string process_input(const string &s, crypto_manager_stub &cm, table_encryptor *tenc) {
   vector<string> tokens;
   tokenize(s, "|", tokens);
   vector<string> columns;
@@ -1242,7 +1242,7 @@ static inline string process_input(const string &s, CryptoManager &cm, table_enc
 }
 
 static inline void process_batch(const vector<string> &lines,
-                                 CryptoManager &cm,
+                                 crypto_manager_stub &cm,
                                  table_encryptor *tenc) {
   vector<vector<string> > tokens;
   for (auto it = lines.begin();
@@ -1307,6 +1307,7 @@ int main(int argc, char **argv) {
     //cryptdb_logger::enable(log_name_to_group["crypto"]);
 
     CryptoManager cm("12345");
+    crypto_manager_stub stub(&cm);
     vector<string> lines;
     for (;;) {
         string s;
@@ -1315,7 +1316,7 @@ int main(int argc, char **argv) {
             break;
         if (tenc->shouldProcessRow()) {
           try {
-              cout << process_input(s, cm, tenc) << endl;
+              cout << process_input(s, stub, tenc) << endl;
           } catch (...) {
               cerr << "Input line failed:" << endl
                    << "  " << s << endl;
@@ -1325,7 +1326,7 @@ int main(int argc, char **argv) {
         }
     }
     if (!tenc->shouldProcessRow()) {
-      process_batch(lines, cm, tenc);
+      process_batch(lines, stub, tenc);
     }
     return 0;
 }
