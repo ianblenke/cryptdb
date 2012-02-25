@@ -11,7 +11,7 @@ fi
 
 CDB_TOP=$HOME/cryptdb
 CDB_EXP_FOLDER=$CDB_TOP/tpch-2.14.0/experiments
-BULK_ENC=$CDB_EXP_FOLDER/bulk_enc.sh
+BULK_ENC=$CDB_EXP_FOLDER/dist_bulk_enc.sh
 REG_ENC=$CDB_TOP/obj/parser/cdb_enc
 source $CDB_EXP_FOLDER/scales.sh
 
