@@ -51,7 +51,10 @@ OPE::lazy_sample(const ZZ &d_lo, const ZZ &d_hi,
     auto ci = dgap_cache.find(r_lo + rgap);
     if (ci == dgap_cache.end()) {
         dgap = domain_gap(ndomain, nrange, nrange / 2, prng);
-        dgap_cache[r_lo + rgap] = dgap;
+        if (dgap_cache.size() < MaxGapCache) {
+            // TODO: should really use some LRU replacement policy...
+            dgap_cache[r_lo + rgap] = dgap;
+        }
     } else {
         dgap = ci->second;
     }

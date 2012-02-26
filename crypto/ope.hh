@@ -39,6 +39,8 @@ class OPE {
     AES aesk;
     std::map<NTL::ZZ, NTL::ZZ> dgap_cache;
 
+    static const size_t MaxGapCache = 100000;
+
     template<class CB>
     ope_domain_range search(CB go_low);
 
