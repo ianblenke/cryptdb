@@ -2546,48 +2546,140 @@ static void do_query_q20(Connect &conn,
                          vector<q20entry> &results) {
     NamedTimer fcnTimer(__func__);
 
-    ostringstream s;
+    // mysql can't handle nested queries very well , so go ahead
+    // and flatten everything
 
-    s <<
-    "select SQL_NO_CACHE s_name, s_address from SUPPLIER, NATION "
-    "where s_suppkey in ( "
-        "select ps_suppkey from ( "
-        "select ps_suppkey, ps_availqty from PARTSUPP, LINEITEM "
+    //ostringstream s;
+    //s <<
+    //"select SQL_NO_CACHE s_name, s_address from SUPPLIER, NATION "
+    //"where s_suppkey in ( "
+    //    "select ps_suppkey from ( "
+    //    "select ps_suppkey, ps_availqty from PARTSUPP, LINEITEM "
+    //    " where "
+    //    "     ps_partkey = l_partkey and "
+    //    "     ps_suppkey = l_suppkey and "
+    //    "     ps_partkey in ( "
+    //    // TODO: this is slight deviation from TPC-H query, but it makes
+    //    // the comparison more fair (like 'token%' is probably implemented
+    //    // efficiently as a prefix scan)
+    //    "       select p_partkey from PART where p_name like '%" << p_name << "%' "
+    //    "     ) "
+    //    "     and l_shipdate >= date '" << year << "-01-01'"
+    //    "     and l_shipdate < date '" << year << "-01-01' + interval '1' year"
+    //    " group by ps_partkey, ps_suppkey "
+    //    " having ps_availqty > 0.5 * sum(l_quantity) "
+    //    ") as __anon__ "
+    //") "
+    //"and s_nationkey = n_nationkey "
+    //"and n_name = '" << n_name << "' "
+    //"order by s_name";
+    //cerr << s.str() << endl;
+
+    //DBResult * dbres;
+    //{
+    //  NamedTimer t(__func__, "execute");
+    //  conn.execute(s.str(), dbres);
+    //}
+    //ResType res;
+    //{
+    //  NamedTimer t(__func__, "unpack");
+    //  res = dbres->unpack();
+    //  assert(res.ok);
+    //}
+
+    //results.reserve(res.rows.size());
+    //for (auto row : res.rows) {
+    //  results.push_back(q20entry(row[0].data, row[1].data));
+    //}
+
+
+    vector<string> partkeys;
+    {
+        // TODO: this is slight deviation from TPC-H query, but it makes
+        // the comparison more fair (like 'token%' is probably implemented
+        // efficiently as a prefix scan)
+        ostringstream s;
+        s << "select SQL_NO_CACHE p_partkey from PART where p_name like '%" << p_name << "%'";
+
+        DBResult * dbres;
+        {
+          NamedTimer t(__func__, "execute-1");
+          conn.execute(s.str(), dbres);
+        }
+        ResType res;
+        {
+          NamedTimer t(__func__, "unpack-1");
+          res = dbres->unpack();
+          assert(res.ok);
+        }
+
+        partkeys.reserve(res.rows.size());
+        for (auto row : res.rows) {
+            partkeys.push_back(row[0].data);
+        }
+    }
+    assert(!partkeys.empty());
+
+    vector<string> suppkeys;
+    {
+        ostringstream s;
+        s <<
+        "select SQL_NO_CACHE ps_suppkey, ps_availqty from PARTSUPP, LINEITEM "
         " where "
         "     ps_partkey = l_partkey and "
         "     ps_suppkey = l_suppkey and "
         "     ps_partkey in ( "
-        // TODO: this is slight deviation from TPC-H query, but it makes
-        // the comparison more fair (like 'token%' is probably implemented
-        // efficiently as a prefix scan)
-        "       select p_partkey from PART where p_name like '%" << p_name << "%' "
+        << join(partkeys, ",") <<
         "     ) "
         "     and l_shipdate >= date '" << year << "-01-01'"
         "     and l_shipdate < date '" << year << "-01-01' + interval '1' year"
         " group by ps_partkey, ps_suppkey "
-        " having ps_availqty > 0.5 * sum(l_quantity) "
-        ") as __anon__ "
-    ") "
-    "and s_nationkey = n_nationkey "
-    "and n_name = '" << n_name << "' "
-    "order by s_name";
-    cerr << s.str() << endl;
+        " having ps_availqty > 0.5 * sum(l_quantity)";
 
-    DBResult * dbres;
-    {
-      NamedTimer t(__func__, "execute");
-      conn.execute(s.str(), dbres);
-    }
-    ResType res;
-    {
-      NamedTimer t(__func__, "unpack");
-      res = dbres->unpack();
-      assert(res.ok);
-    }
+        DBResult * dbres;
+        {
+          NamedTimer t(__func__, "execute-2");
+          conn.execute(s.str(), dbres);
+        }
+        ResType res;
+        {
+          NamedTimer t(__func__, "unpack-2");
+          res = dbres->unpack();
+          assert(res.ok);
+        }
 
-    results.reserve(res.rows.size());
-    for (auto row : res.rows) {
-      results.push_back(q20entry(row[0].data, row[1].data));
+        suppkeys.reserve(res.rows.size());
+        for (auto row : res.rows) {
+            suppkeys.push_back(row[0].data);
+        }
+
+        std::set<string> unique(suppkeys.begin(), suppkeys.end());
+        suppkeys.clear();
+        suppkeys.insert(suppkeys.begin(), unique.begin(), unique.end());
+    }
+    assert(!suppkeys.empty());
+
+    {
+        ostringstream s;
+        s <<
+        "select SQL_NO_CACHE s_name, s_address from SUPPLIER, NATION where s_suppkey in ( "
+        << join(suppkeys ,",") <<
+        ") and s_nationkey = n_nationkey and n_name = '" << n_name << "' order by s_name";
+
+        DBResult * dbres;
+        {
+          NamedTimer t(__func__, "execute-3");
+          conn.execute(s.str(), dbres);
+        }
+        ResType res;
+        {
+          NamedTimer t(__func__, "unpack-3");
+          res = dbres->unpack();
+          assert(res.ok);
+        }
+        for (auto row : res.rows) {
+          results.push_back(q20entry(row[0].data, row[1].data));
+        }
     }
 }
 
@@ -2626,6 +2718,35 @@ static void do_query_q20_opt_noagg(Connect &conn,
     Binary key(cm.getKey(cm.getmkey(), fieldname(part::p_name, "SWP"), SECLEVEL::SWP));
     Token t = CryptoManager::token(key, Binary(lowerpname));
 
+    vector<string> partkeyDETs;
+    {
+        ostringstream s;
+        s <<
+        "select SQL_NO_CACHE p_partkey_DET from part_enc where searchSWP("
+          << marshallBinary(string((char *)t.ciph.content, t.ciph.len))
+          << ", "
+          << marshallBinary(string((char *)t.wordKey.content, t.wordKey.len))
+          << ", p_name_SWP) = 1";
+
+        DBResult * dbres;
+        {
+            NamedTimer t(__func__, "execute-1");
+            conn.execute(s.str(), dbres);
+        }
+        ResType res;
+        {
+            NamedTimer t(__func__, "unpack-1");
+            res = dbres->unpack();
+            assert(res.ok);
+        }
+
+        partkeyDETs.reserve(res.rows.size());
+        for (auto row : res.rows) {
+            partkeyDETs.push_back(row[0].data);
+        }
+    }
+    assert(!partkeyDETs.empty());
+
     ostringstream s;
     s <<
         "select SQL_NO_CACHE ps_partkey_DET, ps_suppkey_DET, ps_availqty_DET, l_quantity_DET "
@@ -2634,24 +2755,20 @@ static void do_query_q20_opt_noagg(Connect &conn,
         "    ps_partkey_DET = l_partkey_DET and "
         "    ps_suppkey_DET = l_suppkey_DET and "
         "    ps_partkey_DET in ( "
-        "      select p_partkey_DET from part_enc where searchSWP("
-          << marshallBinary(string((char *)t.ciph.content, t.ciph.len))
-          << ", "
-          << marshallBinary(string((char *)t.wordKey.content, t.wordKey.len))
-          << ", p_name_SWP) = 1 "
+        << join(partkeyDETs, ",") <<
         "    ) "
         "    and l_shipdate_OPE >= " << encDATE_START <<
         "    and l_shipdate_OPE < " << encDATE_END;
-    cerr << s.str() << endl;
+    //cerr << s.str() << endl;
 
     DBResult * dbres;
     {
-        NamedTimer t(__func__, "execute");
+        NamedTimer t(__func__, "execute-2");
         conn.execute(s.str(), dbres);
     }
     ResType res;
     {
-        NamedTimer t(__func__, "unpack");
+        NamedTimer t(__func__, "unpack-2");
         res = dbres->unpack();
         assert(res.ok);
     }
@@ -2712,7 +2829,8 @@ static void do_query_q20_opt_noagg(Connect &conn,
     s_suppkeys.clear();
     s_suppkeys.insert(s_suppkeys.begin(), s_suppkeys_set.begin(), s_suppkeys_set.end());
 
-    assert(!s_suppkeys.empty());
+    //assert(!s_suppkeys.empty());
+    if (s_suppkeys.empty()) return;
 
     ostringstream s1;
     s1 <<
@@ -2726,11 +2844,11 @@ static void do_query_q20_opt_noagg(Connect &conn,
     //cerr << s1.str() << endl;
 
     {
-      NamedTimer t(__func__, "execute");
+      NamedTimer t(__func__, "execute-3");
       conn.execute(s1.str(), dbres);
     }
     {
-      NamedTimer t(__func__, "unpack");
+      NamedTimer t(__func__, "unpack-3");
       res = dbres->unpack();
       assert(res.ok);
     }
@@ -2790,6 +2908,34 @@ static void do_query_q20_opt(Connect &conn,
     Binary key(cm.getKey(cm.getmkey(), fieldname(part::p_name, "SWP"), SECLEVEL::SWP));
     Token t = CryptoManager::token(key, Binary(lowerpname));
 
+    vector<string> partkeyDETs;
+    {
+        ostringstream s;
+        s <<
+        "select SQL_NO_CACHE p_partkey_DET from part_enc where searchSWP("
+          << marshallBinary(string((char *)t.ciph.content, t.ciph.len))
+          << ", "
+          << marshallBinary(string((char *)t.wordKey.content, t.wordKey.len))
+          << ", p_name_SWP) = 1";
+
+        DBResult * dbres;
+        {
+            NamedTimer t(__func__, "execute-1");
+            conn.execute(s.str(), dbres);
+        }
+        ResType res;
+        {
+            NamedTimer t(__func__, "unpack-1");
+            res = dbres->unpack();
+            assert(res.ok);
+        }
+
+        partkeyDETs.reserve(res.rows.size());
+        for (auto row : res.rows) {
+            partkeyDETs.push_back(row[0].data);
+        }
+    }
+
     string pkinfo = marshallBinary(cm.getPKInfo());
     ostringstream s;
     s <<
@@ -2799,16 +2945,12 @@ static void do_query_q20_opt(Connect &conn,
         "    ps_partkey_DET = l_partkey_DET and "
         "    ps_suppkey_DET = l_suppkey_DET and "
         "    ps_partkey_DET in ( "
-        "      select p_partkey_DET from part_enc where searchSWP("
-          << marshallBinary(string((char *)t.ciph.content, t.ciph.len))
-          << ", "
-          << marshallBinary(string((char *)t.wordKey.content, t.wordKey.len))
-          << ", p_name_SWP) = 1 "
+        << join(partkeyDETs, ",") <<
         "    ) "
         "    and l_shipdate_OPE >= " << encDATE_START <<
         "    and l_shipdate_OPE < " << encDATE_END << " "
         "group by ps_partkey_DET, ps_suppkey_DET";
-    cerr << s.str() << endl;
+    //cerr << s.str() << endl;
 
     DBResult * dbres;
     {
@@ -2851,7 +2993,8 @@ static void do_query_q20_opt(Connect &conn,
     s_suppkeys.clear();
     s_suppkeys.insert(s_suppkeys.begin(), s_suppkeys_set.begin(), s_suppkeys_set.end());
 
-    assert(!s_suppkeys.empty());
+    //assert(!s_suppkeys.empty());
+    if (s_suppkeys.empty()) return;
 
     ostringstream s1;
     s1 <<
