@@ -1307,7 +1307,7 @@ int main(int argc, char **argv) {
     //cryptdb_logger::enable(log_name_to_group["crypto"]);
 
     CryptoManager cm("12345");
-    crypto_manager_stub stub(&cm);
+    crypto_manager_stub stub(&cm, false);
     vector<string> lines;
     for (;;) {
         string s;

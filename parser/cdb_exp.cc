@@ -20,6 +20,8 @@
 using namespace std;
 using namespace NTL;
 
+static bool UseOldOpe = false;
+
 class NamedTimer : public Timer {
 public:
   NamedTimer(const string &key0) : key0(key0) {}
@@ -102,7 +104,7 @@ Result decryptRow(const string &data,
                   fieldType f,
                   onion o,
                   CryptoManager &cm) {
-    crypto_manager_stub cm_stub(&cm);
+    crypto_manager_stub cm_stub(&cm, UseOldOpe);
     bool isBin;
     string res = cm_stub.crypt<n_bytes>(
         cm.getmkey(),
@@ -121,7 +123,7 @@ Result decryptRowFromTo(const string &data,
                         SECLEVEL max,
                         SECLEVEL min,
                         CryptoManager &cm) {
-    crypto_manager_stub cm_stub(&cm);
+    crypto_manager_stub cm_stub(&cm, UseOldOpe);
     bool isBin;
     string res = cm_stub.crypt<n_bytes>(
         cm.getmkey(),
@@ -484,6 +486,87 @@ static void do_query_q1(Connect &conn,
     }
 }
 
+typedef map< pair< uint8_t, uint8_t >,
+             pair< uint64_t, double > > Q1AggGroup;
+
+static void ReadChar2AggGroup(const string& data,
+                              Q1AggGroup& agg_group) {
+
+  const uint8_t *p   = (const uint8_t *) data.data();
+  const uint8_t *end = (const uint8_t *) data.data() + data.size();
+  while (p < end) {
+    uint8_t l_returnflag = *p++;
+    uint8_t l_linestatus = *p++;
+    const uint64_t *u64p = (const uint64_t *) p;
+    uint64_t count = *u64p;
+    p += sizeof(uint64_t);
+    const double *dp = (const double *) p;
+    double value = *dp;
+    p += sizeof(double);
+    agg_group[make_pair(l_returnflag, l_linestatus)] = make_pair(count, value);
+  }
+}
+
+static void do_query_q1_nosort(Connect &conn,
+                               uint32_t year,
+                               vector<q1entry> &results) {
+    NamedTimer fcnTimer(__func__);
+
+    ostringstream buf;
+    buf << "select SQL_NO_CACHE sum_char2(l_returnflag, l_linestatus, l_quantity) as sum_qty, sum_char2(l_returnflag, l_linestatus, l_extendedprice) as sum_base_price, sum_char2(l_returnflag, l_linestatus, l_extendedprice * (1 - l_discount)) as sum_disc_price, sum_char2(l_returnflag, l_linestatus, l_extendedprice * (1 - l_discount) * (1 + l_tax)) as sum_charge, sum_char2(l_returnflag, l_linestatus, l_discount) as sum_disc from LINEITEM "
+        << "where l_shipdate <= date '" << year << "-1-1'"
+        ;
+
+    DBResult * dbres;
+    {
+      NamedTimer t(__func__, "execute");
+      conn.execute(buf.str(), dbres);
+    }
+    ResType res;
+    {
+      NamedTimer t(__func__, "unpack");
+      res = dbres->unpack();
+      assert(res.ok);
+    }
+    assert(res.rows.size() == 1);
+
+    Q1AggGroup sum_qty_group;
+    Q1AggGroup sum_base_price_group;
+    Q1AggGroup sum_disc_price_group;
+    Q1AggGroup sum_charge_group;
+    Q1AggGroup sum_disc_group;
+
+    ReadChar2AggGroup(res.rows[0][0].data, sum_qty_group);
+    ReadChar2AggGroup(res.rows[0][1].data, sum_base_price_group);
+    ReadChar2AggGroup(res.rows[0][2].data, sum_disc_price_group);
+    ReadChar2AggGroup(res.rows[0][3].data, sum_charge_group);
+    ReadChar2AggGroup(res.rows[0][4].data, sum_disc_group);
+
+    for (Q1AggGroup::iterator it = sum_qty_group.begin();
+         it != sum_qty_group.end(); ++it) {
+
+        pair< uint64_t, double >& p0 = it->second;
+        pair< uint64_t, double >& p1 = sum_base_price_group[it->first];
+        pair< uint64_t, double >& p2 = sum_disc_price_group[it->first];
+        pair< uint64_t, double >& p3 = sum_charge_group[it->first];
+        pair< uint64_t, double >& p4 = sum_disc_group[it->first];
+
+        results.push_back(
+                q1entry(
+                    string(1, it->first.first),
+                    string(1, it->first.second),
+                    p0.second,
+                    p1.second,
+                    p2.second,
+                    p3.second,
+                    p0.second / double(p0.first),
+                    p1.second / double(p1.first),
+                    p4.second / double(p4.first),
+                    p0.first));
+        // TODO: sort results
+    }
+}
+
 static inline uint64_t ExtractTimeInfo(const string &data) {
   const uint64_t *p = (const uint64_t *) data.data();
   return *p;
@@ -521,7 +604,7 @@ static void do_query_q1_packed_opt(Connect &conn,
                                    CryptoManager &cm,
                                    uint32_t year,
                                    vector<q1entry> &results) {
-    crypto_manager_stub cm_stub(&cm);
+    crypto_manager_stub cm_stub(&cm, UseOldOpe);
     NamedTimer fcnTimer(__func__);
 
     // l_shipdate <= date '[year]-01-01'
@@ -651,7 +734,7 @@ static void do_query_q1_opt_nosort(Connect &conn,
                                    CryptoManager &cm,
                                    uint32_t year,
                                    vector<q1entry> &results) {
-    crypto_manager_stub cm_stub(&cm);
+    crypto_manager_stub cm_stub(&cm, UseOldOpe);
     NamedTimer fcnTimer(__func__);
 
     // l_shipdate <= date '[year]-01-01'
@@ -773,7 +856,7 @@ static void do_query_q1_opt(Connect &conn,
                             CryptoManager &cm,
                             uint32_t year,
                             vector<q1entry> &results) {
-    crypto_manager_stub cm_stub(&cm);
+    crypto_manager_stub cm_stub(&cm, UseOldOpe);
     NamedTimer fcnTimer(__func__);
 
     // l_shipdate <= date '[year]-01-01'
@@ -881,7 +964,7 @@ static void do_query_q1_noopt(Connect &conn,
                               CryptoManager &cm,
                               uint32_t year,
                               vector<q1entry> &results) {
-    crypto_manager_stub cm_stub(&cm);
+    crypto_manager_stub cm_stub(&cm, UseOldOpe);
     NamedTimer fcnTimer(__func__);
 
     // l_shipdate <= date '[year]-01-01'
@@ -1051,7 +1134,7 @@ static void do_query_q11_noopt(Connect &conn,
                                const string &name,
                                double fraction,
                                vector<q11entry> &results) {
-    crypto_manager_stub cm_stub(&cm);
+    crypto_manager_stub cm_stub(&cm, UseOldOpe);
     assert(name.size() <= 25);
     NamedTimer fcnTimer(__func__);
 
@@ -1198,7 +1281,7 @@ static void do_query_q14_opt(Connect &conn,
                              CryptoManager &cm,
                              uint32_t year,
                              vector<q14entry> &results) {
-    crypto_manager_stub cm_stub(&cm);
+    crypto_manager_stub cm_stub(&cm, UseOldOpe);
     NamedTimer fcnTimer(__func__);
 
     bool isBin;
@@ -1263,7 +1346,7 @@ static void do_query_q14_noopt(Connect &conn,
                                uint32_t year,
                                vector<q14entry> &results,
                                bool use_opt_table = false) {
-    crypto_manager_stub cm_stub(&cm);
+    crypto_manager_stub cm_stub(&cm, UseOldOpe);
     NamedTimer fcnTimer(__func__);
 
     bool isBin;
@@ -1384,7 +1467,7 @@ static void do_query_q11_opt_proj(Connect &conn,
                                    const string &name,
                                    double fraction,
                                    vector<q11entry> &results) {
-    crypto_manager_stub cm_stub(&cm);
+    crypto_manager_stub cm_stub(&cm, UseOldOpe);
     NamedTimer fcnTimer(__func__);
     assert(name == "IRAQ"); // TODO: can only handle IRAQ for now
 
@@ -1606,7 +1689,7 @@ static void do_query_q11_opt(Connect &conn,
                              const string &name,
                              double fraction,
                              vector<q11entry> &results) {
-    crypto_manager_stub cm_stub(&cm);
+    crypto_manager_stub cm_stub(&cm, UseOldOpe);
     assert(name.size() <= 25);
     NamedTimer fcnTimer(__func__);
 
@@ -1835,7 +1918,7 @@ static void do_query_q11_opt(Connect &conn,
 //                             const string &name,
 //                             double fraction,
 //                             vector<q11entry> &results) {
-//    crypto_manager_stub cm_stub(&cm);
+//    crypto_manager_stub cm_stub(&cm, UseOldOpe);
 //    assert(name.size() <= 25);
 //    NamedTimer fcnTimer(__func__);
 //
@@ -1959,9 +2042,9 @@ static void do_query_q2_noopt(Connect &conn,
                               const string &type,
                               const string &name,
                               vector<q2entry> &results) {
-    assert(name.size() <= 25);
+    assert(name.size() <= 26);
 
-    crypto_manager_stub cm_stub(&cm);
+    crypto_manager_stub cm_stub(&cm, UseOldOpe);
     NamedTimer fcnTimer(__func__);
 
     string lowertype(lower_s(type));
@@ -2689,7 +2772,7 @@ static void do_query_q20_opt_noagg(Connect &conn,
                                    const string &p_name,
                                    const string &n_name,
                                    vector<q20entry> &results) {
-    crypto_manager_stub cm_stub(&cm);
+    crypto_manager_stub cm_stub(&cm, UseOldOpe);
     NamedTimer fcnTimer(__func__);
 
     assert(n_name.size() <= 25);
@@ -2879,7 +2962,7 @@ static void do_query_q20_opt(Connect &conn,
                              const string &p_name,
                              const string &n_name,
                              vector<q20entry> &results) {
-    crypto_manager_stub cm_stub(&cm);
+    crypto_manager_stub cm_stub(&cm, UseOldOpe);
     NamedTimer fcnTimer(__func__);
 
     assert(n_name.size() <= 25);
@@ -3045,7 +3128,7 @@ static inline uint32_t random_year() {
 
 static void usage(char **argv) {
     cerr << "[USAGE]: " << argv[0] << " "
-         << "(query_flag args) num_queries db_name hostname"
+         << "(query_flag args) num_queries db_name (old_ope|new_ope) hostname"
          << endl;
 }
 
@@ -3062,13 +3145,14 @@ enum query_selection {
 
 int main(int argc, char **argv) {
     srand(time(NULL));
-    if (argc != 5 && argc != 6 && argc != 7 && argc != 8) {
+    if (argc != 6 && argc != 7 && argc != 8 && argc != 9) {
         usage(argv);
         return 1;
     }
 
     static const char * Query1Strings[] = {
         "--orig-query1",
+        "--orig-nosort-query1",
         "--crypt-query1",
         "--crypt-opt-query1",
         "--crypt-opt-packed-query1",
@@ -3140,16 +3224,20 @@ int main(int argc, char **argv) {
 
     int input_nruns;
     string db_name;
+    string ope_type;
     string hostname;
     switch (q) {
-      case query1:  input_nruns = atoi(argv[3]); db_name = argv[4]; hostname = argv[5]; break;
-      case query2:  input_nruns = atoi(argv[5]); db_name = argv[6]; hostname = argv[7]; break;
-      case query11: input_nruns = atoi(argv[4]); db_name = argv[5]; hostname = argv[6]; break;
-      case query14: input_nruns = atoi(argv[3]); db_name = argv[4]; hostname = argv[5]; break;
-      case query18: input_nruns = atoi(argv[3]); db_name = argv[4]; hostname = argv[5]; break;
-      case query20: input_nruns = atoi(argv[5]); db_name = argv[6]; hostname = argv[7]; break;
+    case query1:  input_nruns = atoi(argv[3]); db_name = argv[4]; ope_type = argv[5]; hostname = argv[6]; break;
+    case query2:  input_nruns = atoi(argv[5]); db_name = argv[6]; ope_type = argv[7]; hostname = argv[8]; break;
+    case query11: input_nruns = atoi(argv[4]); db_name = argv[5]; ope_type = argv[6]; hostname = argv[7]; break;
+    case query14: input_nruns = atoi(argv[3]); db_name = argv[4]; ope_type = argv[5]; hostname = argv[6]; break;
+    case query18: input_nruns = atoi(argv[3]); db_name = argv[4]; ope_type = argv[5]; hostname = argv[6]; break;
+    case query20: input_nruns = atoi(argv[5]); db_name = argv[6]; ope_type = argv[7]; hostname = argv[8]; break;
     }
     uint32_t nruns = (uint32_t) input_nruns;
+
+    assert(ope_type == "old_ope" || ope_type == "new_ope");
+    UseOldOpe = ope_type == "old_ope";
 
     unsigned long ctr = 0;
 
@@ -3179,6 +3267,13 @@ int main(int argc, char **argv) {
             // vanilla MYSQL case
             for (size_t i = 0; i < nruns; i++) {
               do_query_q1(conn, year, results);
+              ctr += results.size();
+              PRINT_RESULTS();
+              results.clear();
+            }
+          } else if (mode == "orig-nosort-query1") {
+            for (size_t i = 0; i < nruns; i++) {
+              do_query_q1_nosort(conn, year, results);
               ctr += results.size();
               PRINT_RESULTS();
               results.clear();
