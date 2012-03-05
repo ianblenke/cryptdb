@@ -46,7 +46,7 @@ enum lineitem {
 };
 
 static void process_row(CryptoManager& cm, const vector<string>& elems) {
-    crypto_manager_stub cm_stub(&cm);
+    crypto_manager_stub cm_stub(&cm, false);
 
     vector<string> newelems = elems;
 

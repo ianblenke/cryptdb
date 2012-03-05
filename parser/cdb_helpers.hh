@@ -118,8 +118,8 @@ struct max_size {
 class crypto_manager_stub {
 public:
 
-  crypto_manager_stub(CryptoManager* cm, bool Profile = true)
-      : cm(cm), Profile(Profile) {}
+  crypto_manager_stub(CryptoManager* cm, bool OldOpe, bool Profile = true)
+      : cm(cm), OldOpe(OldOpe), Profile(Profile) {}
   ~crypto_manager_stub() {
       for (ope_cache_map::iterator it = ope_cache.begin();
            it != ope_cache.end(); ++it) delete it->second;
@@ -352,30 +352,49 @@ private:
             }
 
             if (fromlevel == SECLEVEL::OPEJOIN) {
-
                 fromlevel = increaseLevel(fromlevel, ft, oOPE);
-                new_ope* ope =
-                    get_ope_object(cm->getKey(mkey, fullfieldname, fromlevel), n_bytes);
-
                 _static_assert(sizeof(long) == sizeof(uint64_t));
-                if (n_bytes <= 4) {
-                    NTL::ZZ e = ope->encrypt(NTL::to_ZZ(val));
-                    //assert(NumBits(e) <= (n_bytes * 2));
-                    val = to_long(e); // is only correct for 64-bit machines
-                                      // TODO: fix
-                    if (fromlevel == tolevel) {
-                        isBin = false;
-                        return strFromVal(val);
+                if (OldOpe) {
+                    OPE ope(cm->getKey(mkey, fullfieldname, fromlevel),
+                            n_bytes * 8,
+                            n_bytes * 8 * 2);
+                    if (n_bytes <= 4) {
+                        val = ope.encrypt(val);
+                        if (fromlevel == tolevel) {
+                            isBin = false;
+                            return strFromVal(val);
+                        }
+                    } else {
+                        NTL::ZZ plaintext;
+                        plaintext = val;
+                        string ciphertext = ope.encrypt(plaintext);
+                        if (fromlevel == tolevel) {
+                            isBin = true;
+                            return ciphertext;
+                        }
                     }
                 } else {
-                    NTL::ZZ plaintext;
-                    plaintext = val; // is only correct for 64-bit machines...
-                                     // TODO: fix
-                    NTL::ZZ ctxt = ope->encrypt(plaintext);
-                    if (fromlevel == tolevel) {
-                        // CT larger than long int, so need to use binary
-                        isBin = true;
-                        return StringFromZZ(ctxt);
+                    new_ope* ope =
+                        get_ope_object(cm->getKey(mkey, fullfieldname, fromlevel), n_bytes);
+                    if (n_bytes <= 4) {
+                        NTL::ZZ e = ope->encrypt(NTL::to_ZZ(val));
+                        //assert(NumBits(e) <= (n_bytes * 2));
+                        val = to_long(e); // is only correct for 64-bit machines
+                                          // TODO: fix
+                        if (fromlevel == tolevel) {
+                            isBin = false;
+                            return strFromVal(val);
+                        }
+                    } else {
+                        NTL::ZZ plaintext;
+                        plaintext = val; // is only correct for 64-bit machines...
+                                         // TODO: fix
+                        NTL::ZZ ctxt = ope->encrypt(plaintext);
+                        if (fromlevel == tolevel) {
+                            // CT larger than long int, so need to use binary
+                            isBin = true;
+                            return StringFromZZ(ctxt);
+                        }
                     }
                 }
             }
@@ -492,36 +511,60 @@ private:
 
           uint64_t val;
           if (fromlevel == SECLEVEL::OPE) {
-
-              new_ope* ope =
-                  get_ope_object(cm->getKey(mkey, fullfieldname, fromlevel), n_bytes);
-
               _static_assert(sizeof(long) == sizeof(uint64_t));
-              if (n_bytes <= 4) {
-                  val = valFromStr(data);
-                  NTL::ZZ ct;
-                  ct = val; // only for 64-bit
-                  NTL::ZZ pt = ope->decrypt(ct);
-                  val = to_long(pt);
-                  //assert(NTL::NumBits(pt) <= n_bytes);
-                  assert(max_size<n_bytes * 8>::is_valid);
-                  assert(val <= max_size<n_bytes * 8>::value);
-                  fromlevel = decreaseLevel(fromlevel, ft, oOPE);
-                  if (fromlevel == tolevel) {
-                      isBin = false;
-                      return strFromVal(val);
+              if (OldOpe) {
+                  OPE ope(cm->getKey(mkey, fullfieldname, fromlevel),
+                          n_bytes * 8,
+                          n_bytes * 8 * 2);
+                  if (n_bytes <= 4) {
+                      val = valFromStr(data);
+                      val = ope.decrypt(val);
+                      assert(max_size<n_bytes * 8>::is_valid);
+                      assert(val <= max_size<n_bytes * 8>::value);
+                      fromlevel = decreaseLevel(fromlevel, ft, oOPE);
+                      if (fromlevel == tolevel) {
+                          isBin = false;
+                          return strFromVal(val);
+                      }
+                  } else {
+                      val = ope.decryptToU64(data);
+                      assert(max_size<n_bytes * 8>::is_valid);
+                      assert(val <= max_size<n_bytes * 8>::value);
+                      fromlevel = decreaseLevel(fromlevel, ft, oOPE);
+                      if (fromlevel == tolevel) {
+                          isBin = false;
+                          return strFromVal(val);
+                      }
                   }
               } else {
-                  NTL::ZZ ct = ZZFromString(data);
-                  NTL::ZZ pt = ope->decrypt(ct);
-                  //assert(NTL::NumBits(pt) <= n_bytes);
-                  val = to_long(pt);
-                  assert(max_size<n_bytes * 8>::is_valid);
-                  assert(val <= max_size<n_bytes * 8>::value);
-                  fromlevel = decreaseLevel(fromlevel, ft, oOPE);
-                  if (fromlevel == tolevel) {
-                      isBin = false;
-                      return strFromVal(val);
+                  new_ope* ope =
+                      get_ope_object(cm->getKey(mkey, fullfieldname, fromlevel), n_bytes);
+                  if (n_bytes <= 4) {
+                      val = valFromStr(data);
+                      NTL::ZZ ct;
+                      ct = val; // only for 64-bit
+                      NTL::ZZ pt = ope->decrypt(ct);
+                      val = to_long(pt);
+                      //assert(NTL::NumBits(pt) <= n_bytes);
+                      assert(max_size<n_bytes * 8>::is_valid);
+                      assert(val <= max_size<n_bytes * 8>::value);
+                      fromlevel = decreaseLevel(fromlevel, ft, oOPE);
+                      if (fromlevel == tolevel) {
+                          isBin = false;
+                          return strFromVal(val);
+                      }
+                  } else {
+                      NTL::ZZ ct = ZZFromString(data);
+                      NTL::ZZ pt = ope->decrypt(ct);
+                      //assert(NTL::NumBits(pt) <= n_bytes);
+                      val = to_long(pt);
+                      assert(max_size<n_bytes * 8>::is_valid);
+                      assert(val <= max_size<n_bytes * 8>::value);
+                      fromlevel = decreaseLevel(fromlevel, ft, oOPE);
+                      if (fromlevel == tolevel) {
+                          isBin = false;
+                          return strFromVal(val);
+                      }
                   }
               }
           } else {
@@ -708,6 +751,7 @@ public:
   CryptoManager* cm;
 
 private:
+  const bool OldOpe;
   const bool Profile;
 };
 

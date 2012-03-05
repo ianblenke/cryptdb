@@ -29,7 +29,7 @@ using namespace NTL;
 #endif /* NDEBUG */
 
 static CryptoManager cm("12345");
-static crypto_manager_stub stub(&cm);
+static crypto_manager_stub stub(&cm, false);
 
 static void test_big_ope(uint64_t a, uint64_t b, bool test_decrypt = true)
 {
