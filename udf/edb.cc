@@ -95,6 +95,13 @@ my_bool  agg_char2_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *er
 char *   agg_char2(UDF_INIT *initid, UDF_ARGS *args, char *result,
              unsigned long *length, char *is_null, char *error);
 
+my_bool  agg_char2_row_pack_init(UDF_INIT *initid, UDF_ARGS *args, char *message);
+void     agg_char2_row_pack_deinit(UDF_INIT *initid);
+void     agg_char2_row_pack_clear(UDF_INIT *initid, char *is_null, char *error);
+my_bool  agg_char2_row_pack_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error);
+char *   agg_char2_row_pack(UDF_INIT *initid, UDF_ARGS *args, char *result,
+             unsigned long *length, char *is_null, char *error);
+
 my_bool  agg8_init(UDF_INIT *initid, UDF_ARGS *args, char *message);
 void     agg8_deinit(UDF_INIT *initid);
 void     agg8_clear(UDF_INIT *initid, char *is_null, char *error);
@@ -855,6 +862,203 @@ agg_char2(UDF_INIT *initid, UDF_ARGS *args, char *result,
         BytesFromZZ(ptr, it->second.second,
                     CryptoManager::Paillier_len_bytes);
         ptr += CryptoManager::Paillier_len_bytes;
+    }
+    return (char *) as->rbuf;
+}
+
+struct agg_char2_row_pack_state {
+    struct per_group_state {
+        std::vector< std::vector<ZZ> > running_sums;
+        uint64_t count;
+    };
+    typedef std::map<uint16_t, per_group_state> group_map;
+    group_map aggs;
+    uint32_t fields_mask;
+    ZZ n2;
+    void *rbuf;
+
+    // internal state
+    ssize_t block_id; // the block ID that is in block_buf. is also
+                      // the last read block out of fp (so fp points to
+                      // block_id + 1). if -1, then block_buf is not
+                      // meaningful
+
+    // last block buffer
+    char* block_buf;
+    size_t block_size;
+
+    // file pointer
+    FILE* fp;
+};
+
+static size_t NumBitsHigh(uint32_t t) {
+    size_t cnt = 0;
+    size_t s = sizeof(uint32_t) * 8;
+    while (s--) {
+        cnt += t & 0x1;
+        t >>= 1;
+    }
+    return cnt;
+}
+
+static const size_t AggSize = 256;
+
+my_bool
+agg_char2_row_pack_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
+{
+    if (args->arg_count != 5) {
+        strcpy(message, "need to provide 5 args");
+        return 1;
+    }
+
+    agg_char2_row_pack_state *as = new agg_char2_row_pack_state;
+    as->rbuf = NULL;
+
+    if (args->args[3] == NULL) {
+        strcpy(message, "need to indicate which fields are of interest");
+        return 1;
+    }
+
+    as->fields_mask = *((long long *) args->args[3]);
+    if (as->fields_mask > 0x1F /* hardcode 5 fields for now */) {
+        strcpy(message, "fields out of range");
+        return 1;
+    }
+
+    if (args->args[4] == NULL) {
+        strcpy(message, "need to provide PK");
+        return 1;
+    }
+
+    ZZFromBytes(as->n2, (const uint8_t *) args->args[4],
+                args->lengths[4]);
+
+    as->block_id = -1;
+
+    as->fp = fopen("/tmp/tpch-0.05/lineitem_enc/data", "rb");
+    assert(as->fp);
+
+    as->block_size = AggSize * 5; // hardcode 5 for now
+    as->block_buf = (char *) malloc(as->block_size);
+
+    initid->ptr = (char *) as;
+    return 0;
+}
+
+void
+agg_char2_row_pack_deinit(UDF_INIT *initid)
+{
+    agg_char2_row_pack_state *as = (agg_char2_row_pack_state *) initid->ptr;
+    free(as->rbuf);
+    free(as->block_buf);
+    fclose(as->fp);
+    delete as;
+}
+
+void
+agg_char2_row_pack_clear(UDF_INIT *initid, char *is_null, char *error)
+{
+    agg_char2_row_pack_state *as = (agg_char2_row_pack_state *) initid->ptr;
+    as->aggs.clear();
+    as->block_id = -1;
+    fseek(as->fp, 0, SEEK_SET);
+}
+
+static const size_t RowsPerBlock = 12;
+
+my_bool
+agg_char2_row_pack_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error)
+{
+    agg_char2_row_pack_state *as = (agg_char2_row_pack_state *) initid->ptr;
+
+    long long p0, p1, row_id;
+    p0 = *((long long *) args->args[0]);
+    p1 = *((long long *) args->args[1]);
+
+    uint16_t key = (uint8_t(p0) << 8) | uint8_t(p1);
+
+    agg_char2_row_pack_state::group_map::iterator it = as->aggs.find(key);
+    agg_char2_row_pack_state::per_group_state* s = NULL;
+    if (UNLIKELY(it == as->aggs.end())) {
+        s = &as->aggs[key]; // creates on demand
+        vector<ZZ> cpy;
+        cpy.resize(RowsPerBlock, to_ZZ(1));
+        s->running_sums.resize(NumBitsHigh(as->fields_mask), cpy);
+        s->count = 1;
+    } else {
+        s->count++;
+        s = &it->second;
+    }
+
+    // compute block ID from row ID
+    row_id = *((long long *) args->args[2]);
+    size_t block_id = row_id / RowsPerBlock;
+
+    assert((ssize_t)block_id >= as->block_id); // ONLY support scanning forward for now!
+
+    // read in block
+    while (as->block_id < (ssize_t)block_id) {
+        // scan forward
+        size_t bread = fread(as->block_buf, 1, as->block_size, as->fp);
+        assert(bread == as->block_size); // TODO: handle bad files
+        as->block_id++;
+        // TODO: seek if we are really far away instead?
+    }
+
+    // compute block offset
+    size_t block_offset = row_id % RowsPerBlock;
+
+    // do sum for each field of interest
+    size_t idx = 0;
+    for (size_t i = 0; i < 5; i++) { // TODO: don't hardcode 5
+        if (as->fields_mask & (0x1 << i)) {
+            ZZ &sum = s->running_sums[idx][block_offset];
+            ZZ e;
+            ZZFromBytes(
+                e,
+                (const uint8_t *) as->block_buf + (i * AggSize),
+                AggSize);
+            MulMod(sum, sum, e, as->n2);
+            idx++;
+        }
+    }
+    return true;
+}
+
+char *
+agg_char2_row_pack(UDF_INIT *initid, UDF_ARGS *args, char *result,
+    unsigned long *length, char *is_null, char *error)
+{
+    agg_char2_row_pack_state *as = (agg_char2_row_pack_state *) initid->ptr;
+    *length =
+        (2 + sizeof(uint64_t) +
+         NumBitsHigh(as->fields_mask) * RowsPerBlock *
+         CryptoManager::Paillier_len_bytes) * as->aggs.size();
+
+    as->rbuf = malloc(*length);
+    assert(as->rbuf); // TODO: handle OOM
+
+    uint8_t* ptr = (uint8_t *) as->rbuf;
+
+    for (agg_char2_row_pack_state::group_map::iterator it = as->aggs.begin();
+         it != as->aggs.end(); ++it) {
+        *ptr++ = (uint8_t) ((it->first >> 8) & 0xFF);
+        *ptr++ = (uint8_t) (it->first & 0xFF);
+        uint64_t *iptr = (uint64_t *) ptr;
+        *iptr = it->second.count;
+        ptr += sizeof(uint64_t);
+
+        for (vector< vector<ZZ> >::iterator iit =
+                it->second.running_sums.begin();
+             iit != it->second.running_sums.end(); ++iit) {
+            for (vector<ZZ>::iterator zzt = iit->begin();
+                 zzt != iit->end(); ++zzt) {
+                BytesFromZZ(ptr, *zzt,
+                            CryptoManager::Paillier_len_bytes);
+                ptr += CryptoManager::Paillier_len_bytes;
+            }
+        }
+
     }
     return (char *) as->rbuf;
 }

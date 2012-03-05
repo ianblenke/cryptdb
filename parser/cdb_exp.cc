@@ -769,6 +769,122 @@ static void do_query_q1_opt_nosort(Connect &conn,
     }
 }
 
+static void do_query_q1_opt_rowpack(Connect &conn,
+                                    CryptoManager &cm,
+                                    uint32_t year,
+                                    vector<q1entry> &results) {
+    crypto_manager_stub cm_stub(&cm);
+    NamedTimer fcnTimer(__func__);
+
+    // l_shipdate <= date '[year]-01-01'
+    bool isBin;
+    string encDATE = cm_stub.crypt<3>(cm.getmkey(), strFromVal(EncodeDate(1, 1, year)),
+                              TYPE_INTEGER, fieldname(lineitem::l_shipdate, "OPE"),
+                              getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
+
+    DBResult * dbres;
+
+    conn.execute("set @cnt := 0", dbres);
+
+    string pkinfo = marshallBinary(cm.getPKInfo());
+    ostringstream s;
+    s <<
+      "SELECT SQL_NO_CACHE agg_char2_row_pack("
+        "l_returnflag_DET, "
+        "l_linestatus_DET, "
+        "cnt, "
+        "0x1F, "
+        << pkinfo <<
+      ") FROM ( "
+        "SELECT l_returnflag_DET, l_linestatus_DET, "
+        "@cnt := @cnt + 1 AS cnt, l_shipdate_OPE FROM lineitem_enc "
+      ") AS _anon_ WHERE l_shipdate_OPE <= " << encDATE;
+    cerr << s.str() << endl;
+
+    {
+      NamedTimer t(__func__, "execute");
+      conn.execute(s.str(), dbres);
+    }
+    ResType res;
+    {
+      NamedTimer t(__func__, "unpack");
+      res = dbres->unpack();
+      assert(res.ok);
+    }
+
+    static const size_t BitsPerAggField = 83;
+    static const size_t FieldsPerAgg = 1024 / BitsPerAggField;
+    ZZ mask = to_ZZ(1); mask <<= BitsPerAggField; mask -= 1;
+    {
+      assert(res.rows.size() == 1);
+      string data = res.rows[0][0].data;
+
+      // format of data is
+      // [ l_returnflag_DET (1 byte) | l_linestatus_DET (1 byte) |
+      //   count(*) (8 bytes) | [ rows (RowsPerAgg * 256 bytes) ]* ]*
+      typedef map< pair<unsigned char, unsigned char>, q1entry > GroupMap;
+      GroupMap groups;
+
+      const uint8_t *p   = (const uint8_t *) data.data();
+      const uint8_t *end = (const uint8_t *) data.data() + data.size();
+      while (p < end) {
+
+        unsigned char l_returnflag_DET = *p++;
+        unsigned char l_linestatus_DET = *p++;
+
+        // l_returnflag
+        unsigned char l_returnflag_ch = (unsigned char) decryptRow<uint32_t, 1>(
+                to_s((int)l_returnflag_DET),
+                12345,
+                fieldname(lineitem::l_returnflag, "DET"),
+                TYPE_INTEGER,
+                oDET,
+                cm);
+
+        // l_linestatus
+        unsigned char l_linestatus_ch = (unsigned char) decryptRow<uint32_t, 1>(
+                to_s((int)l_linestatus_DET),
+                12345,
+                fieldname(lineitem::l_linestatus, "DET"),
+                TYPE_INTEGER,
+                oDET,
+                cm);
+
+        // warning: endianness on DB machine must be same as this machine
+        const uint64_t *u64p = (const uint64_t *) p;
+        uint64_t count_order = *u64p;
+
+        p += sizeof(uint64_t);
+
+        q1entry q;
+        q.l_returnflag = string(1, (char) l_returnflag_ch);
+        q.l_linestatus = string(1, (char) l_linestatus_ch);
+        q.count_order = count_order;
+
+        for (size_t i = 0; i < 5; i++) {
+          double sum = 0.0;
+          for (size_t j = 0; j < FieldsPerAgg; j++) {
+            ZZ m;
+            cm.decrypt_Paillier(string((const char *) p, 256), m);
+            uint64_t e = to_long( (m >> (BitsPerAggField * j)) & mask );
+            sum += ((double)e)/100.0;
+            p += 256;
+          }
+          switch (i) {
+          case 0: q.sum_qty = sum; q.avg_qty = sum / ((double)count_order); break;
+          case 1: q.sum_base_price = sum; q.avg_price = sum / ((double)count_order); break;
+          case 2: q.sum_disc_price = sum; break;
+          case 3: q.sum_charge = sum; break;
+          case 4: q.avg_disc = sum / ((double)count_order); break;
+          default: assert(false);
+          }
+        }
+
+        groups[make_pair( l_returnflag_ch, l_linestatus_ch )] = q;
+      }
+    }
+}
+
 static void do_query_q1_opt(Connect &conn,
                             CryptoManager &cm,
                             uint32_t year,
@@ -2223,6 +2339,7 @@ static void do_query_q18_crypt(Connect &conn,
         "from lineitem_enc "
         "group by l_orderkey_DET "
         "having count(*) >= " << minGroupCount;
+    cerr  << s.str() << endl;
 
     DBResult * dbres;
     {
@@ -2241,12 +2358,18 @@ static void do_query_q18_crypt(Connect &conn,
         NamedTimer t(__func__, "aggregating");
         for (auto row : res.rows) {
             vector<string> ciphers;
+            bool trace = row[0].data == "613450318";
             tokenize(row[1].data, ",", ciphers);
             assert(!ciphers.empty());
 
             double sum = 0.0;
             for (vector<string>::iterator it = ciphers.begin();
                  it != ciphers.end(); ++it) {
+                if (trace) {
+                  cerr << "cipher: " << *it << endl;
+                  uint64_t c = valFromStr(*it);
+                  cerr << "cc: " << c << endl;
+                }
                 uint64_t l_quantity_int = decryptRow<uint64_t, 7>(
                         *it,
                         12345,
@@ -2256,6 +2379,8 @@ static void do_query_q18_crypt(Connect &conn,
                         cm);
                 double l_quantity = ((double)l_quantity_int)/100.0;
                 sum += l_quantity;
+
+                if (trace) cerr << l_quantity << endl;
 
                 // short circuit evaluations:
 
@@ -2268,6 +2393,8 @@ static void do_query_q18_crypt(Connect &conn,
                 if ((sum + ((double)(ciphers.end() - (it + 1))) * L_QUANTITY_MAX) <=
                     (double) threshold) break;
             }
+
+            if (trace) cerr << "total sum: " << sum << endl;
 
             if (sum > (double) threshold) l_orderkeys.push_back(row[0].data);
         }
@@ -2343,6 +2470,160 @@ static void do_query_q18_crypt(Connect &conn,
                     cm);
 
             uint64_t o_orderdate = decryptRow<uint64_t, 3>(
+                    row[3].data,
+                    12345,
+                    fieldname(orders::o_orderdate, "DET"),
+                    TYPE_INTEGER,
+                    oDET,
+                    cm);
+
+            uint64_t o_totalprice_int = decryptRow<uint64_t, 7>(
+                    row[4].data,
+                    12345,
+                    fieldname(orders::o_totalprice, "DET"),
+                    TYPE_INTEGER,
+                    oDET,
+                    cm);
+            double o_totalprice = ((double)o_totalprice_int)/100.0;
+
+            ZZ z;
+            cm.decrypt_Paillier(row[5].data, z);
+            long sum_qty_int = extract_from_slot(z, 0);
+            double sum_qty = ((double)sum_qty_int)/100.0;
+
+            results.push_back(
+                q18entry(
+                    c_name,
+                    c_custkey,
+                    o_orderkey,
+                    o_orderdate,
+                    o_totalprice,
+                    sum_qty));
+        }
+    }
+}
+
+static void do_query_q18_crypt_opt2(Connect &conn,
+                                    CryptoManager& cm,
+                                    uint64_t threshold,
+                                    vector<q18entry> &results) {
+    NamedTimer fcnTimer(__func__);
+
+    double L_QUANTITY_MAX = 50.0; // comes from statistics
+
+    size_t minGroupCount = (size_t)ceil(double(threshold)/L_QUANTITY_MAX);
+    assert(minGroupCount >= 1);
+
+    ostringstream s;
+
+    // query 1
+    string pkinfo = marshallBinary(cm.getPKInfo());
+    s <<
+        "select "
+            "l_orderkey_DET, "
+            "agg(l_bitpacked_AGG, " << pkinfo << ", " << minGroupCount << ") END "
+        "from lineitem_enc "
+        "group by l_orderkey_DET "
+        "having count(*) >= " << minGroupCount;
+
+    DBResult * dbres;
+    {
+        NamedTimer t(__func__, "execute");
+        conn.execute(s.str(), dbres);
+    }
+    ResType res;
+    {
+        NamedTimer t(__func__, "unpack");
+        res = dbres->unpack();
+        assert(res.ok);
+    }
+
+    vector<string> l_orderkeys;
+    {
+        NamedTimer t(__func__, "decrypt-part1");
+        for (auto row : res.rows) {
+            ZZ z;
+            cm.decrypt_Paillier(row[1].data, z);
+            long sum_qty_int = extract_from_slot(z, 0);
+            double sum_qty = ((double)sum_qty_int)/100.0;
+
+            if (sum_qty > (double) threshold) {
+                l_orderkeys.push_back(row[0].data);
+            }
+        }
+    }
+
+    cerr << join(l_orderkeys, ",") << endl;
+
+    ostringstream s1;
+    // query 2
+
+    assert(!l_orderkeys.empty());
+    s1 <<
+        "select "
+        "    c_name_DET, c_custkey_DET, o_orderkey_DET, "
+        "    o_orderdate_DET, o_totalprice_DET, agg(l_bitpacked_AGG, " << pkinfo << ") "
+        "from "
+        "    customer_enc, orders_enc, lineitem_enc "
+        "where "
+        "    o_orderkey_DET in ( "
+        << join(l_orderkeys, ",") <<
+        "    ) "
+        "    and c_custkey_DET = o_custkey_DET "
+        "    and o_orderkey_DET = l_orderkey_DET "
+        "group by "
+        "    c_name_DET, "
+        "    c_custkey_DET, "
+        "    o_orderkey_DET, "
+        "    o_orderdate_DET, "
+        "    o_totalprice_DET "
+        "order by "
+        "    o_totalprice_OPE desc, "
+        "    o_orderdate_OPE "
+        "limit 100";
+
+    {
+        DBResult * dbres;
+        {
+            NamedTimer t(__func__, "execute");
+            conn.execute(s1.str(), dbres);
+        }
+        ResType res;
+        {
+            NamedTimer t(__func__, "unpack");
+            res = dbres->unpack();
+            assert(res.ok);
+        }
+
+        for (auto row : res.rows) {
+
+            string c_name = decryptRow<string>(
+                    row[0].data,
+                    12345,
+                    fieldname(customer::c_name, "DET"),
+                    TYPE_TEXT,
+                    oDET,
+                    cm);
+
+            uint64_t c_custkey = decryptRowFromTo<uint64_t, 4>(
+                    row[1].data,
+                    12345,
+                    fieldname(customer::c_custkey, "DET"),
+                    TYPE_INTEGER,
+                    SECLEVEL::DETJOIN,
+                    getMin(oDET),
+                    cm);
+
+            uint64_t o_orderkey = decryptRowFromTo<uint64_t, 4>(
+                    row[2].data,
+                    12345,
+                    fieldname(customer::c_custkey, "DET"),
+                    TYPE_INTEGER,
+                    SECLEVEL::DETJOIN,
+                    getMin(oDET),
+                    cm);
+
+            uint64_t o_orderdate = decryptRow<uint64_t>(
                     row[3].data,
                     12345,
                     fieldname(orders::o_orderdate, "DET"),
@@ -2930,6 +3211,7 @@ int main(int argc, char **argv) {
         "--crypt-opt-query1",
         "--crypt-opt-packed-query1",
         "--crypt-opt-nosort-query1",
+        "--crypt-opt-row-packed-query1",
     };
     std::set<string> Query1Modes
       (Query1Strings, Query1Strings + NELEMS(Query1Strings));
@@ -2963,6 +3245,7 @@ int main(int argc, char **argv) {
         "--orig-query18",
         "--crypt-query18",
         "--crypt-opt-query18",
+        "--crypt-opt2-query18",
     };
     std::set<string> Query18Modes
       (Query18Strings, Query18Strings + NELEMS(Query18Strings));
@@ -3064,6 +3347,13 @@ int main(int argc, char **argv) {
           } else if (mode == "crypt-opt-nosort-query1") {
             for (size_t i = 0; i < nruns; i++) {
               do_query_q1_opt_nosort(conn, cm, year, results);
+              ctr += results.size();
+              PRINT_RESULTS();
+              results.clear();
+            }
+          } else if (mode == "crypt-opt-row-packed-query1") {
+            for (size_t i = 0; i < nruns; i++) {
+              do_query_q1_opt_rowpack(conn, cm, year, results);
               ctr += results.size();
               PRINT_RESULTS();
               results.clear();
@@ -3196,6 +3486,13 @@ int main(int argc, char **argv) {
           } else if (mode == "crypt-opt-query18") {
             for (size_t i = 0; i < nruns; i++) {
               do_query_q18_crypt_opt(conn, cm, threshold, results);
+              ctr += results.size();
+              PRINT_RESULTS();
+              results.clear();
+            }
+          } else if (mode == "crypt-opt2-query18") {
+            for (size_t i = 0; i < nruns; i++) {
+              do_query_q18_crypt_opt2(conn, cm, threshold, results);
               ctr += results.size();
               PRINT_RESULTS();
               results.clear();
