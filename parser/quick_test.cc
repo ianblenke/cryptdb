@@ -19,6 +19,9 @@
 #include <parser/cdb_helpers.hh>
 #include <parser/encdata.hh>
 
+#include <crypto/paillier.hh>
+#include <crypto/prng.hh>
+
 #include <util/cryptdb_log.hh>
 
 using namespace std;
@@ -140,6 +143,40 @@ static void test_row_pack_hom_sum(
   assert(actual == s);
 }
 
+static void test_larger_hom() {
+    static const size_t ctbits = 1256 * 2;
+    auto sk = Paillier_priv::keygen(ctbits / 2, ctbits / 8);
+    Paillier_priv pp(sk);
+
+    auto pk = pp.pubkey();
+    Paillier p(pk);
+
+    for (size_t i = 0; i < 100; i++) {
+      urandom u;
+      ZZ pt0 = u.rand_zz_mod(to_ZZ(1) << 1253);
+      ZZ pt1 = u.rand_zz_mod(to_ZZ(1) << 1253);
+
+      ZZ ct0 = p.encrypt(pt0);
+      ZZ ct1 = p.encrypt(pt1);
+      ZZ sum = p.add(ct0, ct1);
+      assert(pp.decrypt(ct0) == pt0);
+      assert(pp.decrypt(ct1) == pt1);
+      assert(pp.decrypt(sum) == (pt0 + pt1));
+    }
+
+    {
+      ZZ pt0 = (to_ZZ(1) << (1253)) - 1;
+      ZZ pt1 = (to_ZZ(1) << (1253)) - 1;
+
+      ZZ ct0 = p.encrypt(pt0);
+      ZZ ct1 = p.encrypt(pt1);
+      ZZ sum = p.add(ct0, ct1);
+      assert(pp.decrypt(ct0) == pt0);
+      assert(pp.decrypt(ct1) == pt1);
+      assert(pp.decrypt(sum) == (pt0 + pt1));
+    }
+}
+
 int main(int argc, char **argv) {
     // agg tests
     test_row_pack_hom_sum({ 1, 2, 3, 4 });
@@ -150,6 +187,8 @@ int main(int argc, char **argv) {
     test_row_pack_hom_sum(
       {17, 36, 8, 28, 24, 32, 38, 45, 49, 27, 2,
       28, 26, 30, 15, 26, 50, 37, 12, 9});
+
+    test_larger_hom();
 
     // det tests
 
