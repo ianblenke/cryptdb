@@ -78,7 +78,79 @@ static void test_big_ope(uint64_t a, uint64_t b, bool test_decrypt = true)
     assert((i < i1) == (memcmp(ct.data(), ct1.data(), 16) < 0));
 }
 
+template <size_t SlotSize>
+static inline void insert_into_slot(ZZ& z, long value, size_t slot) {
+    z |= (to_ZZ(value) << (SlotSize * slot));
+}
+
+static void test_row_pack_hom_sum(
+    const vector<uint32_t>& rows) {
+
+  static const size_t BitsPerAggField = 83;
+  static const size_t FieldsPerAgg = 1024 / BitsPerAggField;
+
+  vector<string> packed_cts;
+  size_t nAggs = rows.size() / FieldsPerAgg +
+      (rows.size() % FieldsPerAgg ? 1 : 0);
+  for (size_t i = 0; i < nAggs; i++) {
+      size_t base = i * FieldsPerAgg;
+      ZZ z;
+      for (size_t j = 0; j < min(FieldsPerAgg, rows.size() - base); j++) {
+          size_t row_id = base + j;
+          insert_into_slot<BitsPerAggField>(z, rows[row_id], j);
+      }
+      string e0 = cm.encrypt_Paillier(z);
+      e0.resize(256);
+      packed_cts.push_back(e0);
+  }
+
+  vector<ZZ> sums;
+  sums.resize(FieldsPerAgg, to_ZZ(1));
+
+  string pkinfo = cm.getPKInfo();
+  ZZ n2;
+  ZZFromBytes(n2, (const uint8_t *) pkinfo.data(), pkinfo.size());
+
+  uint64_t actual = 0;
+  for (size_t i = 0; i < rows.size(); i++) {
+    if ((i % 2) == 0) {
+      size_t block_id = i / FieldsPerAgg;
+      size_t block_offset = i % FieldsPerAgg;
+      ZZ &sum = sums[block_offset];
+      ZZ e;
+      ZZFromBytes(
+          e,
+          (const uint8_t *) packed_cts[block_id].data(),
+          256);
+      MulMod(sum, sum, e, n2);
+      actual += rows[i];
+    }
+  }
+
+  uint64_t s = 0;
+  ZZ mask = to_ZZ(1); mask <<= BitsPerAggField; mask -= 1;
+  for (size_t i = 0; i < sums.size(); i++) {
+    ZZ m;
+    cm.decrypt_Paillier(StringFromZZ(sums[i]), m);
+    uint64_t e = to_long( (m >> (BitsPerAggField * i)) & mask );
+    s += e;
+  }
+
+  cerr << "actual: " << actual << ", got: " << s << endl;
+  assert(actual == s);
+}
+
 int main(int argc, char **argv) {
+    // agg tests
+    test_row_pack_hom_sum({ 1, 2, 3, 4 });
+    test_row_pack_hom_sum({ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 });
+    test_row_pack_hom_sum({
+        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
+        1, 2, 3, 4, 5, 6, 7, 8, 9, });
+    test_row_pack_hom_sum(
+      {17, 36, 8, 28, 24, 32, 38, 45, 49, 27, 2,
+      28, 26, 30, 15, 26, 50, 37, 12, 9});
+
     // det tests
 
     // test int type

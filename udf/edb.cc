@@ -889,6 +889,9 @@ struct agg_char2_row_pack_state {
 
     // file pointer
     FILE* fp;
+
+    // debug file
+    //std::ofstream debug_stream;
 };
 
 static size_t NumBitsHigh(uint32_t t) {
@@ -921,7 +924,7 @@ agg_char2_row_pack_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
 
     as->fields_mask = *((long long *) args->args[3]);
     if (as->fields_mask > 0x1F /* hardcode 5 fields for now */) {
-        strcpy(message, "fields out of range");
+        sprintf(message, "fields out of range: %d", as->fields_mask);
         return 1;
     }
 
@@ -941,6 +944,9 @@ agg_char2_row_pack_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
     as->block_size = AggSize * 5; // hardcode 5 for now
     as->block_buf = (char *) malloc(as->block_size);
 
+    //as->debug_stream.open("/tmp/debug.txt");
+    //assert(as->debug_stream.good());
+
     initid->ptr = (char *) as;
     return 0;
 }
@@ -952,6 +958,7 @@ agg_char2_row_pack_deinit(UDF_INIT *initid)
     free(as->rbuf);
     free(as->block_buf);
     fclose(as->fp);
+    //as->debug_stream.flush();
     delete as;
 }
 
@@ -985,9 +992,13 @@ agg_char2_row_pack_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *er
         cpy.resize(RowsPerBlock, to_ZZ(1));
         s->running_sums.resize(NumBitsHigh(as->fields_mask), cpy);
         s->count = 1;
+        //as->debug_stream <<
+        //  "create new group " << p0 << " " << p1 << ": "
+        //  << "fields_mask: " << as->fields_mask
+        //  << " num_bits_high: " << NumBitsHigh(as->fields_mask) << endl;
     } else {
-        s->count++;
         s = &it->second;
+        s->count++;
     }
 
     // compute block ID from row ID
@@ -1003,15 +1014,19 @@ agg_char2_row_pack_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *er
         assert(bread == as->block_size); // TODO: handle bad files
         as->block_id++;
         // TODO: seek if we are really far away instead?
+        //as->debug_stream << "read block " << as->block_id << endl;
     }
 
     // compute block offset
     size_t block_offset = row_id % RowsPerBlock;
 
+    //as->debug_stream << row_id << ": " << block_id << " " << block_offset << endl;
+
     // do sum for each field of interest
     size_t idx = 0;
     for (size_t i = 0; i < 5; i++) { // TODO: don't hardcode 5
         if (as->fields_mask & (0x1 << i)) {
+            //as->debug_stream << "  idx: " << idx << endl;
             ZZ &sum = s->running_sums[idx][block_offset];
             ZZ e;
             ZZFromBytes(
@@ -1042,6 +1057,7 @@ agg_char2_row_pack(UDF_INIT *initid, UDF_ARGS *args, char *result,
 
     for (agg_char2_row_pack_state::group_map::iterator it = as->aggs.begin();
          it != as->aggs.end(); ++it) {
+        //as->debug_stream << "group :" << ((it->first >> 8) & 0xFF) << " " << (it->first & 0xFF) << endl;
         *ptr++ = (uint8_t) ((it->first >> 8) & 0xFF);
         *ptr++ = (uint8_t) (it->first & 0xFF);
         uint64_t *iptr = (uint64_t *) ptr;
@@ -1055,6 +1071,7 @@ agg_char2_row_pack(UDF_INIT *initid, UDF_ARGS *args, char *result,
                  zzt != iit->end(); ++zzt) {
                 BytesFromZZ(ptr, *zzt,
                             CryptoManager::Paillier_len_bytes);
+                //as->debug_stream << marshallBinary(string((char*)ptr, 256U)) << endl;
                 ptr += CryptoManager::Paillier_len_bytes;
             }
         }

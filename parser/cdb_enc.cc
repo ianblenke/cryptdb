@@ -813,11 +813,16 @@ protected:
   void do_row_pack(const vector<vector<string> > &rows,
                    vector<vector<string> >       &enccols,
                    crypto_manager_stub &cm) {
+      // ASSUMES ROWS SORTED BY ENCRYPTED PRIMARY KEY
+
+      _static_assert(FieldsPerAgg == 12); // this is hardcoded various places
       size_t nAggs = rows.size() / FieldsPerAgg +
           (rows.size() % FieldsPerAgg ? 1 : 0);
       for (size_t i = 0; i < nAggs; i++) {
           size_t base = i * FieldsPerAgg;
           ZZ z0, z1, z2, z3, z4;
+          z0 = to_ZZ(0); z1 = to_ZZ(0); z2 = to_ZZ(0);
+          z3 = to_ZZ(0); z4 = to_ZZ(0);
           for (size_t j = 0; j < min(FieldsPerAgg, rows.size() - base); j++) {
               size_t row_id = base + j;
               const vector<string>& tokens = rows[row_id];

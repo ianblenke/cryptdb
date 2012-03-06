@@ -856,7 +856,7 @@ static void do_query_q1_opt_rowpack(Connect &conn,
                                     CryptoManager &cm,
                                     uint32_t year,
                                     vector<q1entry> &results) {
-    crypto_manager_stub cm_stub(&cm);
+    crypto_manager_stub cm_stub(&cm, UseOldOpe);
     NamedTimer fcnTimer(__func__);
 
     // l_shipdate <= date '[year]-01-01'
@@ -867,7 +867,7 @@ static void do_query_q1_opt_rowpack(Connect &conn,
 
     DBResult * dbres;
 
-    conn.execute("set @cnt := 0", dbres);
+    conn.execute("set @cnt := -1", dbres);
 
     string pkinfo = marshallBinary(cm.getPKInfo());
     ostringstream s;
@@ -876,12 +876,14 @@ static void do_query_q1_opt_rowpack(Connect &conn,
         "l_returnflag_DET, "
         "l_linestatus_DET, "
         "cnt, "
-        "0x1F, "
+        "31, "
         << pkinfo <<
       ") FROM ( "
         "SELECT l_returnflag_DET, l_linestatus_DET, "
         "@cnt := @cnt + 1 AS cnt, l_shipdate_OPE FROM lineitem_enc "
-      ") AS _anon_ WHERE l_shipdate_OPE <= " << encDATE;
+      ") AS _anon_ "
+      "WHERE l_shipdate_OPE <= " << encDATE
+      ;
     cerr << s.str() << endl;
 
     {
@@ -898,6 +900,7 @@ static void do_query_q1_opt_rowpack(Connect &conn,
     static const size_t BitsPerAggField = 83;
     static const size_t FieldsPerAgg = 1024 / BitsPerAggField;
     ZZ mask = to_ZZ(1); mask <<= BitsPerAggField; mask -= 1;
+    assert(NumBits(mask) == (int)BitsPerAggField);
     {
       assert(res.rows.size() == 1);
       string data = res.rows[0][0].data;
@@ -956,14 +959,20 @@ static void do_query_q1_opt_rowpack(Connect &conn,
           switch (i) {
           case 0: q.sum_qty = sum; q.avg_qty = sum / ((double)count_order); break;
           case 1: q.sum_base_price = sum; q.avg_price = sum / ((double)count_order); break;
-          case 2: q.sum_disc_price = sum; break;
-          case 3: q.sum_charge = sum; break;
-          case 4: q.avg_disc = sum / ((double)count_order); break;
+          case 2: q.avg_disc = sum / ((double)count_order); break;
+          case 3: q.sum_disc_price = sum; break;
+          case 4: q.sum_charge = sum; break;
           default: assert(false);
           }
         }
 
         groups[make_pair( l_returnflag_ch, l_linestatus_ch )] = q;
+      }
+
+      results.reserve(groups.size());
+      for (GroupMap::iterator it = groups.begin();
+           it != groups.end(); ++it) {
+        results.push_back(it->second);
       }
     }
 }
