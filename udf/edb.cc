@@ -102,6 +102,13 @@ my_bool  agg_char2_row_pack_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null,
 char *   agg_char2_row_pack(UDF_INIT *initid, UDF_ARGS *args, char *result,
              unsigned long *length, char *is_null, char *error);
 
+my_bool  agg_char2_row_col_pack_init(UDF_INIT *initid, UDF_ARGS *args, char *message);
+void     agg_char2_row_col_pack_deinit(UDF_INIT *initid);
+void     agg_char2_row_col_pack_clear(UDF_INIT *initid, char *is_null, char *error);
+my_bool  agg_char2_row_col_pack_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error);
+char *   agg_char2_row_col_pack(UDF_INIT *initid, UDF_ARGS *args, char *result,
+             unsigned long *length, char *is_null, char *error);
+
 my_bool  agg8_init(UDF_INIT *initid, UDF_ARGS *args, char *message);
 void     agg8_deinit(UDF_INIT *initid);
 void     agg8_clear(UDF_INIT *initid, char *is_null, char *error);
@@ -891,7 +898,7 @@ struct agg_char2_row_pack_state {
     FILE* fp;
 
     // debug file
-    //std::ofstream debug_stream;
+    std::ofstream debug_stream;
 };
 
 static size_t NumBitsHigh(uint32_t t) {
@@ -971,7 +978,9 @@ agg_char2_row_pack_clear(UDF_INIT *initid, char *is_null, char *error)
     fseek(as->fp, 0, SEEK_SET);
 }
 
-static const size_t RowsPerBlock = 12;
+struct AggRowPack {
+  static const size_t RowsPerBlock = 12;
+};
 
 my_bool
 agg_char2_row_pack_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error)
@@ -989,7 +998,7 @@ agg_char2_row_pack_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *er
     if (UNLIKELY(it == as->aggs.end())) {
         s = &as->aggs[key]; // creates on demand
         vector<ZZ> cpy;
-        cpy.resize(RowsPerBlock, to_ZZ(1));
+        cpy.resize(AggRowPack::RowsPerBlock, to_ZZ(1));
         s->running_sums.resize(NumBitsHigh(as->fields_mask), cpy);
         s->count = 1;
         //as->debug_stream <<
@@ -1003,7 +1012,7 @@ agg_char2_row_pack_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *er
 
     // compute block ID from row ID
     row_id = *((long long *) args->args[2]);
-    size_t block_id = row_id / RowsPerBlock;
+    size_t block_id = row_id / AggRowPack::RowsPerBlock;
 
     assert((ssize_t)block_id >= as->block_id); // ONLY support scanning forward for now!
 
@@ -1018,7 +1027,7 @@ agg_char2_row_pack_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *er
     }
 
     // compute block offset
-    size_t block_offset = row_id % RowsPerBlock;
+    size_t block_offset = row_id % AggRowPack::RowsPerBlock;
 
     //as->debug_stream << row_id << ": " << block_id << " " << block_offset << endl;
 
@@ -1047,7 +1056,7 @@ agg_char2_row_pack(UDF_INIT *initid, UDF_ARGS *args, char *result,
     agg_char2_row_pack_state *as = (agg_char2_row_pack_state *) initid->ptr;
     *length =
         (2 + sizeof(uint64_t) +
-         NumBitsHigh(as->fields_mask) * RowsPerBlock *
+         NumBitsHigh(as->fields_mask) * AggRowPack::RowsPerBlock *
          CryptoManager::Paillier_len_bytes) * as->aggs.size();
 
     as->rbuf = malloc(*length);
@@ -1076,6 +1085,161 @@ agg_char2_row_pack(UDF_INIT *initid, UDF_ARGS *args, char *result,
             }
         }
 
+    }
+    return (char *) as->rbuf;
+}
+
+my_bool
+agg_char2_row_col_pack_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
+{
+    if (args->arg_count != 4) {
+        strcpy(message, "need to provide 4 args");
+        return 1;
+    }
+
+    agg_char2_row_pack_state *as = new agg_char2_row_pack_state;
+    as->rbuf = NULL;
+
+    if (args->args[3] == NULL) {
+        strcpy(message, "need to provide PK");
+        return 1;
+    }
+
+    ZZFromBytes(as->n2, (const uint8_t *) args->args[3],
+                args->lengths[3]);
+
+    as->block_id = -1;
+
+    as->fp = fopen("/tmp/tpch-0.05/lineitem_enc/row_col_pack/data", "rb");
+    assert(as->fp);
+
+    as->block_size = AggSize;
+    as->block_buf = (char *) malloc(as->block_size);
+
+    as->debug_stream.open("/tmp/debug.txt");
+    assert(as->debug_stream.good());
+
+    initid->ptr = (char *) as;
+    return 0;
+}
+
+void
+agg_char2_row_col_pack_deinit(UDF_INIT *initid)
+{
+    agg_char2_row_pack_state *as = (agg_char2_row_pack_state *) initid->ptr;
+    free(as->rbuf);
+    free(as->block_buf);
+    fclose(as->fp);
+    //as->debug_stream.flush();
+    delete as;
+}
+
+void
+agg_char2_row_col_pack_clear(UDF_INIT *initid, char *is_null, char *error)
+{
+    agg_char2_row_pack_state *as = (agg_char2_row_pack_state *) initid->ptr;
+    as->aggs.clear();
+    as->block_id = -1;
+    fseek(as->fp, 0, SEEK_SET);
+}
+
+struct AggRowColPack {
+  static const size_t RowsPerBlock = 2;
+};
+
+my_bool
+agg_char2_row_col_pack_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error)
+{
+    agg_char2_row_pack_state *as = (agg_char2_row_pack_state *) initid->ptr;
+
+    long long p0, p1, row_id;
+    p0 = *((long long *) args->args[0]);
+    p1 = *((long long *) args->args[1]);
+
+    uint16_t key = (uint8_t(p0) << 8) | uint8_t(p1);
+
+    agg_char2_row_pack_state::group_map::iterator it = as->aggs.find(key);
+    agg_char2_row_pack_state::per_group_state* s = NULL;
+    if (UNLIKELY(it == as->aggs.end())) {
+        s = &as->aggs[key]; // creates on demand
+        vector<ZZ> cpy;
+        cpy.resize(AggRowColPack::RowsPerBlock, to_ZZ(1));
+        s->running_sums.resize(1, cpy);
+        s->count = 1;
+        //as->debug_stream <<
+        //  "create new group " << p0 << " " << p1 << ": "
+        //  << "fields_mask: " << as->fields_mask
+        //  << " num_bits_high: " << NumBitsHigh(as->fields_mask) << endl;
+    } else {
+        s = &it->second;
+        s->count++;
+    }
+
+    // compute block ID from row ID
+    row_id = *((long long *) args->args[2]);
+    size_t block_id = row_id / AggRowColPack::RowsPerBlock;
+    // compute block offset
+    size_t block_offset = row_id % AggRowColPack::RowsPerBlock;
+
+    assert((ssize_t)block_id >= as->block_id); // ONLY support scanning forward for now!
+
+    as->debug_stream << row_id << ": " << block_id << " " << block_offset << endl;
+
+    // read in block
+    while (as->block_id < (ssize_t)block_id) {
+        // scan forward
+        size_t bread = fread(as->block_buf, 1, as->block_size, as->fp);
+        as->debug_stream << "bread: " << bread << endl;
+        assert(bread == as->block_size); // TODO: handle bad files
+        as->block_id++;
+        // TODO: seek if we are really far away instead?
+        as->debug_stream << "read block " << as->block_id << endl;
+    }
+
+    //as->debug_stream << row_id << ": " << block_id << " " << block_offset << endl;
+
+    //as->debug_stream << "  idx: " << idx << endl;
+    ZZ &sum = s->running_sums[0][block_offset];
+    ZZ e;
+    ZZFromBytes(
+        e,
+        (const uint8_t *) as->block_buf,
+        AggSize);
+    MulMod(sum, sum, e, as->n2);
+    return true;
+}
+
+char *
+agg_char2_row_col_pack(UDF_INIT *initid, UDF_ARGS *args, char *result,
+    unsigned long *length, char *is_null, char *error)
+{
+    agg_char2_row_pack_state *as = (agg_char2_row_pack_state *) initid->ptr;
+    *length =
+        (2 + sizeof(uint64_t) +
+         AggRowColPack::RowsPerBlock *
+         CryptoManager::Paillier_len_bytes) * as->aggs.size();
+
+    as->rbuf = malloc(*length);
+    assert(as->rbuf); // TODO: handle OOM
+
+    uint8_t* ptr = (uint8_t *) as->rbuf;
+
+    for (agg_char2_row_pack_state::group_map::iterator it = as->aggs.begin();
+         it != as->aggs.end(); ++it) {
+        //as->debug_stream << "group :" << ((it->first >> 8) & 0xFF) << " " << (it->first & 0xFF) << endl;
+        *ptr++ = (uint8_t) ((it->first >> 8) & 0xFF);
+        *ptr++ = (uint8_t) (it->first & 0xFF);
+        uint64_t *iptr = (uint64_t *) ptr;
+        *iptr = it->second.count;
+        ptr += sizeof(uint64_t);
+
+        for (vector<ZZ>::iterator zzt = it->second.running_sums[0].begin();
+             zzt != it->second.running_sums[0].end(); ++zzt) {
+            BytesFromZZ(ptr, *zzt,
+                        CryptoManager::Paillier_len_bytes);
+            //as->debug_stream << marshallBinary(string((char*)ptr, 256U)) << endl;
+            ptr += CryptoManager::Paillier_len_bytes;
+        }
     }
     return (char *) as->rbuf;
 }
