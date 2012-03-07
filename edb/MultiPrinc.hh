@@ -9,7 +9,8 @@
 
 #include <edb/AccessManager.hh>
 #include <edb/Translator.hh>
-#include <parser/Analysis.hh>
+#include <util/schema.hh>
+#include <parser/Annotation.hh>
 
 class MultiPrinc {
  public:
@@ -32,8 +33,8 @@ class MultiPrinc {
                            std::string currentField,
                            bool & encryptfield, std::map<std::string,
                            TableMetadata *> & tm);*/
-    list<std::string> processAnnotation(Annotation &annot, bool &encryptField,
-                                        Analysis &analysis);
+    std::list<std::string> processAnnotation(Annotation &annot, bool &encryptField,
+                                        SchemaInfo * schema);
 
     int commitAnnotations();
 
@@ -76,7 +77,7 @@ class MultiPrinc {
 
     /*** INSERT tasks ***/
     
-    void insertLex(LEX *lex, Analysis &a, TMKM &tmkm);
+    void insertLex(LEX *lex, SchemaInfo * schema, TMKM &tmkm);
     //wordsIt points to the first value
     void insertRelations(const std::list<std::pair<std::string, bool> > & values, std::string table,
                          std::list<std::string> fields,
@@ -106,5 +107,5 @@ class MultiPrinc {
     MultiPrinc * mp;
 
     //utility function for checking that schema is okay, and setting tm to sensitive
-    bool setSensitive(SchemaInfo *schema, string table_name, string field);
+    bool setSensitive(SchemaInfo *schema, std::string table_name, std::string field);
 };
