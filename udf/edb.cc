@@ -884,6 +884,10 @@ struct agg_char2_row_pack_state {
     ZZ n2;
     void *rbuf;
 
+    // internal element buffer
+    typedef std::map< uint16_t, std::list< uint64_t > > element_buffer_map;
+    element_buffer_map element_buffer;
+
     // internal state
     ssize_t block_id; // the block ID that is in block_buf. is also
                       // the last read block out of fp (so fp points to
@@ -899,11 +903,21 @@ struct agg_char2_row_pack_state {
 
     // debug file
     std::ofstream debug_stream;
+
+    // stats
+    struct stats {
+      stats() : seeks(0), mults(0), all_pos(0) {}
+      uint32_t seeks;
+      uint32_t mults;
+      uint32_t all_pos;
+    };
+
+    stats st;
 };
 
 static size_t NumBitsHigh(uint32_t t) {
     size_t cnt = 0;
-    size_t s = sizeof(uint32_t) * 8;
+    size_t s = sizeof(t) * 8;
     while (s--) {
         cnt += t & 0x1;
         t >>= 1;
@@ -1091,6 +1105,7 @@ agg_char2_row_pack(UDF_INIT *initid, UDF_ARGS *args, char *result,
 struct AggRowColPack {
   static const size_t AggSize = 1256 * 2 / 8;
   static const size_t RowsPerBlock = 3;
+  static const size_t BufferSize = 1024;
 };
 
 my_bool
@@ -1147,6 +1162,158 @@ agg_char2_row_col_pack_clear(UDF_INIT *initid, char *is_null, char *error)
     fseek(as->fp, 0, SEEK_SET);
 }
 
+static void flush_group_buffers(agg_char2_row_pack_state *as) {
+
+    // value is ordered list based on the pair's first element
+    typedef vector< pair< uint16_t, list< pair< uint64_t, uint32_t > > > >
+            allocation_map;
+    allocation_map alloc_map;
+    for (agg_char2_row_pack_state::element_buffer_map::iterator
+            eit = as->element_buffer.begin();
+         eit != as->element_buffer.end(); ++eit) {
+      // lookup agg group
+      agg_char2_row_pack_state::group_map::iterator it =
+        as->aggs.find(eit->first);
+      agg_char2_row_pack_state::per_group_state* s = NULL;
+      if (UNLIKELY(it == as->aggs.end())) {
+          s = &as->aggs[eit->first]; // creates on demand
+          vector<ZZ> cpy;
+          // +1 b/c of the "all columns significant" block
+          cpy.resize(AggRowColPack::RowsPerBlock + 1, to_ZZ(1));
+          s->running_sums.resize(1, cpy);
+          s->count = 0;
+      } else {
+          s = &it->second;
+      }
+      s->count += eit->second.size();
+
+      map< uint64_t, vector< uint32_t > > m;
+      for (list<uint64_t>::iterator it = eit->second.begin();
+           it != eit->second.end(); ++it) {
+        uint64_t row_id = *it;
+
+        // compute block ID from row ID
+        uint64_t block_id = row_id / AggRowColPack::RowsPerBlock;
+        // compute block offset
+        uint64_t block_offset = row_id % AggRowColPack::RowsPerBlock;
+
+        vector<uint32_t>& masks = m[block_id];
+        if (masks.empty()) {
+          masks.push_back(0x1 << block_offset);
+        } else {
+          // search for empty spot w/ linear scan
+          bool found = false;
+          for (vector<uint32_t>::iterator it = masks.begin();
+               it != masks.end(); ++it) {
+            if (!((*it) & (0x1 << block_offset))) {
+              *it |= 0x1 << block_offset;
+              found = true;
+              break;
+            }
+          }
+
+          if (!found) masks.push_back(0x1 << block_offset);
+        }
+      }
+      eit->second.clear(); // clear buffer
+
+      list< pair< uint64_t, uint32_t > > elems;
+      for (map< uint64_t, vector< uint32_t > >::iterator it = m.begin();
+           it != m.end(); ++it) {
+        //elems.reserve(elems.size() + it->second.size());
+        for (vector<uint32_t>::iterator iit = it->second.begin();
+             iit != it->second.end(); ++iit) {
+          elems.push_back(make_pair(it->first, *iit));
+        }
+      }
+      alloc_map.push_back(make_pair(eit->first, elems));
+    }
+
+    size_t pos_first_non_empty = 0;
+    for (allocation_map::iterator it = alloc_map.begin();
+         it != alloc_map.end(); ++it) {
+      if (it->second.empty()) pos_first_non_empty++;
+      else break;
+    }
+
+    while (pos_first_non_empty < alloc_map.size()) {
+      // find min block id for all groups
+      uint64_t minSoFar = alloc_map[pos_first_non_empty].second.front().first;
+      for (size_t i = pos_first_non_empty + 1; i < alloc_map.size(); i++) {
+        if (!alloc_map[i].second.empty() &&
+            alloc_map[i].second.front().first < minSoFar) {
+          minSoFar = alloc_map[i].second.front().first;
+        }
+      }
+
+      // read in block (minSoFar)
+      if (as->block_id > ssize_t(minSoFar)) {
+        // seek backwards
+        as->block_id = ssize_t(minSoFar) - 1;
+        fseek(as->fp, minSoFar * as->block_size, SEEK_SET);
+        as->st.seeks++;
+      }
+
+      // now read forward
+      while (as->block_id < ssize_t(minSoFar)) {
+          // scan forward
+          size_t bread = fread(as->block_buf, 1, as->block_size, as->fp);
+          //as->debug_stream << "bread: " << bread << endl;
+          assert(bread == as->block_size); // TODO: handle bad files
+          as->block_id++;
+          // TODO: seek if we are really far away instead?
+          as->debug_stream << "read block " << as->block_id << endl;
+      }
+
+      // service the requests
+      for (size_t i = pos_first_non_empty; i < alloc_map.size(); i++) {
+        pair< uint16_t, list< pair< uint64_t, uint32_t > > > &group =
+          alloc_map[i];
+        if (group.second.empty() ||
+            group.second.front().first != minSoFar) continue;
+        agg_char2_row_pack_state::per_group_state& s = as->aggs[group.first];
+
+        static const uint32_t AllPosHigh = (0x1 << AggRowColPack::RowsPerBlock) - 1;
+        if (group.second.front().second == AllPosHigh) {
+          // can use the "all pos" buffer
+          ZZ &sum = s.running_sums[0][AggRowColPack::RowsPerBlock];
+          ZZ e;
+          ZZFromBytes(
+              e,
+              (const uint8_t *) as->block_buf,
+              AggRowColPack::AggSize);
+          MulMod(sum, sum, e, as->n2);
+
+          as->st.mults++;
+          as->st.all_pos++;
+        } else {
+          // must do each position individually
+          for (size_t i = 0; i < s.running_sums[0].size(); i++) {
+            if (group.second.front().second & (0x1 << i)) {
+              ZZ &sum = s.running_sums[0][i];
+              ZZ e;
+              ZZFromBytes(
+                  e,
+                  (const uint8_t *) as->block_buf,
+                  AggRowColPack::AggSize);
+              MulMod(sum, sum, e, as->n2);
+
+              as->st.mults++;
+            }
+          }
+        }
+        group.second.pop_front();
+      }
+
+      // find first non-empty
+      pos_first_non_empty = 0;
+      for (allocation_map::iterator it = alloc_map.begin();
+           it != alloc_map.end(); ++it) {
+        if (it->second.empty()) pos_first_non_empty++;
+        else break;
+      }
+    }
+}
 
 my_bool
 agg_char2_row_col_pack_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error)
@@ -1154,59 +1321,21 @@ agg_char2_row_col_pack_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char
     agg_char2_row_pack_state *as = (agg_char2_row_pack_state *) initid->ptr;
 
     long long p0, p1, row_id;
-    p0 = *((long long *) args->args[0]);
-    p1 = *((long long *) args->args[1]);
+    p0     = *((long long *) args->args[0]);
+    p1     = *((long long *) args->args[1]);
+    row_id = *((long long *) args->args[2]);
 
     uint16_t key = (uint8_t(p0) << 8) | uint8_t(p1);
 
-    agg_char2_row_pack_state::group_map::iterator it = as->aggs.find(key);
-    agg_char2_row_pack_state::per_group_state* s = NULL;
-    if (UNLIKELY(it == as->aggs.end())) {
-        s = &as->aggs[key]; // creates on demand
-        vector<ZZ> cpy;
-        cpy.resize(AggRowColPack::RowsPerBlock, to_ZZ(1));
-        s->running_sums.resize(1, cpy);
-        s->count = 1;
-        //as->debug_stream <<
-        //  "create new group " << p0 << " " << p1 << ": "
-        //  << "fields_mask: " << as->fields_mask
-        //  << " num_bits_high: " << NumBitsHigh(as->fields_mask) << endl;
-    } else {
-        s = &it->second;
-        s->count++;
+    // insert into buffer
+    list<uint64_t>& elem_buffer = as->element_buffer[key];
+    elem_buffer.push_back(row_id);
+
+    // if per group buffer is full, then flush
+    if (elem_buffer.size() >= AggRowColPack::BufferSize) {
+      flush_group_buffers(as);
     }
 
-    // compute block ID from row ID
-    row_id = *((long long *) args->args[2]);
-    size_t block_id = row_id / AggRowColPack::RowsPerBlock;
-    // compute block offset
-    size_t block_offset = row_id % AggRowColPack::RowsPerBlock;
-
-    assert((ssize_t)block_id >= as->block_id); // ONLY support scanning forward for now!
-
-    as->debug_stream << row_id << ": " << block_id << " " << block_offset << endl;
-
-    // read in block
-    while (as->block_id < (ssize_t)block_id) {
-        // scan forward
-        size_t bread = fread(as->block_buf, 1, as->block_size, as->fp);
-        as->debug_stream << "bread: " << bread << endl;
-        assert(bread == as->block_size); // TODO: handle bad files
-        as->block_id++;
-        // TODO: seek if we are really far away instead?
-        as->debug_stream << "read block " << as->block_id << endl;
-    }
-
-    //as->debug_stream << row_id << ": " << block_id << " " << block_offset << endl;
-
-    //as->debug_stream << "  idx: " << idx << endl;
-    ZZ &sum = s->running_sums[0][block_offset];
-    ZZ e;
-    ZZFromBytes(
-        e,
-        (const uint8_t *) as->block_buf,
-        AggRowColPack::AggSize);
-    MulMod(sum, sum, e, as->n2);
     return true;
 }
 
@@ -1215,10 +1344,23 @@ agg_char2_row_col_pack(UDF_INIT *initid, UDF_ARGS *args, char *result,
     unsigned long *length, char *is_null, char *error)
 {
     agg_char2_row_pack_state *as = (agg_char2_row_pack_state *) initid->ptr;
+
+    // flush all buffers
+    flush_group_buffers(as);
+
     *length =
-        (2 + sizeof(uint64_t) +
-         AggRowColPack::RowsPerBlock *
-         AggRowColPack::AggSize) * as->aggs.size();
+        (2 /* group key */ +
+         sizeof(uint64_t) /* group count */ +
+         sizeof(uint32_t) /* num of agg configs to come */ +
+         (AggRowColPack::RowsPerBlock + 1) *
+         (sizeof(uint32_t) /* mask of interest */ +
+         AggRowColPack::AggSize)) * as->aggs.size();
+
+    as->debug_stream << "length = " << *length << endl;
+
+    as->debug_stream << "seeks = " << as->st.seeks << endl;
+    as->debug_stream << "mults = " << as->st.mults << endl;
+    as->debug_stream << "all_pos = " << as->st.all_pos << endl;
 
     as->rbuf = malloc(*length);
     assert(as->rbuf); // TODO: handle OOM
@@ -1230,14 +1372,22 @@ agg_char2_row_col_pack(UDF_INIT *initid, UDF_ARGS *args, char *result,
         //as->debug_stream << "group :" << ((it->first >> 8) & 0xFF) << " " << (it->first & 0xFF) << endl;
         *ptr++ = (uint8_t) ((it->first >> 8) & 0xFF);
         *ptr++ = (uint8_t) (it->first & 0xFF);
+
         uint64_t *iptr = (uint64_t *) ptr;
         *iptr = it->second.count;
         ptr += sizeof(uint64_t);
 
-        for (vector<ZZ>::iterator zzt = it->second.running_sums[0].begin();
-             zzt != it->second.running_sums[0].end(); ++zzt) {
-            BytesFromZZ(ptr, *zzt, AggRowColPack::AggSize);
-            //as->debug_stream << marshallBinary(string((char*)ptr, 256U)) << endl;
+        uint32_t *u32p = (uint32_t *) ptr;
+        *u32p = AggRowColPack::RowsPerBlock + 1;
+        ptr += sizeof(uint32_t);
+
+        size_t s = it->second.running_sums[0].size();
+        for (size_t idx = 0; idx < s; idx++) {
+            uint32_t *iptr = (uint32_t *) ptr;
+            *iptr = (idx + 1 == s) ? ((0x1 << s) - 1) : (0x1 << idx);
+            ptr += sizeof(uint32_t);
+
+            BytesFromZZ(ptr, it->second.running_sums[0][idx], AggRowColPack::AggSize);
             ptr += AggRowColPack::AggSize;
         }
     }

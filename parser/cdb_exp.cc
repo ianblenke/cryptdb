@@ -1038,12 +1038,13 @@ static void do_query_q1_opt_row_col_pack(Connect &conn,
 
       // format of data is
       // [ l_returnflag_DET (1 byte) | l_linestatus_DET (1 byte) |
-      //   count(*) (8 bytes) | rows (3 * 256 bytes) ]* ]*
+      //   count(*) (8 bytes) | rows (3 * (4 + 256) bytes) ]* ]*
       typedef map< pair<unsigned char, unsigned char>, q1entry > GroupMap;
       GroupMap groups;
 
       const uint8_t *p   = (const uint8_t *) data.data();
       const uint8_t *end = (const uint8_t *) data.data() + data.size();
+      cerr << "data.size() == " << data.size() << endl;
       while (p < end) {
 
         unsigned char l_returnflag_DET = *p++;
@@ -1082,25 +1083,37 @@ static void do_query_q1_opt_row_col_pack(Connect &conn,
 #define TAKE_FROM_SLOT(z, slot) \
         (to_long(((z) >> (BitsPerAggField * (slot))) & mask))
 
-        for (size_t i = 0; i < 3; i++) {
+        const uint32_t *u32p = (const uint32_t *) p;
+        uint32_t n_aggs = *u32p;
+        p += sizeof(uint32_t);
+
+        for (size_t group_i = 0; group_i < n_aggs; group_i++) {
+          // interest mask
+          const uint32_t *u32p = (const uint32_t *) p;
+          uint32_t interest_mask = *u32p;
+          p += sizeof(uint32_t);
+
           ZZ ct = ZZFromBytes(
               (const uint8_t *) p,
               RowColPackCipherSize / 8);
           ZZ m = pp.decrypt(ct);
-
-          long sum_qty_int = TAKE_FROM_SLOT(m, i * 5 + 0);
-          long sum_base_price_int = TAKE_FROM_SLOT(m, i * 5 + 1);
-          long sum_discount_int = TAKE_FROM_SLOT(m, i * 5 + 2);
-          long sum_disc_price_int = TAKE_FROM_SLOT(m, i * 5 + 3);
-          long sum_charge_int = TAKE_FROM_SLOT(m, i * 5 + 4);
-
-          sum_qty += ((double)sum_qty_int)/100.0;
-          sum_base_price += ((double)sum_base_price_int)/100.0;
-          sum_discount += ((double)sum_discount_int)/100.0;
-          sum_disc_price += ((double)sum_disc_price_int)/100.0;
-          sum_charge += ((double)sum_charge_int)/100.0;
-
           p += RowColPackCipherSize / 8;
+
+          for (size_t i = 0; i < 3; i++) {
+            if (!(interest_mask & (0x1 << i))) continue;
+
+            long sum_qty_int = TAKE_FROM_SLOT(m, i * 5 + 0);
+            long sum_base_price_int = TAKE_FROM_SLOT(m, i * 5 + 1);
+            long sum_discount_int = TAKE_FROM_SLOT(m, i * 5 + 2);
+            long sum_disc_price_int = TAKE_FROM_SLOT(m, i * 5 + 3);
+            long sum_charge_int = TAKE_FROM_SLOT(m, i * 5 + 4);
+
+            sum_qty += ((double)sum_qty_int)/100.0;
+            sum_base_price += ((double)sum_base_price_int)/100.0;
+            sum_discount += ((double)sum_discount_int)/100.0;
+            sum_disc_price += ((double)sum_disc_price_int)/100.0;
+            sum_charge += ((double)sum_charge_int)/100.0;
+          }
         }
 
         double avg_qty = sum_qty / ((double)count_order);
