@@ -1135,8 +1135,8 @@ agg_char2_row_col_pack_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
     as->block_size = AggRowColPack::AggSize;
     as->block_buf = (char *) malloc(as->block_size);
 
-    as->debug_stream.open("/tmp/debug.txt");
-    assert(as->debug_stream.good());
+    //as->debug_stream.open("/tmp/debug.txt");
+    //assert(as->debug_stream.good());
 
     initid->ptr = (char *) as;
     return 0;
@@ -1262,7 +1262,7 @@ static void flush_group_buffers(agg_char2_row_pack_state *as) {
           assert(bread == as->block_size); // TODO: handle bad files
           as->block_id++;
           // TODO: seek if we are really far away instead?
-          as->debug_stream << "read block " << as->block_id << endl;
+          //as->debug_stream << "read block " << as->block_id << endl;
       }
 
       // service the requests
@@ -1356,11 +1356,11 @@ agg_char2_row_col_pack(UDF_INIT *initid, UDF_ARGS *args, char *result,
          (sizeof(uint32_t) /* mask of interest */ +
          AggRowColPack::AggSize)) * as->aggs.size();
 
-    as->debug_stream << "length = " << *length << endl;
+    //as->debug_stream << "length = " << *length << endl;
 
-    as->debug_stream << "seeks = " << as->st.seeks << endl;
-    as->debug_stream << "mults = " << as->st.mults << endl;
-    as->debug_stream << "all_pos = " << as->st.all_pos << endl;
+    //as->debug_stream << "seeks = " << as->st.seeks << endl;
+    //as->debug_stream << "mults = " << as->st.mults << endl;
+    //as->debug_stream << "all_pos = " << as->st.all_pos << endl;
 
     as->rbuf = malloc(*length);
     assert(as->rbuf); // TODO: handle OOM

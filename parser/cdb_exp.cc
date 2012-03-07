@@ -881,7 +881,7 @@ static void do_query_q1_opt_rowpack(Connect &conn,
         << pkinfo <<
       ") FROM ( "
         "SELECT l_returnflag_DET, l_linestatus_DET, "
-        "@cnt := @cnt + 1 AS cnt, l_shipdate_OPE FROM lineitem_enc "
+        "@cnt := @cnt + 1 AS cnt, l_shipdate_OPE FROM lineitem_enc_noagg "
       ") AS _anon_ "
       "WHERE l_shipdate_OPE <= " << encDATE
       ;
@@ -1044,7 +1044,6 @@ static void do_query_q1_opt_row_col_pack(Connect &conn,
 
       const uint8_t *p   = (const uint8_t *) data.data();
       const uint8_t *end = (const uint8_t *) data.data() + data.size();
-      cerr << "data.size() == " << data.size() << endl;
       while (p < end) {
 
         unsigned char l_returnflag_DET = *p++;
