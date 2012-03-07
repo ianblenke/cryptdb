@@ -898,6 +898,10 @@ struct agg_char2_row_pack_state {
     char* block_buf;
     size_t block_size;
 
+    // internal buffer
+    char* internal_buffer;
+    ssize_t internal_block_id;
+
     // file pointer
     FILE* fp;
 
@@ -1108,7 +1112,10 @@ agg_char2_row_pack(UDF_INIT *initid, UDF_ARGS *args, char *result,
 struct AggRowColPack {
   static const size_t AggSize = 1256 * 2 / 8;
   static const size_t RowsPerBlock = 3;
-  static const size_t BufferSize = 4;
+  static const size_t BufferSize = 1024;
+
+  //static const size_t NumBlocksInternalBuffer = 524288;
+  static const size_t NumBlocksInternalBuffer = 4194304;
 };
 
 my_bool
@@ -1130,16 +1137,24 @@ agg_char2_row_col_pack_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
     ZZFromBytes(as->n2, (const uint8_t *) args->args[3],
                 args->lengths[3]);
 
-    as->block_id = -1;
-
     as->fp = fopen("/tmp/tpch-1.00/lineitem_enc/row_col_pack/data", "rb");
     assert(as->fp);
 
-    as->block_size = AggRowColPack::AggSize;
-    as->block_buf = (char *) malloc(as->block_size);
+    // load the first block
+    as->internal_buffer =
+      (char *) malloc( AggRowColPack::AggSize * AggRowColPack::NumBlocksInternalBuffer );
+    assert(as->internal_buffer);
+    as->internal_block_id = 0;
+    fread(as->internal_buffer, 1,
+          AggRowColPack::AggSize * AggRowColPack::NumBlocksInternalBuffer,
+          as->fp);
 
-    //as->debug_stream.open("/tmp/debug.txt");
-    //assert(as->debug_stream.good());
+    as->block_id = 0;
+    as->block_size = AggRowColPack::AggSize;
+    as->block_buf = as->internal_buffer;
+
+    as->debug_stream.open("/tmp/debug.txt");
+    assert(as->debug_stream.good());
 
     initid->ptr = (char *) as;
     return 0;
@@ -1150,9 +1165,9 @@ agg_char2_row_col_pack_deinit(UDF_INIT *initid)
 {
     agg_char2_row_pack_state *as = (agg_char2_row_pack_state *) initid->ptr;
     free(as->rbuf);
-    free(as->block_buf);
+    free(as->internal_buffer);
     fclose(as->fp);
-    //as->debug_stream.flush();
+    as->debug_stream.flush();
     delete as;
 }
 
@@ -1161,8 +1176,14 @@ agg_char2_row_col_pack_clear(UDF_INIT *initid, char *is_null, char *error)
 {
     agg_char2_row_pack_state *as = (agg_char2_row_pack_state *) initid->ptr;
     as->aggs.clear();
-    as->block_id = -1;
+    as->block_id = 0;
+    as->block_buf = as->internal_buffer;
+    as->internal_block_id = 0;
     fseek(as->fp, 0, SEEK_SET);
+    // reload the first block
+    fread(as->internal_buffer, 1,
+          AggRowColPack::AggSize * AggRowColPack::NumBlocksInternalBuffer,
+          as->fp);
 }
 
 static void flush_group_buffers(agg_char2_row_pack_state *as) {
@@ -1182,8 +1203,8 @@ static void flush_group_buffers(agg_char2_row_pack_state *as) {
       if (UNLIKELY(it == as->aggs.end())) {
           s = &as->aggs[eit->first]; // creates on demand
           vector<ZZ> cpy;
-          // +1 b/c of the "all columns significant" block
-          cpy.resize(AggRowColPack::RowsPerBlock + 1, to_ZZ(1));
+          // the index is...
+          cpy.resize((0x1 << AggRowColPack::RowsPerBlock) - 1, to_ZZ(1));
           s->running_sums.resize(1, cpy);
           s->count = 0;
       } else {
@@ -1252,24 +1273,33 @@ static void flush_group_buffers(agg_char2_row_pack_state *as) {
         }
       }
 
-      // read in block (minSoFar)
-      if (as->block_id > ssize_t(minSoFar)) {
-        // seek backwards
-        as->block_id = ssize_t(minSoFar) - 1;
-        fseek(as->fp, minSoFar * as->block_size, SEEK_SET);
-        as->st.seeks++;
+      //// read in block (minSoFar)
+      //if (as->block_id > ssize_t(minSoFar)) {
+      //  // seek backwards
+      //  as->block_id = ssize_t(minSoFar) - 1;
+      //  fseek(as->fp, minSoFar * as->block_size, SEEK_SET);
+      //  as->st.seeks++;
+      //}
+      assert(as->block_id <= ssize_t(minSoFar)); // TODO: support seeking
+
+      // assert that the block_id is always in the range of the internal
+      // buffer
+      assert( as->internal_block_id <= as->block_id &&
+              as->block_id < (as->internal_block_id + AggRowColPack::NumBlocksInternalBuffer) );
+
+      // read the internal buffer forward until the range covers minSoFar
+      while ( (as->internal_block_id + AggRowColPack::NumBlocksInternalBuffer) <= ssize_t(minSoFar) ) {
+        size_t bread =
+          fread(as->internal_buffer, 1,
+                as->block_size * AggRowColPack::NumBlocksInternalBuffer,
+                as->fp);
+        assert(bread % AggRowColPack::AggSize == 0); // TODO: deal w/ bad files
+        as->internal_block_id += AggRowColPack::NumBlocksInternalBuffer;
       }
 
-      // now read forward
-      while (as->block_id < ssize_t(minSoFar)) {
-          // scan forward
-          size_t bread = fread(as->block_buf, 1, as->block_size, as->fp);
-          //as->debug_stream << "bread: " << bread << endl;
-          assert(bread == as->block_size); // TODO: handle bad files
-          as->block_id++;
-          // TODO: seek if we are really far away instead?
-          //as->debug_stream << "read block " << as->block_id << endl;
-      }
+      // set block_id/block_buf accordingly
+      as->block_id = minSoFar;
+      as->block_buf = as->internal_buffer + as->block_size * ( as->block_id - as->internal_block_id );
 
       // service the requests
       for (size_t i = pos_first_non_empty; i < alloc_map.size(); i++) {
@@ -1279,35 +1309,22 @@ static void flush_group_buffers(agg_char2_row_pack_state *as) {
             group.second.front().first != minSoFar) continue;
         agg_char2_row_pack_state::per_group_state& s = as->aggs[group.first];
 
+        // use group.second.front().second - 1 as an index into the running
+        // sums vector
+
+        ZZ &sum = s.running_sums[0][group.second.front().second - 1];
+        ZZ e;
+        ZZFromBytes(
+            e,
+            (const uint8_t *) as->block_buf,
+            AggRowColPack::AggSize);
+        MulMod(sum, sum, e, as->n2);
+
+        // stats
+        as->st.mults++;
         static const uint32_t AllPosHigh = (0x1 << AggRowColPack::RowsPerBlock) - 1;
-        if (group.second.front().second == AllPosHigh) {
-          // can use the "all pos" buffer
-          ZZ &sum = s.running_sums[0][AggRowColPack::RowsPerBlock];
-          ZZ e;
-          ZZFromBytes(
-              e,
-              (const uint8_t *) as->block_buf,
-              AggRowColPack::AggSize);
-          MulMod(sum, sum, e, as->n2);
+        if (group.second.front().second == AllPosHigh) as->st.all_pos++;
 
-          as->st.mults++;
-          as->st.all_pos++;
-        } else {
-          // must do each position individually
-          for (size_t i = 0; i < s.running_sums[0].size(); i++) {
-            if (group.second.front().second & (0x1 << i)) {
-              ZZ &sum = s.running_sums[0][i];
-              ZZ e;
-              ZZFromBytes(
-                  e,
-                  (const uint8_t *) as->block_buf,
-                  AggRowColPack::AggSize);
-              MulMod(sum, sum, e, as->n2);
-
-              as->st.mults++;
-            }
-          }
-        }
         group.second.pop_front();
       }
 
@@ -1366,15 +1383,16 @@ agg_char2_row_col_pack(UDF_INIT *initid, UDF_ARGS *args, char *result,
         (2 /* group key */ +
          sizeof(uint64_t) /* group count */ +
          sizeof(uint32_t) /* num of agg configs to come */ +
-         (AggRowColPack::RowsPerBlock + 1) *
+         ((0x1 << AggRowColPack::RowsPerBlock) - 1) *
          (sizeof(uint32_t) /* mask of interest */ +
          AggRowColPack::AggSize)) * as->aggs.size();
 
     //as->debug_stream << "seeks = " << as->st.seeks << endl;
-    //as->debug_stream << "mults = " << as->st.mults << endl;
-    //as->debug_stream << "all_pos = " << as->st.all_pos << endl;
-    //as->debug_stream << "avg_masks_size = "
-    //  << (double(as->st.masks_sum)/double(as->st.masks_cnt)) << endl;
+    as->debug_stream << "length = " << *length << endl;
+    as->debug_stream << "mults = " << as->st.mults << endl;
+    as->debug_stream << "all_pos = " << as->st.all_pos << endl;
+    as->debug_stream << "avg_masks_size = "
+      << (double(as->st.masks_sum)/double(as->st.masks_cnt)) << endl;
 
     as->rbuf = malloc(*length);
     assert(as->rbuf); // TODO: handle OOM
@@ -1391,13 +1409,14 @@ agg_char2_row_col_pack(UDF_INIT *initid, UDF_ARGS *args, char *result,
         ptr += sizeof(uint64_t);
 
         uint32_t *u32p = (uint32_t *) ptr;
-        *u32p = AggRowColPack::RowsPerBlock + 1;
+        *u32p = (0x1 << AggRowColPack::RowsPerBlock) - 1;
         ptr += sizeof(uint32_t);
 
         size_t s = it->second.running_sums[0].size();
+        assert(s == ((0x1 << AggRowColPack::RowsPerBlock) - 1));
         for (size_t idx = 0; idx < s; idx++) {
             uint32_t *iptr = (uint32_t *) ptr;
-            *iptr = (idx + 1 == s) ? ((0x1 << s) - 1) : (0x1 << idx);
+            *iptr = (idx + 1);
             ptr += sizeof(uint32_t);
 
             BytesFromZZ(ptr, it->second.running_sums[0][idx], AggRowColPack::AggSize);
