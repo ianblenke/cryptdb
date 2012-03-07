@@ -230,7 +230,7 @@ test_HGD()
 
 
    }*/
-
+/*
 static void __attribute__((unused))
 evaluateMetrics(const TestConfig &tc, int argc, char ** argv)
 {
@@ -323,7 +323,7 @@ evaluateMetrics(const TestConfig &tc, int argc, char ** argv)
     printf("cipher average time %f ms \n",
             (1000.0* (double) (timerEnd-timerStart))/(tests*1.0));
 
-    /*
+    / *
        timerStart = time(NULL);
        //inequality selection
        for (int i = 0; i < tests; i++) {
@@ -349,8 +349,8 @@ evaluateMetrics(const TestConfig &tc, int argc, char ** argv)
        timerEnd = time(NULL);
        printf("range select plain %f ms \n",
           (1000.0*(timerEnd-timerStart))/(tests*1.0));
-     */
-    /*
+* /
+    / *
        timerStart = time(NULL);
        //inequality selection
        for (int i = 0; i < tests; i++) {
@@ -378,13 +378,13 @@ evaluateMetrics(const TestConfig &tc, int argc, char ** argv)
        timerEnd = time(NULL);
        printf("range select cipher %f ms \n",
           (1000.0*(timerEnd-timerStart))/(tests*1.0));
-     */
+     * /
 
     cl->execute("DROP TABLE testplain;");
     cl->execute("DROP TABLE testcipher;");
 
 }
-
+*/
 //tests protected methods of EDBProxy
 class tester : public EDBProxy {
 public:
@@ -567,7 +567,7 @@ testTrain(const TestConfig &tc, int ac, char **a) {
 }
 //do not change: has been used in creating the DUMPS for experiments
 const uint64_t mkey = 113341234;
-
+/*
 static void __attribute__((unused))
 evalImproveSummations(const TestConfig &tc)
 {
@@ -600,7 +600,7 @@ evalImproveSummations(const TestConfig &tc)
     cerr << "time per sum: " << time/(1.0*no_sums) << " ms \n";
 
 }
-
+*/
 static void
 interactiveTest(const TestConfig &tc, int ac, char **av)
 {
@@ -1085,7 +1085,7 @@ interactiveTest(const TestConfig &tc, int ac, char **av)
     cout << "Goodbye!\n";
             */
 }
-
+/*
 static void __attribute__((unused))
 microEvaluate(const TestConfig &tc, int argc, char ** argv)
 {
@@ -1178,7 +1178,7 @@ microEvaluate(const TestConfig &tc, int argc, char ** argv)
     delete clplain;
 
 }
-
+*/
 //at this point this function is mostly to figure our how binary data
 // works..later will become a test
 /*
@@ -1202,7 +1202,7 @@ microEvaluate(const TestConfig &tc, int argc, char ** argv)
     execute("DROP TABLE peoples;");
    }
  */
-
+ /*
 //integration test
 static void __attribute__((unused))
 testEDBProxy(const TestConfig &tc)
@@ -1231,7 +1231,7 @@ testEDBProxy(const TestConfig &tc)
 
     cout << "\n------------------- \n Integration test succeeded \n\n";
 }
-
+*/
 static void
 testPaillier(const TestConfig &tc, int ac, char **av)
 {
@@ -1295,7 +1295,7 @@ testUtils(const TestConfig &tc, int ac, char **av)
 
     LOG(test) << toString(parse(query, delimsStay, delimsGo, keepIntact), id_op);
 }
-
+/*
 static void __attribute__((unused))
 createTables(string file, EDBProxy * cl)
 {
@@ -1329,7 +1329,7 @@ createTables(string file, EDBProxy * cl)
     createsFile.close();
 
 }
-
+*/
 static void __attribute__((unused))
 convertQueries()
 {

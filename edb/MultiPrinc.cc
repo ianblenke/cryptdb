@@ -63,10 +63,12 @@ const bool VERBOSE = true;
 
 list<string>
 MultiPrinc::processAnnotation(Annotation &annot, bool &encryptfield,
-                              Analysis &analysis) {
+                              SchemaInfo * schema) {
     int accres;
     list<string> query_list;
     switch (annot.type) {
+    case SINGLE_ENC:
+        assert_s(false, "mp received SINGLE type annotation");
     case PRINCTYPE:
         accres = accMan->startPrinc(annot.getPrimitive());
         assert_s(accres >= 0, "access manager could not start principal " + annot.getPrimitive());
@@ -80,8 +82,8 @@ MultiPrinc::processAnnotation(Annotation &annot, bool &encryptfield,
         encryptfield = false;
         break;
     case SPEAKSFOR: {
-        assert_s(setSensitive(analysis.schema, annot.getLeftTableName(), annot.getLeftFieldName()), "could not set left speaksfor table as sensitive");
-        assert_s(setSensitive(analysis.schema, annot.getRightTableName(), annot.getRightFieldName()), "could not set right speaksfor table as sensitive");
+        assert_s(setSensitive(schema, annot.getLeftTableName(), annot.getLeftFieldName()), "could not set left speaksfor table as sensitive");
+        assert_s(setSensitive(schema, annot.getRightTableName(), annot.getRightFieldName()), "could not set right speaksfor table as sensitive");
 
         accres = accMan->addToPrinc(annot.getLeft().column, annot.getLeft().princtype);
         assert_s(accres >= 0, "access manager could not add to princ " + annot.getLeftStr());
@@ -104,10 +106,10 @@ MultiPrinc::processAnnotation(Annotation &annot, bool &encryptfield,
         mkm.reverseEncFor[annot.getRight().column] = true;
         encryptfield = true;
 
-        assert_s(setSensitive(analysis.schema, annot.getPrimitiveTableName(), annot.getPrimitiveFieldName()), "could not set primitive encfor table as sensitive");
-        assert_s(setSensitive(analysis.schema, annot.getRightTableName(), annot.getRightFieldName()), "could not set right encfor table as sensitive");
+        assert_s(setSensitive(schema, annot.getPrimitiveTableName(), annot.getPrimitiveFieldName()), "could not set primitive encfor table as sensitive");
+        assert_s(setSensitive(schema, annot.getRightTableName(), annot.getRightFieldName()), "could not set right encfor table as sensitive");
         cerr << "sensitive done" << endl;
-        FieldMeta *fm = analysis.schema->tableMetaMap[annot.getPrimitiveTableName()]->fieldMetaMap[annot.getPrimitiveFieldName()];
+        FieldMeta *fm = schema->tableMetaMap[annot.getPrimitiveTableName()]->fieldMetaMap[annot.getPrimitiveFieldName()];
         assert_s(fm, "ENCFOR received primitive that does not exist; please put CREATE TABLE query before ENCFOR annotation\n");
         mkm.encForMap[fullName(fm->fname, annot.getPrimitiveTableName())] = annot.getRight().column;
         cerr << "process annotations mkm " << fullName(fm->fname, annot.getPrimitiveTableName()) << "->" << annot.getRight().column << endl;
@@ -830,7 +832,7 @@ MultiPrinc::checkPredicate(const AccessRelation & accRel, map<string, string> & 
 }
 
 void
-MultiPrinc::insertLex(LEX *lex, Analysis &a, TMKM &tmkm) {
+MultiPrinc::insertLex(LEX *lex, SchemaInfo * schema, TMKM &tmkm) {
     assert_s(lex->sql_command == SQLCOM_INSERT, "insertLex should only get insert commands");
     string table = lex->select_lex.table_list.first->table_name;
     if (!lex->many_values.head()) {
@@ -852,8 +854,8 @@ MultiPrinc::insertLex(LEX *lex, Analysis &a, TMKM &tmkm) {
             field_names.push_back(ifd->field_name);
         }
     } else {
-        auto it = a.schema->tableMetaMap.find(table);
-        assert(it != a.schema->tableMetaMap.end());
+        auto it = schema->tableMetaMap.find(table);
+        assert(it != schema->tableMetaMap.end());
         field_names = it->second->fieldNames;
     }
 

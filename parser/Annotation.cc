@@ -139,7 +139,7 @@ Annotation::getRightFieldName() {
 
 string
 Annotation::getPrimitiveTableName() {
-    if (type != ENCFOR) {
+    if (type != ENCFOR && type != SINGLE_ENC) {
         //LOG(error) << "Annotation asked for primitive when not ENCFOR";
         return "";
     }
@@ -150,7 +150,7 @@ Annotation::getPrimitiveTableName() {
 
 string
 Annotation::getPrimitiveFieldName() {
-    if (type != ENCFOR) {
+    if (type != ENCFOR && type != SINGLE_ENC) {
         //LOG(error) << "Annotation asked for primitive when not ENCFOR";
         return "";
     }
@@ -241,8 +241,10 @@ Annotation::parse() {
         type = ENCFOR;
     } else if (toLowerCase(query).find("speaksfor",0) != string::npos) {
         type = SPEAKSFOR;
+    } else if (toLowerCase(query).find("enc",0) != string::npos) {
+        type = SINGLE_ENC;
     } else {
-        assert_s(false, "annotation is not PRINCTYPE, PRINCTYPE EXTERNAL, SPEAKSFOR, or ENCFOR");
+        assert_s(false, "annotation is not PRINCTYPE, PRINCTYPE EXTERNAL, SPEAKSFOR, ENCFOR, or SINGLE_ENC");
     }
 
     auto word = query_list.begin();
@@ -257,6 +259,7 @@ Annotation::parse() {
         assert_s(toLowerCase(*word) == "princtype", "PRINCTYPE annotation does not begin with PRINCTYPE");
         break;
     case ENCFOR:
+    case SINGLE_ENC:
         primitive = *word;
         break;
     case SPEAKSFOR:
@@ -279,6 +282,8 @@ Annotation::parse() {
     case SPEAKSFOR:
         assert_s(toLowerCase(*word) == "speaksfor", "middle of SPEAKSFOR annotation is not SPEAKSFOR");
         break;
+    case SINGLE_ENC:
+        assert_s(toLowerCase(*word) == "enc", "middle of single princ ENC annotation is not ENC");
     }
 
     //last word/pair
@@ -296,12 +301,16 @@ Annotation::parse() {
         word++;
         right.princtype = *word;
         break;
+    case SINGLE_ENC:
+        assert_s(word == query_list.end(), "SINGLE_ENC annotation has too many words");
+        return;
     }
 
     //encryption level or predicate, if exists
     word++;
     switch(type) {
     case PRINCTYPE:
+    case SINGLE_ENC:
         assert_s(false, "annotation has too many words");
     case PRINCTYPE_EXTERNAL:
         //this should be the end

@@ -19,6 +19,8 @@
 #include <parser/cdb_helpers.hh>
 #include <parser/encdata.hh>
 
+#include <crypto/paillier.hh>
+
 #include <util/cryptdb_log.hh>
 
 using namespace std;
@@ -111,6 +113,11 @@ static inline void push_binary_string(
         string slice = binary.substr(i * slice_size, slice_size);
         enccols.push_back(to_mysql_escape_varbin(slice));
     }
+}
+
+template <size_t SlotSize>
+static inline void insert_into_slot(ZZ& z, long value, size_t slot) {
+    z |= (to_ZZ(value) << (SlotSize * slot));
 }
 
 template <typename T, size_t WordsPerSlot>
@@ -572,6 +579,8 @@ public:
       none,
       normal,
       packed,
+      row_packed,
+      row_col_packed,
   };
 
   static vector<datatypes> Schema;
@@ -594,6 +603,8 @@ public:
         processrow = true;
         break;
       case packed:
+      case row_packed:
+      case row_col_packed:
         onions = PackedOnions;
         usenull = false;
         processrow = false;
@@ -627,12 +638,9 @@ protected:
   }
   */
 
-  virtual
-  void encryptBatch(const vector<vector<string> > &tokens,
-                    vector<vector<string> >       &enccols,
-                    crypto_manager_stub &cm) {
-    assert(tpe == opt_type::packed);
-
+  void do_group_pack(const vector<vector<string> > &tokens,
+                     vector<vector<string> >       &enccols,
+                     crypto_manager_stub &cm) {
     // sort into (l_returnflag, l_linestatus)
     typedef pair<string, string> Key;
     typedef vector<string> Row;
@@ -796,6 +804,149 @@ protected:
 
         enccols.push_back(enc_row);
       }
+    }
+  }
+
+  static const size_t BitsPerAggField = 83;
+  static const size_t FieldsPerAgg = 1024 / BitsPerAggField;
+
+  static const size_t RowColPackPlainSize = 1256;
+  static const size_t RowColPackCipherSize = RowColPackPlainSize * 2;
+
+  void do_row_col_pack(const vector<vector<string> > &rows,
+                       vector<vector<string> >       &enccols,
+                       crypto_manager_stub &cm) {
+      // ASSUMES ROWS SORTED BY ENCRYPTED PRIMARY KEY
+
+      _static_assert( RowColPackCipherSize % 8 == 0 );
+      _static_assert( BitsPerAggField * 5 * 3 <= RowColPackPlainSize );
+
+      auto sk = Paillier_priv::keygen(RowColPackCipherSize / 2,
+                                      RowColPackCipherSize / 8);
+      Paillier_priv pp(sk);
+
+      auto pk = pp.pubkey();
+      Paillier p(pk);
+
+      size_t nAggs = rows.size() / 3 +
+          (rows.size() % 3 ? 1 : 0);
+      for (size_t i = 0; i < nAggs; i++) {
+        size_t base = i * 3;
+        ZZ z = to_ZZ(0);
+        for (size_t j = 0; j < min(3, rows.size() - base); j++) {
+          size_t row_id = base + j;
+
+          const vector<string>& tokens = rows[row_id];
+
+          // l_quantity_AGG
+          long l_quantity_int = roundToLong(resultFromStr<double>(tokens[lineitem::l_quantity]) * 100.0);
+          insert_into_slot<BitsPerAggField>(z, l_quantity_int, 5 * j);
+
+          // l_extendedprice_AGG
+          long l_extendedprice_int = roundToLong(resultFromStr<double>(tokens[lineitem::l_extendedprice]) * 100.0);
+          insert_into_slot<BitsPerAggField>(z, l_extendedprice_int, 5 * j + 1);
+
+          // l_discount_AGG
+          long l_discount_int = roundToLong(resultFromStr<double>(tokens[lineitem::l_discount]) * 100.0);
+          insert_into_slot<BitsPerAggField>(z, l_discount_int, 5 * j + 2);
+
+          // l_disc_price = l_extendedprice * (1 - l_discount)
+          double l_extendedprice  = resultFromStr<double>(tokens[lineitem::l_extendedprice]);
+          double l_discount       = resultFromStr<double>(tokens[lineitem::l_discount]);
+          double l_disc_price     = l_extendedprice * (1.0 - l_discount);
+          long   l_disc_price_int = roundToLong(l_disc_price * 100.0);
+          insert_into_slot<BitsPerAggField>(z, l_disc_price_int, 5 * j + 3);
+
+          // l_charge = l_extendedprice * (1 - l_discount) * (1 + l_tax)
+          double l_tax        = resultFromStr<double>(tokens[lineitem::l_tax]);
+          double l_charge     = l_extendedprice * (1.0 - l_discount) * (1.0 + l_tax);
+          long   l_charge_int = roundToLong(l_charge * 100.0);
+          insert_into_slot<BitsPerAggField>(z, l_charge_int, 5 * j + 4);
+        }
+
+        ZZ ct = p.encrypt(z);
+        string e = StringFromZZ(ct);
+        assert(e.size() <= (RowColPackCipherSize / 8));
+        e.resize(RowColPackCipherSize / 8);
+        cout << e;
+      }
+  }
+
+  void do_row_pack(const vector<vector<string> > &rows,
+                   vector<vector<string> >       &enccols,
+                   crypto_manager_stub &cm) {
+      // ASSUMES ROWS SORTED BY ENCRYPTED PRIMARY KEY
+
+      _static_assert(FieldsPerAgg == 12); // this is hardcoded various places
+      size_t nAggs = rows.size() / FieldsPerAgg +
+          (rows.size() % FieldsPerAgg ? 1 : 0);
+      for (size_t i = 0; i < nAggs; i++) {
+          size_t base = i * FieldsPerAgg;
+          ZZ z0, z1, z2, z3, z4;
+          z0 = to_ZZ(0); z1 = to_ZZ(0); z2 = to_ZZ(0);
+          z3 = to_ZZ(0); z4 = to_ZZ(0);
+          for (size_t j = 0; j < min(FieldsPerAgg, rows.size() - base); j++) {
+              size_t row_id = base + j;
+              const vector<string>& tokens = rows[row_id];
+
+              // l_quantity_AGG
+              long l_quantity_int = roundToLong(resultFromStr<double>(tokens[lineitem::l_quantity]) * 100.0);
+              insert_into_slot<BitsPerAggField>(z0, l_quantity_int, j);
+
+              // l_extendedprice_AGG
+              long l_extendedprice_int = roundToLong(resultFromStr<double>(tokens[lineitem::l_extendedprice]) * 100.0);
+              insert_into_slot<BitsPerAggField>(z1, l_extendedprice_int, j);
+
+              // l_discount_AGG
+              long l_discount_int = roundToLong(resultFromStr<double>(tokens[lineitem::l_discount]) * 100.0);
+              insert_into_slot<BitsPerAggField>(z2, l_discount_int, j);
+
+              // l_disc_price = l_extendedprice * (1 - l_discount)
+              double l_extendedprice  = resultFromStr<double>(tokens[lineitem::l_extendedprice]);
+              double l_discount       = resultFromStr<double>(tokens[lineitem::l_discount]);
+              double l_disc_price     = l_extendedprice * (1.0 - l_discount);
+              long   l_disc_price_int = roundToLong(l_disc_price * 100.0);
+              insert_into_slot<BitsPerAggField>(z3, l_disc_price_int, j);
+
+              // l_charge = l_extendedprice * (1 - l_discount) * (1 + l_tax)
+              double l_tax        = resultFromStr<double>(tokens[lineitem::l_tax]);
+              double l_charge     = l_extendedprice * (1.0 - l_discount) * (1.0 + l_tax);
+              long   l_charge_int = roundToLong(l_charge * 100.0);
+              insert_into_slot<BitsPerAggField>(z4, l_charge_int, j);
+          }
+
+          // write the block out
+          string e0 = cm.encrypt_Paillier(z0);
+          e0.resize(256);
+
+          string e1 = cm.encrypt_Paillier(z1);
+          e1.resize(256);
+
+          string e2 = cm.encrypt_Paillier(z2);
+          e2.resize(256);
+
+          string e3 = cm.encrypt_Paillier(z3);
+          e3.resize(256);
+
+          string e4 = cm.encrypt_Paillier(z4);
+          e4.resize(256);
+
+          cout << e0 << e1 << e2 << e3 << e4;
+      }
+  }
+
+  virtual
+  void encryptBatch(const vector<vector<string> > &tokens,
+                    vector<vector<string> >       &enccols,
+                    crypto_manager_stub &cm) {
+    assert(tpe == opt_type::packed ||
+           tpe == opt_type::row_packed ||
+           tpe == opt_type::row_col_packed);
+    switch (tpe) {
+    case opt_type::packed:         do_group_pack  (tokens, enccols, cm); break;
+    case opt_type::row_packed:     do_row_pack    (tokens, enccols, cm); break;
+    case opt_type::row_col_packed: do_row_col_pack(tokens, enccols, cm); break;
+    default: assert(false);
     }
   }
 
@@ -1213,6 +1364,8 @@ static map<string, table_encryptor *> EncryptorMap = {
   {"lineitem-none", new lineitem_encryptor(lineitem_encryptor::none)},
   {"lineitem-normal", new lineitem_encryptor(lineitem_encryptor::normal)},
   {"lineitem-packed", new lineitem_encryptor(lineitem_encryptor::packed)},
+  {"lineitem-row-packed", new lineitem_encryptor(lineitem_encryptor::row_packed)},
+  {"lineitem-row-col-packed", new lineitem_encryptor(lineitem_encryptor::row_col_packed)},
 
   {"partsupp-none", new partsupp_encryptor(partsupp_encryptor::none)},
   {"partsupp-normal", new partsupp_encryptor(partsupp_encryptor::normal)},

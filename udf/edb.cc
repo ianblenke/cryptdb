@@ -95,6 +95,20 @@ my_bool  agg_char2_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *er
 char *   agg_char2(UDF_INIT *initid, UDF_ARGS *args, char *result,
              unsigned long *length, char *is_null, char *error);
 
+my_bool  agg_char2_row_pack_init(UDF_INIT *initid, UDF_ARGS *args, char *message);
+void     agg_char2_row_pack_deinit(UDF_INIT *initid);
+void     agg_char2_row_pack_clear(UDF_INIT *initid, char *is_null, char *error);
+my_bool  agg_char2_row_pack_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error);
+char *   agg_char2_row_pack(UDF_INIT *initid, UDF_ARGS *args, char *result,
+             unsigned long *length, char *is_null, char *error);
+
+my_bool  agg_char2_row_col_pack_init(UDF_INIT *initid, UDF_ARGS *args, char *message);
+void     agg_char2_row_col_pack_deinit(UDF_INIT *initid);
+void     agg_char2_row_col_pack_clear(UDF_INIT *initid, char *is_null, char *error);
+my_bool  agg_char2_row_col_pack_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error);
+char *   agg_char2_row_col_pack(UDF_INIT *initid, UDF_ARGS *args, char *result,
+             unsigned long *length, char *is_null, char *error);
+
 my_bool  agg8_init(UDF_INIT *initid, UDF_ARGS *args, char *message);
 void     agg8_deinit(UDF_INIT *initid);
 void     agg8_clear(UDF_INIT *initid, char *is_null, char *error);
@@ -855,6 +869,527 @@ agg_char2(UDF_INIT *initid, UDF_ARGS *args, char *result,
         BytesFromZZ(ptr, it->second.second,
                     CryptoManager::Paillier_len_bytes);
         ptr += CryptoManager::Paillier_len_bytes;
+    }
+    return (char *) as->rbuf;
+}
+
+struct agg_char2_row_pack_state {
+    struct per_group_state {
+        std::vector< std::vector<ZZ> > running_sums;
+        uint64_t count;
+    };
+    typedef std::map<uint16_t, per_group_state> group_map;
+    group_map aggs;
+    uint32_t fields_mask;
+    ZZ n2;
+    void *rbuf;
+
+    // internal element buffer
+    typedef std::map< uint16_t, std::list< uint64_t > > element_buffer_map;
+    element_buffer_map element_buffer;
+
+    // internal state
+    ssize_t block_id; // the block ID that is in block_buf. is also
+                      // the last read block out of fp (so fp points to
+                      // block_id + 1). if -1, then block_buf is not
+                      // meaningful
+
+    // last block buffer
+    char* block_buf;
+    size_t block_size;
+
+    // file pointer
+    FILE* fp;
+
+    // debug file
+    std::ofstream debug_stream;
+
+    // stats
+    struct stats {
+      stats() : seeks(0), mults(0), all_pos(0) {}
+      uint32_t seeks;
+      uint32_t mults;
+      uint32_t all_pos;
+    };
+
+    stats st;
+};
+
+static size_t NumBitsHigh(uint32_t t) {
+    size_t cnt = 0;
+    size_t s = sizeof(t) * 8;
+    while (s--) {
+        cnt += t & 0x1;
+        t >>= 1;
+    }
+    return cnt;
+}
+
+struct AggRowPack {
+  static const size_t AggSize = 256;
+  static const size_t RowsPerBlock = 12;
+};
+
+my_bool
+agg_char2_row_pack_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
+{
+    if (args->arg_count != 5) {
+        strcpy(message, "need to provide 5 args");
+        return 1;
+    }
+
+    agg_char2_row_pack_state *as = new agg_char2_row_pack_state;
+    as->rbuf = NULL;
+
+    if (args->args[3] == NULL) {
+        strcpy(message, "need to indicate which fields are of interest");
+        return 1;
+    }
+
+    as->fields_mask = *((long long *) args->args[3]);
+    if (as->fields_mask > 0x1F /* hardcode 5 fields for now */) {
+        sprintf(message, "fields out of range: %d", as->fields_mask);
+        return 1;
+    }
+
+    if (args->args[4] == NULL) {
+        strcpy(message, "need to provide PK");
+        return 1;
+    }
+
+    ZZFromBytes(as->n2, (const uint8_t *) args->args[4],
+                args->lengths[4]);
+
+    as->block_id = -1;
+
+    as->fp = fopen("/tmp/tpch-0.05/lineitem_enc/data", "rb");
+    assert(as->fp);
+
+    as->block_size = AggRowPack::AggSize * 5; // hardcode 5 for now
+    as->block_buf = (char *) malloc(as->block_size);
+
+    //as->debug_stream.open("/tmp/debug.txt");
+    //assert(as->debug_stream.good());
+
+    initid->ptr = (char *) as;
+    return 0;
+}
+
+void
+agg_char2_row_pack_deinit(UDF_INIT *initid)
+{
+    agg_char2_row_pack_state *as = (agg_char2_row_pack_state *) initid->ptr;
+    free(as->rbuf);
+    free(as->block_buf);
+    fclose(as->fp);
+    //as->debug_stream.flush();
+    delete as;
+}
+
+void
+agg_char2_row_pack_clear(UDF_INIT *initid, char *is_null, char *error)
+{
+    agg_char2_row_pack_state *as = (agg_char2_row_pack_state *) initid->ptr;
+    as->aggs.clear();
+    as->block_id = -1;
+    fseek(as->fp, 0, SEEK_SET);
+}
+
+my_bool
+agg_char2_row_pack_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error)
+{
+    agg_char2_row_pack_state *as = (agg_char2_row_pack_state *) initid->ptr;
+
+    long long p0, p1, row_id;
+    p0 = *((long long *) args->args[0]);
+    p1 = *((long long *) args->args[1]);
+
+    uint16_t key = (uint8_t(p0) << 8) | uint8_t(p1);
+
+    agg_char2_row_pack_state::group_map::iterator it = as->aggs.find(key);
+    agg_char2_row_pack_state::per_group_state* s = NULL;
+    if (UNLIKELY(it == as->aggs.end())) {
+        s = &as->aggs[key]; // creates on demand
+        vector<ZZ> cpy;
+        cpy.resize(AggRowPack::RowsPerBlock, to_ZZ(1));
+        s->running_sums.resize(NumBitsHigh(as->fields_mask), cpy);
+        s->count = 1;
+        //as->debug_stream <<
+        //  "create new group " << p0 << " " << p1 << ": "
+        //  << "fields_mask: " << as->fields_mask
+        //  << " num_bits_high: " << NumBitsHigh(as->fields_mask) << endl;
+    } else {
+        s = &it->second;
+        s->count++;
+    }
+
+    // compute block ID from row ID
+    row_id = *((long long *) args->args[2]);
+    size_t block_id = row_id / AggRowPack::RowsPerBlock;
+
+    assert((ssize_t)block_id >= as->block_id); // ONLY support scanning forward for now!
+
+    // read in block
+    while (as->block_id < (ssize_t)block_id) {
+        // scan forward
+        size_t bread = fread(as->block_buf, 1, as->block_size, as->fp);
+        assert(bread == as->block_size); // TODO: handle bad files
+        as->block_id++;
+        // TODO: seek if we are really far away instead?
+        //as->debug_stream << "read block " << as->block_id << endl;
+    }
+
+    // compute block offset
+    size_t block_offset = row_id % AggRowPack::RowsPerBlock;
+
+    //as->debug_stream << row_id << ": " << block_id << " " << block_offset << endl;
+
+    // do sum for each field of interest
+    size_t idx = 0;
+    for (size_t i = 0; i < 5; i++) { // TODO: don't hardcode 5
+        if (as->fields_mask & (0x1 << i)) {
+            //as->debug_stream << "  idx: " << idx << endl;
+            ZZ &sum = s->running_sums[idx][block_offset];
+            ZZ e;
+            ZZFromBytes(
+                e,
+                (const uint8_t *) as->block_buf + (i * AggRowPack::AggSize),
+                AggRowPack::AggSize);
+            MulMod(sum, sum, e, as->n2);
+            idx++;
+        }
+    }
+    return true;
+}
+
+char *
+agg_char2_row_pack(UDF_INIT *initid, UDF_ARGS *args, char *result,
+    unsigned long *length, char *is_null, char *error)
+{
+    agg_char2_row_pack_state *as = (agg_char2_row_pack_state *) initid->ptr;
+    *length =
+        (2 + sizeof(uint64_t) +
+         NumBitsHigh(as->fields_mask) * AggRowPack::RowsPerBlock *
+         CryptoManager::Paillier_len_bytes) * as->aggs.size();
+
+    as->rbuf = malloc(*length);
+    assert(as->rbuf); // TODO: handle OOM
+
+    uint8_t* ptr = (uint8_t *) as->rbuf;
+
+    for (agg_char2_row_pack_state::group_map::iterator it = as->aggs.begin();
+         it != as->aggs.end(); ++it) {
+        //as->debug_stream << "group :" << ((it->first >> 8) & 0xFF) << " " << (it->first & 0xFF) << endl;
+        *ptr++ = (uint8_t) ((it->first >> 8) & 0xFF);
+        *ptr++ = (uint8_t) (it->first & 0xFF);
+        uint64_t *iptr = (uint64_t *) ptr;
+        *iptr = it->second.count;
+        ptr += sizeof(uint64_t);
+
+        for (vector< vector<ZZ> >::iterator iit =
+                it->second.running_sums.begin();
+             iit != it->second.running_sums.end(); ++iit) {
+            for (vector<ZZ>::iterator zzt = iit->begin();
+                 zzt != iit->end(); ++zzt) {
+                BytesFromZZ(ptr, *zzt,
+                            CryptoManager::Paillier_len_bytes);
+                //as->debug_stream << marshallBinary(string((char*)ptr, 256U)) << endl;
+                ptr += CryptoManager::Paillier_len_bytes;
+            }
+        }
+
+    }
+    return (char *) as->rbuf;
+}
+
+struct AggRowColPack {
+  static const size_t AggSize = 1256 * 2 / 8;
+  static const size_t RowsPerBlock = 3;
+  static const size_t BufferSize = 1024;
+};
+
+my_bool
+agg_char2_row_col_pack_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
+{
+    if (args->arg_count != 4) {
+        strcpy(message, "need to provide 4 args");
+        return 1;
+    }
+
+    agg_char2_row_pack_state *as = new agg_char2_row_pack_state;
+    as->rbuf = NULL;
+
+    if (args->args[3] == NULL) {
+        strcpy(message, "need to provide PK");
+        return 1;
+    }
+
+    ZZFromBytes(as->n2, (const uint8_t *) args->args[3],
+                args->lengths[3]);
+
+    as->block_id = -1;
+
+    as->fp = fopen("/tmp/tpch-0.05/lineitem_enc/row_col_pack/data", "rb");
+    assert(as->fp);
+
+    as->block_size = AggRowColPack::AggSize;
+    as->block_buf = (char *) malloc(as->block_size);
+
+    //as->debug_stream.open("/tmp/debug.txt");
+    //assert(as->debug_stream.good());
+
+    initid->ptr = (char *) as;
+    return 0;
+}
+
+void
+agg_char2_row_col_pack_deinit(UDF_INIT *initid)
+{
+    agg_char2_row_pack_state *as = (agg_char2_row_pack_state *) initid->ptr;
+    free(as->rbuf);
+    free(as->block_buf);
+    fclose(as->fp);
+    //as->debug_stream.flush();
+    delete as;
+}
+
+void
+agg_char2_row_col_pack_clear(UDF_INIT *initid, char *is_null, char *error)
+{
+    agg_char2_row_pack_state *as = (agg_char2_row_pack_state *) initid->ptr;
+    as->aggs.clear();
+    as->block_id = -1;
+    fseek(as->fp, 0, SEEK_SET);
+}
+
+static void flush_group_buffers(agg_char2_row_pack_state *as) {
+
+    // value is ordered list based on the pair's first element
+    typedef vector< pair< uint16_t, list< pair< uint64_t, uint32_t > > > >
+            allocation_map;
+    allocation_map alloc_map;
+    for (agg_char2_row_pack_state::element_buffer_map::iterator
+            eit = as->element_buffer.begin();
+         eit != as->element_buffer.end(); ++eit) {
+      // lookup agg group
+      agg_char2_row_pack_state::group_map::iterator it =
+        as->aggs.find(eit->first);
+      agg_char2_row_pack_state::per_group_state* s = NULL;
+      if (UNLIKELY(it == as->aggs.end())) {
+          s = &as->aggs[eit->first]; // creates on demand
+          vector<ZZ> cpy;
+          // +1 b/c of the "all columns significant" block
+          cpy.resize(AggRowColPack::RowsPerBlock + 1, to_ZZ(1));
+          s->running_sums.resize(1, cpy);
+          s->count = 0;
+      } else {
+          s = &it->second;
+      }
+      s->count += eit->second.size();
+
+      map< uint64_t, vector< uint32_t > > m;
+      for (list<uint64_t>::iterator it = eit->second.begin();
+           it != eit->second.end(); ++it) {
+        uint64_t row_id = *it;
+
+        // compute block ID from row ID
+        uint64_t block_id = row_id / AggRowColPack::RowsPerBlock;
+        // compute block offset
+        uint64_t block_offset = row_id % AggRowColPack::RowsPerBlock;
+
+        vector<uint32_t>& masks = m[block_id];
+        if (masks.empty()) {
+          masks.push_back(0x1 << block_offset);
+        } else {
+          // search for empty spot w/ linear scan
+          bool found = false;
+          for (vector<uint32_t>::iterator it = masks.begin();
+               it != masks.end(); ++it) {
+            if (!((*it) & (0x1 << block_offset))) {
+              *it |= 0x1 << block_offset;
+              found = true;
+              break;
+            }
+          }
+
+          if (!found) masks.push_back(0x1 << block_offset);
+        }
+      }
+      eit->second.clear(); // clear buffer
+
+      list< pair< uint64_t, uint32_t > > elems;
+      for (map< uint64_t, vector< uint32_t > >::iterator it = m.begin();
+           it != m.end(); ++it) {
+        //elems.reserve(elems.size() + it->second.size());
+        for (vector<uint32_t>::iterator iit = it->second.begin();
+             iit != it->second.end(); ++iit) {
+          elems.push_back(make_pair(it->first, *iit));
+        }
+      }
+      alloc_map.push_back(make_pair(eit->first, elems));
+    }
+
+    size_t pos_first_non_empty = 0;
+    for (allocation_map::iterator it = alloc_map.begin();
+         it != alloc_map.end(); ++it) {
+      if (it->second.empty()) pos_first_non_empty++;
+      else break;
+    }
+
+    while (pos_first_non_empty < alloc_map.size()) {
+      // find min block id for all groups
+      uint64_t minSoFar = alloc_map[pos_first_non_empty].second.front().first;
+      for (size_t i = pos_first_non_empty + 1; i < alloc_map.size(); i++) {
+        if (!alloc_map[i].second.empty() &&
+            alloc_map[i].second.front().first < minSoFar) {
+          minSoFar = alloc_map[i].second.front().first;
+        }
+      }
+
+      // read in block (minSoFar)
+      if (as->block_id > ssize_t(minSoFar)) {
+        // seek backwards
+        as->block_id = ssize_t(minSoFar) - 1;
+        fseek(as->fp, minSoFar * as->block_size, SEEK_SET);
+        as->st.seeks++;
+      }
+
+      // now read forward
+      while (as->block_id < ssize_t(minSoFar)) {
+          // scan forward
+          size_t bread = fread(as->block_buf, 1, as->block_size, as->fp);
+          //as->debug_stream << "bread: " << bread << endl;
+          assert(bread == as->block_size); // TODO: handle bad files
+          as->block_id++;
+          // TODO: seek if we are really far away instead?
+          //as->debug_stream << "read block " << as->block_id << endl;
+      }
+
+      // service the requests
+      for (size_t i = pos_first_non_empty; i < alloc_map.size(); i++) {
+        pair< uint16_t, list< pair< uint64_t, uint32_t > > > &group =
+          alloc_map[i];
+        if (group.second.empty() ||
+            group.second.front().first != minSoFar) continue;
+        agg_char2_row_pack_state::per_group_state& s = as->aggs[group.first];
+
+        static const uint32_t AllPosHigh = (0x1 << AggRowColPack::RowsPerBlock) - 1;
+        if (group.second.front().second == AllPosHigh) {
+          // can use the "all pos" buffer
+          ZZ &sum = s.running_sums[0][AggRowColPack::RowsPerBlock];
+          ZZ e;
+          ZZFromBytes(
+              e,
+              (const uint8_t *) as->block_buf,
+              AggRowColPack::AggSize);
+          MulMod(sum, sum, e, as->n2);
+
+          as->st.mults++;
+          as->st.all_pos++;
+        } else {
+          // must do each position individually
+          for (size_t i = 0; i < s.running_sums[0].size(); i++) {
+            if (group.second.front().second & (0x1 << i)) {
+              ZZ &sum = s.running_sums[0][i];
+              ZZ e;
+              ZZFromBytes(
+                  e,
+                  (const uint8_t *) as->block_buf,
+                  AggRowColPack::AggSize);
+              MulMod(sum, sum, e, as->n2);
+
+              as->st.mults++;
+            }
+          }
+        }
+        group.second.pop_front();
+      }
+
+      // find first non-empty
+      pos_first_non_empty = 0;
+      for (allocation_map::iterator it = alloc_map.begin();
+           it != alloc_map.end(); ++it) {
+        if (it->second.empty()) pos_first_non_empty++;
+        else break;
+      }
+    }
+}
+
+my_bool
+agg_char2_row_col_pack_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error)
+{
+    agg_char2_row_pack_state *as = (agg_char2_row_pack_state *) initid->ptr;
+
+    long long p0, p1, row_id;
+    p0     = *((long long *) args->args[0]);
+    p1     = *((long long *) args->args[1]);
+    row_id = *((long long *) args->args[2]);
+
+    uint16_t key = (uint8_t(p0) << 8) | uint8_t(p1);
+
+    // insert into buffer
+    list<uint64_t>& elem_buffer = as->element_buffer[key];
+    elem_buffer.push_back(row_id);
+
+    // if per group buffer is full, then flush
+    if (elem_buffer.size() >= AggRowColPack::BufferSize) {
+      flush_group_buffers(as);
+    }
+
+    return true;
+}
+
+char *
+agg_char2_row_col_pack(UDF_INIT *initid, UDF_ARGS *args, char *result,
+    unsigned long *length, char *is_null, char *error)
+{
+    agg_char2_row_pack_state *as = (agg_char2_row_pack_state *) initid->ptr;
+
+    // flush all buffers
+    flush_group_buffers(as);
+
+    *length =
+        (2 /* group key */ +
+         sizeof(uint64_t) /* group count */ +
+         sizeof(uint32_t) /* num of agg configs to come */ +
+         (AggRowColPack::RowsPerBlock + 1) *
+         (sizeof(uint32_t) /* mask of interest */ +
+         AggRowColPack::AggSize)) * as->aggs.size();
+
+    //as->debug_stream << "length = " << *length << endl;
+
+    //as->debug_stream << "seeks = " << as->st.seeks << endl;
+    //as->debug_stream << "mults = " << as->st.mults << endl;
+    //as->debug_stream << "all_pos = " << as->st.all_pos << endl;
+
+    as->rbuf = malloc(*length);
+    assert(as->rbuf); // TODO: handle OOM
+
+    uint8_t* ptr = (uint8_t *) as->rbuf;
+
+    for (agg_char2_row_pack_state::group_map::iterator it = as->aggs.begin();
+         it != as->aggs.end(); ++it) {
+        //as->debug_stream << "group :" << ((it->first >> 8) & 0xFF) << " " << (it->first & 0xFF) << endl;
+        *ptr++ = (uint8_t) ((it->first >> 8) & 0xFF);
+        *ptr++ = (uint8_t) (it->first & 0xFF);
+
+        uint64_t *iptr = (uint64_t *) ptr;
+        *iptr = it->second.count;
+        ptr += sizeof(uint64_t);
+
+        uint32_t *u32p = (uint32_t *) ptr;
+        *u32p = AggRowColPack::RowsPerBlock + 1;
+        ptr += sizeof(uint32_t);
+
+        size_t s = it->second.running_sums[0].size();
+        for (size_t idx = 0; idx < s; idx++) {
+            uint32_t *iptr = (uint32_t *) ptr;
+            *iptr = (idx + 1 == s) ? ((0x1 << s) - 1) : (0x1 << idx);
+            ptr += sizeof(uint32_t);
+
+            BytesFromZZ(ptr, it->second.running_sums[0][idx], AggRowColPack::AggSize);
+            ptr += AggRowColPack::AggSize;
+        }
     }
     return (char *) as->rbuf;
 }

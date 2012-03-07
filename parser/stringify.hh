@@ -7,6 +7,16 @@
 #include <iostream>
 
 
+template<class T>
+std::string stringify_ptr(T * x) {
+    if (x == NULL ) {
+	return "NULL";
+    } else {
+	return x->stringify();
+    }
+}
+
+
 static inline std::ostream&
 operator<<(std::ostream &out, String &s)
 {
@@ -490,6 +500,7 @@ operator<<(std::ostream &out, LEX &lex)
             }
 
             lex.query_tables->print(t, &s, QT_ORDINARY);
+	    std::cerr << "s is " << s << "\n";
             out << "into " << s;
             if (lex.field_list.head())
                 out << " " << lex.field_list;

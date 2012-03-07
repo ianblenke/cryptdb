@@ -19,6 +19,9 @@
 #include <parser/cdb_helpers.hh>
 #include <parser/encdata.hh>
 
+#include <crypto/paillier.hh>
+#include <crypto/prng.hh>
+
 #include <util/cryptdb_log.hh>
 
 using namespace std;
@@ -78,7 +81,115 @@ static void test_big_ope(uint64_t a, uint64_t b, bool test_decrypt = true)
     assert((i < i1) == (memcmp(ct.data(), ct1.data(), 16) < 0));
 }
 
+template <size_t SlotSize>
+static inline void insert_into_slot(ZZ& z, long value, size_t slot) {
+    z |= (to_ZZ(value) << (SlotSize * slot));
+}
+
+static void test_row_pack_hom_sum(
+    const vector<uint32_t>& rows) {
+
+  static const size_t BitsPerAggField = 83;
+  static const size_t FieldsPerAgg = 1024 / BitsPerAggField;
+
+  vector<string> packed_cts;
+  size_t nAggs = rows.size() / FieldsPerAgg +
+      (rows.size() % FieldsPerAgg ? 1 : 0);
+  for (size_t i = 0; i < nAggs; i++) {
+      size_t base = i * FieldsPerAgg;
+      ZZ z;
+      for (size_t j = 0; j < min(FieldsPerAgg, rows.size() - base); j++) {
+          size_t row_id = base + j;
+          insert_into_slot<BitsPerAggField>(z, rows[row_id], j);
+      }
+      string e0 = cm.encrypt_Paillier(z);
+      e0.resize(256);
+      packed_cts.push_back(e0);
+  }
+
+  vector<ZZ> sums;
+  sums.resize(FieldsPerAgg, to_ZZ(1));
+
+  string pkinfo = cm.getPKInfo();
+  ZZ n2;
+  ZZFromBytes(n2, (const uint8_t *) pkinfo.data(), pkinfo.size());
+
+  uint64_t actual = 0;
+  for (size_t i = 0; i < rows.size(); i++) {
+    if ((i % 2) == 0) {
+      size_t block_id = i / FieldsPerAgg;
+      size_t block_offset = i % FieldsPerAgg;
+      ZZ &sum = sums[block_offset];
+      ZZ e;
+      ZZFromBytes(
+          e,
+          (const uint8_t *) packed_cts[block_id].data(),
+          256);
+      MulMod(sum, sum, e, n2);
+      actual += rows[i];
+    }
+  }
+
+  uint64_t s = 0;
+  ZZ mask = to_ZZ(1); mask <<= BitsPerAggField; mask -= 1;
+  for (size_t i = 0; i < sums.size(); i++) {
+    ZZ m;
+    cm.decrypt_Paillier(StringFromZZ(sums[i]), m);
+    uint64_t e = to_long( (m >> (BitsPerAggField * i)) & mask );
+    s += e;
+  }
+
+  cerr << "actual: " << actual << ", got: " << s << endl;
+  assert(actual == s);
+}
+
+static void test_larger_hom() {
+    static const size_t ctbits = 1256 * 2;
+    auto sk = Paillier_priv::keygen(ctbits / 2, ctbits / 8);
+    Paillier_priv pp(sk);
+
+    auto pk = pp.pubkey();
+    Paillier p(pk);
+
+    for (size_t i = 0; i < 100; i++) {
+      urandom u;
+      ZZ pt0 = u.rand_zz_mod(to_ZZ(1) << 1253);
+      ZZ pt1 = u.rand_zz_mod(to_ZZ(1) << 1253);
+
+      ZZ ct0 = p.encrypt(pt0);
+      ZZ ct1 = p.encrypt(pt1);
+      ZZ sum = p.add(ct0, ct1);
+      assert(pp.decrypt(ct0) == pt0);
+      assert(pp.decrypt(ct1) == pt1);
+      assert(pp.decrypt(sum) == (pt0 + pt1));
+    }
+
+    {
+      ZZ pt0 = (to_ZZ(1) << (1253)) - 1;
+      ZZ pt1 = (to_ZZ(1) << (1253)) - 1;
+
+      ZZ ct0 = p.encrypt(pt0);
+      ZZ ct1 = p.encrypt(pt1);
+      ZZ sum = p.add(ct0, ct1);
+      assert(pp.decrypt(ct0) == pt0);
+      assert(pp.decrypt(ct1) == pt1);
+      assert(pp.decrypt(sum) == (pt0 + pt1));
+    }
+}
+
 int main(int argc, char **argv) {
+    // agg tests
+    test_row_pack_hom_sum({ 1, 2, 3, 4 });
+    test_row_pack_hom_sum({ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 });
+    test_row_pack_hom_sum({
+        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
+        1, 2, 3, 4, 5, 6, 7, 8, 9, });
+    test_row_pack_hom_sum(
+      {17, 36, 8, 28, 24, 32, 38, 45, 49, 27, 2,
+      28, 26, 30, 15, 26, 50, 37, 12, 9});
+
+    test_larger_hom();
+
     // det tests
 
     // test int type

@@ -23,6 +23,7 @@
 #include <util/cleanup.hh>
 #include <util/rob.hh>
 
+
 using namespace std;
 
 //struct FieldMeta;
@@ -52,99 +53,6 @@ public:
 
     OnionLevelMap olm;
 };*/
-
-/**
- * Used to keep track of encryption constraints during
- * analysis
- */
-class EncSet {
-public:
-    EncSet(OnionLevelFieldMap input) : osl(input) {}
-    EncSet(); // TODO(stephentu): move ctor here
-
-    /**
-     * decides which encryption scheme to use out of multiple in a set
-     */
-    EncSet chooseOne() const;
-
-    EncSet intersect(const EncSet & es2) const;
-
-    inline bool empty() const { return osl.empty(); }
-
-    inline bool singleton() const { return osl.size() == 1; }
-
-    inline OnionLevelFieldPair extract_singleton() const {
-        assert(singleton());
-        auto it = osl.begin();
-        return OnionLevelFieldPair(it->first, it->second);
-    }
-
-    OnionLevelFieldMap osl; //max level on each onion
-};
-
-const EncDesc FULL_EncDesc = {
-        {
-            {oDET, SECLEVEL::SEMANTIC_DET},
-            {oOPE, SECLEVEL::SEMANTIC_OPE},
-            {oAGG, SECLEVEL::SEMANTIC_AGG},
-            {oSWP, SECLEVEL::SWP         },
-        }
-};
-
-const EncDesc NUMERIC_EncDec = {
-        {
-            {oDET, SECLEVEL::SEMANTIC_DET},
-            {oOPE, SECLEVEL::SEMANTIC_OPE},
-            {oAGG, SECLEVEL::SEMANTIC_AGG},
-        }
-};
-
-const EncDesc EQ_SEARCH_EncDesc = {
-        {
-            {oDET, SECLEVEL::SEMANTIC_DET},
-            {oOPE, SECLEVEL::SEMANTIC_OPE},
-            {oSWP, SECLEVEL::SWP         },
-        }
-};
-
-const EncSet EQ_EncSet = {
-        {
-            {oDET, LevelFieldPair(SECLEVEL::DET, NULL)},
-            {oOPE, LevelFieldPair(SECLEVEL::OPE, NULL)},
-        }
-};
-
-const EncSet ORD_EncSet = {
-        {
-            {oOPE, LevelFieldPair(SECLEVEL::OPE, NULL)},
-        }
-};
-
-//todo: there should be a map of FULL_EncSets depending on item type
-const EncSet FULL_EncSet = {
-        {
-            {oDET, LevelFieldPair(SECLEVEL::SEMANTIC_DET, NULL)},
-            {oOPE, LevelFieldPair(SECLEVEL::SEMANTIC_OPE, NULL)},
-            {oAGG, LevelFieldPair(SECLEVEL::SEMANTIC_AGG, NULL)},
-            {oSWP, LevelFieldPair(SECLEVEL::SWP,          NULL)},
-        }
-};
-
-const EncSet Search_EncSet = {
-        {
-            {oSWP, LevelFieldPair(SECLEVEL::SWP, NULL)},
-        }
-};
-
-const EncSet ADD_EncSet = {
-        {
-            {oAGG, LevelFieldPair(SECLEVEL::SEMANTIC_AGG, NULL)},
-        }
-};
-
-const EncSet EMPTY_EncSet = {
-        {{}}
-};
 
 
 /******* ENCRYPTED SCHEMA INFORMATION ********/
@@ -346,7 +254,8 @@ class Rewriter {
 public:
     //Rewriter(const std::string & db);
     Rewriter(ConnectionData db,
-             bool MultiPrinc = false);
+             bool MultiPrinc = false,
+             bool encByDefault = true);
     ~Rewriter();
 
     void setMasterKey(const std::string &mkey);
@@ -359,7 +268,10 @@ public:
 private:
     void initSchema();
     void createMetaTablesIfNotExists();
-
+    list<string> processAnnotation(Annotation annot, Analysis &a);
+    //initialize multi-principal data structures
+    void mp_init(Analysis &a);
+    
     std::string    db;
     SchemaInfo*    schema;
     CryptoManager* cm;
@@ -368,6 +280,7 @@ private:
     Connect*       c;
     MultiPrinc*    mp;
     TMKM           tmkm;
+    bool           encByDefault;
 };
 
 class ScopedMySQLRes {

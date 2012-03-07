@@ -255,6 +255,13 @@ getVal(list<string>::iterator & it)
 
 }
 
+char *
+getCStr(const std::string & x) {
+    char *  res = (char *)malloc(x.size());
+    memcpy(res, x.c_str(), x.size());
+    return res;
+}
+
 string
 strFromVal(uint64_t x)
 {

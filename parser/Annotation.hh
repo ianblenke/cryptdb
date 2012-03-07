@@ -10,6 +10,7 @@ typedef enum annoType {
     PRINCTYPE_EXTERNAL,
     ENCFOR,
     SPEAKSFOR,
+    SINGLE_ENC,
 } annoType;
 
 // PrincTypes are the part of an annotation that describe which principal
@@ -30,6 +31,8 @@ std::list<std::string> split(std::string &s, char c);
  *  CRYPTDB PRINCTYPE princtypename EXTERNAL;
  *  CRYPTDB primitive ENCFOR right [enclevel];
  *  CRYPTDB left SPEAKSFOR right [IF predicate];
+ *  
+ *  CRYPTDB primitive ENC
  *
  * primitive := tablename.columnname
  * princtype := tablename.columnname princtypename
