@@ -1012,7 +1012,7 @@ static void do_query_q1_opt_row_col_pack(Connect &conn,
         << pkinfo <<
       ") FROM ( "
         "SELECT l_returnflag_DET, l_linestatus_DET, "
-        "@cnt := @cnt + 1 AS cnt, l_shipdate_OPE FROM lineitem_enc "
+        "@cnt := @cnt + 1 AS cnt, l_shipdate_OPE FROM lineitem_enc_noagg "
       ") AS _anon_ "
       "WHERE l_shipdate_OPE <= " << encDATE
       ;

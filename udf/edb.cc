@@ -885,7 +885,7 @@ struct agg_char2_row_pack_state {
     void *rbuf;
 
     // internal element buffer
-    typedef std::map< uint16_t, std::list< uint64_t > > element_buffer_map;
+    typedef std::map< uint16_t, std::vector< uint64_t > > element_buffer_map;
     element_buffer_map element_buffer;
 
     // internal state
@@ -906,10 +906,13 @@ struct agg_char2_row_pack_state {
 
     // stats
     struct stats {
-      stats() : seeks(0), mults(0), all_pos(0) {}
+      stats() : seeks(0), mults(0), all_pos(0), masks_sum(0), masks_cnt(0) {}
       uint32_t seeks;
       uint32_t mults;
       uint32_t all_pos;
+
+      uint32_t masks_sum;
+      uint32_t masks_cnt;
     };
 
     stats st;
@@ -1105,7 +1108,7 @@ agg_char2_row_pack(UDF_INIT *initid, UDF_ARGS *args, char *result,
 struct AggRowColPack {
   static const size_t AggSize = 1256 * 2 / 8;
   static const size_t RowsPerBlock = 3;
-  static const size_t BufferSize = 1024;
+  static const size_t BufferSize = 4;
 };
 
 my_bool
@@ -1129,7 +1132,7 @@ agg_char2_row_col_pack_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
 
     as->block_id = -1;
 
-    as->fp = fopen("/tmp/tpch-0.05/lineitem_enc/row_col_pack/data", "rb");
+    as->fp = fopen("/tmp/tpch-1.00/lineitem_enc/row_col_pack/data", "rb");
     assert(as->fp);
 
     as->block_size = AggRowColPack::AggSize;
@@ -1168,6 +1171,7 @@ static void flush_group_buffers(agg_char2_row_pack_state *as) {
     typedef vector< pair< uint16_t, list< pair< uint64_t, uint32_t > > > >
             allocation_map;
     allocation_map alloc_map;
+    alloc_map.reserve(as->element_buffer.size());
     for (agg_char2_row_pack_state::element_buffer_map::iterator
             eit = as->element_buffer.begin();
          eit != as->element_buffer.end(); ++eit) {
@@ -1188,7 +1192,7 @@ static void flush_group_buffers(agg_char2_row_pack_state *as) {
       s->count += eit->second.size();
 
       map< uint64_t, vector< uint32_t > > m;
-      for (list<uint64_t>::iterator it = eit->second.begin();
+      for (vector<uint64_t>::iterator it = eit->second.begin();
            it != eit->second.end(); ++it) {
         uint64_t row_id = *it;
 
@@ -1217,16 +1221,17 @@ static void flush_group_buffers(agg_char2_row_pack_state *as) {
       }
       eit->second.clear(); // clear buffer
 
-      list< pair< uint64_t, uint32_t > > elems;
+      alloc_map.push_back(make_pair(eit->first, list< pair< uint64_t, uint32_t > >()));
+      list< pair< uint64_t, uint32_t > >& elems = alloc_map.back().second;
       for (map< uint64_t, vector< uint32_t > >::iterator it = m.begin();
            it != m.end(); ++it) {
-        //elems.reserve(elems.size() + it->second.size());
         for (vector<uint32_t>::iterator iit = it->second.begin();
              iit != it->second.end(); ++iit) {
           elems.push_back(make_pair(it->first, *iit));
         }
+        as->st.masks_sum += it->second.size();
+        as->st.masks_cnt++;
       }
-      alloc_map.push_back(make_pair(eit->first, elems));
     }
 
     size_t pos_first_non_empty = 0;
@@ -1240,9 +1245,10 @@ static void flush_group_buffers(agg_char2_row_pack_state *as) {
       // find min block id for all groups
       uint64_t minSoFar = alloc_map[pos_first_non_empty].second.front().first;
       for (size_t i = pos_first_non_empty + 1; i < alloc_map.size(); i++) {
-        if (!alloc_map[i].second.empty() &&
-            alloc_map[i].second.front().first < minSoFar) {
-          minSoFar = alloc_map[i].second.front().first;
+        pair< uint16_t, list< pair< uint64_t, uint32_t > > > &group =
+          alloc_map[i];
+        if (!group.second.empty() && group.second.front().first < minSoFar) {
+          minSoFar = group.second.front().first;
         }
       }
 
@@ -1328,11 +1334,19 @@ agg_char2_row_col_pack_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char
     uint16_t key = (uint8_t(p0) << 8) | uint8_t(p1);
 
     // insert into buffer
-    list<uint64_t>& elem_buffer = as->element_buffer[key];
-    elem_buffer.push_back(row_id);
+    agg_char2_row_pack_state::element_buffer_map::iterator it =
+      as->element_buffer.find(key);
+    vector<uint64_t>* elem_buffer = NULL;
+    if (UNLIKELY(it == as->element_buffer.end())) {
+      elem_buffer = &as->element_buffer[key];
+      elem_buffer->reserve(AggRowColPack::BufferSize);
+    } else {
+      elem_buffer = &it->second;
+    }
+    elem_buffer->push_back(row_id);
 
     // if per group buffer is full, then flush
-    if (elem_buffer.size() >= AggRowColPack::BufferSize) {
+    if (UNLIKELY(elem_buffer->size() >= AggRowColPack::BufferSize)) {
       flush_group_buffers(as);
     }
 
@@ -1356,11 +1370,11 @@ agg_char2_row_col_pack(UDF_INIT *initid, UDF_ARGS *args, char *result,
          (sizeof(uint32_t) /* mask of interest */ +
          AggRowColPack::AggSize)) * as->aggs.size();
 
-    //as->debug_stream << "length = " << *length << endl;
-
     //as->debug_stream << "seeks = " << as->st.seeks << endl;
     //as->debug_stream << "mults = " << as->st.mults << endl;
     //as->debug_stream << "all_pos = " << as->st.all_pos << endl;
+    //as->debug_stream << "avg_masks_size = "
+    //  << (double(as->st.masks_sum)/double(as->st.masks_cnt)) << endl;
 
     as->rbuf = malloc(*length);
     assert(as->rbuf); // TODO: handle OOM
@@ -1369,7 +1383,6 @@ agg_char2_row_col_pack(UDF_INIT *initid, UDF_ARGS *args, char *result,
 
     for (agg_char2_row_pack_state::group_map::iterator it = as->aggs.begin();
          it != as->aggs.end(); ++it) {
-        //as->debug_stream << "group :" << ((it->first >> 8) & 0xFF) << " " << (it->first & 0xFF) << endl;
         *ptr++ = (uint8_t) ((it->first >> 8) & 0xFF);
         *ptr++ = (uint8_t) (it->first & 0xFF);
 
