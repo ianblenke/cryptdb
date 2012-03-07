@@ -19,6 +19,8 @@
 #include <parser/cdb_helpers.hh>
 #include <parser/encdata.hh>
 
+#include <crypto/paillier.hh>
+
 #include <util/cryptdb_log.hh>
 
 using namespace std;
@@ -808,17 +810,30 @@ protected:
   static const size_t BitsPerAggField = 83;
   static const size_t FieldsPerAgg = 1024 / BitsPerAggField;
 
+  static const size_t RowColPackPlainSize = 1256;
+  static const size_t RowColPackCipherSize = RowColPackPlainSize * 2;
+
   void do_row_col_pack(const vector<vector<string> > &rows,
                        vector<vector<string> >       &enccols,
                        crypto_manager_stub &cm) {
       // ASSUMES ROWS SORTED BY ENCRYPTED PRIMARY KEY
 
-      size_t nAggs = rows.size() / 2 +
-          (rows.size() % 2 ? 1 : 0);
+      _static_assert( RowColPackCipherSize % 8 == 0 );
+      _static_assert( BitsPerAggField * 5 * 3 <= RowColPackPlainSize );
+
+      auto sk = Paillier_priv::keygen(RowColPackCipherSize / 2,
+                                      RowColPackCipherSize / 8);
+      Paillier_priv pp(sk);
+
+      auto pk = pp.pubkey();
+      Paillier p(pk);
+
+      size_t nAggs = rows.size() / 3 +
+          (rows.size() % 3 ? 1 : 0);
       for (size_t i = 0; i < nAggs; i++) {
-        size_t base = i * 2;
+        size_t base = i * 3;
         ZZ z = to_ZZ(0);
-        for (size_t j = 0; j < min(2, rows.size() - base); j++) {
+        for (size_t j = 0; j < min(3, rows.size() - base); j++) {
           size_t row_id = base + j;
 
           const vector<string>& tokens = rows[row_id];
@@ -848,8 +863,11 @@ protected:
           long   l_charge_int = roundToLong(l_charge * 100.0);
           insert_into_slot<BitsPerAggField>(z, l_charge_int, 5 * j + 4);
         }
-        string e = cm.encrypt_Paillier(z);
-        e.resize(256);
+
+        ZZ ct = p.encrypt(z);
+        string e = StringFromZZ(ct);
+        assert(e.size() <= (RowColPackCipherSize / 8));
+        e.resize(RowColPackCipherSize / 8);
         cout << e;
       }
   }

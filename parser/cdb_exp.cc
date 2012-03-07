@@ -15,6 +15,7 @@
 #include <edb/Connect.hh>
 #include <parser/cdb_rewrite.hh>
 #include <parser/cdb_helpers.hh>
+#include <crypto/paillier.hh>
 #include <util/util.hh>
 
 using namespace std;
@@ -984,6 +985,13 @@ static void do_query_q1_opt_row_col_pack(Connect &conn,
     crypto_manager_stub cm_stub(&cm, UseOldOpe);
     NamedTimer fcnTimer(__func__);
 
+    static const size_t RowColPackPlainSize = 1256;
+    static const size_t RowColPackCipherSize = RowColPackPlainSize * 2;
+    auto sk = Paillier_priv::keygen(RowColPackCipherSize / 2,
+                                    RowColPackCipherSize / 8);
+    Paillier_priv pp(sk);
+    auto pk = pp.pubkey();
+
     // l_shipdate <= date '[year]-01-01'
     bool isBin;
     string encDATE = cm_stub.crypt<3>(cm.getmkey(), strFromVal(EncodeDate(1, 1, year)),
@@ -994,7 +1002,7 @@ static void do_query_q1_opt_row_col_pack(Connect &conn,
 
     conn.execute("set @cnt := -1", dbres);
 
-    string pkinfo = marshallBinary(cm.getPKInfo());
+    string pkinfo = marshallBinary(StringFromZZ(pk[0] * pk[0]));
     ostringstream s;
     s <<
       "SELECT SQL_NO_CACHE agg_char2_row_col_pack("
@@ -1030,7 +1038,7 @@ static void do_query_q1_opt_row_col_pack(Connect &conn,
 
       // format of data is
       // [ l_returnflag_DET (1 byte) | l_linestatus_DET (1 byte) |
-      //   count(*) (8 bytes) | rows (2 * 256 bytes) ]* ]*
+      //   count(*) (8 bytes) | rows (3 * 256 bytes) ]* ]*
       typedef map< pair<unsigned char, unsigned char>, q1entry > GroupMap;
       GroupMap groups;
 
@@ -1074,9 +1082,11 @@ static void do_query_q1_opt_row_col_pack(Connect &conn,
 #define TAKE_FROM_SLOT(z, slot) \
         (to_long(((z) >> (BitsPerAggField * (slot))) & mask))
 
-        for (size_t i = 0; i < 2; i++) {
-          ZZ m;
-          cm.decrypt_Paillier(string((const char *) p, 256), m);
+        for (size_t i = 0; i < 3; i++) {
+          ZZ ct = ZZFromBytes(
+              (const uint8_t *) p,
+              RowColPackCipherSize / 8);
+          ZZ m = pp.decrypt(ct);
 
           long sum_qty_int = TAKE_FROM_SLOT(m, i * 5 + 0);
           long sum_base_price_int = TAKE_FROM_SLOT(m, i * 5 + 1);
@@ -1090,7 +1100,7 @@ static void do_query_q1_opt_row_col_pack(Connect &conn,
           sum_disc_price += ((double)sum_disc_price_int)/100.0;
           sum_charge += ((double)sum_charge_int)/100.0;
 
-          p += 256;
+          p += RowColPackCipherSize / 8;
         }
 
         double avg_qty = sum_qty / ((double)count_order);

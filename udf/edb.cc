@@ -911,7 +911,10 @@ static size_t NumBitsHigh(uint32_t t) {
     return cnt;
 }
 
-static const size_t AggSize = 256;
+struct AggRowPack {
+  static const size_t AggSize = 256;
+  static const size_t RowsPerBlock = 12;
+};
 
 my_bool
 agg_char2_row_pack_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
@@ -948,7 +951,7 @@ agg_char2_row_pack_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
     as->fp = fopen("/tmp/tpch-0.05/lineitem_enc/data", "rb");
     assert(as->fp);
 
-    as->block_size = AggSize * 5; // hardcode 5 for now
+    as->block_size = AggRowPack::AggSize * 5; // hardcode 5 for now
     as->block_buf = (char *) malloc(as->block_size);
 
     //as->debug_stream.open("/tmp/debug.txt");
@@ -977,10 +980,6 @@ agg_char2_row_pack_clear(UDF_INIT *initid, char *is_null, char *error)
     as->block_id = -1;
     fseek(as->fp, 0, SEEK_SET);
 }
-
-struct AggRowPack {
-  static const size_t RowsPerBlock = 12;
-};
 
 my_bool
 agg_char2_row_pack_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error)
@@ -1040,8 +1039,8 @@ agg_char2_row_pack_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *er
             ZZ e;
             ZZFromBytes(
                 e,
-                (const uint8_t *) as->block_buf + (i * AggSize),
-                AggSize);
+                (const uint8_t *) as->block_buf + (i * AggRowPack::AggSize),
+                AggRowPack::AggSize);
             MulMod(sum, sum, e, as->n2);
             idx++;
         }
@@ -1089,6 +1088,11 @@ agg_char2_row_pack(UDF_INIT *initid, UDF_ARGS *args, char *result,
     return (char *) as->rbuf;
 }
 
+struct AggRowColPack {
+  static const size_t AggSize = 1256 * 2 / 8;
+  static const size_t RowsPerBlock = 3;
+};
+
 my_bool
 agg_char2_row_col_pack_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
 {
@@ -1113,7 +1117,7 @@ agg_char2_row_col_pack_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
     as->fp = fopen("/tmp/tpch-0.05/lineitem_enc/row_col_pack/data", "rb");
     assert(as->fp);
 
-    as->block_size = AggSize;
+    as->block_size = AggRowColPack::AggSize;
     as->block_buf = (char *) malloc(as->block_size);
 
     as->debug_stream.open("/tmp/debug.txt");
@@ -1143,9 +1147,6 @@ agg_char2_row_col_pack_clear(UDF_INIT *initid, char *is_null, char *error)
     fseek(as->fp, 0, SEEK_SET);
 }
 
-struct AggRowColPack {
-  static const size_t RowsPerBlock = 2;
-};
 
 my_bool
 agg_char2_row_col_pack_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error)
@@ -1204,7 +1205,7 @@ agg_char2_row_col_pack_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char
     ZZFromBytes(
         e,
         (const uint8_t *) as->block_buf,
-        AggSize);
+        AggRowColPack::AggSize);
     MulMod(sum, sum, e, as->n2);
     return true;
 }
@@ -1217,7 +1218,7 @@ agg_char2_row_col_pack(UDF_INIT *initid, UDF_ARGS *args, char *result,
     *length =
         (2 + sizeof(uint64_t) +
          AggRowColPack::RowsPerBlock *
-         CryptoManager::Paillier_len_bytes) * as->aggs.size();
+         AggRowColPack::AggSize) * as->aggs.size();
 
     as->rbuf = malloc(*length);
     assert(as->rbuf); // TODO: handle OOM
@@ -1235,10 +1236,9 @@ agg_char2_row_col_pack(UDF_INIT *initid, UDF_ARGS *args, char *result,
 
         for (vector<ZZ>::iterator zzt = it->second.running_sums[0].begin();
              zzt != it->second.running_sums[0].end(); ++zzt) {
-            BytesFromZZ(ptr, *zzt,
-                        CryptoManager::Paillier_len_bytes);
+            BytesFromZZ(ptr, *zzt, AggRowColPack::AggSize);
             //as->debug_stream << marshallBinary(string((char*)ptr, 256U)) << endl;
-            ptr += CryptoManager::Paillier_len_bytes;
+            ptr += AggRowColPack::AggSize;
         }
     }
     return (char *) as->rbuf;
