@@ -1277,6 +1277,65 @@ static void do_query_q11(Connect &conn,
     }
 }
 
+static void do_query_q11_nosubquery(Connect &conn,
+                                    const string &name,
+                                    double fraction,
+                                    vector<q11entry> &results) {
+    NamedTimer fcnTimer(__func__);
+
+    // compute threshold
+    double threshold = 0.0;
+    {
+        ostringstream s;
+        s << "select sum(ps_supplycost * ps_availqty) * " << fraction << " "
+          << "from PARTSUPP, SUPPLIER, NATION "
+          << "where ps_suppkey = s_suppkey and s_nationkey = n_nationkey and n_name = '"
+          << name << "'";
+
+        DBResult * dbres;
+        {
+          NamedTimer t(__func__, "execute");
+          conn.execute(s.str(), dbres);
+        }
+        ResType res;
+        {
+          NamedTimer t(__func__, "unpack");
+          res = dbres->unpack();
+          assert(res.ok);
+        }
+
+        assert(res.rows.size() == 1);
+        threshold = resultFromStr<double>(res.rows[0][0].data);
+    }
+
+    ostringstream s;
+    s << "select SQL_NO_CACHE ps_partkey, sum(ps_supplycost * ps_availqty) as value "
+      << "from PARTSUPP, SUPPLIER, NATION "
+      << "where ps_suppkey = s_suppkey and s_nationkey = n_nationkey and n_name = '" << name << "' "
+      << "group by ps_partkey having sum(ps_supplycost * ps_availqty) > " << threshold
+      //<< "order by value desc"
+      ;
+    cerr << s.str() << endl;
+
+    DBResult * dbres;
+    {
+      NamedTimer t(__func__, "execute");
+      conn.execute(s.str(), dbres);
+    }
+    ResType res;
+    {
+      NamedTimer t(__func__, "unpack");
+      res = dbres->unpack();
+      assert(res.ok);
+    }
+
+    for (auto row : res.rows) {
+      results.push_back(
+          q11entry(resultFromStr<uint64_t>(row[0].data),
+                   resultFromStr<double>(row[1].data)));
+    }
+}
+
 static void do_query_q14_opt(Connect &conn,
                              CryptoManager &cm,
                              uint32_t year,
@@ -1738,7 +1797,7 @@ static void do_query_q11_opt(Connect &conn,
         threshold = ps_value * fraction;
     }
 
-    cerr << "threshold: " << threshold << endl;
+    //cerr << "threshold: " << threshold << endl;
 
     // encrypt threshold for ps_value_OPE
     uint64_t threshold_int = (uint64_t) roundToLong(threshold * 100.0);
@@ -2071,7 +2130,7 @@ static void do_query_q2_noopt(Connect &conn,
     s << "SELECT SQL_NO_CACHE "
         << "s_acctbal_DET, s_name_DET, n_name_DET, p_partkey_DET, "
         << "p_mfgr_DET, s_address_DET, s_phone_DET, s_comment_DET, p_type_DET "
-      << "FROM part_enc, supplier_enc, partsupp_enc, nation_enc, region_enc "
+      << "FROM part_enc, supplier_enc, partsupp_enc_noopt, nation_enc, region_enc "
       << "WHERE "
         << "p_partkey_DET = ps_partkey_DET AND "
         << "s_suppkey_DET = ps_suppkey_DET AND "
@@ -2087,7 +2146,7 @@ static void do_query_q2_noopt(Connect &conn,
         << "ps_supplycost_OPE = ("
           << "SELECT "
             << "min(ps_supplycost_OPE) "
-          << "FROM partsupp_enc, supplier_enc, nation_enc, region_enc "
+          << "FROM partsupp_enc_noopt, supplier_enc, nation_enc, region_enc "
           << "WHERE "
             << "p_partkey_DET = ps_partkey_DET AND "
             << "s_suppkey_DET = ps_suppkey_DET AND "
@@ -2833,7 +2892,7 @@ static void do_query_q20_opt_noagg(Connect &conn,
     ostringstream s;
     s <<
         "select SQL_NO_CACHE ps_partkey_DET, ps_suppkey_DET, ps_availqty_DET, l_quantity_DET "
-        "from partsupp_enc, lineitem_enc "
+        "from partsupp_enc_noopt, lineitem_enc "
         "where "
         "    ps_partkey_DET = l_partkey_DET and "
         "    ps_suppkey_DET = l_suppkey_DET and "
@@ -3023,7 +3082,7 @@ static void do_query_q20_opt(Connect &conn,
     ostringstream s;
     s <<
         "select SQL_NO_CACHE ps_suppkey_DET, ps_availqty_DET, agg(l_bitpacked_AGG, " << pkinfo << ") "
-        "from partsupp_enc, lineitem_enc "
+        "from partsupp_enc_noopt, lineitem_enc "
         "where "
         "    ps_partkey_DET = l_partkey_DET and "
         "    ps_suppkey_DET = l_suppkey_DET and "
@@ -3170,6 +3229,7 @@ int main(int argc, char **argv) {
 
     static const char * Query11Strings[] = {
         "--orig-query11",
+        "--orig-query11-nosubquery",
         "--crypt-query11",
         "--crypt-opt-query11",
         "--crypt-opt-proj-query11",
@@ -3344,6 +3404,13 @@ int main(int argc, char **argv) {
           if (mode == "orig-query11") {
             for (size_t i = 0; i < nruns; i++) {
               do_query_q11(conn, nation, fraction, results);
+              ctr += results.size();
+              PRINT_RESULTS();
+              results.clear();
+            }
+          } else if (mode == "orig-query11-nosubquery") {
+            for (size_t i = 0; i < nruns; i++) {
+              do_query_q11_nosubquery(conn, nation, fraction, results);
               ctr += results.size();
               PRINT_RESULTS();
               results.clear();
