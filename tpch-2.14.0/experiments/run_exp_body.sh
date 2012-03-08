@@ -27,6 +27,8 @@ for factor in $SCALES; do
         reset_exp
         /usr/bin/time -f '%e' -o crypt.nosort.query1 -a $CDB_EXP --crypt-opt-nosort-query1 1998 1 tpch-$factor $OPE_TYPE $EXP_HOSTNAME
         reset_exp
+        /usr/bin/time -f '%e' -o crypt.packed.query1 -a $CDB_EXP --crypt-opt-row-col-packed-query1 1998 1 tpch-$factor $OPE_TYPE $EXP_HOSTNAME
+        reset_exp
 
         /usr/bin/time -f '%e' -o orig.query2 -a $CDB_EXP --orig-query2 36 STEEL ASIA 1 tpch-$factor $OPE_TYPE $EXP_HOSTNAME
         reset_exp

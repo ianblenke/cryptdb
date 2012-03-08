@@ -1114,15 +1114,15 @@ struct AggRowColPack {
   static const size_t RowsPerBlock = 3;
   static const size_t BufferSize = 1024;
 
-  //static const size_t NumBlocksInternalBuffer = 524288;
-  static const size_t NumBlocksInternalBuffer = 4194304;
+  static const size_t NumBlocksInternalBuffer = 524288;
+  //static const size_t NumBlocksInternalBuffer = 4194304;
 };
 
 my_bool
 agg_char2_row_col_pack_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
 {
-    if (args->arg_count != 4) {
-        strcpy(message, "need to provide 4 args");
+    if (args->arg_count != 5) {
+        strcpy(message, "need to provide 5 args");
         return 1;
     }
 
@@ -1134,10 +1134,19 @@ agg_char2_row_col_pack_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
         return 1;
     }
 
+    if (args->args[4] == NULL) {
+        strcpy(message, "need to provide name");
+        return 1;
+    }
+    // TODO: fix security
+    string name =
+      "/tmp/" + string(args->args[4], args->lengths[4]) +
+      "/lineitem_enc/row_col_pack/data";
+
     ZZFromBytes(as->n2, (const uint8_t *) args->args[3],
                 args->lengths[3]);
 
-    as->fp = fopen("/tmp/tpch-1.00/lineitem_enc/row_col_pack/data", "rb");
+    as->fp = fopen(name.c_str(), "rb");
     assert(as->fp);
 
     // load the first block

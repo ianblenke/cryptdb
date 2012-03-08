@@ -981,7 +981,8 @@ static void do_query_q1_opt_rowpack(Connect &conn,
 static void do_query_q1_opt_row_col_pack(Connect &conn,
                                          CryptoManager &cm,
                                          uint32_t year,
-                                         vector<q1entry> &results) {
+                                         vector<q1entry> &results,
+                                         const string& db) {
     crypto_manager_stub cm_stub(&cm, UseOldOpe);
     NamedTimer fcnTimer(__func__);
 
@@ -1009,7 +1010,7 @@ static void do_query_q1_opt_row_col_pack(Connect &conn,
         "l_returnflag_DET, "
         "l_linestatus_DET, "
         "cnt, "
-        << pkinfo <<
+        << pkinfo << ", " << "\"" << db << "\""
       ") FROM ( "
         "SELECT l_returnflag_DET, l_linestatus_DET, "
         "@cnt := @cnt + 1 AS cnt, l_shipdate_OPE FROM lineitem_enc_noagg "
@@ -3831,7 +3832,7 @@ int main(int argc, char **argv) {
             }
           } else if (mode == "crypt-opt-row-col-packed-query1") {
             for (size_t i = 0; i < nruns; i++) {
-              do_query_q1_opt_row_col_pack(conn, cm, year, results);
+              do_query_q1_opt_row_col_pack(conn, cm, year, results, db_name);
               ctr += results.size();
               PRINT_RESULTS();
               results.clear();
