@@ -666,7 +666,7 @@ agg_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error)
     }
 
     ZZ e;
-    ZZFromBytes(e, (const uint8_t *) args->args[0], args->lengths[0]);
+    ZZFromBytesFast(e, (const uint8_t *) args->args[0], args->lengths[0]);
 
     MulMod(as->sum, as->sum, e, as->n2);
     return true;
