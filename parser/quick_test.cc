@@ -177,7 +177,53 @@ static void test_larger_hom() {
     }
 }
 
+static void test_copy_zz() {
+    urandom u;
+    for (size_t i = 0; i < 10; i++) {
+      ZZ z0 = u.rand_zz_mod(to_ZZ(1) << 1024);
+      string s0 = StringFromZZFast(z0);
+      ZZ z1 = ZZFromStringFast(s0);
+      assert( z0 == z1 );
+    }
+}
+
+static void test_zz_from_compatibility() {
+    urandom u;
+
+    {
+      ZZ z0 = u.rand_zz_mod(to_ZZ(1) << 1024);
+
+      string s0 = StringFromZZ(z0);
+      assert( s0.size() <= 128 );
+      s0.resize( 128 ); // pad
+
+      ZZ t0 = ZZFromString(s0);
+      ZZ t1 = ZZFromStringFast(s0);
+
+      assert( t0 == t1 );
+    }
+
+    {
+      ZZ z0 = u.rand_zz_mod(to_ZZ(1) << (1256 * 2));
+
+      string s0 = StringFromZZ(z0);
+      assert( s0.size() <= (1256 * 2 / 8) );
+      s0.resize( 320 ); // pad + align
+
+      ZZ t0 = ZZFromString(s0);
+      ZZ t1 = ZZFromStringFast(s0);
+
+      assert( t0 == t1 );
+    }
+}
+
 int main(int argc, char **argv) {
+
+    // test copying a ZZ object directly
+    test_copy_zz();
+
+    test_zz_from_compatibility();
+
     // agg tests
     test_row_pack_hom_sum({ 1, 2, 3, 4 });
     test_row_pack_hom_sum({ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 });

@@ -122,7 +122,7 @@ TEST_SNIPPET(agg_decrypt) {
 }
 
 TEST_SNIPPET(agg_add) {
-    const string* aggs[] = {
+    static const string* aggs[] = {
         &AGG_DATA_0,
         &AGG_DATA_1,
         &AGG_DATA_2,
@@ -144,6 +144,46 @@ TEST_SNIPPET(agg_add) {
         const string& a = *aggs[_i % NELEMS(aggs)];
         ZZFromBytes(e, (const uint8_t *) a.data(), a.size());
         MulMod(sum, sum, e, n2);
+    }
+}
+
+TEST_SNIPPET(zz_from_bytes) {
+    static const string* aggs[] = {
+        &AGG_DATA_0,
+        &AGG_DATA_1,
+        &AGG_DATA_2,
+        &AGG_DATA_3,
+        &AGG_DATA_4,
+        &AGG_DATA_5,
+        &AGG_DATA_6,
+        &AGG_DATA_7,
+        &AGG_DATA_8,
+        &AGG_DATA_9,
+    };
+    REPEAT(numOps) {
+        ZZ e;
+        const string& a = *aggs[_i % NELEMS(aggs)];
+        ZZFromBytes(e, (const uint8_t *) a.data(), a.size());
+    }
+}
+
+TEST_SNIPPET(zz_from_bytes_fast) {
+    static const string* aggs[] = {
+        &AGG_DATA_0,
+        &AGG_DATA_1,
+        &AGG_DATA_2,
+        &AGG_DATA_3,
+        &AGG_DATA_4,
+        &AGG_DATA_5,
+        &AGG_DATA_6,
+        &AGG_DATA_7,
+        &AGG_DATA_8,
+        &AGG_DATA_9,
+    };
+    REPEAT(numOps) {
+        ZZ e;
+        const string& a = *aggs[_i % NELEMS(aggs)];
+        ZZFromStringFast(e, a);
     }
 }
 
@@ -211,6 +251,11 @@ int main(int argc, char** argv) {
 
 #define TIME_SNIPPET(name, numOps) \
     time_snippet(#name, name, numOps)
+
+    { // begin ZZFromBytes
+        TIME_SNIPPET(zz_from_bytes,      10000000);
+        TIME_SNIPPET(zz_from_bytes_fast, 10000000);
+    } // end ZZFromBytes
 
     { // begin DET
 
