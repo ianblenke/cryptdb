@@ -439,6 +439,18 @@ NTL::ZZ UInt64_tToZZ (uint64_t value);
 std::string StringFromZZ(const NTL::ZZ &x);
 NTL::ZZ ZZFromString(const std::string &s);
 
+std::string StringFromZZFast(const NTL::ZZ& x);
+
+void ZZFromStringFast(NTL::ZZ& x, const std::string& s);
+void ZZFromBytesFast(NTL::ZZ& x, const unsigned char *p, long n);
+
+inline NTL::ZZ ZZFromStringFast(const std::string& s) {
+  NTL::ZZ z; ZZFromStringFast(z, s); return z;
+}
+inline NTL::ZZ ZZFromBytesFast(const unsigned char *p, long n) {
+  NTL::ZZ z; ZZFromBytesFast(z, p, n); return z;
+}
+
 //rolls an interator forward
 template<typename T> void
 roll(typename std::list<T>::iterator & it,  int count)

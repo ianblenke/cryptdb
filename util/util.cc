@@ -4,6 +4,8 @@
 #include <stdexcept>
 #include <assert.h>
 
+#include <gmp.h>
+
 #include <openssl/rand.h>
 
 #include <util/util.hh>
@@ -217,7 +219,78 @@ ZZFromString(const string &s)
     return ZZFromBytes((const uint8_t *) s.data(), s.length());
 }
 
+// based on _ntl_gcopy from g_lip_impl.h
+// we duplicate this so we can avoid having to do a copy
+#define ALLOC(p) (((long *) (p))[0])
+#define SIZE(p) (((long *) (p))[1])
+#define DATA(p) ((mp_limb_t *) (((long *) (p)) + 2))
+#define STORAGE(len) ((long)(2*sizeof(long) + (len)*sizeof(mp_limb_t)))
+#define MustAlloc(c, len)  (!(c) || (ALLOC(c) >> 2) < (len))
 
+static void _ntl_gcopy_mp(mp_limb_t* a, long sa, _ntl_gbigint *bb)
+{
+   _ntl_gbigint b;
+   long abs_sa, i;
+   mp_limb_t *adata, *bdata;
+
+   b = *bb;
+
+   if (!a || sa == 0) {
+      if (b) SIZE(b) = 0;
+   }
+   else {
+      if (a != b) {
+         if (sa >= 0)
+            abs_sa = sa;
+         else
+            abs_sa = -sa;
+
+         if (MustAlloc(b, abs_sa)) {
+            _ntl_gsetlength(&b, abs_sa);
+            *bb = b;
+         }
+
+         adata = a;
+         bdata = DATA(b);
+
+         for (i = 0; i < abs_sa; i++)
+            bdata[i] = adata[i];
+
+         SIZE(b) = sa;
+      }
+   }
+}
+
+#ifndef NTL_GMP_LIP
+#error "NTL is not compiled with GMP"
+#endif
+
+string StringFromZZFast(const ZZ& x) {
+    long sa = SIZE(x.rep);
+    long abs_sa;
+    if (sa >= 0)
+      abs_sa = sa;
+    else
+      abs_sa = -sa;
+    mp_limb_t* data = DATA(x.rep);
+    return string((char *)data, abs_sa * sizeof(mp_limb_t));
+}
+
+void ZZFromStringFast(ZZ& x, const string& s) {
+    assert(s.size() % sizeof(mp_limb_t) == 0);
+    _ntl_gcopy_mp(
+        (mp_limb_t*) s.data(),
+        s.size() / sizeof(mp_limb_t),
+        &x.rep);
+}
+
+void ZZFromBytesFast(ZZ& x, const unsigned char *p, long n) {
+    assert(n % sizeof(mp_limb_t) == 0);
+    _ntl_gcopy_mp(
+        (mp_limb_t*) p,
+        n / sizeof(mp_limb_t),
+        &x.rep);
+}
 
 ZZ
 UInt64_tToZZ (uint64_t value)
