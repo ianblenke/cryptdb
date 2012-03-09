@@ -109,20 +109,6 @@ my_bool  agg_char2_row_col_pack_add(UDF_INIT *initid, UDF_ARGS *args, char *is_n
 char *   agg_char2_row_col_pack(UDF_INIT *initid, UDF_ARGS *args, char *result,
              unsigned long *length, char *is_null, char *error);
 
-my_bool  agg8_init(UDF_INIT *initid, UDF_ARGS *args, char *message);
-void     agg8_deinit(UDF_INIT *initid);
-void     agg8_clear(UDF_INIT *initid, char *is_null, char *error);
-my_bool  agg8_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error);
-char *   agg8(UDF_INIT *initid, UDF_ARGS *args, char *result,
-             unsigned long *length, char *is_null, char *error);
-
-my_bool  agg_profile_init(UDF_INIT *initid, UDF_ARGS *args, char *message);
-void     agg_profile_deinit(UDF_INIT *initid);
-void     agg_profile_clear(UDF_INIT *initid, char *is_null, char *error);
-my_bool  agg_profile_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error);
-char *   agg_profile(UDF_INIT *initid, UDF_ARGS *args, char *result,
-                     unsigned long *length, char *is_null, char *error);
-
 my_bool  agg_par_init(UDF_INIT *initid, UDF_ARGS *args, char *message);
 void     agg_par_deinit(UDF_INIT *initid);
 void     agg_par_clear(UDF_INIT *initid, char *is_null, char *error);
@@ -873,16 +859,39 @@ agg_char2(UDF_INIT *initid, UDF_ARGS *args, char *result,
     return (char *) as->rbuf;
 }
 
+struct worker_msg {
+  bool shutdown;
+  uint16_t group_key;
+  size_t idx;
+  mpz_t value;
+};
+
+struct mpz_wrapper { mpz_t mp; };
+
+struct worker_state {
+  std::map< uint16_t, std::vector< mpz_wrapper > > group_map;
+  concurrent_bounded_queue<worker_msg> q;
+  mpz_t* mod;
+};
+
 struct agg_char2_row_pack_state {
     struct per_group_state {
         std::vector< std::vector<ZZ> > running_sums;
+        std::vector< std::vector< mpz_wrapper > > running_sums_mp;
         uint64_t count;
     };
     typedef std::map<uint16_t, per_group_state> group_map;
     group_map aggs;
     uint32_t fields_mask;
     ZZ n2;
+    mpz_t n2_mp;
     void *rbuf;
+
+    // parallel data structures
+    bool run_in_parallel;
+    std::vector< pthread_t > workers;
+    std::vector< worker_state > worker_states;
+    size_t workerCnt;
 
     // internal element buffer
     typedef std::map< uint16_t, std::vector< uint64_t > > element_buffer_map;
@@ -1116,13 +1125,63 @@ struct AggRowColPack {
 
   static const size_t NumBlocksInternalBuffer = 524288;
   //static const size_t NumBlocksInternalBuffer = 4194304;
+
+  static const size_t NumThreads = 8;
 };
+
+static inline void
+MPZFromBytes(mpz_t rop, const uint8_t *p, size_t n) {
+    mpz_import(rop, n, -1, sizeof(uint8_t), 0, 0, p);
+}
+
+static inline void
+BytesFromMPZ(uint8_t* p, mpz_t rop, size_t n) {
+    size_t count;
+    mpz_export(p, &count, -1, n, -1, 0, rop);
+    assert(count == 1);
+}
+
+static inline void
+InitMPZRunningSums(vector<mpz_wrapper>& v) {
+    v.resize( (0x1 << AggRowColPack::RowsPerBlock) - 1 );
+    for (size_t i = 0; i < (0x1 << AggRowColPack::RowsPerBlock) - 1; i++) {
+      mpz_init_set_ui(v[i].mp, 1);
+    }
+}
+
+static void* worker_main(void* p) {
+  worker_state* ctx = (worker_state *) p;
+  worker_msg m;
+  while (true) {
+    ctx->q.pop(m);
+    if (m.shutdown) break;
+    else {
+      auto it = ctx->group_map.find(m.group_key);
+      vector< mpz_wrapper >* v = NULL;
+      if (it == ctx->group_map.end()) {
+        // init it
+        v = &ctx->group_map[m.group_key]; // create
+        InitMPZRunningSums(*v);
+      } else {
+        v = &it->second;
+      }
+
+      vector<mpz_wrapper>& vr = *v;
+      mpz_mul(vr[m.idx].mp, vr[m.idx].mp, m.value);
+      mpz_mod(vr[m.idx].mp, vr[m.idx].mp, *ctx->mod);
+
+      // need to free value (but not mod)
+      mpz_clear(m.value);
+    }
+  }
+  return NULL;
+}
 
 my_bool
 agg_char2_row_col_pack_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
 {
-    if (args->arg_count != 5) {
-        strcpy(message, "need to provide 5 args");
+    if (args->arg_count != 6) {
+        strcpy(message, "need to provide 6 args");
         return 1;
     }
 
@@ -1138,13 +1197,37 @@ agg_char2_row_col_pack_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
         strcpy(message, "need to provide name");
         return 1;
     }
+
+    if (args->args[5] == NULL) {
+        strcpy(message, "need to provide parallelism flag");
+        return 1;
+    }
+
     // TODO: fix security
     string name =
       "/tmp/" + string(args->args[4], args->lengths[4]) +
       "/lineitem_enc/row_col_pack/data";
 
-    ZZFromBytes(as->n2, (const uint8_t *) args->args[3],
-                args->lengths[3]);
+    as->run_in_parallel = *((long long *) args->args[5]);
+
+    if (as->run_in_parallel) {
+      // must use mpz for parallel (since ZZ is not thread-safe)
+      mpz_init(as->n2_mp);
+      MPZFromBytes(as->n2_mp, (const uint8_t *) args->args[3],
+                   args->lengths[3]);
+
+      // init the worker threads
+      as->workers.resize(AggRowColPack::NumThreads);
+      as->worker_states.resize(AggRowColPack::NumThreads);
+      for (size_t i = 0; i < AggRowColPack::NumThreads; i++) {
+        as->worker_states[i].mod = &as->n2_mp;
+        pthread_create(&as->workers[i], NULL, worker_main, &as->worker_states[i]);
+      }
+      as->workerCnt = 0;
+    } else {
+      ZZFromBytes(as->n2, (const uint8_t *) args->args[3],
+                  args->lengths[3]);
+    }
 
     as->fp = fopen(name.c_str(), "rb");
     assert(as->fp);
@@ -1173,6 +1256,9 @@ void
 agg_char2_row_col_pack_deinit(UDF_INIT *initid)
 {
     agg_char2_row_pack_state *as = (agg_char2_row_pack_state *) initid->ptr;
+
+    if (as->run_in_parallel) mpz_clear(as->n2_mp);
+
     free(as->rbuf);
     free(as->internal_buffer);
     fclose(as->fp);
@@ -1211,10 +1297,13 @@ static void flush_group_buffers(agg_char2_row_pack_state *as) {
       agg_char2_row_pack_state::per_group_state* s = NULL;
       if (UNLIKELY(it == as->aggs.end())) {
           s = &as->aggs[eit->first]; // creates on demand
-          vector<ZZ> cpy;
-          // the index is...
-          cpy.resize((0x1 << AggRowColPack::RowsPerBlock) - 1, to_ZZ(1));
-          s->running_sums.resize(1, cpy);
+          if (as->run_in_parallel) {
+            s->running_sums_mp.resize(1);
+            InitMPZRunningSums(s->running_sums_mp[0]);
+          } else {
+            s->running_sums.resize(1);
+            s->running_sums[0].resize((0x1 << AggRowColPack::RowsPerBlock) - 1, to_ZZ(1));
+          }
           s->count = 0;
       } else {
           s = &it->second;
@@ -1316,18 +1405,31 @@ static void flush_group_buffers(agg_char2_row_pack_state *as) {
           alloc_map[i];
         if (group.second.empty() ||
             group.second.front().first != minSoFar) continue;
-        agg_char2_row_pack_state::per_group_state& s = as->aggs[group.first];
 
         // use group.second.front().second - 1 as an index into the running
         // sums vector
 
-        ZZ &sum = s.running_sums[0][group.second.front().second - 1];
-        ZZ e;
-        ZZFromBytes(
-            e,
-            (const uint8_t *) as->block_buf,
-            AggRowColPack::AggSize);
-        MulMod(sum, sum, e, as->n2);
+        if (as->run_in_parallel) {
+          worker_msg m;
+          m.shutdown  = false;
+          m.group_key = group.first;
+          m.idx       = group.second.front().second - 1;
+          mpz_init2(m.value, AggRowColPack::AggSize * 8);
+          MPZFromBytes(
+              m.value,
+              (const uint8_t *) as->block_buf,
+              AggRowColPack::AggSize);
+          as->worker_states[ as->workerCnt++ % AggRowColPack::NumThreads ].q.push(m);
+        } else {
+          agg_char2_row_pack_state::per_group_state& s = as->aggs[group.first];
+          ZZ &sum = s.running_sums[0][group.second.front().second - 1];
+          ZZ e;
+          ZZFromBytes(
+              e,
+              (const uint8_t *) as->block_buf,
+              AggRowColPack::AggSize);
+          MulMod(sum, sum, e, as->n2);
+        }
 
         // stats
         as->st.mults++;
@@ -1388,6 +1490,36 @@ agg_char2_row_col_pack(UDF_INIT *initid, UDF_ARGS *args, char *result,
     // flush all buffers
     flush_group_buffers(as);
 
+    if (as->run_in_parallel) {
+      // wait until workers are done
+      worker_msg m;
+      m.shutdown = true;
+
+      for (size_t i = 0; i < AggRowColPack::NumThreads; i++) {
+        // signal all threads to stop
+        as->worker_states[i].q.push(m);
+      }
+
+      for (size_t i = 0; i < AggRowColPack::NumThreads; i++) {
+        // wait until computation is done
+        pthread_join(as->workers[i], NULL);
+      }
+
+      for (size_t i = 0; i < AggRowColPack::NumThreads; i++) {
+        // merge (aggregate) results from workers into main results
+        worker_state& s = as->worker_states[i];
+        for (map< uint16_t, vector<mpz_wrapper> >::iterator it = s.group_map.begin();
+             it != s.group_map.end(); ++it) {
+          vector<mpz_wrapper>& v = as->aggs[it->first].running_sums_mp[0];
+          assert( v.size() == it->second.size() );
+          for (size_t i = 0; i < v.size(); i++) {
+            mpz_mul(v[i].mp, v[i].mp, it->second[i].mp);
+            mpz_mod(v[i].mp, v[i].mp, as->n2_mp);
+          }
+        }
+      }
+    }
+
     *length =
         (2 /* group key */ +
          sizeof(uint64_t) /* group count */ +
@@ -1397,6 +1529,7 @@ agg_char2_row_col_pack(UDF_INIT *initid, UDF_ARGS *args, char *result,
          AggRowColPack::AggSize)) * as->aggs.size();
 
     //as->debug_stream << "seeks = " << as->st.seeks << endl;
+    as->debug_stream << "run_in_parallel = " << (as->run_in_parallel ? "yes" : "no") << endl;
     as->debug_stream << "length = " << *length << endl;
     as->debug_stream << "mults = " << as->st.mults << endl;
     as->debug_stream << "all_pos = " << as->st.all_pos << endl;
@@ -1421,158 +1554,43 @@ agg_char2_row_col_pack(UDF_INIT *initid, UDF_ARGS *args, char *result,
         *u32p = (0x1 << AggRowColPack::RowsPerBlock) - 1;
         ptr += sizeof(uint32_t);
 
-        size_t s = it->second.running_sums[0].size();
-        assert(s == ((0x1 << AggRowColPack::RowsPerBlock) - 1));
-        for (size_t idx = 0; idx < s; idx++) {
-            uint32_t *iptr = (uint32_t *) ptr;
-            *iptr = (idx + 1);
-            ptr += sizeof(uint32_t);
-
-            BytesFromZZ(ptr, it->second.running_sums[0][idx], AggRowColPack::AggSize);
-            ptr += AggRowColPack::AggSize;
+        if (as->run_in_parallel) {
+          size_t s = it->second.running_sums_mp[0].size();
+          assert(s == ((0x1 << AggRowColPack::RowsPerBlock) - 1));
+          for (size_t idx = 0; idx < s; idx++) {
+              uint32_t *iptr = (uint32_t *) ptr;
+              *iptr = (idx + 1);
+              ptr += sizeof(uint32_t);
+              BytesFromMPZ(ptr, it->second.running_sums_mp[0][idx].mp, AggRowColPack::AggSize);
+              ptr += AggRowColPack::AggSize;
+          }
+        } else {
+          size_t s = it->second.running_sums[0].size();
+          assert(s == ((0x1 << AggRowColPack::RowsPerBlock) - 1));
+          for (size_t idx = 0; idx < s; idx++) {
+              uint32_t *iptr = (uint32_t *) ptr;
+              *iptr = (idx + 1);
+              ptr += sizeof(uint32_t);
+              BytesFromZZ(ptr, it->second.running_sums[0][idx], AggRowColPack::AggSize);
+              ptr += AggRowColPack::AggSize;
+          }
         }
     }
+
+    if (as->run_in_parallel) {
+      // need to clear worker states
+      for (size_t i = 0; i < AggRowColPack::NumThreads; i++) {
+        worker_state& s = as->worker_states[i];
+        for (map<uint16_t, vector<mpz_wrapper> >::iterator it = s.group_map.begin();
+             it != s.group_map.end(); ++it) {
+          for (vector<mpz_wrapper>::iterator iit = it->second.begin();
+               iit != it->second.end(); ++iit) {
+            mpz_clear(iit->mp);
+          }
+        }
+      }
+    }
     return (char *) as->rbuf;
-}
-
-// agg8()
-
-my_bool
-agg8_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
-{
-    return agg_init(initid, args, message);
-}
-
-void
-agg8_deinit(UDF_INIT *initid)
-{
-    agg_deinit(initid);
-}
-
-void
-agg8_clear(UDF_INIT *initid, char *is_null, char *error)
-{
-    agg_clear(initid, is_null, error);
-}
-
-//args will be element to add, constant N2
-my_bool
-agg8_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error)
-{
-    // means we don't add
-    if (args->args[0] == NULL) return true;
-    SANITY(args->arg_count == (8 + 1));
-
-    uint8_t buf[CryptoManager::Paillier_len_bytes];
-
-    // copy args into buf
-    for (size_t i = 0; i < 8; i++) {
-        // each individual buffer is 32-bytes (8 * 32 = 256 = Paillier_len_bytes)
-        SANITY(args->lengths[i] == 32);
-        memcpy(buf + (i * 32), args->args[i], 32);
-    }
-
-    agg_state *as = (agg_state *) initid->ptr;
-    if (!as->n2_set) {
-        ZZFromBytes(as->n2, (const uint8_t *) args->args[8],
-                    args->lengths[8]);
-        as->n2_set = 1;
-    }
-
-    ZZ e;
-    ZZFromBytes(e, (const uint8_t *) buf, sizeof(buf));
-
-    MulMod(as->sum, as->sum, e, as->n2);
-    return true;
-}
-
-char *
-agg8(UDF_INIT *initid, UDF_ARGS *args, char *result,
-    unsigned long *length, char *is_null, char *error)
-{
-    return agg(initid, args, result, length, is_null, error);
-}
-
-// agg_profile()
-
-struct agg_profile_state {
-  struct agg_state agg;
-  uint64_t start;
-  uint64_t realstart;
-};
-
-static uint64_t cur_usec() {
-    //struct timeval tv;
-    //gettimeofday(&tv, 0);
-    //return ((uint64_t)tv.tv_sec) * 1000000 + tv.tv_usec;
-
-  struct timespec t;
-  clock_gettime(CLOCK_MONOTONIC, &t);
-  return ((uint64_t)t.tv_sec) * 1000000 + (t.tv_nsec / 1000);
-}
-
-my_bool
-agg_profile_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
-{
-    agg_profile_state *as = new agg_profile_state();
-    as->realstart = as->start = cur_usec();
-    as->agg.rbuf = malloc(sizeof(uint64_t) + CryptoManager::Paillier_len_bytes);
-    initid->ptr = (char *) as;
-    return 0;
-}
-
-void
-agg_profile_deinit(UDF_INIT *initid)
-{
-    agg_profile_state *as = (agg_profile_state *) initid->ptr;
-    uint64_t now = cur_usec();
-    uint64_t diff = now - as->realstart;
-    cout << "total: " << diff << endl;
-    free(as->agg.rbuf);
-    delete as;
-}
-
-void
-agg_profile_clear(UDF_INIT *initid, char *is_null, char *error)
-{
-    agg_profile_state *as = (agg_profile_state *) initid->ptr;
-    as->start = cur_usec();
-    as->agg.sum = to_ZZ(1);
-    as->agg.n2_set = 0;
-}
-
-//args will be element to add, constant N2
-my_bool
-agg_profile_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error)
-{
-    agg_profile_state *as = (agg_profile_state *) initid->ptr;
-    if (!as->agg.n2_set) {
-        ZZFromBytes(as->agg.n2, (const uint8_t *) args->args[1],
-                    args->lengths[1]);
-        as->agg.n2_set = 1;
-    }
-
-    ZZ e;
-    ZZFromBytes(e, (const uint8_t *) args->args[0], args->lengths[0]);
-
-    MulMod(as->agg.sum, as->agg.sum, e, as->agg.n2);
-    return true;
-}
-
-char *
-agg_profile(UDF_INIT *initid, UDF_ARGS *args, char *result,
-            unsigned long *length, char *is_null, char *error)
-{
-    agg_profile_state *as = (agg_profile_state *) initid->ptr;
-    uint64_t now = cur_usec();
-    uint64_t *p = (uint64_t*) as->agg.rbuf;
-    cout << (now - as->start) << endl;
-    *p = now - as->start;
-
-    BytesFromZZ(((uint8_t*)as->agg.rbuf) + sizeof(uint64_t), as->agg.sum,
-                CryptoManager::Paillier_len_bytes);
-    *length = sizeof(uint64_t) + CryptoManager::Paillier_len_bytes;
-    return (char *) as->agg.rbuf;
 }
 
 // --------------------------------------------------

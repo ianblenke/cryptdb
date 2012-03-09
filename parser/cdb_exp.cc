@@ -1010,7 +1010,7 @@ static void do_query_q1_opt_row_col_pack(Connect &conn,
         "l_returnflag_DET, "
         "l_linestatus_DET, "
         "cnt, "
-        << pkinfo << ", " << "\"" << db << "\""
+        << pkinfo << ", " << "\"" << db << "\", 1"
       ") FROM ( "
         "SELECT l_returnflag_DET, l_linestatus_DET, "
         "@cnt := @cnt + 1 AS cnt, l_shipdate_OPE FROM lineitem_enc_noagg "
