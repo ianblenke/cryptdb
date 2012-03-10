@@ -16,6 +16,7 @@
 #include <parser/cdb_rewrite.hh>
 #include <parser/cdb_helpers.hh>
 #include <crypto/paillier.hh>
+#include <util/executor.hpp>
 #include <util/util.hh>
 
 using namespace std;
@@ -1418,6 +1419,56 @@ static struct q11entry_sorter {
   }
 } q11entry_functor;
 
+struct _q11_noopt_task {
+  _q11_noopt_task() : totalSum(0.0) {}
+  void operator()() {
+      for (auto row : rows) {
+        // ps_partkey
+        uint64_t ps_partkey = decryptRowFromTo<uint64_t, 4>(
+                row[0].data,
+                12345,
+                fieldname(partsupp::ps_partkey, "DET"),
+                TYPE_INTEGER,
+                SECLEVEL::DETJOIN,
+                getMin(oDET),
+                *cm);
+
+        // ps_supplycost
+        uint64_t ps_supplycost_int = decryptRow<uint64_t, 7>(
+                row[1].data,
+                12345,
+                fieldname(partsupp::ps_supplycost, "DET"),
+                TYPE_INTEGER,
+                oDET,
+                *cm);
+        double ps_supplycost = ((double)ps_supplycost_int)/100.0;
+
+        // ps_availqty
+        uint64_t ps_availqty = decryptRow<uint64_t, 4>(
+                row[2].data,
+                12345,
+                fieldname(partsupp::ps_availqty, "DET"),
+                TYPE_INTEGER,
+                oDET,
+                *cm);
+
+        double value = ps_supplycost * ((double)ps_availqty);
+
+        auto it = aggState.find(ps_partkey);
+        if (it == aggState.end()) {
+          aggState[ps_partkey] = value;
+        } else {
+          it->second += value;
+        }
+        totalSum += value;
+      }
+  }
+  CryptoManager* cm;
+  vector< vector< SqlItem > > rows;
+  map<uint64_t, double> aggState;
+  double totalSum;
+};
+
 static void do_query_q11_noopt(Connect &conn,
                                CryptoManager &cm,
                                const string &name,
@@ -1459,9 +1510,56 @@ static void do_query_q11_noopt(Connect &conn,
       assert(res.ok);
     }
 
+    static const bool DoParallel = true;
+    static const size_t NumThreads = 8;
     map<uint64_t, double> aggState;
     double totalSum = 0.0;
-    {
+
+    if (DoParallel) {
+      NamedTimer t(__func__, "decrypt");
+
+      using namespace exec_service;
+
+      vector<_q11_noopt_task> tasks( NumThreads );
+      size_t blockSize = res.rows.size() / 8;
+      for (size_t i = 0; i < NumThreads; i++) {
+        tasks[i].cm = &cm;
+        size_t start = i * blockSize;
+        if (i == NumThreads - 1) {
+          // last thread
+          tasks[i].rows.insert(
+              tasks[i].rows.begin(),
+              res.rows.begin() + start,
+              res.rows.end());
+        } else {
+          tasks[i].rows.insert(
+              tasks[i].rows.begin(),
+              res.rows.begin() + start,
+              res.rows.begin() + start + blockSize);
+        }
+      }
+
+      Exec<_q11_noopt_task>::DefaultExecutor exec( NumThreads );
+      exec.start();
+      for (size_t i = 0; i < NumThreads; i++) {
+        exec.submit(tasks[i]);
+      }
+      exec.stop(); // blocks until completion
+
+      // merge results
+      for (size_t i = 0; i < NumThreads; i++) {
+        for (map<uint64_t, double>::iterator it = tasks[i].aggState.begin();
+             it != tasks[i].aggState.end(); ++it) {
+          auto it0 = aggState.find(it->first);
+          if (it0 == aggState.end()) {
+            aggState[it->first] = it->second;
+          } else {
+            it0->second += it->second;
+          }
+        }
+        totalSum += tasks[i].totalSum;
+      }
+    } else {
       NamedTimer t(__func__, "decrypt");
       for (auto row : res.rows) {
 

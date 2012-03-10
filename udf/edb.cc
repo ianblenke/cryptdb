@@ -1126,7 +1126,7 @@ struct AggRowColPack {
   static const size_t NumBlocksInternalBuffer = 524288;
   //static const size_t NumBlocksInternalBuffer = 4194304;
 
-  static const size_t NumThreads = 8;
+  static const size_t NumThreads = 16;
 };
 
 static inline void
