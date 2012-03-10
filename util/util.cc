@@ -265,6 +265,13 @@ static void _ntl_gcopy_mp(mp_limb_t* a, long sa, _ntl_gbigint *bb)
 #error "NTL is not compiled with GMP"
 #endif
 
+string padForZZ(string s) {
+    if (s.size() % sizeof(mp_limb_t) == 0) {return s;}
+    int n = ((s.size()/sizeof(mp_limb_t)) + 1)*sizeof(mp_limb_t);
+    s.resize(n);
+    return s;
+}
+
 string StringFromZZFast(const ZZ& x) {
     long sa = SIZE(x.rep);
     long abs_sa;
@@ -284,8 +291,13 @@ void ZZFromStringFast(ZZ& x, const string& s) {
         &x.rep);
 }
 
+//Faster function, if p is 8-byte aligned; if not go for the slower one
+// TODO: figure out how to pad non-8-byte aligned p
 void ZZFromBytesFast(ZZ& x, const unsigned char *p, long n) {
-    assert(n % sizeof(mp_limb_t) == 0);
+    if (n % sizeof(mp_limb_t) != 0) {
+        x = ZZFromBytes((const uint8_t *) p, n);
+        return;
+    }
     _ntl_gcopy_mp(
         (mp_limb_t*) p,
         n / sizeof(mp_limb_t),
@@ -1143,9 +1155,9 @@ hasApostrophe(const string &data)
 string
 homomorphicAdd(const string &val1, const string &val2, const string &valn2)
 {
-    ZZ z1 = ZZFromString(val1);
-    ZZ z2 = ZZFromString(val2);
-    ZZ n2 = ZZFromString(valn2);
+    ZZ z1 = ZZFromStringFast(padForZZ(val1));
+    ZZ z2 = ZZFromStringFast(padForZZ(val2));
+    ZZ n2 = ZZFromStringFast(padForZZ(valn2));
     ZZ res = MulMod(z1, z2, n2);
     return StringFromZZ(res);
 }

@@ -1105,7 +1105,7 @@ CryptoManager::setMasterKey(const string &masterKeyArg)
     RAND_seed((const uint8_t *) masterKeyArg.c_str(),
               (int) masterKeyArg.size());
 
-    SetSeed(ZZFromString(masterKeyArg));
+    SetSeed(ZZFromStringFast(padForZZ(masterKeyArg)));
 }
 
 AES_KEY * CryptoManager::getKey(const string & key) {
@@ -1463,7 +1463,7 @@ CryptoManager::decrypt_Paillier(const string &ciphertext)
 void
 CryptoManager::decrypt_Paillier(const string &ciphertext, ZZ &m)
 {
-    ZZ c = ZZFromString(ciphertext);
+    ZZ c = ZZFromStringFast(padForZZ(ciphertext));
 
     ZZ mp =
         (Paillier_Lfast(PowerMod(c % Paillier_p2, Paillier_fast ? Paillier_a : (Paillier_p-1), Paillier_p2),

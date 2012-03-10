@@ -783,9 +783,9 @@ latency_Paillier(unsigned int notests, unsigned int notestsagg) {
     string res;
     t.lap();
 
-    ZZ a = ZZFromString(enc);
-    ZZ b = ZZFromString(enc);
-    ZZ n2 = ZZFromString(cm->getPKInfo());
+    ZZ a = ZZFromStringFast(padForZZ(enc));
+    ZZ b = ZZFromStringFast(padForZZ(enc));
+    ZZ n2 = ZZFromStringFast(padForZZ(cm->getPKInfo()));
 
     for (unsigned int i = 0; i < notestsagg ; i++) {
         a = MulMod(a, b, n2);

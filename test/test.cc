@@ -170,10 +170,10 @@ test_HGD()
 {
     unsigned int len = 16;     //bytes
     unsigned int bitsPrecision = len * bitsPerByte + 10;
-    ZZ K = ZZFromString(randomBytes(len));
-    ZZ N1 = ZZFromString(randomBytes(len));
-    ZZ N2 = ZZFromString(randomBytes(len));
-    ZZ SEED = ZZFromString(randomBytes(len));
+    ZZ K = ZZFromStringFast(padForZZ(randomBytes(len)));
+    ZZ N1 = ZZFromStringFast(padForZZ(randomBytes(len)));
+    ZZ N2 = ZZFromStringFast(padForZZ(randomBytes(len)));
+    ZZ SEED = ZZFromStringFast(padForZZ(randomBytes(len)));
 
     ZZ sample = HGD(K, N1, N2, SEED, len*bitsPerByte, bitsPrecision);
 
@@ -191,10 +191,10 @@ test_HGD()
         K = N1+ N2+1;
         while (K > N1+N2) {
             cerr << "test " << i << "\n";
-            K = ZZFromString(randomBytes(len));
-            N1 = ZZFromString(randomBytes(len));
-            N2 = ZZFromString(randomBytes(len));
-            SEED = ZZFromString(randomBytes(len));
+            K = ZZFromStringFast(padForZZ(randomBytes(len)));
+            N1 = ZZFromStringFast(padForZZ(randomBytes(len)));
+            N2 = ZZFromStringFast(padForZZ(randomBytes(len)));
+            SEED = ZZFromStringFast(padForZZ(randomBytes(len)));
         }
 
         clock_t currentTime = clock();

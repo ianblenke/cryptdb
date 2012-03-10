@@ -15,7 +15,7 @@ struct tree_node;
 
 class ope_lookup_failure {};
 
-static int
+static inline int
 ffsl(uint64_t mask)
 {
 	int bit;

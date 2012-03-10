@@ -116,10 +116,10 @@ class OPEInternals {
         if (AES_BLOCK_BYTES >= desiredBytes) {
             string seed_s((char *)seed, AES_BLOCK_BYTES);
             seed_s.resize(desiredBytes, 0);
-            return ZZFromBytes((const uint8_t *)seed_s.c_str(), desiredBytes);
+            return ZZFromBytesFast((const uint8_t *)seed_s.c_str(), desiredBytes);
         }
         //need to generate more randomness using a PRG
-        SetSeed(ZZFromBytes(seed, AES_BLOCK_BYTES));
+        SetSeed(ZZFromBytesFast(seed, AES_BLOCK_BYTES));
 
         return RandomLen_ZZ(desiredNoBits);
         // cerr << "seed " << stringToByteInts(string((char *)seed, AES_BLOCK_BYTES)) << " buf "
@@ -263,8 +263,8 @@ string
 OPE::encrypt(const string &plaintext)
 {
     //transford plaintext to ZZ
-    ZZ m = ZZFromBytes((const uint8_t *) plaintext.data(),
-                       iOPE->OPEPlaintextSize/bitsPerByte);
+    ZZ m = ZZFromBytesFast((const uint8_t *) plaintext.data(),
+                           iOPE->OPEPlaintextSize/bitsPerByte);
 
     //cerr << "ZZ to encrypt " << m << "\n";
     //cerr <<" size in bytes " << iOPE->OPEPlaintextSize/bitsPerByte << "\n";
@@ -326,8 +326,8 @@ string
 OPE::decrypt(const string &ciphertext)
 {
     //transform plaintext to ZZ
-    ZZ c = ZZFromBytes((const uint8_t *) ciphertext.data(),
-                       iOPE->OPECiphertextSize/bitsPerByte);
+    ZZ c = ZZFromBytesFast((const uint8_t *) ciphertext.data(),
+                           iOPE->OPECiphertextSize/bitsPerByte);
 
     //cerr << "TO DECRYPT " << c << "\n";
 

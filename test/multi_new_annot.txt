@@ -22,6 +22,11 @@ insert into users values ('bob', 2);
 insert into privmsg values (1, 2, 1);
 insert into msgs values (1, 'hello!');
 
+update msgs set msgtext='hi there~' where msgid = 1;
+select * from msgs;
+update msgs set msgtext='hello!' where msgtext = 'hi there~' and msgid = 1;
+select * from msgs;
+
 select * from privmsg;
 select * from users;
 select msgid, msgtext from msgs;
@@ -56,7 +61,7 @@ insert into msgs values (1, 'hi there');
 insert into msgs values (2, 'hi to you too');
 select * from msgs;
 
-update msgs set msgtext='hello!' where msgid = 1;
+update msgs set msgtext = 'sadface', msgid = 2 where msgid = 1;
 select * from msgs;
 
 drop table privmsg;

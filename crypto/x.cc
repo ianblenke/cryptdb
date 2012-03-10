@@ -20,6 +20,7 @@
 #include <crypto/ffx.hh>
 #include <crypto/online_ope.hh>
 #include <crypto/padding.hh>
+#include <crypto/mont.hh>
 #include <util/timer.hh>
 #include <NTL/ZZ.h>
 #include <NTL/RR.h>
@@ -134,7 +135,7 @@ test_hgd()
     s = HGD(to_ZZ(100), to_ZZ(100), to_ZZ(0), &r);
     assert(s == 100);
 }
-/*
+
 static void
 test_paillier()
 {
@@ -158,8 +159,17 @@ test_paillier()
     ZZ v0 = u.rand_zz_mod(to_ZZ(1) << 256);
     ZZ v1 = u.rand_zz_mod(to_ZZ(1) << 256);
     assert(pp.decrypt(p.mul(p.encrypt(v0), v1)) == v0 * v1);
-    }*/
-/*
+
+    ZZ a = p.encrypt(pt0);
+    ZZ b = p.encrypt(pt1);
+    timer sumperf;
+    for (int i = 0; i < 1000; i++) {
+        a = p.add(a, b);
+    }
+    cout << "paillier add: "
+         << ((double) sumperf.lap()) / 1000 << " usec" << endl;
+}
+
 static void
 test_paillier_packing()
 {
@@ -221,7 +231,45 @@ test_paillier_packing()
         assert(decagg == to_ZZ(plainagg));
     }
 }
-*/
+
+static void
+test_montgomery()
+{
+    urandom u;
+    ZZ m = RandomPrime_ZZ(2048);
+    montgomery mm(m);
+
+    for (int i = 0; i < 1000; i++) {
+        ZZ a = u.rand_zz_mod(m);
+        ZZ b = u.rand_zz_mod(m);
+        ZZ ma = mm.to_mont(a);
+        ZZ mb = mm.to_mont(b);
+        assert(a == mm.from_mont(ma));
+        assert(b == mm.from_mont(mb));
+
+        ZZ ab = MulMod(a, b, m);
+        ZZ mab = mm.mmul(ma, mb);
+        assert(ab == mm.from_mont(mab));
+    }
+
+    cout << "montgomery ok" << endl;
+
+    ZZ x = u.rand_zz_mod(m);
+    ZZ mx = mm.to_mont(x);
+
+    timer tplain;
+    ZZ p = x;
+    for (int i = 0; i < 100000; i++)
+        p = MulMod(p, x, m);
+    cout << "regular multiply: " << tplain.lap() << " usec for 100k" << endl;
+
+    timer tmont;
+    ZZ mp = mx;
+    for (int i = 0; i < 100000; i++)
+        mp = mm.mmul(mp, mx);
+    cout << "montgomery multiply: " << tmont.lap() << " usec for 100k" << endl;
+}
+
 static void
 test_bn()
 {
@@ -435,8 +483,7 @@ test_online_ope_rebalance()
     ope_server<uint16_t> ope_serv;
     ope_client<uint16_t, ffx2_block_cipher<blowfish, 16>> ope_clnt(&fk, &ope_serv);
 
-    cerr << "before encrypting \n";
-    //only manual testing so far -- when balancing is implemented this will be automated
+    // only manual testing so far -- when balancing is implemented this will be automated
     ope_clnt.encrypt(10);
     ope_clnt.encrypt(20);
     ope_clnt.encrypt(30);
@@ -479,8 +526,9 @@ main(int ac, char **av)
     test_bn();
     test_ecjoin();
     test_search();
-//    test_paillier();
-//    test_paillier_packing();
+    test_paillier();
+    test_paillier_packing();
+    test_montgomery();
     test_skip32();
     test_online_ope();
     test_ffx();

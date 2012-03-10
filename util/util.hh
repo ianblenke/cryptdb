@@ -439,6 +439,8 @@ NTL::ZZ UInt64_tToZZ (uint64_t value);
 std::string StringFromZZ(const NTL::ZZ &x);
 NTL::ZZ ZZFromString(const std::string &s);
 
+std::string padForZZ(std::string s);
+
 std::string StringFromZZFast(const NTL::ZZ& x);
 
 void ZZFromStringFast(NTL::ZZ& x, const std::string& s);

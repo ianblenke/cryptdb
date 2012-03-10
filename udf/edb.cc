@@ -646,8 +646,8 @@ agg_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error)
 
     agg_state *as = (agg_state *) initid->ptr;
     if (!as->n2_set) {
-        ZZFromBytes(as->n2, (const uint8_t *) args->args[1],
-                    args->lengths[1]);
+        ZZFromBytesFast(as->n2, (const uint8_t *) args->args[1],
+                        args->lengths[1]);
         as->n2_set = 1;
     }
 
@@ -1927,9 +1927,9 @@ func_add_set(UDF_INIT *initid, UDF_ARGS *args,
 
     uint64_t n2len = args->lengths[2];
     ZZ field, val, n2;
-    ZZFromBytes(field, (const uint8_t *) args->args[0], args->lengths[0]);
-    ZZFromBytes(val, (const uint8_t *) args->args[1], args->lengths[1]);
-    ZZFromBytes(n2, (const uint8_t *) args->args[2], args->lengths[2]);
+    ZZFromBytesFast(field, (const uint8_t *) args->args[0], args->lengths[0]);
+    ZZFromBytesFast(val, (const uint8_t *) args->args[1], args->lengths[1]);
+    ZZFromBytesFast(n2, (const uint8_t *) args->args[2], args->lengths[2]);
 
     ZZ res;
     MulMod(res, field, val, n2);
