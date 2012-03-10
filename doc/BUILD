@@ -2,7 +2,7 @@ Packages needed for Ubuntu:
 
   % apt-get install liblua5.1-0-dev libntl-dev libmysqlclient-dev \
                     libssl-dev libbsd-dev libevent-dev libglib2.0-dev \
-                    libtbb-dev
+                    libtbb-dev libgmp-dev
 
 You will need to install mysql-proxy from source, because
 versions prior to 0.9.0 have various bugs that break CryptDB:
