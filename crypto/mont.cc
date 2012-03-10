@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <assert.h>
 #include <crypto/mont.hh>
 
@@ -19,15 +20,19 @@ montgomery::from_mont(const ZZ &a)
 ZZ
 montgomery::mmul(const ZZ &a, const ZZ &b)
 {
-    ZZ abr = a * b;
-    ZZ l = trunc_ZZ(abr, _mbits);   // low bits that need to be shot down
-    ZZ c = l * _minusm_inv_modr_m;
+    ZZ ab = a * b;
 
-    // assert((abr + c) % _r == 0);
+    for (uint i = 0; i < _mbits; i += sizeof(long)) {
+        uint thisbits = std::min((uint) sizeof(long), _mbits - i);
+        long l = trunc_long(ab, thisbits);  // bits to cancel out
+        long c = _minusm_inv_modr * l & (~(long)0 >> (sizeof(long)-thisbits));
+        ab += _m * c;
 
-    ZZ ab = (abr + c) >> _mbits;
-    if (ab >= _m)
-        return ab - _m;
-    else
-        return ab;
+        // assert(trunc_long(ab, thisbits) == 0);
+        ab = ab >> thisbits;
+    }
+
+    while (ab >= _m)
+        ab = ab - _m;
+    return ab;
 }
