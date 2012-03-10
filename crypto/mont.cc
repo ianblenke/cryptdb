@@ -28,15 +28,17 @@ montgomery::mmul(const ZZ &a, const ZZ &b)
 {
     _static_assert( sizeof(mp_limb_t) == sizeof(long) );
     ZZ ab = a * b;
+    if (ab == 0) return ab; // to avoid testing in loop
 
     for (uint i = 0; i < _mbits; i += sizeof(long) * 8) {
         uint thisbits = std::min((uint) sizeof(long) * 8, _mbits - i);
-        long l = trunc_long(ab, thisbits);  // bits to cancel out
+        mp_limb_t* abdata = DATA(ab.rep);
+        long l = abdata[0];
         long c = _minusm_inv_modr * l & (~(long)0 >> (sizeof(long)-thisbits));
         ab += _m * c;
 
         // assert(trunc_long(ab, thisbits) == 0);
-        ab = ab >> thisbits;
+        ab >>= thisbits;
     }
 
     while (ab >= _m)
