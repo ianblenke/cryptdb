@@ -34,7 +34,9 @@ montgomery::mmul(const ZZ &a, const ZZ &b)
         uint thisbits = std::min((uint) sizeof(long) * 8, _mbits - i);
         mp_limb_t* abdata = DATA(ab.rep);
         long l = abdata[0];
-        long c = _minusm_inv_modr * l & (~(long)0 >> (sizeof(long)-thisbits));
+        long c = _minusm_inv_modr * l;
+        if (thisbits < sizeof(long) * 8)
+            c &= (((long)1) << thisbits) - 1;
         ab += _m * c;
 
         // assert(trunc_long(ab, thisbits) == 0);

@@ -11,6 +11,7 @@
 #include <stdio.h>
 
 #include <parser/cdb_rewrite.hh>
+#include <util/cryptdb_log.hh>
 
 #define UNIMPLEMENTED \
     throw runtime_error(string("Unimplemented: ") + \
@@ -159,15 +160,15 @@ sq(MYSQL *m, const string &s)
 static void
 printOnion(onion level) {
     if (level == oDET) {
-        cerr << "oDET" << endl;
+        LOG(cdb_v) << "oDET";
     } else if (level == oOPE) {
-        cerr << "oOPE" << endl;
+        LOG(cdb_v) << "oOPE";
     } else if (level == oAGG) {
-        cerr << "oAGG" << endl;
+        LOG(cdb_v) << "oAGG";
     } else if (level == oSWP) {
-        cerr << "oSWP" << endl;
+        LOG(cdb_v) << "oSWP";
     } else {
-        cerr << "NOT A KNOWN ONION" << endl;
+        LOG(cdb_v) << "NOT A KNOWN ONION";
     }
 }
 
@@ -191,20 +192,20 @@ printSecLevel(SECLEVEL l) {
         {SECLEVEL::SEMANTIC_VAL, "SEMANTIC_VAL"},
         {SECLEVEL::SECLEVEL_LAST, "SECLEVEL_LAST"} };
     if (seclevel_map.find(l) != seclevel_map.end()) {
-        cerr << seclevel_map[l];
+        LOG(cdb_v) << seclevel_map[l];
         return;
     }
-    cerr << "[not a valid seclevel]";
+    LOG(cdb_v) << "[not a valid seclevel]";
 }
 
 
 static string
 crypt(Analysis & a, string plaindata, fieldType ft, string fieldname, SECLEVEL fromlevel, SECLEVEL tolevel, bool & isBin, uint64_t salt, FieldMeta *fm, const vector<SqlItem> &res = vector<SqlItem>()) {
-    cerr << "crypt " << plaindata << " from "; printSecLevel(fromlevel); cerr << " to "; printSecLevel(tolevel); cerr << endl;
+    LOG(cdb_v) << "crypt " << plaindata << " from "; printSecLevel(fromlevel); LOG(cdb_v) << " to "; printSecLevel(tolevel);
     AES_KEY * mkey;
     if (a.mp) {
         string key;
-        //cerr << "crypt fm->fname = " << fullName(fm->fname, fm->tm->anonTableName) << endl;
+        //LOG(cdb_v) << "crypt fm->fname = " << fullName(fm->fname, fm->tm->anonTableName);
         if (a.tmkm.processingQuery) {
             key = a.mp->get_key(fullName(fm->fname, fm->tm->anonTableName), a.tmkm);
         } else {
@@ -214,7 +215,7 @@ crypt(Analysis & a, string plaindata, fieldType ft, string fieldname, SECLEVEL f
     } else {
         mkey = a.cm->getmkey();
     }
-    //cerr << "crypt '" << plaindata << "' with length before crypt " << plaindata.length() << endl;
+    //LOG(cdb_v) << "crypt '" << plaindata << "' with length before crypt " << plaindata.length();
     string c = a.cm->crypt(mkey, plaindata, ft, fieldname, fromlevel, tolevel, isBin, salt);
     return c;
 }
@@ -458,9 +459,9 @@ static inline void
 rewrite(Item **i, Analysis &a) {
     Item *i0 = itemTypes.do_rewrite(*i, a);
     if (i0 != *i) {
-        if (i0->name) {
-            cerr << "rewrite " << (*i)->name << "->" << i0->name << endl;
-        }
+        /*if (i0->name) {
+            LOG(cdb_v) << "rewrite " << (*i)->name << "->" << i0->name;
+            }*/
         i0->name = (*i)->name; // preserve the name (alias)
         *i = i0;
     }
@@ -482,7 +483,7 @@ do_optimize_const_item(T *i, Analysis &a) {
         stringstream buf;
         buf << "SELECT " << *i;
         string q(buf.str());
-        cerr << q << endl;
+        LOG(cdb_v) << q;
         MYSQL *m = a.conn();
         mysql_query_wrapper(m, q);
 
@@ -528,8 +529,8 @@ do_optimize_const_item(T *i, Analysis &a) {
 //            MYSQL_TYPE_GEOMETRY=255
 //};
 
-                cerr << "p: " << p << endl;
-                cerr << "field->type: " << field->type << endl;
+                LOG(cdb_v) << "p: " << p;
+                LOG(cdb_v) << "field->type: " << field->type;
 
                 switch (field->type) {
                     case MYSQL_TYPE_SHORT:
@@ -564,7 +565,7 @@ do_optimize_const_item(T *i, Analysis &a) {
             if (rep != NULL) return rep;
         } else {
             // some error in dealing with the DB
-            cerr << "could not retrieve result set" << endl;
+            LOG(warn) << "could not retrieve result set";
         }
     }
     return i;
@@ -593,7 +594,7 @@ record_item_meta_for_constraints(Item *i,
                                  Analysis &a)
 {
     auto c = tr.encset.extract_singleton();
-    cerr << "Need to encrypt " << *i << " with: " << c << endl;
+    LOG(cdb_v) << "Need to encrypt " << *i << " with: " << c;
     auto it = a.itemToMeta.find(i);
     ItemMeta *im;
     if (it == a.itemToMeta.end()) {
@@ -623,11 +624,11 @@ do_rewrite_type_args(T *i, Analysis &a) {
 template<class T>
 class CItemSubtype : public CItemType {
     virtual EncSet do_gather(Item *i, const constraints &tr, Analysis & a) const {
-        cerr << "CItemSubtype do_gather (L659)" << *i << " encset " << tr.encset << "\n";
+        LOG(cdb_v) << "CItemSubtype do_gather (L659)" << *i << " encset " << tr.encset;
         return do_gather_type((T*) i, tr, a);
     }
     virtual void do_enforce(Item *i, const constraints &tr, Analysis & a) const {
-        cerr << "CItemSubtype do_enforce " << *i << " encset " << tr.encset << "\n";
+        LOG(cdb_v) << "CItemSubtype do_enforce " << *i << " encset " << tr.encset;
         do_enforce_type((T*) i, tr, a);
     }
     virtual Item* do_optimize(Item *i, Analysis & a) const {
@@ -649,12 +650,12 @@ class CItemSubtype : public CItemType {
         return do_optimize_const_item(i, a);
     }
     virtual Item * do_rewrite_type(T *i, Analysis & a) const { 
-        cerr << "do_rewrite_type L676 " << *i << endl;
+        LOG(cdb_v) << "do_rewrite_type L676 " << *i;
         if (a.itemToMeta.find(i) != a.itemToMeta.end()) {
-            cerr << "itemtometa exists" << endl;
+            //cerr << "itemtometa exists" << endl;
             addToReturn(a.rmeta, 0, a.itemToMeta[i], false, i->name);
         } else {
-            cerr << "nothing in itemtometa" << endl;
+            //cerr << "nothing in itemtometa" << endl;
             addToReturn(a.rmeta, 0, NULL, false, i->name);
         }
         return i;
@@ -712,7 +713,7 @@ static class ANON : public CItemSubtypeIT<Item_field, Item::Type::FIELD_ITEM> {
     }
 
     virtual EncSet do_gather_type(Item_field *i, const constraints &tr, Analysis & a) const {
-        cerr << "CItemSubtypeIT (L730) do_gather " << *i << "\n";
+        LOG(cdb_v) << "CItemSubtypeIT (L730) do_gather " << *i;
 
         string fullfieldname = extract_fieldname(i);
 
@@ -793,14 +794,14 @@ static class ANON : public CItemSubtypeIT<Item_field, Item::Type::FIELD_ITEM> {
         it->second->exposedLevels.restrict(encpair.first,
                                            encpair.second.first);
 
-        cerr << "ENCSET FOR FIELD " << fieldname << " is " << a.fieldToAMeta[fieldname]->exposedLevels << "\n";
+        LOG(cdb_v) << "ENCSET FOR FIELD " << fieldname << " is " << a.fieldToAMeta[fieldname]->exposedLevels;
         record_item_meta_for_constraints(i, tr, a);
     }
 
     virtual Item *
     do_rewrite_type(Item_field *i, Analysis & a) const
     {
-        cerr << "do_rewrite_type L806 " << *i << endl;
+        LOG(cdb_v) << "do_rewrite_type L806 " << *i;
         auto it = a.itemHasRewrite.find(i);
         if (it == a.itemHasRewrite.end()) {
             // fix table name
@@ -838,7 +839,7 @@ static class ANON : public CItemSubtypeIT<Item_field, Item::Type::FIELD_ITEM> {
     virtual void
     do_rewrite_proj_type(Item_field *i, Analysis & a, vector<Item *> &l) const
     {
-        cerr << "do_rewrite_proj_type (L855)" << endl;
+        LOG(cdb_v) << "do_rewrite_proj_type (L855)";
         //rewrite current projection field
         l.push_back(do_rewrite_type(i, a));
 
@@ -860,7 +861,7 @@ static class ANON : public CItemSubtypeIT<Item_field, Item::Type::FIELD_ITEM> {
     virtual void
     do_rewrite_insert_type(Item_field *i, Analysis & a, vector<Item *> &l, FieldMeta *fm) const
     {
-        cerr << "do_rewrite_insert_type L701 (IT)" << endl;
+        LOG(cdb_v) << "do_rewrite_insert_type L701 (IT)";
 
         assert(fm == NULL);
         // need to map this one field into all of its onions
@@ -888,7 +889,7 @@ static class ANON : public CItemSubtypeIT<Item_field, Item::Type::FIELD_ITEM> {
 
 static class ANON : public CItemSubtypeIT<Item_string, Item::Type::STRING_ITEM> {
     virtual EncSet do_gather_type(Item_string *i, const constraints &tr, Analysis & a) const {
-        cerr << "CItemSubtypeIT (L899) const string do_gather " << *i << "\n";
+        LOG(cdb_v) << "CItemSubtypeIT (L899) const string do_gather " << *i;
         /* constant strings are always ok */
         for (auto it = a.tmkm.encForVal.begin(); it != a.tmkm.encForVal.end(); it++) {
             if (it->second == "") {
@@ -908,7 +909,7 @@ static class ANON : public CItemSubtypeIT<Item_string, Item::Type::STRING_ITEM> 
     }
 
     virtual Item * do_rewrite_type(Item_string *i, Analysis & a) const {
-        cerr << "do_rewrite_type L908" << endl;
+        LOG(cdb_v) << "do_rewrite_type L908";
         string unenc = ItemToString(i);
         string enc = encryptConstantItem(i,  a);
         if (enc != unenc) {
@@ -921,7 +922,7 @@ static class ANON : public CItemSubtypeIT<Item_string, Item::Type::STRING_ITEM> 
     virtual void
     do_rewrite_insert_type(Item_string *i, Analysis & a, vector<Item *> &l, FieldMeta *fm) const
     {
-        cerr << "do_rewrite_insert_type L880 " << *i << endl;
+        LOG(cdb_v) << "do_rewrite_insert_type L880 " << *i;
         assert(fm != NULL);
         String s;
         String *s0 = i->val_str(&s);
@@ -943,7 +944,7 @@ static class ANON : public CItemSubtypeIT<Item_string, Item::Type::STRING_ITEM> 
         {
             string anonName = fullName(it->second, fm->tm->anonTableName);
             bool isBin;
-            cerr << "field " << fm->fname << " on onion ";
+            LOG(cdb_v) << "field " << fm->fname << " on onion ";
             printOnion(it->first);
 
             string enc = crypt(a, plaindata, TYPE_TEXT, anonName, getMin(it->first), getMax(it->first), isBin, salt, fm);
@@ -970,7 +971,7 @@ static class ANON : public CItemSubtypeIT<Item_string, Item::Type::STRING_ITEM> 
 
 static class ANON : public CItemSubtypeIT<Item_num, Item::Type::INT_ITEM> {
     virtual EncSet do_gather_type(Item_num *i, const constraints &tr, Analysis & a) const {
-        cerr << "CItemSubtypeIT (L966) num do_gather " << *i << "\n";
+        LOG(cdb_v) << "CItemSubtypeIT (L966) num do_gather " << *i << "\n";
         /* constant ints are always ok */
         for (auto it = a.tmkm.encForVal.begin(); it != a.tmkm.encForVal.end(); it++) {
             if (it->second == "") {
@@ -989,14 +990,14 @@ static class ANON : public CItemSubtypeIT<Item_num, Item::Type::INT_ITEM> {
         return i;
     }
     virtual Item * do_rewrite_type(Item_num *i, Analysis & a) const {
-        cerr << "do_rewrite_type L970 " << *i << endl;
+        LOG(cdb_v) << "do_rewrite_type L970 " << *i;
         string enc = encryptConstantItem(i, a);
         return new Item_int((ulonglong) valFromStr(enc));
     }
     virtual void
     do_rewrite_insert_type(Item_num *i, Analysis & a, vector<Item *> &l, FieldMeta *fm) const
     {
-        cerr << "do_rewrite_insert_type L942 " << *i << endl;
+        LOG(cdb_v) << "do_rewrite_insert_type L942 " << *i << endl;
         //TODO: this part is quite repetitive with string or
         //any other type -- write a function
 
@@ -1034,7 +1035,7 @@ static class ANON : public CItemSubtypeIT<Item_num, Item::Type::INT_ITEM> {
 
 static class ANON : public CItemSubtypeIT<Item_decimal, Item::Type::DECIMAL_ITEM> {
     virtual EncSet do_gather_type(Item_decimal *i, const constraints &tr, Analysis & a) const {
-        cerr << "CItemSubtypeIT (L1024) decimal do_gather " << *i << "\n";
+        LOG(cdb_v) << "CItemSubtypeIT (L1024) decimal do_gather " << *i;
         /* constant decimals are always ok */
         return tr.encset;
     }
@@ -1046,7 +1047,7 @@ static class ANON : public CItemSubtypeIT<Item_decimal, Item::Type::DECIMAL_ITEM
         return i;
     }
     virtual Item * do_rewrite_type(Item_decimal *i, Analysis & a) const {
-        cerr << "do_rewrite_type L1028" << endl;
+        LOG(cdb_v) << "do_rewrite_type L1028";
         double n = i->val_real();
         char buf[sizeof(double) * 2];
         sprintf(buf, "%x", (unsigned int)n);
@@ -1056,7 +1057,7 @@ static class ANON : public CItemSubtypeIT<Item_decimal, Item::Type::DECIMAL_ITEM
     virtual void
     do_rewrite_insert_type(Item_decimal *i, Analysis & a, vector<Item *> &l, FieldMeta *fm) const
     {
-        cerr << "do_rewrite_insert_type L997" << endl;
+        LOG(cdb_v) << "do_rewrite_insert_type L997";
         assert(fm != NULL);
         double n = i->val_real();
         char buf[sizeof(double) * 2];
@@ -1117,7 +1118,7 @@ static class ANON : public CItemSubtypeIT<Item_subselect, Item::Type::SUBSELECT_
 extern const char str_in_optimizer[] = "<in_optimizer>";
 static class ANON : public CItemSubtypeFN<Item_in_optimizer, str_in_optimizer> {
     virtual EncSet do_gather_type(Item_in_optimizer *i, const constraints &tr, Analysis & a) const {
-        cerr << "CItemSubtypeFN (L1107) do_gather " << *i << "\n";
+        LOG(cdb_v) << "CItemSubtypeFN (L1107) do_gather " << *i;
 
         Item **args = i->arguments();
         analyze(args[0], constraints(EMPTY_EncSet, "in_opt", i, &tr), a);
@@ -1149,7 +1150,7 @@ static class ANON : public CItemSubtypeIT<Item_cache, Item::Type::CACHE_ITEM> {
 template<Item_func::Functype FT, class IT>
 class CItemCompare : public CItemSubtypeFT<Item_func, FT> {
     virtual EncSet do_gather_type(Item_func *i, const constraints &tr, Analysis & a) const {
-        cerr << "CItemCompare (L1139) do_gather func " << *i << "\n";
+        LOG(cdb_v) << "CItemCompare (L1139) do_gather func " << *i;
 
         EncSet t2;
 
@@ -1170,7 +1171,7 @@ class CItemCompare : public CItemSubtypeFT<Item_func, FT> {
         //cerr << "intersect " << tr << " with " << t2 << " result is " << new_encset << " \n";
 
         if (new_encset.osl.size() == 0) {
-            cerr << "query not supported because " << reason << " and " << tr << "\n";
+            LOG(warn) << "query not supported because " << reason << " and " << tr;
             exit(-1);//TODO: throw some exception
         }
 
@@ -1189,9 +1190,9 @@ class CItemCompare : public CItemSubtypeFT<Item_func, FT> {
         return do_optimize_type_self_and_args(i, a);
     }
     virtual Item * do_rewrite_type(Item_func *i, Analysis & a) const {
-        cerr << "do_rewrite_type L1171 " << *i << endl;
+        LOG(cdb_v) << "do_rewrite_type L1171 " << *i;
         Item *temp = do_rewrite_type_args(i, a);
-        cerr << "return 1171 " << *temp << endl;
+        LOG(cdb_v) << "return 1171 " << *temp;
         return temp;
     }
 };
@@ -1207,7 +1208,7 @@ static CItemCompare<Item_func::Functype::LE_FUNC,    Item_func_le>    ANON;
 template<Item_func::Functype FT, class IT>
 class CItemCond : public CItemSubtypeFT<Item_cond, FT> {
     virtual EncSet do_gather_type(Item_cond *i, const constraints &tr, Analysis & a) const {
-        cerr << "CItemCond (L1195) do_gather " << *i << "\n";
+        LOG(cdb_v) << "CItemCond (L1195) do_gather " << *i;
         //cerr << "do_a_t item_cond reason " << tr << "\n";
         auto it = List_iterator<Item>(*i->argument_list());
         //we split the current item in the different subexpressions
@@ -1225,7 +1226,7 @@ class CItemCond : public CItemSubtypeFT<Item_cond, FT> {
         return do_optimize_type_self_and_args(i, a);
     }
     virtual Item * do_rewrite_type(Item_cond *i, Analysis & a) const {
-        cerr << "do_rewrite_type L1207" << endl;
+        LOG(cdb_v) << "do_rewrite_type L1207";
         auto item_it = List_iterator<Item>(*i->argument_list());
         for (;;) {
             if (!item_it++)
@@ -1325,7 +1326,7 @@ class CItemAdditive : public CItemSubtypeFN<Item_func_additive_op, NAME> {
         return do_optimize_type_self_and_args(i, a);
     }
     virtual Item * do_rewrite_type(Item_func_additive_op *i, Analysis & a) const {
-        cerr << "do_rewrite_type L1305" << endl;
+        LOG(cdb_v) << "do_rewrite_type L1305";
         // rewrite children
         do_rewrite_type_args(i, a);
 
@@ -1796,7 +1797,7 @@ static CItemChooseOrder<Item_sum::Sumfunctype::MAX_FUNC> ANON;
 template<Item_sum::Sumfunctype SFT>
 class CItemSum : public CItemSubtypeST<Item_sum_sum, SFT> {
     virtual EncSet do_gather_type(Item_sum_sum *i, const constraints &tr, Analysis & a) const {
-        cerr << "do_a_t Item_sum_sum reason " << tr  << "\n";
+        LOG(cdb_v) << "do_a_t Item_sum_sum reason " << tr;
         if (i->has_with_distinct())
             analyze(i->get_arg(0), constraints(EQ_EncSet, "agg_distinct", i, &tr, false), a);
 
@@ -1814,7 +1815,7 @@ static CItemSum<Item_sum::Sumfunctype::AVG_DISTINCT_FUNC> ANON;
 
 static class ANON : public CItemSubtypeST<Item_sum_bit, Item_sum::Sumfunctype::SUM_BIT_FUNC> {
     virtual EncSet do_gather_type(Item_sum_bit *i, const constraints &tr, Analysis & a) const {
-        cerr << "do_a_t Item_sum_bit reason " << tr << "\n";
+        LOG(cdb_v) << "do_a_t Item_sum_bit reason " << tr;
         analyze(i->get_arg(0), constraints(EMPTY_EncSet, "bitagg", i, &tr, false), a);
         return tr.encset;
     }
@@ -1824,7 +1825,7 @@ static class ANON : public CItemSubtypeST<Item_sum_bit, Item_sum::Sumfunctype::S
 
 static class ANON : public CItemSubtypeST<Item_func_group_concat, Item_sum::Sumfunctype::GROUP_CONCAT_FUNC> {
     virtual EncSet do_gather_type(Item_func_group_concat *i, const constraints &tr, Analysis & a) const {
-        cerr << "do_a_t Item_func_group reason " << tr << "\n";
+        LOG(cdb_v) << "do_a_t Item_func_group reason " << tr;
         uint arg_count_field = (*i).*rob<Item_func_group_concat, uint,
                 &Item_func_group_concat::arg_count_field>::ptr();
         for (uint x = 0; x < arg_count_field; x++) {
@@ -1852,7 +1853,7 @@ static class ANON : public CItemSubtypeFT<Item_char_typecast, Item_func::Functyp
 extern const char str_cast_as_signed[] = "cast_as_signed";
 static class ANON : public CItemSubtypeFN<Item_func_signed, str_cast_as_signed> {
     virtual EncSet do_gather_type(Item_func_signed *i, const constraints &tr, Analysis & a) const {
-        cerr << "do_a_t Item_func_signed reason " << tr << "\n";
+        LOG(cdb_v) << "do_a_t Item_func_signed reason " << tr;
         analyze(i->arguments()[0], tr, a);
         return tr.encset;
     }
@@ -1865,7 +1866,7 @@ static class ANON : public CItemSubtypeFN<Item_func_signed, str_cast_as_signed> 
 
 static class ANON : public CItemSubtypeIT<Item_ref, Item::Type::REF_ITEM> {
     virtual EncSet do_gather_type(Item_ref *i, const constraints &tr, Analysis & a) const {
-        cerr << "do_a_t Item_ref reason " << tr << "\n";
+        LOG(cdb_v) << "do_a_t Item_ref reason " << tr;
         if (i->ref) {
             analyze(*i->ref, tr, a);
             return tr.encset;
@@ -1955,7 +1956,7 @@ process_select_lex(st_select_lex *select_lex, const constraints &tr, Analysis & 
 static void
 rewrite_select_lex(st_select_lex *select_lex, Analysis & a)
 {
-    cerr << "rewrite select lex input is " << *select_lex << endl;
+    LOG(cdb_v) << "rewrite select lex input is " << *select_lex;
     auto item_it = List_iterator<Item>(select_lex->item_list);
 
     List<Item> newList;
@@ -1963,7 +1964,7 @@ rewrite_select_lex(st_select_lex *select_lex, Analysis & a)
         Item *item = item_it++;
         if (!item)
             break;
-        cerr << "rewrite_select_lex " << *item << " with name " << item->name << endl;
+        LOG(cdb_v) << "rewrite_select_lex " << *item << " with name " << item->name;
         vector<Item *> l;
         itemTypes.do_rewrite_proj(item, a, l);
         for (auto it = l.begin(); it != l.end(); ++it) {
@@ -2105,15 +2106,14 @@ add_table(SchemaInfo * schema, const string & table, LEX *lex, bool encByDefault
         // if this isn't a create table if not exists, then issue a
         // warning and quit
         if (!(lex->create_info.options & HA_LEX_CREATE_IF_NOT_EXISTS)) {
-            cerr << "ERROR: Embedded DB possibly"
-                    "out of sync with regular DB (or, just programmer error)"
-                 << endl;
+            LOG(warn) << "ERROR: Embedded DB possibly"
+                    "out of sync with regular DB (or, just programmer error)";
         }
         return;
     }
 
     TableMeta *tm = new TableMeta();
-    cerr << "adding " << table << " to schema->tableMetaMap" << endl;
+    LOG(cdb_v) << "adding " << table << " to schema->tableMetaMap";
     schema->tableMetaMap[table] = tm;
 
     tm->tableNo = schema->totalTables++;
@@ -2138,7 +2138,7 @@ add_table(SchemaInfo * schema, const string & table, LEX *lex, bool encByDefault
         // mp->processAnnotations so by default add no onions or encryption paraphernalia
         // Similarly, non-encByDefault single princ shouldn't have any additional encryption info
         if (encByDefault) {
-            cerr << "encByDefault" << endl;
+            LOG(cdb_v) << "encByDefault";
             if (IsMySQLTypeNumeric(field->sql_type)) {
                 fm->encdesc = NUMERIC_EncDec;
             } else {
@@ -2195,9 +2195,7 @@ public:
             f0->charset = charset;
         } else {
 	    //encryption is always unsigned
-	    Field_num * fn = static_cast<Field_num *>(f->field);
-	    cerr << "f g is null? " << (fn==NULL) << "\n";
-	    fn->unsigned_flag = true;
+	    f0->flags = f0->flags | UNSIGNED_FLAG; 
 	}
         return f0;
     }
@@ -2277,8 +2275,7 @@ static void rewrite_create_field(const string &table_name,
         THD *thd         = current_thd;
         Create_field *f0 = f->clone(thd->mem_root);
         f0->field_name   = thd->strdup(fm->salt_name.c_str());
-	Field_num * fn = static_cast<Field_num *>(f->field);
-	fn->unsigned_flag = true;
+	f0->flags = f0->flags | UNSIGNED_FLAG;//salt is unsigned
         f0->sql_type     = MYSQL_TYPE_LONGLONG;
 	f0->length       = 8;
         l.push_back(f0);
@@ -2304,7 +2301,7 @@ process_create_lex(LEX * lex, Analysis & a, bool encByDefault)
 {
     const string &table =
         lex->select_lex.table_list.first->table_name;
-    cerr << "table is " << table << " and encByDefault is " << encByDefault << " and true is " << true << endl;
+    LOG(cdb_v) << "table is " << table << " and encByDefault is " << encByDefault << " and true is " << true;
     add_table(a.schema, table, lex, encByDefault);
 }
 
@@ -2404,9 +2401,9 @@ rewrite_update_lex(LEX *lex, Analysis &a)
             fmVec.push_back(a.schema->getFieldMeta(ifd->table_name, ifd->field_name));
             vector<Item *> l;
             itemTypes.do_rewrite_insert(i, a, l, NULL);
-            cerr << "fields" << endl;
+            LOG(cdb_v) << "fields";
             for (auto it0 = l.begin(); it0 != l.end(); ++it0) {
-                cerr << **it0 << endl;
+                //LOG(cdb_v) << **it0;
                 newList.push_back(*it0);
             }
         }
@@ -2414,7 +2411,7 @@ rewrite_update_lex(LEX *lex, Analysis &a)
     }
 
     if (fmVec.empty()) {
-        cerr << "NO FIELDS TO UPDATE IN UPDATE" << endl;
+        LOG(warn) << "NO FIELDS TO UPDATE IN UPDATE";
         return;
     }
 
@@ -2429,10 +2426,10 @@ rewrite_update_lex(LEX *lex, Analysis &a)
                 break;
             vector<Item *> l;
             itemTypes.do_rewrite_insert(i, a, l, *fmVecIt);
-            cerr << "values" << endl;
+            LOG(cdb_v) << "values";
             for (auto it1 = l.begin(); it1 != l.end(); ++it1) {
                 newList.push_back(*it1);
-                cerr << **it1 << endl;
+                //LOG(cdb_v) << **it1;
             }
             ++fmVecIt;
         }
@@ -3023,7 +3020,7 @@ list<string>
 Rewriter::processAnnotation(Annotation annot, Analysis &a)
 {
     assert_s(annot.getPrimitive() != "", "enc annotation has no primitive");
-    cerr << "table is " << annot.getPrimitiveTableName() << "; field is " << annot.getPrimitiveFieldName() << endl;
+    LOG(cdb_v) << "table is " << annot.getPrimitiveTableName() << "; field is " << annot.getPrimitiveFieldName();
     TableMeta *tm = schema->tableMetaMap[annot.getPrimitiveTableName()];
     FieldMeta *fm = tm->fieldMetaMap[annot.getPrimitiveFieldName()];
     
@@ -3041,20 +3038,20 @@ Rewriter::processAnnotation(Annotation annot, Analysis &a)
     for (auto pr : fm->encdesc.olm) {
         fm->onionnames[pr.first] = anonymizeFieldName(fm->index, pr.first, fm->fname, true);
         if (pr.first == oDET) {
-            cerr << fm->fname << " (" << fm->index << ") gets DET onion" << endl;
+            LOG(cdb_v) << fm->fname << " (" << fm->index << ") gets DET onion";
             if (numeric) {
                 query_list.push_back(query + " CHANGE " + fm->fname + " " + fm->onionnames[pr.first] + " " + TN_I64 + ";");
             } else {
                 query_list.push_back(query + " CHANGE " + fm->fname + " " + fm->onionnames[pr.first] + " " + TN_TEXT + ";");
             }
         } else if (pr.first == oOPE) {
-            cerr << fm->fname << " (" << fm->index << ") gets OPE onion" << endl;
+            LOG(cdb_v) << fm->fname << " (" << fm->index << ") gets OPE onion";
             query_list.push_back(query + " ADD " + fm->onionnames[pr.first] + " " + TN_I64 + " AFTER " + fm->onionnames[oDET] + ";");
         } else if (pr.first == oAGG) {
-            cerr << fm->fname << " (" << fm->index << ") gets AGG onion" << endl;
+            LOG(cdb_v) << fm->fname << " (" << fm->index << ") gets AGG onion";
             query_list.push_back(query + " ADD " + fm->onionnames[pr.first] + " " + TN_HOM + " AFTER " + fm->onionnames[oOPE] + ";");
         } else if (pr.first == oSWP) {
-            cerr << fm->fname << " (" << fm->index << ") gets SWP onion" << endl;
+            LOG(cdb_v) << fm->fname << " (" << fm->index << ") gets SWP onion";
             query_list.push_back(query + " ADD " + fm->onionnames[pr.first] + " " + TN_TEXT + " AFTER " + fm->onionnames[oOPE] + ";");
         } else {
             assert_s(false, "unknown onion type");
@@ -3098,9 +3095,10 @@ Rewriter::rewrite(const string & q, Analysis & a)
     }
 
     LEX *lex = p.lex();
+   
     //login/logout command; nothing needs to be passed on
     if ((lex->sql_command == SQLCOM_DELETE || lex->sql_command == SQLCOM_INSERT) && analysis.mp && analysis.mp->checkPsswd(lex)) {
-        cerr << "login/logout " << *lex << endl;
+        LOG(cdb_v) << "login/logout " << *lex;
         return queries;
     }
 
@@ -3122,7 +3120,7 @@ Rewriter::rewrite(const string & q, Analysis & a)
     }
     stringstream ss;
     ss << *lex;
-    cerr << "FINAL QUERY: " << *lex << endl;
+    LOG(cdb_v) << "FINAL QUERY: " << *lex << endl;
     queries.push_back(ss.str());
     a = analysis;
     return queries;
@@ -3150,7 +3148,7 @@ mp_init_decrypt(MultiPrinc * mp, Analysis & a) {
     if (!mp) {return;}
     
     a.tmkm.processingQuery = false;
-    cerr << a.rmeta.stringify() << "\n";
+    LOG(cdb_v) << a.rmeta.stringify() << "\n";
     for (auto i = a.rmeta.rfmeta.begin(); i != a.rmeta.rfmeta.end(); i++) {
         if (!i->second.is_salt) {
             a.tmkm.encForReturned[fullName(i->second.im->basefield->fname, i->second.im->basefield->tm->anonTableName)] = i->first;
@@ -3167,7 +3165,7 @@ Rewriter::decryptResults(ResType & dbres,
 
     unsigned int rows = dbres.rows.size();
 
-    cerr << "rows in result " << rows << "\n";
+    LOG(cdb_v) << "rows in result " << rows << "\n";
     unsigned int cols = dbres.names.size();
 
     ResType res = ResType();

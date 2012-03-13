@@ -39,6 +39,8 @@
 #define SQL_PRINCVALUE "varchar(255)"
 #define TESTING 1
 #define THRESHOLD 100
+#define MAX_LOG 512
+#define LOG_TIME 300 // 300 sec (5 min) being the longest we want to go between writing logs
 
 typedef struct Prin {
     //the name of the principal (either a generic or a principal)
@@ -389,6 +391,14 @@ class KeyAccess {
 
     bool isInstance(Prin prin);
     bool isOrphan(Prin prin);
+
+    //writes prin to file, logging that prin's key has been accessed
+    void log(Prin prin);
+    void write_log();
+
+    std::string log_file;
+    std::set<Prin> log_set;
+    time_t log_time;
 
 #if TESTING
  public:

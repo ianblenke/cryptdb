@@ -8,6 +8,7 @@
 #define LOG_GROUPS(m)       \
     m(warn)                 \
     m(debug)                \
+    m(cdb_v)                \
     m(crypto)               \
     m(crypto_v)             \
     m(crypto_data)          \

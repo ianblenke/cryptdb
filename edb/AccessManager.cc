@@ -596,6 +596,7 @@ KeyAccess::KeyAccess(Connect * connect)
     this->crypt_man = new CryptoManager(randomBytes(AES_KEY_BYTES));
     this->conn = connect;
     this->meta_finished = false;
+    this->log_file = "CryptDB_log";
 }
 
 ResType
@@ -1137,6 +1138,33 @@ KeyAccess::removeFromOrphans(Prin orphan)
     return 0;
 }
 
+void
+KeyAccess::log(Prin prin)
+{
+    log_set.insert(prin);
+    time_t now = time(NULL);
+    if (log_set.size() > MAX_LOG || (now - log_time) > LOG_TIME) {
+        write_log();
+    }
+}
+
+void
+KeyAccess::write_log() {
+    time_t now = time(NULL);
+    ofstream f;
+    stringstream log_name;
+    log_name << log_file << now << ".log";
+    LOG(am_v) << "writing log " << log_name.str();
+    f.open(log_name.str(), ios::app);
+    for (auto i = log_set.begin(); i != log_set.end(); i++) {
+        f << i->gen << " " << i->value << "\n";
+    }
+    f.close();
+    
+    log_set.clear();
+    log_time = now;
+}
+
 string
 KeyAccess::getKey(Prin prin)
 {
@@ -1155,6 +1183,7 @@ KeyAccess::getKey(Prin prin)
         }
     }
     //cerr << "returning null? " << (prinkey.key.length() == 0) << "\n";
+    log(prin);
     return prinkey.key;
 }
 
@@ -1876,6 +1905,7 @@ KeyAccess::getUncached(Prin prin)
 
 KeyAccess::~KeyAccess()
 {
+    write_log();
     map<Prin, PrinKey>::iterator it;
     for(it = keys.begin(); it != keys.end(); it++) {
         it->second.key.resize(0);

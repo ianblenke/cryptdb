@@ -317,6 +317,10 @@ Annotation::parse() {
         assert_s(word == query_list.end(), "annotation has too many words");
         return;
     case ENCFOR:
+        if (word == query_list.end()) {
+            DETenclevel = SECLEVEL::SEMANTIC_DET;
+            OPEenclevel = SECLEVEL::SEMANTIC_OPE;
+        }
         while (word != query_list.end()) {
             if (equalsIgnoreCase(levelnames[(int) SECLEVEL::DET], *word)) {
                 DETenclevel = SECLEVEL::DET;
@@ -325,7 +329,7 @@ Annotation::parse() {
                 DETenclevel = SECLEVEL::DETJOIN;
             }
             else if (equalsIgnoreCase(levelnames[(int) SECLEVEL::OPE], *word)) {
-                DETenclevel = SECLEVEL::DET;
+                DETenclevel = SECLEVEL::SEMANTIC_DET;
                 OPEenclevel = SECLEVEL::OPE;
             }
             else if (equalsIgnoreCase(levelnames[(int) SECLEVEL::SEMANTIC_AGG], *word)) {

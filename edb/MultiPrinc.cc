@@ -115,30 +115,39 @@ MultiPrinc::processAnnotation(Annotation &annot, bool &encryptfield,
         cerr << "process annotations mkm " << fullName(fm->fname, annot.getPrimitiveTableName()) << "->" << annot.getRight().column << endl;
         //if level not specified, it will be SECLEVEL::INVALID
         string query = "ALTER TABLE " + annot.getPrimitiveTableName();
+        bool first = true;
         //there will always be a DET onion
-        if (fm->onionnames.find(oDET) == fm->onionnames.end()) {
-            fm->onionnames[oDET] = anonymizeFieldName(0, oDET, fm->fname, true);
-        }
         if (annot.getDETLevel() != SECLEVEL::INVALID) {
+            if (fm->onionnames.find(oDET) == fm->onionnames.end()) {
+                fm->onionnames[oDET] = anonymizeFieldName(0, oDET, fm->fname, true);
+            }
+            if (annot.getDETLevel() != SECLEVEL::INVALID) {
+                fm->setOnionLevel(oDET, annot.getDETLevel());
+            }
+            //mkm.encForMap[fullName(fm->onionnames[oDET], annot.getPrimitiveTableName())] = annot.getRight().column;
+            //cerr << "process annotations mkm " << fullName(fm->onionnames[oDET], annot.getPrimitiveTableName()) << "->" << annot.getRight().column << endl;
+            if (IsMySQLTypeNumeric(fm->sql_field->sql_type)) {
+                query_list.push_back(query + " CHANGE " + fm->fname + " " + fm->onionnames[oDET] + " " + TN_I64 + ";");
+            } else {
+                query_list.push_back(query + " CHANGE " + fm->fname + " " + fm->onionnames[oDET] + " " + TN_TEXT + ";");
+            }
             fm->setOnionLevel(oDET, annot.getDETLevel());
-        }
-        //mkm.encForMap[fullName(fm->onionnames[oDET], annot.getPrimitiveTableName())] = annot.getRight().column;
-        //cerr << "process annotations mkm " << fullName(fm->onionnames[oDET], annot.getPrimitiveTableName()) << "->" << annot.getRight().column << endl;
-        if (IsMySQLTypeNumeric(fm->sql_field->sql_type)) {
-            query_list.push_back(query + " CHANGE " + fm->fname + " " + fm->onionnames[oDET] + " " + TN_I64 + ";");
-        } else {
-            query_list.push_back(query + " CHANGE " + fm->fname + " " + fm->onionnames[oDET] + " " + TN_TEXT + ";");
-        }
-        //there will always be an OPE onion
-        if (fm->onionnames.find(oOPE) == fm->onionnames.end()) {
-            fm->onionnames[oOPE] = anonymizeFieldName(0, oOPE, fm->fname, true);
+            first = false;
         }
         if (annot.getOPELevel() != SECLEVEL::INVALID) {
+            if (fm->onionnames.find(oOPE) == fm->onionnames.end()) {
+                fm->onionnames[oOPE] = anonymizeFieldName(0, oOPE, fm->fname, true);
+            }
             fm->setOnionLevel(oOPE, annot.getOPELevel());
+            if (!first) {
+                //mkm.encForMap[fullName(fm->onionnames[oOPE], annot.getPrimitiveTableName())] = annot.getRight().column;
+                //cerr << "process annotations mkm " << fullName(fm->onionnames[oOPE], annot.getPrimitiveTableName()) << "->" << annot.getRight().column << endl;
+                query_list.push_back(query + " ADD " + fm->onionnames[oOPE] + " " + TN_I64 + ";");
+            } else {
+                query_list.push_back(query + " CHANGE " + fm->fname + " " + fm->onionnames[oOPE] + " " + TN_I64 + ";");
+            }
+            first = false;
         }
-        //mkm.encForMap[fullName(fm->onionnames[oOPE], annot.getPrimitiveTableName())] = annot.getRight().column;
-        //cerr << "process annotations mkm " << fullName(fm->onionnames[oOPE], annot.getPrimitiveTableName()) << "->" << annot.getRight().column << endl;
-        query_list.push_back(query + " ADD " + fm->onionnames[oOPE] + " " + TN_I64 + ";");
         if (annot.getAGGLevel()) {
             if (fm->onionnames.find(oAGG) == fm->onionnames.end()) {
                 fm->onionnames[oAGG] = anonymizeFieldName(0, oAGG, fm->fname, true);
