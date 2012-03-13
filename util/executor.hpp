@@ -116,14 +116,7 @@ public:
     m_executor(executor),
     m_id(id),
     m_queue(queue),
-    m_errHandler(errHandler),
-    m_running(false) {
-    pthread_mutex_init(&m_mutex, NULL);
-  }
-
-  ~Worker() {
-    pthread_mutex_destroy(&m_mutex);
-  }
+    m_errHandler(errHandler) {}
 
   inline void start() {
     pthread_create(&m_thd, NULL, Worker::StartBodyStub, this);
@@ -144,10 +137,8 @@ private:
   unsigned int m_id;
   tbb::concurrent_bounded_queue< JobRef<T>* > *m_queue;
   H *m_errHandler;
-  bool m_running;
 
   pthread_t m_thd;
-  pthread_mutex_t m_mutex;
 };
 
 template <typename T>

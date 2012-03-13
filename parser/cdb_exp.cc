@@ -23,6 +23,8 @@ using namespace std;
 using namespace NTL;
 
 static bool UseOldOpe = false;
+static const bool DoParallel = true;
+static const size_t NumThreads = 8;
 
 class NamedTimer : public Timer {
 public:
@@ -145,6 +147,41 @@ static inline unsigned char hexToInt(unsigned char c) {
     return (c >= 'A') ? (c - 'A' + 10) : (c - '0');
 }
 
+typedef vector<SqlItem> SqlRow;
+typedef vector<SqlRow>  SqlRowGroup;
+
+// split allRows into numGroups evenly, putting the results in
+// groups. extra rows are placed into the last non-empty group.
+// empty groups are created if there are not enough rows to go
+// around
+static void SplitRowsIntoGroups(
+    vector< SqlRowGroup >& groups,
+    const vector< SqlRow >& allRows,
+    size_t numGroups) {
+  assert(numGroups > 0);
+  groups.resize(numGroups);
+  size_t blockSize = allRows.size() / numGroups;
+  if (blockSize == 0) {
+    groups[0] = allRows;
+    return;
+  }
+  for (size_t i = 0; i < numGroups; i++) {
+    size_t start = i * blockSize;
+    if (i == numGroups - 1) {
+      // last group
+      groups[i].insert(
+          groups[i].begin(),
+          allRows.begin() + start,
+          allRows.end());
+    } else {
+      groups[i].insert(
+          groups[i].begin(),
+          allRows.begin() + start,
+          allRows.begin() + start + blockSize);
+    }
+  }
+}
+
 struct lineitem_group {
     lineitem_group(
             double l_quantity,
@@ -171,30 +208,6 @@ public:
 };
 
 static map<lineitem_key, vector<lineitem_group> > agg_groups;
-
-// mysql api returns binary data in form of
-// X'...', where .. is the ASCII of the hex data...
-//
-// TODO: this function probably exists somewhere else, i can't find it though.
-// so rolling my own for now
-static inline string mysqlHexToBinaryData(const string &q) {
-    assert(q.substr(0, 2) == "X'");
-    assert(q[q.size()-1] == '\'');
-
-    string asciiHexData = q.substr(2, q.size() - 3);
-    assert((asciiHexData.size() % 2) == 0);
-    ostringstream buf;
-    for (size_t p = 0; p < asciiHexData.size(); p += 2) {
-        assert(isUpperHexChar(asciiHexData[p]) &&
-               isUpperHexChar(asciiHexData[p+1]));
-        unsigned char c = 0;
-        c = (hexToInt(asciiHexData[p]) << 4) |
-             hexToInt(asciiHexData[p+1]);
-        buf << c;
-    }
-
-    return buf.str();
-}
 
 // TODO: remove duplication
 enum lineitem {
@@ -1420,6 +1433,7 @@ static struct q11entry_sorter {
 } q11entry_functor;
 
 struct _q11_noopt_task_state {
+  _q11_noopt_task_state() : totalSum(0.0) {}
   vector< vector< SqlItem > > rows;
   map<uint64_t, double> aggState;
   double totalSum;
@@ -1427,7 +1441,6 @@ struct _q11_noopt_task_state {
 
 struct _q11_noopt_task {
   void operator()() {
-      //cerr << "processing " << state->rows.size() << " rows" << endl;
       for (auto row : state->rows) {
         // ps_partkey
         uint64_t ps_partkey = decryptRowFromTo<uint64_t, 4>(
@@ -1514,11 +1527,8 @@ static void do_query_q11_noopt(Connect &conn,
       assert(res.ok);
     }
 
-    static const bool DoParallel = true;
-    static const size_t NumThreads = 8;
     map<uint64_t, double> aggState;
     double totalSum = 0.0;
-
     if (DoParallel) {
       NamedTimer t(__func__, "decrypt");
 
@@ -1526,24 +1536,13 @@ static void do_query_q11_noopt(Connect &conn,
 
       vector<_q11_noopt_task_state> states( NumThreads );
       vector<_q11_noopt_task> tasks( NumThreads );
-      size_t blockSize = res.rows.size() / 8;
+      vector<SqlRowGroup> groups;
+      SplitRowsIntoGroups(groups, res.rows, NumThreads);
+
       for (size_t i = 0; i < NumThreads; i++) {
         tasks[i].cm    = &cm;
         tasks[i].state = &states[i];
-
-        size_t start = i * blockSize;
-        if (i == NumThreads - 1) {
-          // last thread
-          states[i].rows.insert(
-              states[i].rows.begin(),
-              res.rows.begin() + start,
-              res.rows.end());
-        } else {
-          states[i].rows.insert(
-              states[i].rows.begin(),
-              res.rows.begin() + start,
-              res.rows.begin() + start + blockSize);
-        }
+        states[i].rows = groups[i];
       }
 
       Exec<_q11_noopt_task>::DefaultExecutor exec( NumThreads );
@@ -1794,6 +1793,54 @@ static void do_query_q14_opt(Connect &conn,
     }
 }
 
+struct _q14_noopt_task_state {
+  _q14_noopt_task_state() : running_numer(0.0), running_denom(0.0) {}
+  vector< vector< SqlItem > > rows;
+  double running_numer;
+  double running_denom;
+};
+
+struct _q14_noopt_task {
+  void operator()() {
+    for (auto row : state->rows) {
+      // l_extendedprice * (1 - l_discount)
+      uint64_t l_extendedprice_int = decryptRow<uint64_t, 7>(
+          row[1].data,
+          12345,
+          fieldname(lineitem::l_extendedprice, "DET"),
+          TYPE_INTEGER,
+          oDET,
+          *cm);
+      double l_extendedprice = ((double)l_extendedprice_int)/100.0;
+
+      uint64_t l_discount_int = decryptRow<uint64_t, 7>(
+          row[2].data,
+          12345,
+          fieldname(lineitem::l_discount, "DET"),
+          TYPE_INTEGER,
+          oDET,
+          *cm);
+      double l_discount = ((double)l_discount_int)/100.0;
+
+      double value = l_extendedprice * (1.0 - l_discount);
+      state->running_denom += value;
+
+      // decrypt p_type, to check if matches
+      string p_type = decryptRow<string>(
+          row[0].data,
+          12345,
+          fieldname(part::p_type, "DET"),
+          TYPE_TEXT,
+          oDET,
+          *cm);
+      if (strncmp(p_type.c_str(), "PROMO", strlen("PROMO")) == 0) {
+        state->running_numer += value;
+      }
+    }
+  }
+  CryptoManager* cm;
+  _q14_noopt_task_state* state;
+};
 static void do_query_q14_noopt(Connect &conn,
                                CryptoManager &cm,
                                uint32_t year,
@@ -1830,44 +1877,79 @@ static void do_query_q14_noopt(Connect &conn,
         assert(res.ok);
     }
 
-    double running_numer = 0.0;
-    double running_denom = 0.0;
-    for (auto row : res.rows) {
-        // l_extendedprice * (1 - l_discount)
-        uint64_t l_extendedprice_int = decryptRow<uint64_t, 7>(
-                row[1].data,
-                12345,
-                fieldname(lineitem::l_extendedprice, "DET"),
-                TYPE_INTEGER,
-                oDET,
-                cm);
-        double l_extendedprice = ((double)l_extendedprice_int)/100.0;
+    cerr << "got " << res.rows.size() << " rows to decrypt" << endl;
 
-        uint64_t l_discount_int = decryptRow<uint64_t, 7>(
-                row[2].data,
-                12345,
-                fieldname(lineitem::l_discount, "DET"),
-                TYPE_INTEGER,
-                oDET,
-                cm);
-        double l_discount = ((double)l_discount_int)/100.0;
+    if (DoParallel) {
+      NamedTimer t(__func__, "decrypt");
+      using namespace exec_service;
 
-        double value = l_extendedprice * (1.0 - l_discount);
-        running_denom += value;
+      vector<_q14_noopt_task_state> states( NumThreads );
+      vector<_q14_noopt_task> tasks( NumThreads );
+      vector<SqlRowGroup> groups;
+      SplitRowsIntoGroups(groups, res.rows, NumThreads);
 
-        // decrypt p_type, to check if matches
-        string p_type = decryptRow<string>(
-                row[0].data,
-                12345,
-                fieldname(part::p_type, "DET"),
-                TYPE_TEXT,
-                oDET,
-                cm);
-        if (strncmp(p_type.c_str(), "PROMO", strlen("PROMO")) == 0) {
-            running_numer += value;
-        }
+      for (size_t i = 0; i < NumThreads; i++) {
+        tasks[i].cm    = &cm;
+        tasks[i].state = &states[i];
+        states[i].rows = groups[i];
+      }
+
+      Exec<_q14_noopt_task>::DefaultExecutor exec( NumThreads );
+      exec.start();
+      for (size_t i = 0; i < NumThreads; i++) {
+        exec.submit(tasks[i]);
+      }
+      exec.stop(); // blocks until completion
+
+      // merge results
+      double running_numer = 0.0;
+      double running_denom = 0.0;
+      for (size_t i = 0; i < NumThreads; i++) {
+        running_numer += states[i].running_numer;
+        running_denom += states[i].running_denom;
+      }
+      results.push_back(100.0 * running_numer / running_denom);
+    } else {
+      NamedTimer t(__func__, "decrypt");
+      double running_numer = 0.0;
+      double running_denom = 0.0;
+      for (auto row : res.rows) {
+          // l_extendedprice * (1 - l_discount)
+          uint64_t l_extendedprice_int = decryptRow<uint64_t, 7>(
+                  row[1].data,
+                  12345,
+                  fieldname(lineitem::l_extendedprice, "DET"),
+                  TYPE_INTEGER,
+                  oDET,
+                  cm);
+          double l_extendedprice = ((double)l_extendedprice_int)/100.0;
+
+          uint64_t l_discount_int = decryptRow<uint64_t, 7>(
+                  row[2].data,
+                  12345,
+                  fieldname(lineitem::l_discount, "DET"),
+                  TYPE_INTEGER,
+                  oDET,
+                  cm);
+          double l_discount = ((double)l_discount_int)/100.0;
+
+          double value = l_extendedprice * (1.0 - l_discount);
+          running_denom += value;
+
+          // decrypt p_type, to check if matches
+          string p_type = decryptRow<string>(
+                  row[0].data,
+                  12345,
+                  fieldname(part::p_type, "DET"),
+                  TYPE_TEXT,
+                  oDET,
+                  cm);
+          if (strncmp(p_type.c_str(), "PROMO", strlen("PROMO")) == 0) {
+              running_numer += value;
+          }
+      }
+      results.push_back(100.0 * running_numer / running_denom);
     }
-    results.push_back(100.0 * running_numer / running_denom);
 }
 
 static void do_query_q14(Connect &conn,
