@@ -1419,10 +1419,16 @@ static struct q11entry_sorter {
   }
 } q11entry_functor;
 
+struct _q11_noopt_task_state {
+  vector< vector< SqlItem > > rows;
+  map<uint64_t, double> aggState;
+  double totalSum;
+};
+
 struct _q11_noopt_task {
-  _q11_noopt_task() : totalSum(0.0) {}
   void operator()() {
-      for (auto row : rows) {
+      //cerr << "processing " << state->rows.size() << " rows" << endl;
+      for (auto row : state->rows) {
         // ps_partkey
         uint64_t ps_partkey = decryptRowFromTo<uint64_t, 4>(
                 row[0].data,
@@ -1454,19 +1460,17 @@ struct _q11_noopt_task {
 
         double value = ps_supplycost * ((double)ps_availqty);
 
-        auto it = aggState.find(ps_partkey);
-        if (it == aggState.end()) {
-          aggState[ps_partkey] = value;
+        auto it = state->aggState.find(ps_partkey);
+        if (it == state->aggState.end()) {
+          state->aggState[ps_partkey] = value;
         } else {
           it->second += value;
         }
-        totalSum += value;
+        state->totalSum += value;
       }
   }
   CryptoManager* cm;
-  vector< vector< SqlItem > > rows;
-  map<uint64_t, double> aggState;
-  double totalSum;
+  _q11_noopt_task_state* state;
 };
 
 static void do_query_q11_noopt(Connect &conn,
@@ -1520,20 +1524,23 @@ static void do_query_q11_noopt(Connect &conn,
 
       using namespace exec_service;
 
+      vector<_q11_noopt_task_state> states( NumThreads );
       vector<_q11_noopt_task> tasks( NumThreads );
       size_t blockSize = res.rows.size() / 8;
       for (size_t i = 0; i < NumThreads; i++) {
-        tasks[i].cm = &cm;
+        tasks[i].cm    = &cm;
+        tasks[i].state = &states[i];
+
         size_t start = i * blockSize;
         if (i == NumThreads - 1) {
           // last thread
-          tasks[i].rows.insert(
-              tasks[i].rows.begin(),
+          states[i].rows.insert(
+              states[i].rows.begin(),
               res.rows.begin() + start,
               res.rows.end());
         } else {
-          tasks[i].rows.insert(
-              tasks[i].rows.begin(),
+          states[i].rows.insert(
+              states[i].rows.begin(),
               res.rows.begin() + start,
               res.rows.begin() + start + blockSize);
         }
@@ -1548,8 +1555,8 @@ static void do_query_q11_noopt(Connect &conn,
 
       // merge results
       for (size_t i = 0; i < NumThreads; i++) {
-        for (map<uint64_t, double>::iterator it = tasks[i].aggState.begin();
-             it != tasks[i].aggState.end(); ++it) {
+        for (map<uint64_t, double>::iterator it = states[i].aggState.begin();
+             it != states[i].aggState.end(); ++it) {
           auto it0 = aggState.find(it->first);
           if (it0 == aggState.end()) {
             aggState[it->first] = it->second;
@@ -1557,7 +1564,7 @@ static void do_query_q11_noopt(Connect &conn,
             it0->second += it->second;
           }
         }
-        totalSum += tasks[i].totalSum;
+        totalSum += states[i].totalSum;
       }
     } else {
       NamedTimer t(__func__, "decrypt");

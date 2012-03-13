@@ -117,16 +117,21 @@ public:
     m_id(id),
     m_queue(queue),
     m_errHandler(errHandler),
-    m_running(false) {}
+    m_running(false) {
+    pthread_mutex_init(&m_mutex, NULL);
+  }
+
+  ~Worker() {
+    pthread_mutex_destroy(&m_mutex);
+  }
 
   inline void start() {
     pthread_create(&m_thd, NULL, Worker::StartBodyStub, this);
   }
 
   inline void join() { pthread_join(m_thd, NULL); }
-  inline void stop() { m_running = false; }
-private:
 
+private:
   static void* StartBodyStub(void *self) {
     static_cast<Worker<T,H>*>(self)->startBody();
     pthread_exit(NULL);
@@ -142,6 +147,7 @@ private:
   bool m_running;
 
   pthread_t m_thd;
+  pthread_mutex_t m_mutex;
 };
 
 template <typename T>
@@ -197,16 +203,9 @@ public:
   void stop() {
     assert(m_running);
     m_running = false;
-    for (typename worker_vec::iterator it = m_workers.begin();
-         it != m_workers.end(); ++it) {
-      (*it).stop();
-    }
     for (size_t id = 0; id < m_numWorkers; id++) {
       JobRefEnd<T> *j = new JobRefEnd<T>();
-      if (!m_queue.try_push(j)) {
-        // queue already full
-        delete j;
-      }
+      m_queue.push(j);
     }
     for (typename worker_vec::iterator it = m_workers.begin();
          it != m_workers.end(); ++it) {
@@ -244,11 +243,14 @@ public:
 template <typename T, typename H>
 void Worker<T, H>::startBody() {
   m_executor->onWorkerStart(m_id);
-  m_running = true;
-  while (m_running) {
+  while (true) {
     JobRef<T> *job = NULL;
     m_queue->pop(job);
     assert(job != NULL);
+    if (!job->ref()) {
+      delete job;
+      break; // end of work
+    }
     try {
       job->execJob();
     } catch (...) {
