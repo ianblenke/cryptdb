@@ -862,16 +862,23 @@ agg_char2(UDF_INIT *initid, UDF_ARGS *args, char *result,
 struct worker_msg {
   bool shutdown;
   uint16_t group_key;
+  size_t group_id;
   size_t idx;
   mpz_t value;
 };
 
 struct mpz_wrapper { mpz_t mp; };
 
+// forward decl
+struct agg_char2_row_pack_state;
+
 struct worker_state {
-  std::map< uint16_t, std::vector< mpz_wrapper > > group_map;
+  std::map<
+    uint16_t,
+    std::vector< std::vector< mpz_wrapper > > > group_map;
   concurrent_bounded_queue<worker_msg> q;
   mpz_t* mod;
+  agg_char2_row_pack_state* as;
 };
 
 struct agg_char2_row_pack_state {
@@ -887,6 +894,12 @@ struct agg_char2_row_pack_state {
     mpz_t n2_mp;
     void *rbuf;
 
+    // agg info
+    size_t agg_size; // size of each aggregate in bytes
+    size_t rows_per_agg; // number of rows packed into each aggregrate
+
+    size_t num_groups;
+
     // parallel data structures
     bool run_in_parallel;
     std::vector< pthread_t > workers;
@@ -894,7 +907,9 @@ struct agg_char2_row_pack_state {
     size_t workerCnt;
 
     // internal element buffer
-    typedef std::map< uint16_t, std::vector< uint64_t > > element_buffer_map;
+    typedef std::map<
+      uint16_t,
+      std::vector< std::pair< uint64_t, uint64_t > > > element_buffer_map;
     element_buffer_map element_buffer;
 
     // internal state
@@ -1119,8 +1134,9 @@ agg_char2_row_pack(UDF_INIT *initid, UDF_ARGS *args, char *result,
 }
 
 struct AggRowColPack {
-  static const size_t AggSize = 1256 * 2 / 8;
-  static const size_t RowsPerBlock = 3;
+  //static const size_t AggSize = 1256 * 2 / 8;
+  //static const size_t RowsPerBlock = 3;
+
   static const size_t BufferSize = 1024;
 
   static const size_t NumBlocksInternalBuffer = 524288;
@@ -1142,9 +1158,10 @@ BytesFromMPZ(uint8_t* p, mpz_t rop, size_t n) {
 }
 
 static inline void
-InitMPZRunningSums(vector<mpz_wrapper>& v) {
-    v.resize( (0x1 << AggRowColPack::RowsPerBlock) - 1 );
-    for (size_t i = 0; i < (0x1 << AggRowColPack::RowsPerBlock) - 1; i++) {
+InitMPZRunningSums(size_t rows_per_agg, vector<mpz_wrapper>& v) {
+    assert( rows_per_agg > 0 );
+    v.resize( (0x1u << rows_per_agg) - 1 );
+    for (size_t i = 0; i < (0x1u << rows_per_agg) - 1; i++) {
       mpz_init_set_ui(v[i].mp, 1);
     }
 }
@@ -1157,16 +1174,19 @@ static void* worker_main(void* p) {
     if (m.shutdown) break;
     else {
       auto it = ctx->group_map.find(m.group_key);
-      vector< mpz_wrapper >* v = NULL;
+      vector< vector< mpz_wrapper > >* v = NULL;
       if (it == ctx->group_map.end()) {
         // init it
         v = &ctx->group_map[m.group_key]; // create
-        InitMPZRunningSums(*v);
+        v->resize(ctx->as->num_groups);
+        for (size_t i = 0; i < ctx->as->num_groups; i++) {
+          InitMPZRunningSums(ctx->as->rows_per_agg, v->operator[](i));
+        }
       } else {
         v = &it->second;
       }
 
-      vector<mpz_wrapper>& vr = *v;
+      vector<mpz_wrapper>& vr = v->operator[](m.group_id);
       mpz_mul(vr[m.idx].mp, vr[m.idx].mp, m.value);
       mpz_mod(vr[m.idx].mp, vr[m.idx].mp, *ctx->mod);
 
@@ -1180,8 +1200,8 @@ static void* worker_main(void* p) {
 my_bool
 agg_char2_row_col_pack_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
 {
-    if (args->arg_count != 6) {
-        strcpy(message, "need to provide 6 args");
+    if (args->arg_count <= 8) {
+        strcpy(message, "need to provide more than 8 args");
         return 1;
     }
 
@@ -1194,7 +1214,7 @@ agg_char2_row_col_pack_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
     }
 
     if (args->args[4] == NULL) {
-        strcpy(message, "need to provide name");
+        strcpy(message, "need to provide filename");
         return 1;
     }
 
@@ -1203,12 +1223,28 @@ agg_char2_row_col_pack_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
         return 1;
     }
 
+    if (args->args[6] == NULL) {
+        strcpy(message, "need to provide agg_size (bytes)");
+        return 1;
+    }
+
+    if (args->args[7] == NULL) {
+        strcpy(message, "need to provide rows_per_agg");
+        return 1;
+    }
+
     // TODO: fix security
-    string name =
-      "/tmp/" + string(args->args[4], args->lengths[4]) +
-      "/lineitem_enc/row_col_pack/data";
+    string name(args->args[4], args->lengths[4]);
 
     as->run_in_parallel = *((long long *) args->args[5]);
+    as->agg_size = *((long long *) args->args[6]);
+    as->rows_per_agg = *((long long *) args->args[7]);
+
+    assert(as->agg_size > 0);
+    assert(as->rows_per_agg > 0);
+
+    as->num_groups = args->arg_count - 8;
+    assert(as->num_groups > 0);
 
     if (as->run_in_parallel) {
       // must use mpz for parallel (since ZZ is not thread-safe)
@@ -1221,6 +1257,7 @@ agg_char2_row_col_pack_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
       as->worker_states.resize(AggRowColPack::NumThreads);
       for (size_t i = 0; i < AggRowColPack::NumThreads; i++) {
         as->worker_states[i].mod = &as->n2_mp;
+        as->worker_states[i].as  = as;
         pthread_create(&as->workers[i], NULL, worker_main, &as->worker_states[i]);
       }
       as->workerCnt = 0;
@@ -1234,19 +1271,23 @@ agg_char2_row_col_pack_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
 
     // load the first block
     as->internal_buffer =
-      (char *) malloc( AggRowColPack::AggSize * AggRowColPack::NumBlocksInternalBuffer );
+      (char *) malloc( as->agg_size * AggRowColPack::NumBlocksInternalBuffer );
     assert(as->internal_buffer);
     as->internal_block_id = 0;
     fread(as->internal_buffer, 1,
-          AggRowColPack::AggSize * AggRowColPack::NumBlocksInternalBuffer,
+          as->agg_size * AggRowColPack::NumBlocksInternalBuffer,
           as->fp);
 
     as->block_id = 0;
-    as->block_size = AggRowColPack::AggSize;
+    as->block_size = as->agg_size;
     as->block_buf = as->internal_buffer;
 
     as->debug_stream.open("/tmp/debug.txt");
     assert(as->debug_stream.good());
+
+    as->debug_stream << "agg_size (bytes) = " << as->agg_size << endl;
+    as->debug_stream << "rows_per_agg = " << as->rows_per_agg << endl;
+    as->debug_stream << "num_groups = " << as->num_groups << endl;
 
     initid->ptr = (char *) as;
     return 0;
@@ -1277,14 +1318,23 @@ agg_char2_row_col_pack_clear(UDF_INIT *initid, char *is_null, char *error)
     fseek(as->fp, 0, SEEK_SET);
     // reload the first block
     fread(as->internal_buffer, 1,
-          AggRowColPack::AggSize * AggRowColPack::NumBlocksInternalBuffer,
+          as->agg_size * AggRowColPack::NumBlocksInternalBuffer,
           as->fp);
 }
+
+struct mult_entry {
+  mult_entry() {}
+  mult_entry(uint64_t row_id, size_t group_id, uint32_t mask)
+    : row_id(row_id), group_id(group_id), mask(mask) {}
+  uint64_t row_id;
+  size_t group_id;
+  uint32_t mask;
+};
 
 static void flush_group_buffers(agg_char2_row_pack_state *as) {
 
     // value is ordered list based on the pair's first element
-    typedef vector< pair< uint16_t, list< pair< uint64_t, uint32_t > > > >
+    typedef vector< pair< uint16_t, list<mult_entry> > >
             allocation_map;
     allocation_map alloc_map;
     alloc_map.reserve(as->element_buffer.size());
@@ -1298,11 +1348,15 @@ static void flush_group_buffers(agg_char2_row_pack_state *as) {
       if (UNLIKELY(it == as->aggs.end())) {
           s = &as->aggs[eit->first]; // creates on demand
           if (as->run_in_parallel) {
-            s->running_sums_mp.resize(1);
-            InitMPZRunningSums(s->running_sums_mp[0]);
+            s->running_sums_mp.resize(as->num_groups);
+            for (size_t i = 0; i < as->num_groups; i++) {
+              InitMPZRunningSums(as->rows_per_agg, s->running_sums_mp[i]);
+            }
           } else {
-            s->running_sums.resize(1);
-            s->running_sums[0].resize((0x1 << AggRowColPack::RowsPerBlock) - 1, to_ZZ(1));
+            s->running_sums.resize(as->num_groups);
+            for (size_t i = 0; i < as->num_groups; i++) {
+              s->running_sums[i].resize((0x1 << as->rows_per_agg) - 1, to_ZZ(1));
+            }
           }
           s->count = 0;
       } else {
@@ -1310,46 +1364,55 @@ static void flush_group_buffers(agg_char2_row_pack_state *as) {
       }
       s->count += eit->second.size();
 
-      map< uint64_t, vector< uint32_t > > m;
-      for (vector<uint64_t>::iterator it = eit->second.begin();
+      map< uint64_t, vector< vector< uint32_t > > > m;
+      for (vector< pair< uint64_t, uint64_t > >::iterator it = eit->second.begin();
            it != eit->second.end(); ++it) {
-        uint64_t row_id = *it;
+        pair< uint64_t, uint64_t >& p = *it;
+        uint64_t row_id = p.first;
+        uint64_t mask   = p.second;
 
         // compute block ID from row ID
-        uint64_t block_id = row_id / AggRowColPack::RowsPerBlock;
+        uint64_t block_id = row_id / as->rows_per_agg;
         // compute block offset
-        uint64_t block_offset = row_id % AggRowColPack::RowsPerBlock;
+        uint64_t block_offset = row_id % as->rows_per_agg;
 
-        vector<uint32_t>& masks = m[block_id];
-        if (masks.empty()) {
-          masks.push_back(0x1 << block_offset);
-        } else {
-          // search for empty spot w/ linear scan
-          bool found = false;
-          for (vector<uint32_t>::iterator it = masks.begin();
-               it != masks.end(); ++it) {
-            if (!((*it) & (0x1 << block_offset))) {
-              *it |= 0x1 << block_offset;
-              found = true;
-              break;
+        vector< vector< uint32_t > >&v = m[block_id]; // create on demand
+        v.resize(as->num_groups);
+
+        for (size_t i = 0; i < as->num_groups; i++) {
+          if (!(mask & (0x1 << i))) continue;
+          vector<uint32_t>& masks = m[block_id][i];
+          if (masks.empty()) {
+            masks.push_back(0x1 << block_offset);
+          } else {
+            // search for empty spot w/ linear scan
+            bool found = false;
+            for (vector<uint32_t>::iterator it = masks.begin();
+                 it != masks.end(); ++it) {
+              if (!((*it) & (0x1 << block_offset))) {
+                *it |= 0x1 << block_offset;
+                found = true;
+                break;
+              }
             }
+            if (!found) masks.push_back(0x1 << block_offset);
           }
-
-          if (!found) masks.push_back(0x1 << block_offset);
         }
       }
       eit->second.clear(); // clear buffer
 
-      alloc_map.push_back(make_pair(eit->first, list< pair< uint64_t, uint32_t > >()));
-      list< pair< uint64_t, uint32_t > >& elems = alloc_map.back().second;
-      for (map< uint64_t, vector< uint32_t > >::iterator it = m.begin();
+      alloc_map.push_back(make_pair(eit->first, list<mult_entry>()));
+      list<mult_entry>& elems = alloc_map.back().second;
+      for (map< uint64_t, vector< vector< uint32_t > > >::iterator it = m.begin();
            it != m.end(); ++it) {
-        for (vector<uint32_t>::iterator iit = it->second.begin();
-             iit != it->second.end(); ++iit) {
-          elems.push_back(make_pair(it->first, *iit));
+        for (size_t group_id = 0; group_id < it->second.size(); group_id++) {
+          for (vector<uint32_t>::iterator it0 = it->second[group_id].begin();
+               it0 != it->second[group_id].end(); ++it0) {
+            elems.push_back(mult_entry(it->first, group_id, *it0));
+          }
+          as->st.masks_sum += it->second[group_id].size();
+          as->st.masks_cnt++;
         }
-        as->st.masks_sum += it->second.size();
-        as->st.masks_cnt++;
       }
     }
 
@@ -1362,12 +1425,11 @@ static void flush_group_buffers(agg_char2_row_pack_state *as) {
 
     while (pos_first_non_empty < alloc_map.size()) {
       // find min block id for all groups
-      uint64_t minSoFar = alloc_map[pos_first_non_empty].second.front().first;
+      uint64_t minSoFar = alloc_map[pos_first_non_empty].second.front().row_id;
       for (size_t i = pos_first_non_empty + 1; i < alloc_map.size(); i++) {
-        pair< uint16_t, list< pair< uint64_t, uint32_t > > > &group =
-          alloc_map[i];
-        if (!group.second.empty() && group.second.front().first < minSoFar) {
-          minSoFar = group.second.front().first;
+        pair< uint16_t, list<mult_entry> > &group = alloc_map[i];
+        if (!group.second.empty() && group.second.front().row_id < minSoFar) {
+          minSoFar = group.second.front().row_id;
         }
       }
 
@@ -1391,7 +1453,7 @@ static void flush_group_buffers(agg_char2_row_pack_state *as) {
           fread(as->internal_buffer, 1,
                 as->block_size * AggRowColPack::NumBlocksInternalBuffer,
                 as->fp);
-        assert(bread % AggRowColPack::AggSize == 0); // TODO: deal w/ bad files
+        assert(bread % as->agg_size == 0); // TODO: deal w/ bad files
         as->internal_block_id += AggRowColPack::NumBlocksInternalBuffer;
       }
 
@@ -1401,40 +1463,43 @@ static void flush_group_buffers(agg_char2_row_pack_state *as) {
 
       // service the requests
       for (size_t i = pos_first_non_empty; i < alloc_map.size(); i++) {
-        pair< uint16_t, list< pair< uint64_t, uint32_t > > > &group =
-          alloc_map[i];
+        pair< uint16_t, list<mult_entry> > &group = alloc_map[i];
         if (group.second.empty() ||
-            group.second.front().first != minSoFar) continue;
+            group.second.front().row_id != minSoFar) continue;
 
-        // use group.second.front().second - 1 as an index into the running
+        // use group.second.front().mask - 1 as an index into the running
         // sums vector
 
         if (as->run_in_parallel) {
           worker_msg m;
           m.shutdown  = false;
           m.group_key = group.first;
-          m.idx       = group.second.front().second - 1;
-          mpz_init2(m.value, AggRowColPack::AggSize * 8);
+          m.group_id  = group.second.front().group_id;
+          m.idx       = group.second.front().mask - 1;
+          mpz_init2(m.value, as->agg_size * 8);
           MPZFromBytes(
               m.value,
               (const uint8_t *) as->block_buf,
-              AggRowColPack::AggSize);
+              as->agg_size);
           as->worker_states[ as->workerCnt++ % AggRowColPack::NumThreads ].q.push(m);
         } else {
           agg_char2_row_pack_state::per_group_state& s = as->aggs[group.first];
-          ZZ &sum = s.running_sums[0][group.second.front().second - 1];
+          ZZ &sum =
+            s.running_sums
+              [group.second.front().group_id]
+              [group.second.front().mask - 1];
           ZZ e;
           ZZFromBytes(
               e,
               (const uint8_t *) as->block_buf,
-              AggRowColPack::AggSize);
+              as->agg_size);
           MulMod(sum, sum, e, as->n2);
         }
 
         // stats
         as->st.mults++;
-        static const uint32_t AllPosHigh = (0x1 << AggRowColPack::RowsPerBlock) - 1;
-        if (group.second.front().second == AllPosHigh) as->st.all_pos++;
+        static const uint32_t AllPosHigh = (0x1 << as->rows_per_agg) - 1;
+        if (group.second.front().mask == AllPosHigh) as->st.all_pos++;
 
         group.second.pop_front();
       }
@@ -1464,14 +1529,24 @@ agg_char2_row_col_pack_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char
     // insert into buffer
     agg_char2_row_pack_state::element_buffer_map::iterator it =
       as->element_buffer.find(key);
-    vector<uint64_t>* elem_buffer = NULL;
+    vector< pair<uint64_t, uint64_t> >* elem_buffer = NULL;
     if (UNLIKELY(it == as->element_buffer.end())) {
       elem_buffer = &as->element_buffer[key];
       elem_buffer->reserve(AggRowColPack::BufferSize);
     } else {
       elem_buffer = &it->second;
     }
-    elem_buffer->push_back(row_id);
+
+    // create bitmap
+    uint64_t m = 0;
+    for (size_t i = 0; i < as->num_groups; i++) {
+      long long emit = *((long long *) args->args[i + 8]);
+      if (emit) m |= (0x1 << i);
+    }
+
+    //as->debug_stream << "element (row_id, groups) = " << row_id << ", " << m << endl;
+
+    if (m) elem_buffer->push_back(make_pair(row_id, m));
 
     // if per group buffer is full, then flush
     if (UNLIKELY(elem_buffer->size() >= AggRowColPack::BufferSize)) {
@@ -1508,13 +1583,18 @@ agg_char2_row_col_pack(UDF_INIT *initid, UDF_ARGS *args, char *result,
       for (size_t i = 0; i < AggRowColPack::NumThreads; i++) {
         // merge (aggregate) results from workers into main results
         worker_state& s = as->worker_states[i];
-        for (map< uint16_t, vector<mpz_wrapper> >::iterator it = s.group_map.begin();
+        for (map< uint16_t, vector< vector<mpz_wrapper> > >::iterator
+              it = s.group_map.begin();
              it != s.group_map.end(); ++it) {
-          vector<mpz_wrapper>& v = as->aggs[it->first].running_sums_mp[0];
-          assert( v.size() == it->second.size() );
-          for (size_t i = 0; i < v.size(); i++) {
-            mpz_mul(v[i].mp, v[i].mp, it->second[i].mp);
-            mpz_mod(v[i].mp, v[i].mp, as->n2_mp);
+          assert( it->second.size() == as->num_groups );
+          for (size_t group_id = 0; group_id < as->num_groups; group_id++) {
+            vector<mpz_wrapper>& v =
+              as->aggs[it->first].running_sums_mp[group_id];
+            assert( v.size() == it->second[group_id].size() );
+            for (size_t i = 0; i < v.size(); i++) {
+              mpz_mul(v[i].mp, v[i].mp, it->second[group_id][i].mp);
+              mpz_mod(v[i].mp, v[i].mp, as->n2_mp);
+            }
           }
         }
       }
@@ -1523,10 +1603,11 @@ agg_char2_row_col_pack(UDF_INIT *initid, UDF_ARGS *args, char *result,
     *length =
         (2 /* group key */ +
          sizeof(uint64_t) /* group count */ +
-         sizeof(uint32_t) /* num of agg configs to come */ +
-         ((0x1 << AggRowColPack::RowsPerBlock) - 1) *
+         as->num_groups /* number of groups specified by user */ *
+         (sizeof(uint32_t) /* num of agg configs to come */ +
+         ((0x1 << as->rows_per_agg) - 1) /* number of distinct configs */ *
          (sizeof(uint32_t) /* mask of interest */ +
-         AggRowColPack::AggSize)) * as->aggs.size();
+         as->agg_size))) * as->aggs.size();
 
     //as->debug_stream << "seeks = " << as->st.seeks << endl;
     as->debug_stream << "run_in_parallel = " << (as->run_in_parallel ? "yes" : "no") << endl;
@@ -1550,29 +1631,31 @@ agg_char2_row_col_pack(UDF_INIT *initid, UDF_ARGS *args, char *result,
         *iptr = it->second.count;
         ptr += sizeof(uint64_t);
 
-        uint32_t *u32p = (uint32_t *) ptr;
-        *u32p = (0x1 << AggRowColPack::RowsPerBlock) - 1;
-        ptr += sizeof(uint32_t);
+        for (size_t i = 0; i < as->num_groups; i++) {
+          uint32_t *u32p = (uint32_t *) ptr;
+          *u32p = (0x1 << as->rows_per_agg) - 1;
+          ptr += sizeof(uint32_t);
 
-        if (as->run_in_parallel) {
-          size_t s = it->second.running_sums_mp[0].size();
-          assert(s == ((0x1 << AggRowColPack::RowsPerBlock) - 1));
-          for (size_t idx = 0; idx < s; idx++) {
-              uint32_t *iptr = (uint32_t *) ptr;
-              *iptr = (idx + 1);
-              ptr += sizeof(uint32_t);
-              BytesFromMPZ(ptr, it->second.running_sums_mp[0][idx].mp, AggRowColPack::AggSize);
-              ptr += AggRowColPack::AggSize;
-          }
-        } else {
-          size_t s = it->second.running_sums[0].size();
-          assert(s == ((0x1 << AggRowColPack::RowsPerBlock) - 1));
-          for (size_t idx = 0; idx < s; idx++) {
-              uint32_t *iptr = (uint32_t *) ptr;
-              *iptr = (idx + 1);
-              ptr += sizeof(uint32_t);
-              BytesFromZZ(ptr, it->second.running_sums[0][idx], AggRowColPack::AggSize);
-              ptr += AggRowColPack::AggSize;
+          if (as->run_in_parallel) {
+            size_t s = it->second.running_sums_mp[i].size();
+            assert(s == ((0x1 << as->rows_per_agg) - 1));
+            for (size_t idx = 0; idx < s; idx++) {
+                uint32_t *iptr = (uint32_t *) ptr;
+                *iptr = (idx + 1);
+                ptr += sizeof(uint32_t);
+                BytesFromMPZ(ptr, it->second.running_sums_mp[i][idx].mp, as->agg_size);
+                ptr += as->agg_size;
+            }
+          } else {
+            size_t s = it->second.running_sums[i].size();
+            assert(s == ((0x1 << as->rows_per_agg) - 1));
+            for (size_t idx = 0; idx < s; idx++) {
+                uint32_t *iptr = (uint32_t *) ptr;
+                *iptr = (idx + 1);
+                ptr += sizeof(uint32_t);
+                BytesFromZZ(ptr, it->second.running_sums[i][idx], as->agg_size);
+                ptr += as->agg_size;
+            }
           }
         }
     }
@@ -1581,11 +1664,15 @@ agg_char2_row_col_pack(UDF_INIT *initid, UDF_ARGS *args, char *result,
       // need to clear worker states
       for (size_t i = 0; i < AggRowColPack::NumThreads; i++) {
         worker_state& s = as->worker_states[i];
-        for (map<uint16_t, vector<mpz_wrapper> >::iterator it = s.group_map.begin();
+        for (map<uint16_t, vector< vector<mpz_wrapper> > >::iterator
+              it = s.group_map.begin();
              it != s.group_map.end(); ++it) {
-          for (vector<mpz_wrapper>::iterator iit = it->second.begin();
-               iit != it->second.end(); ++iit) {
-            mpz_clear(iit->mp);
+          for (vector< vector<mpz_wrapper> >::iterator it0 = it->second.begin();
+               it0 != it->second.end(); ++it0) {
+            for (vector<mpz_wrapper>::iterator it1 = it0->begin();
+                 it1 != it0->end(); ++it1) {
+              mpz_clear(it1->mp);
+            }
           }
         }
       }

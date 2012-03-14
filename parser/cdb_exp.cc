@@ -1017,6 +1017,9 @@ static void do_query_q1_opt_row_col_pack(Connect &conn,
 
     conn.execute("set @cnt := -1", dbres);
 
+    string filename =
+      "/tmp/" + db + "/lineitem_enc/row_col_pack/data";
+
     string pkinfo = marshallBinary(StringFromZZ(pk[0] * pk[0]));
     ostringstream s;
     s <<
@@ -1024,7 +1027,8 @@ static void do_query_q1_opt_row_col_pack(Connect &conn,
         "l_returnflag_DET, "
         "l_linestatus_DET, "
         "cnt, "
-        << pkinfo << ", " << "\"" << db << "\", 1"
+        << pkinfo << ", " <<
+        "\"" << filename << "\", 1, " << (RowColPackCipherSize/8) << ", 3, 1"
       ") FROM ( "
         "SELECT l_returnflag_DET, l_linestatus_DET, "
         "@cnt := @cnt + 1 AS cnt, l_shipdate_OPE FROM lineitem_enc_noagg "
