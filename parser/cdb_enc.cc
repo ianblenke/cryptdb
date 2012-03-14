@@ -873,9 +873,16 @@ protected:
   }
 
   void do_row_pack(const vector<vector<string> > &rows,
-                   vector<vector<string> >       &enccols,
+                   vector<vector<string> > &enccols,
+                   uint32_t fields_mask,
                    crypto_manager_stub &cm) {
       // ASSUMES ROWS SORTED BY ENCRYPTED PRIMARY KEY
+
+      bool do_l_quantity = fields_mask & 0x1;
+      bool do_l_extendedprice = fields_mask & (0x1 << 1);
+      bool do_l_discount = fields_mask & (0x1 << 2);
+      bool do_l_disc_price = fields_mask & (0x1 << 3);
+      bool do_l_charge = fields_mask & (0x1 << 4);
 
       _static_assert(FieldsPerAgg == 12); // this is hardcoded various places
       size_t nAggs = rows.size() / FieldsPerAgg +
@@ -890,46 +897,71 @@ protected:
               const vector<string>& tokens = rows[row_id];
 
               // l_quantity_AGG
-              long l_quantity_int = roundToLong(resultFromStr<double>(tokens[lineitem::l_quantity]) * 100.0);
-              insert_into_slot<BitsPerAggField>(z0, l_quantity_int, j);
+              if (do_l_quantity) {
+                long l_quantity_int = roundToLong(resultFromStr<double>(tokens[lineitem::l_quantity]) * 100.0);
+                insert_into_slot<BitsPerAggField>(z0, l_quantity_int, j);
+              }
 
               // l_extendedprice_AGG
-              long l_extendedprice_int = roundToLong(resultFromStr<double>(tokens[lineitem::l_extendedprice]) * 100.0);
-              insert_into_slot<BitsPerAggField>(z1, l_extendedprice_int, j);
+              if (do_l_extendedprice) {
+                long l_extendedprice_int = roundToLong(resultFromStr<double>(tokens[lineitem::l_extendedprice]) * 100.0);
+                insert_into_slot<BitsPerAggField>(z1, l_extendedprice_int, j);
+              }
 
               // l_discount_AGG
-              long l_discount_int = roundToLong(resultFromStr<double>(tokens[lineitem::l_discount]) * 100.0);
-              insert_into_slot<BitsPerAggField>(z2, l_discount_int, j);
+              if (do_l_discount) {
+                long l_discount_int = roundToLong(resultFromStr<double>(tokens[lineitem::l_discount]) * 100.0);
+                insert_into_slot<BitsPerAggField>(z2, l_discount_int, j);
+              }
 
               // l_disc_price = l_extendedprice * (1 - l_discount)
-              double l_extendedprice  = resultFromStr<double>(tokens[lineitem::l_extendedprice]);
-              double l_discount       = resultFromStr<double>(tokens[lineitem::l_discount]);
-              double l_disc_price     = l_extendedprice * (1.0 - l_discount);
-              long   l_disc_price_int = roundToLong(l_disc_price * 100.0);
-              insert_into_slot<BitsPerAggField>(z3, l_disc_price_int, j);
+              if (do_l_disc_price) {
+                double l_extendedprice  = resultFromStr<double>(tokens[lineitem::l_extendedprice]);
+                double l_discount       = resultFromStr<double>(tokens[lineitem::l_discount]);
+                double l_disc_price     = l_extendedprice * (1.0 - l_discount);
+                long   l_disc_price_int = roundToLong(l_disc_price * 100.0);
+                insert_into_slot<BitsPerAggField>(z3, l_disc_price_int, j);
+              }
 
               // l_charge = l_extendedprice * (1 - l_discount) * (1 + l_tax)
-              double l_tax        = resultFromStr<double>(tokens[lineitem::l_tax]);
-              double l_charge     = l_extendedprice * (1.0 - l_discount) * (1.0 + l_tax);
-              long   l_charge_int = roundToLong(l_charge * 100.0);
-              insert_into_slot<BitsPerAggField>(z4, l_charge_int, j);
+              if (do_l_charge) {
+                double l_tax        = resultFromStr<double>(tokens[lineitem::l_tax]);
+                double l_charge     = l_extendedprice * (1.0 - l_discount) * (1.0 + l_tax);
+                long   l_charge_int = roundToLong(l_charge * 100.0);
+                insert_into_slot<BitsPerAggField>(z4, l_charge_int, j);
+              }
           }
 
           // write the block out
-          string e0 = cm.encrypt_Paillier(z0);
-          e0.resize(256);
+          string e0;
+          if (do_l_quantity) {
+            e0 = cm.encrypt_Paillier(z0);
+            e0.resize(256);
+          }
 
-          string e1 = cm.encrypt_Paillier(z1);
-          e1.resize(256);
+          string e1;
+          if (do_l_extendedprice) {
+            e1 = cm.encrypt_Paillier(z1);
+            e1.resize(256);
+          }
 
-          string e2 = cm.encrypt_Paillier(z2);
-          e2.resize(256);
+          string e2;
+          if (do_l_discount) {
+            e2 = cm.encrypt_Paillier(z2);
+            e2.resize(256);
+          }
 
-          string e3 = cm.encrypt_Paillier(z3);
-          e3.resize(256);
+          string e3;
+          if (do_l_disc_price) {
+            e3 = cm.encrypt_Paillier(z3);
+            e3.resize(256);
+          }
 
-          string e4 = cm.encrypt_Paillier(z4);
-          e4.resize(256);
+          string e4;
+          if (do_l_charge) {
+            e4 = cm.encrypt_Paillier(z4);
+            e4.resize(256);
+          }
 
           cout << e0 << e1 << e2 << e3 << e4;
       }
@@ -944,7 +976,7 @@ protected:
            tpe == opt_type::row_col_packed);
     switch (tpe) {
     case opt_type::packed:         do_group_pack  (tokens, enccols, cm); break;
-    case opt_type::row_packed:     do_row_pack    (tokens, enccols, cm); break;
+    case opt_type::row_packed:     do_row_pack    (tokens, enccols, (0x1 << 3), cm); break;
     case opt_type::row_col_packed: do_row_col_pack(tokens, enccols, cm); break;
     default: assert(false);
     }

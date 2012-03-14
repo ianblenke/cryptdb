@@ -1600,14 +1600,38 @@ agg_char2_row_col_pack(UDF_INIT *initid, UDF_ARGS *args, char *result,
       }
     }
 
-    *length =
-        (2 /* group key */ +
-         sizeof(uint64_t) /* group count */ +
-         as->num_groups /* number of groups specified by user */ *
-         (sizeof(uint32_t) /* num of agg configs to come */ +
-         ((0x1 << as->rows_per_agg) - 1) /* number of distinct configs */ *
-         (sizeof(uint32_t) /* mask of interest */ +
-         as->agg_size))) * as->aggs.size();
+    // calculate length
+    map< uint16_t, vector< size_t > > non_zero_m;
+    *length = 0;
+    for (agg_char2_row_pack_state::group_map::iterator it = as->aggs.begin();
+         it != as->aggs.end(); ++it) {
+      *length += 2; /* group key */
+      *length += sizeof(uint64_t); /* number of data items in this group (ie count(*)) */
+
+      vector<size_t>& nn = non_zero_m[it->first];
+      nn.resize(as->num_groups);
+      for (size_t i = 0; i < as->num_groups; i++) {
+        *length += sizeof(uint32_t); /* number of (non-zero) configurations */
+        size_t non_zero = 0;
+        if (as->run_in_parallel) {
+          size_t s = it->second.running_sums_mp[i].size();
+          assert(s == ((0x1 << as->rows_per_agg) - 1));
+          for (size_t idx = 0; idx < s; idx++) {
+            if (mpz_cmp_ui(it->second.running_sums_mp[i][idx].mp, 1)) non_zero++;
+          }
+
+        } else {
+          size_t s = it->second.running_sums[i].size();
+          assert(s == ((0x1 << as->rows_per_agg) - 1));
+          for (size_t idx = 0; idx < s; idx++) {
+            if (it->second.running_sums[i][idx] != 1) non_zero++;
+          }
+        }
+        // all non_zero aggs (mask plus actual agg)
+        *length += non_zero * (sizeof(uint32_t) + as->agg_size);
+        nn[i] = non_zero;
+      }
+    }
 
     //as->debug_stream << "seeks = " << as->st.seeks << endl;
     as->debug_stream << "run_in_parallel = " << (as->run_in_parallel ? "yes" : "no") << endl;
@@ -1631,29 +1655,37 @@ agg_char2_row_col_pack(UDF_INIT *initid, UDF_ARGS *args, char *result,
         *iptr = it->second.count;
         ptr += sizeof(uint64_t);
 
+        vector<size_t>& nn = non_zero_m[it->first];
         for (size_t i = 0; i < as->num_groups; i++) {
           uint32_t *u32p = (uint32_t *) ptr;
-          *u32p = (0x1 << as->rows_per_agg) - 1;
+          *u32p = nn[i];
           ptr += sizeof(uint32_t);
 
           if (as->run_in_parallel) {
             size_t s = it->second.running_sums_mp[i].size();
-            assert(s == ((0x1 << as->rows_per_agg) - 1));
             for (size_t idx = 0; idx < s; idx++) {
+                if (!mpz_cmp_ui(it->second.running_sums_mp[i][idx].mp, 1)) {
+                  continue; // test usefullness
+                }
+
                 uint32_t *iptr = (uint32_t *) ptr;
                 *iptr = (idx + 1);
                 ptr += sizeof(uint32_t);
+
                 BytesFromMPZ(ptr, it->second.running_sums_mp[i][idx].mp, as->agg_size);
                 ptr += as->agg_size;
             }
           } else {
             size_t s = it->second.running_sums[i].size();
-            assert(s == ((0x1 << as->rows_per_agg) - 1));
             for (size_t idx = 0; idx < s; idx++) {
+                ZZ& z = it->second.running_sums[i][idx];
+                if (z == 1) continue;
+
                 uint32_t *iptr = (uint32_t *) ptr;
                 *iptr = (idx + 1);
                 ptr += sizeof(uint32_t);
-                BytesFromZZ(ptr, it->second.running_sums[i][idx], as->agg_size);
+
+                BytesFromZZ(ptr, z, as->agg_size);
                 ptr += as->agg_size;
             }
           }
@@ -1677,6 +1709,7 @@ agg_char2_row_col_pack(UDF_INIT *initid, UDF_ARGS *args, char *result,
         }
       }
     }
+
     return (char *) as->rbuf;
 }
 

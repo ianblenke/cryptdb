@@ -1797,6 +1797,119 @@ static void do_query_q14_opt(Connect &conn,
     }
 }
 
+static void do_query_q14_opt2(Connect &conn,
+                              CryptoManager &cm,
+                              uint32_t year,
+                              vector<q14entry> &results,
+                              const string& db) {
+    crypto_manager_stub cm_stub(&cm, UseOldOpe);
+    NamedTimer fcnTimer(__func__);
+
+    bool isBin;
+    string encDateLower = cm_stub.crypt<3>(cm.getmkey(), strFromVal(EncodeDate(7, 1, year)),
+                                   TYPE_INTEGER, fieldname(lineitem::l_shipdate, "OPE"),
+                                   getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
+    string encDateUpper = cm_stub.crypt<3>(cm.getmkey(), strFromVal(EncodeDate(8, 1, year)),
+                                   TYPE_INTEGER, fieldname(lineitem::l_shipdate, "OPE"),
+                                   getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
+
+    Binary key(cm.getKey(cm.getmkey(), fieldname(part::p_type, "SWP"), SECLEVEL::SWP));
+    Token t = CryptoManager::token(key, Binary("promo"));
+
+    string pkinfo = marshallBinary(cm.getPKInfo());
+    ostringstream s;
+
+    string filename =
+      "/tmp/" + db + "/lineitem_enc/row_pack/disc_price";
+
+    s << "SELECT SQL_NO_CACHE agg_char2_row_col_pack(1, 1, row_id, "
+        << pkinfo << ", " <<
+        "\"" << filename << "\", 1, 256, 12, "
+        << "searchSWP("
+          << marshallBinary(string((char *)t.ciph.content, t.ciph.len))
+          << ", "
+          << marshallBinary(string((char *)t.wordKey.content, t.wordKey.len))
+          << ", p_type_SWP) = 1, 1) "
+      << "FROM lineitem_enc_noagg_rowid, part_enc "
+      << "WHERE "
+        << "l_partkey_DET = p_partkey_DET AND "
+        << "l_shipdate_OPE >= " << encDateLower << " AND "
+        << "l_shipdate_OPE < " << encDateUpper;
+
+    cerr << s.str() << endl;
+
+    DBResult * dbres;
+    {
+      NamedTimer t(__func__, "execute");
+      conn.execute(s.str(), dbres);
+    }
+    ResType res;
+    {
+      NamedTimer t(__func__, "unpack");
+      res = dbres->unpack();
+      assert(res.ok);
+    }
+
+    static const size_t BitsPerAggField = 83;
+    ZZ mask = to_ZZ(1); mask <<= BitsPerAggField; mask -= 1;
+    assert(NumBits(mask) == (int)BitsPerAggField);
+    {
+      assert(res.rows.size() == 1);
+      string data = res.rows[0][0].data;
+
+      double top = 0.0;
+      double bot = 0.0;
+
+      const uint8_t *p   = (const uint8_t *) data.data();
+      const uint8_t *end = (const uint8_t *) data.data() + data.size();
+      while (p < end) {
+
+        unsigned char dummy0 = *p++;
+        unsigned char dummy1 = *p++;
+
+        assert(unsigned(dummy0) == 1);
+        assert(unsigned(dummy1) == 1);
+
+        // skip over count
+        p += sizeof(uint64_t);
+
+#define TAKE_FROM_SLOT(z, slot) \
+        (to_long(((z) >> (BitsPerAggField * (slot))) & mask))
+
+        for (size_t mode = 0; mode < 2; mode++) {
+          const uint32_t *u32p = (const uint32_t *) p;
+          uint32_t n_aggs = *u32p;
+          p += sizeof(uint32_t);
+
+          for (size_t group_i = 0; group_i < n_aggs; group_i++) {
+            // interest mask
+            const uint32_t *u32p = (const uint32_t *) p;
+            uint32_t interest_mask = *u32p;
+            p += sizeof(uint32_t);
+
+            string ct = string((const char *) p, (size_t) 256);
+            ZZ m;
+            cm.decrypt_Paillier(ct, m);
+            p += 256;
+
+            for (size_t i = 0; i < 12; i++) {
+              if (!(interest_mask & (0x1 << i))) continue;
+              long l = TAKE_FROM_SLOT(m, i);
+              if (mode == 0) {
+                top += ((double)l)/100.0;
+              } else {
+                bot += ((double)l)/100.0;
+              }
+            }
+          }
+        }
+      }
+
+      double result = 100.0 * (top / bot);
+      results.push_back(result);
+    }
+}
+
 struct _q14_noopt_task_state {
   _q14_noopt_task_state() : running_numer(0.0), running_denom(0.0) {}
   vector< vector< SqlItem > > rows;
@@ -3969,6 +4082,7 @@ int main(int argc, char **argv) {
         "--crypt-query14",
         "--crypt-opt-tables-query14",
         "--crypt-opt-query14",
+        "--crypt-opt2-query14",
     };
     std::set<string> Query14Modes
       (Query14Strings, Query14Strings + NELEMS(Query14Strings));
@@ -4211,6 +4325,13 @@ int main(int argc, char **argv) {
           } else if (mode == "crypt-opt-query14") {
             for (size_t i = 0; i < nruns; i++) {
               do_query_q14_opt(conn, cm, year, results);
+              ctr += results.size();
+              PRINT_RESULTS();
+              results.clear();
+            }
+          } else if (mode == "crypt-opt2-query14") {
+            for (size_t i = 0; i < nruns; i++) {
+              do_query_q14_opt2(conn, cm, year, results, db_name);
               ctr += results.size();
               PRINT_RESULTS();
               results.clear();
