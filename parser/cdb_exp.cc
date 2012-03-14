@@ -2822,13 +2822,60 @@ static void do_query_q18(Connect &conn,
     }
 }
 
+struct _q18_noopt_task_state {
+  _q18_noopt_task_state()  {}
+  vector< vector< SqlItem > > rows;
+  vector<string> l_orderkeys;
+};
+
+struct _q18_noopt_task {
+  void operator()() {
+    static const double L_QUANTITY_MAX = 50.0; // comes from statistics
+    for (auto row : state->rows) {
+      vector<string> ciphers;
+      tokenize(row[1].data, ",", ciphers);
+      assert(!ciphers.empty());
+
+      double sum = 0.0;
+      for (vector<string>::iterator it = ciphers.begin();
+           it != ciphers.end(); ++it) {
+          uint64_t l_quantity_int = decryptRow<uint64_t, 7>(
+                  *it,
+                  12345,
+                  fieldname(lineitem::l_quantity, "DET"),
+                  TYPE_INTEGER,
+                  oDET,
+                  *cm);
+          double l_quantity = ((double)l_quantity_int)/100.0;
+          sum += l_quantity;
+
+          // short circuit evaluations:
+
+          // if we are already past the threshold, then quit
+          if (sum > (double) threshold) break;
+
+          // if its impossible to reach the threshold even if assuming
+          // the remaining entries are all L_QUANTITY_MAX, then we can
+          // just quit now, w/o decrypting the rest of the entries
+          if ((sum + ((double)(ciphers.end() - (it + 1))) * L_QUANTITY_MAX) <=
+              (double) threshold) break;
+      }
+
+      if (sum > (double) threshold) state->l_orderkeys.push_back(row[0].data);
+    }
+  }
+  CryptoManager* cm;
+  _q18_noopt_task_state* state;
+  double threshold;
+};
+
 static void do_query_q18_crypt(Connect &conn,
                                CryptoManager& cm,
                                uint64_t threshold,
                                vector<q18entry> &results) {
     NamedTimer fcnTimer(__func__);
 
-    double L_QUANTITY_MAX = 50.0; // comes from statistics
+    static const double L_QUANTITY_MAX = 50.0; // comes from statistics
 
     size_t minGroupCount = (size_t)ceil(double(threshold)/L_QUANTITY_MAX);
     assert(minGroupCount >= 1);
@@ -2838,7 +2885,7 @@ static void do_query_q18_crypt(Connect &conn,
     // query 1
     s <<
         "select l_orderkey_DET, group_concat(l_quantity_DET) "
-        "from lineitem_enc "
+        "from lineitem_enc_noagg "
         "group by l_orderkey_DET "
         "having count(*) >= " << minGroupCount;
     cerr  << s.str() << endl;
@@ -2856,22 +2903,45 @@ static void do_query_q18_crypt(Connect &conn,
     }
 
     vector<string> l_orderkeys;
-    {
+    if (DoParallel) {
+        NamedTimer t(__func__, "aggregating");
+
+        using namespace exec_service;
+
+        vector<_q18_noopt_task_state> states( NumThreads );
+        vector<_q18_noopt_task> tasks( NumThreads );
+        vector<SqlRowGroup> groups;
+        SplitRowsIntoGroups(groups, res.rows, NumThreads);
+
+        for (size_t i = 0; i < NumThreads; i++) {
+          tasks[i].cm        = &cm;
+          tasks[i].state     = &states[i];
+          tasks[i].threshold = threshold;
+          states[i].rows     = groups[i];
+        }
+
+        Exec<_q18_noopt_task>::DefaultExecutor exec( NumThreads );
+        exec.start();
+        for (size_t i = 0; i < NumThreads; i++) {
+          exec.submit(tasks[i]);
+        }
+        exec.stop(); // blocks until completion
+
+        for (size_t i = 0; i < NumThreads; i++) {
+          l_orderkeys.insert(l_orderkeys.end(),
+                             states[i].l_orderkeys.begin(),
+                             states[i].l_orderkeys.end());
+        }
+    } else {
         NamedTimer t(__func__, "aggregating");
         for (auto row : res.rows) {
             vector<string> ciphers;
-            bool trace = row[0].data == "613450318";
             tokenize(row[1].data, ",", ciphers);
             assert(!ciphers.empty());
 
             double sum = 0.0;
             for (vector<string>::iterator it = ciphers.begin();
                  it != ciphers.end(); ++it) {
-                if (trace) {
-                  cerr << "cipher: " << *it << endl;
-                  uint64_t c = valFromStr(*it);
-                  cerr << "cc: " << c << endl;
-                }
                 uint64_t l_quantity_int = decryptRow<uint64_t, 7>(
                         *it,
                         12345,
@@ -2881,8 +2951,6 @@ static void do_query_q18_crypt(Connect &conn,
                         cm);
                 double l_quantity = ((double)l_quantity_int)/100.0;
                 sum += l_quantity;
-
-                if (trace) cerr << l_quantity << endl;
 
                 // short circuit evaluations:
 
@@ -2895,8 +2963,6 @@ static void do_query_q18_crypt(Connect &conn,
                 if ((sum + ((double)(ciphers.end() - (it + 1))) * L_QUANTITY_MAX) <=
                     (double) threshold) break;
             }
-
-            if (trace) cerr << "total sum: " << sum << endl;
 
             if (sum > (double) threshold) l_orderkeys.push_back(row[0].data);
         }
