@@ -3597,9 +3597,24 @@ static void do_query_q20_opt_noagg(Connect &conn,
     assert(!partkeyDETs.empty());
 
     ostringstream s;
+    //s <<
+    //    "select SQL_NO_CACHE ps_partkey_DET, ps_suppkey_DET, ps_availqty_DET, l_quantity_DET "
+    //    //"from partsupp_enc_noopt, lineitem_enc_noagg "
+    //    "from lineitem_enc_noagg STRAIGHT_JOIN partsupp_enc_noopt "
+    //    "where "
+    //    "    ps_partkey_DET = l_partkey_DET and "
+    //    "    ps_suppkey_DET = l_suppkey_DET and "
+    //    "    ps_partkey_DET in ( "
+    //    << join(partkeyDETs, ",") <<
+    //    "    ) "
+    //    "    and l_shipdate_OPE >= " << encDATE_START <<
+    //    "    and l_shipdate_OPE < " << encDATE_END;
+    //cerr << s.str() << endl;
+
+    // this strategy seems to perform better than the one above
     s <<
-        "select SQL_NO_CACHE ps_partkey_DET, ps_suppkey_DET, ps_availqty_DET, l_quantity_DET "
-        "from partsupp_enc_noopt, lineitem_enc "
+        "select SQL_NO_CACHE ps_partkey_DET, ps_suppkey_DET, ps_availqty_DET, group_concat(l_quantity_DET) "
+        "from partsupp_enc_noopt, lineitem_enc_noagg "
         "where "
         "    ps_partkey_DET = l_partkey_DET and "
         "    ps_suppkey_DET = l_suppkey_DET and "
@@ -3607,7 +3622,8 @@ static void do_query_q20_opt_noagg(Connect &conn,
         << join(partkeyDETs, ",") <<
         "    ) "
         "    and l_shipdate_OPE >= " << encDATE_START <<
-        "    and l_shipdate_OPE < " << encDATE_END;
+        "    and l_shipdate_OPE < " << encDATE_END <<
+        "    group by ps_partkey_DET, ps_suppkey_DET";
     //cerr << s.str() << endl;
 
     DBResult * dbres;
@@ -3628,8 +3644,8 @@ static void do_query_q20_opt_noagg(Connect &conn,
     AggMap groupBy;
     {
         NamedTimer t(__func__, "decrypt");
-
         for (auto row : res.rows) {
+
             // decrypt availqty
             uint64_t ps_availqty = decryptRow<uint64_t>(
                 row[2].data,
@@ -3639,28 +3655,26 @@ static void do_query_q20_opt_noagg(Connect &conn,
                 oDET,
                 cm);
 
-            // decrypt l_quantity
-            uint64_t l_quantity_int = decryptRow<uint64_t, 7>(
-                    row[3].data,
-                    12345,
-                    fieldname(lineitem::l_quantity, "DET"),
-                    TYPE_INTEGER,
-                    oDET,
-                    cm);
-            double l_quantity = ((double)l_quantity_int)/100.0;
+            vector<string> l_quantities;
+            tokenize(row[3].data, ",", l_quantities);
 
-            pair<AggMap::iterator, bool> res =
-                groupBy.insert(make_pair(
-                            make_pair(row[0].data, row[1].data),
-                            make_pair(ps_availqty, l_quantity)));
-
-            if (!res.second) {
-                // not inserted, need to update group
-                assert(res.first->second.first == ps_availqty);
-                res.first->second.second += l_quantity;
-            } else {
-                // inserted, nothing to do
+            double l_quantity_sum = 0.0;
+            for (vector<string>::iterator it = l_quantities.begin();
+                 it != l_quantities.end(); ++it) {
+              // decrypt l_quantity
+              uint64_t l_quantity_int = decryptRow<uint64_t, 7>(
+                      *it,
+                      12345,
+                      fieldname(lineitem::l_quantity, "DET"),
+                      TYPE_INTEGER,
+                      oDET,
+                      cm);
+              double l_quantity = ((double)l_quantity_int)/100.0;
+              l_quantity_sum += l_quantity;
             }
+
+            groupBy[make_pair(row[0].data, row[1].data)] =
+              make_pair(ps_availqty, l_quantity_sum);
         }
     }
 
