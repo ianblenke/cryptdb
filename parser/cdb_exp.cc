@@ -1810,9 +1810,14 @@ static void do_query_q14_opt2(Connect &conn,
 
       conn.execute("SET GLOBAL innodb_old_blocks_time = 0"); // allow to flood buffer pool
 
-      // NOTE: this is our attempt to mimic a smarter join algorithm,
+      // NOTE: this is our attempt to mimic a hash join
       // and avoid having to do lots of random IO
-      conn.execute("SELECT SQL_NO_CACHE COUNT(*) FROM ( SELECT * FROM part_enc ) AS _ANON_");
+      conn.execute("CREATE TEMPORARY TABLE part_enc_tmp ("
+                   "p_partkey_DET integer unsigned, "
+                   "p_type_SWP varbinary(255), "
+                   "PRIMARY KEY (p_partkey_DET)) ENGINE=MEMORY");
+
+      conn.execute("INSERT INTO part_enc_tmp SELECT p_partkey_DET, p_type_SWP FROM part_enc");
 
       conn.execute("SET GLOBAL innodb_old_blocks_time = 1000");
     }
@@ -1842,7 +1847,7 @@ static void do_query_q14_opt2(Connect &conn,
           << ", "
           << marshallBinary(string((char *)t.wordKey.content, t.wordKey.len))
           << ", p_type_SWP) = 1, 1) "
-      << "FROM lineitem_enc_noagg_rowid, part_enc "
+      << "FROM lineitem_enc_noagg_rowid, part_enc_tmp "
       << "WHERE "
         << "l_partkey_DET = p_partkey_DET AND "
         << "l_shipdate_OPE >= " << encDateLower << " AND "
@@ -1984,9 +1989,14 @@ static void do_query_q14_noopt(Connect &conn,
 
       conn.execute("SET GLOBAL innodb_old_blocks_time = 0"); // allow to flood buffer pool
 
-      // NOTE: this is our attempt to mimic a smarter join algorithm,
+      // NOTE: this is our attempt to mimic a hash join
       // and avoid having to do lots of random IO
-      conn.execute("SELECT SQL_NO_CACHE COUNT(*) FROM ( SELECT * FROM part_enc ) AS _ANON_");
+      conn.execute("CREATE TEMPORARY TABLE part_enc_tmp ("
+                   "p_partkey_DET integer unsigned, "
+                   "p_type_DET varbinary(25), "
+                   "PRIMARY KEY (p_partkey_DET)) ENGINE=MEMORY");
+
+      conn.execute("INSERT INTO part_enc_tmp SELECT p_partkey_DET, p_type_DET FROM part_enc");
 
       conn.execute("SET GLOBAL innodb_old_blocks_time = 1000");
     }
@@ -2001,7 +2011,7 @@ static void do_query_q14_noopt(Connect &conn,
     ostringstream s;
     s << "SELECT SQL_NO_CACHE p_type_DET, l_extendedprice_DET, l_discount_DET "
         << "FROM " << string(use_opt_table ? "lineitem_enc" : "lineitem_enc_noagg")
-          << ", part_enc "
+          << ", part_enc_tmp "
         << "WHERE l_partkey_DET = p_partkey_DET AND "
         << "l_shipdate_OPE >= " << encDateLower << " AND "
         << "l_shipdate_OPE < " << encDateUpper;
@@ -2104,15 +2114,20 @@ static void do_query_q14(Connect &conn,
 
       conn.execute("SET GLOBAL innodb_old_blocks_time = 0"); // allow to flood buffer pool
 
-      // NOTE: this is our attempt to mimic a smarter join algorithm,
+      // NOTE: this is our attempt to mimic a hash join
       // and avoid having to do lots of random IO
-      conn.execute("SELECT SQL_NO_CACHE COUNT(*) FROM ( SELECT * FROM PART ) AS _ANON_");
+      conn.execute("CREATE TEMPORARY TABLE part_tmp ("
+                   "p_partkey integer, "
+                   "p_type varchar(25), "
+                   "PRIMARY KEY (p_partkey)) ENGINE=MEMORY");
+
+      conn.execute("INSERT INTO part_tmp SELECT p_partkey, p_type FROM PART");
 
       conn.execute("SET GLOBAL innodb_old_blocks_time = 1000");
     }
 
     ostringstream s;
-    s << "select SQL_NO_CACHE 100.00 * sum(case when p_type like 'PROMO%' then l_extendedprice * (1 - l_discount) else 0 end) / sum(l_extendedprice * (1 - l_discount)) as promo_revenue from LINEITEM, PART where l_partkey = p_partkey and l_shipdate >= date '" << year << "-07-01' and l_shipdate < date '" << year << "-07-01' + interval '1' month";
+    s << "select SQL_NO_CACHE 100.00 * sum(case when p_type like 'PROMO%' then l_extendedprice * (1 - l_discount) else 0 end) / sum(l_extendedprice * (1 - l_discount)) as promo_revenue from LINEITEM, part_tmp where l_partkey = p_partkey and l_shipdate >= date '" << year << "-07-01' and l_shipdate < date '" << year << "-07-01' + interval '1' month";
     cerr << s.str() << endl;
 
     DBResult * dbres;
