@@ -1805,6 +1805,18 @@ static void do_query_q14_opt2(Connect &conn,
     crypto_manager_stub cm_stub(&cm, UseOldOpe);
     NamedTimer fcnTimer(__func__);
 
+    {
+      NamedTimer t(__func__, "execute-prefetch");
+
+      conn.execute("SET GLOBAL innodb_old_blocks_time = 0"); // allow to flood buffer pool
+
+      // NOTE: this is our attempt to mimic a smarter join algorithm,
+      // and avoid having to do lots of random IO
+      conn.execute("SELECT SQL_NO_CACHE COUNT(*) FROM ( SELECT * FROM part_enc ) AS _ANON_");
+
+      conn.execute("SET GLOBAL innodb_old_blocks_time = 1000");
+    }
+
     bool isBin;
     string encDateLower = cm_stub.crypt<3>(cm.getmkey(), strFromVal(EncodeDate(7, 1, year)),
                                    TYPE_INTEGER, fieldname(lineitem::l_shipdate, "OPE"),
@@ -1958,6 +1970,7 @@ struct _q14_noopt_task {
   CryptoManager* cm;
   _q14_noopt_task_state* state;
 };
+
 static void do_query_q14_noopt(Connect &conn,
                                CryptoManager &cm,
                                uint32_t year,
@@ -1965,6 +1978,18 @@ static void do_query_q14_noopt(Connect &conn,
                                bool use_opt_table = false) {
     crypto_manager_stub cm_stub(&cm, UseOldOpe);
     NamedTimer fcnTimer(__func__);
+
+    {
+      NamedTimer t(__func__, "execute-prefetch");
+
+      conn.execute("SET GLOBAL innodb_old_blocks_time = 0"); // allow to flood buffer pool
+
+      // NOTE: this is our attempt to mimic a smarter join algorithm,
+      // and avoid having to do lots of random IO
+      conn.execute("SELECT SQL_NO_CACHE COUNT(*) FROM ( SELECT * FROM part_enc ) AS _ANON_");
+
+      conn.execute("SET GLOBAL innodb_old_blocks_time = 1000");
+    }
 
     bool isBin;
     string encDateLower = cm_stub.crypt<3>(cm.getmkey(), strFromVal(EncodeDate(7, 1, year)),
@@ -1975,7 +2000,7 @@ static void do_query_q14_noopt(Connect &conn,
             getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
     ostringstream s;
     s << "SELECT SQL_NO_CACHE p_type_DET, l_extendedprice_DET, l_discount_DET "
-        << "FROM " << string(use_opt_table ? "lineitem_enc" : "lineitem_enc_noopt")
+        << "FROM " << string(use_opt_table ? "lineitem_enc" : "lineitem_enc_noagg")
           << ", part_enc "
         << "WHERE l_partkey_DET = p_partkey_DET AND "
         << "l_shipdate_OPE >= " << encDateLower << " AND "
@@ -2073,6 +2098,18 @@ static void do_query_q14(Connect &conn,
                          uint32_t year,
                          vector<q14entry> &results) {
     NamedTimer fcnTimer(__func__);
+
+    {
+      NamedTimer t(__func__, "execute-prefetch");
+
+      conn.execute("SET GLOBAL innodb_old_blocks_time = 0"); // allow to flood buffer pool
+
+      // NOTE: this is our attempt to mimic a smarter join algorithm,
+      // and avoid having to do lots of random IO
+      conn.execute("SELECT SQL_NO_CACHE COUNT(*) FROM ( SELECT * FROM PART ) AS _ANON_");
+
+      conn.execute("SET GLOBAL innodb_old_blocks_time = 1000");
+    }
 
     ostringstream s;
     s << "select SQL_NO_CACHE 100.00 * sum(case when p_type like 'PROMO%' then l_extendedprice * (1 - l_discount) else 0 end) / sum(l_extendedprice * (1 - l_discount)) as promo_revenue from LINEITEM, PART where l_partkey = p_partkey and l_shipdate >= date '" << year << "-07-01' and l_shipdate < date '" << year << "-07-01' + interval '1' month";
@@ -3089,13 +3126,13 @@ static void do_query_q18_crypt(Connect &conn,
     // query 2
 
     assert(!l_orderkeys.empty());
-    string pkinfo = marshallBinary(cm.getPKInfo());
+    //string pkinfo = marshallBinary(cm.getPKInfo());
     s1 <<
         "select "
         "    c_name_DET, c_custkey_DET, o_orderkey_DET, "
-        "    o_orderdate_DET, o_totalprice_DET, agg(l_bitpacked_AGG, " << pkinfo << ") "
+        "    o_orderdate_DET, o_totalprice_DET, group_concat(l_quantity_DET) "
         "from "
-        "    customer_enc, orders_enc, lineitem_enc "
+        "    customer_enc, orders_enc, lineitem_enc_noagg "
         "where "
         "    o_orderkey_DET in ( "
         << join(l_orderkeys, ",") <<
@@ -3171,10 +3208,25 @@ static void do_query_q18_crypt(Connect &conn,
                     cm);
             double o_totalprice = ((double)o_totalprice_int)/100.0;
 
-            ZZ z;
-            cm.decrypt_Paillier(row[5].data, z);
-            long sum_qty_int = extract_from_slot(z, 0);
-            double sum_qty = ((double)sum_qty_int)/100.0;
+            //ZZ z;
+            //cm.decrypt_Paillier(row[5].data, z);
+            //long sum_qty_int = extract_from_slot(z, 0);
+            //double sum_qty = ((double)sum_qty_int)/100.0;
+
+            double sum_qty = 0.0;
+            vector<string> ciphers;
+            tokenize(row[5].data, ",", ciphers);
+            for (vector<string>::iterator it = ciphers.begin();
+                 it != ciphers.end(); ++it) {
+              uint64_t l_quantity_int = decryptRow<uint64_t, 7>(
+                      *it,
+                      12345,
+                      fieldname(lineitem::l_quantity, "DET"),
+                      TYPE_INTEGER,
+                      oDET,
+                      cm);
+              sum_qty += ((double)l_quantity_int)/100.0;
+            }
 
             results.push_back(
                 q18entry(
