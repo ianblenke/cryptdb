@@ -502,7 +502,7 @@ static void do_query_q1(Connect &conn,
 }
 
 typedef map< pair< uint8_t, uint8_t >,
-             pair< uint64_t, double > > Q1AggGroup;
+             pair< uint64_t, uint64_t > > Q1AggGroup;
 
 static void ReadChar2AggGroup(const string& data,
                               Q1AggGroup& agg_group) {
@@ -515,9 +515,9 @@ static void ReadChar2AggGroup(const string& data,
     const uint64_t *u64p = (const uint64_t *) p;
     uint64_t count = *u64p;
     p += sizeof(uint64_t);
-    const double *dp = (const double *) p;
-    double value = *dp;
-    p += sizeof(double);
+    const uint64_t *dp = (const uint64_t *) p;
+    uint64_t value = *dp;
+    p += sizeof(uint64_t);
     agg_group[make_pair(l_returnflag, l_linestatus)] = make_pair(count, value);
   }
 }
@@ -528,9 +528,10 @@ static void do_query_q1_nosort(Connect &conn,
     NamedTimer fcnTimer(__func__);
 
     ostringstream buf;
-    buf << "select SQL_NO_CACHE sum_char2(l_returnflag, l_linestatus, l_quantity) as sum_qty, sum_char2(l_returnflag, l_linestatus, l_extendedprice) as sum_base_price, sum_char2(l_returnflag, l_linestatus, l_extendedprice * (1 - l_discount)) as sum_disc_price, sum_char2(l_returnflag, l_linestatus, l_extendedprice * (1 - l_discount) * (1 + l_tax)) as sum_charge, sum_char2(l_returnflag, l_linestatus, l_discount) as sum_disc from LINEITEM "
+    buf << "select SQL_NO_CACHE sum_char2(l_returnflag, l_linestatus, l_quantity) as sum_qty, sum_char2(l_returnflag, l_linestatus, l_extendedprice) as sum_base_price, sum_char2(l_returnflag, l_linestatus, l_extendedprice * (100 - l_discount)) as sum_disc_price, sum_char2(l_returnflag, l_linestatus, l_extendedprice * (100 - l_discount) * (100 + l_tax)) as sum_charge, sum_char2(l_returnflag, l_linestatus, l_discount) as sum_disc from LINEITEM_INT "
         << "where l_shipdate <= date '" << year << "-1-1'"
         ;
+    cerr << buf.str() << endl;
 
     DBResult * dbres;
     {
@@ -560,23 +561,23 @@ static void do_query_q1_nosort(Connect &conn,
     for (Q1AggGroup::iterator it = sum_qty_group.begin();
          it != sum_qty_group.end(); ++it) {
 
-        pair< uint64_t, double >& p0 = it->second;
-        pair< uint64_t, double >& p1 = sum_base_price_group[it->first];
-        pair< uint64_t, double >& p2 = sum_disc_price_group[it->first];
-        pair< uint64_t, double >& p3 = sum_charge_group[it->first];
-        pair< uint64_t, double >& p4 = sum_disc_group[it->first];
+        pair< uint64_t, uint64_t >& p0 = it->second;
+        pair< uint64_t, uint64_t >& p1 = sum_base_price_group[it->first];
+        pair< uint64_t, uint64_t >& p2 = sum_disc_price_group[it->first];
+        pair< uint64_t, uint64_t >& p3 = sum_charge_group[it->first];
+        pair< uint64_t, uint64_t >& p4 = sum_disc_group[it->first];
 
         results.push_back(
                 q1entry(
                     string(1, it->first.first),
                     string(1, it->first.second),
-                    p0.second,
-                    p1.second,
-                    p2.second,
-                    p3.second,
-                    p0.second / double(p0.first),
-                    p1.second / double(p1.first),
-                    p4.second / double(p4.first),
+                    (double(p0.second)/100.0),
+                    (double(p1.second)/100.0),
+                    (double(p2.second)/100.0),
+                    (double(p3.second)/100.0),
+                    (double(p0.second)/100.0) / double(p0.first),
+                    (double(p1.second)/100.0) / double(p1.first),
+                    (double(p4.second)/100.0) / double(p4.first),
                     p0.first));
         // TODO: sort results
     }
@@ -1015,7 +1016,7 @@ static void do_query_q1_opt_row_col_pack(Connect &conn,
 
     DBResult * dbres;
 
-    conn.execute("set @cnt := -1", dbres);
+    //conn.execute("set @cnt := -1", dbres);
 
     string filename =
       "/tmp/" + db + "/lineitem_enc/row_col_pack/data";
@@ -1026,13 +1027,10 @@ static void do_query_q1_opt_row_col_pack(Connect &conn,
       "SELECT SQL_NO_CACHE agg_char2_row_col_pack("
         "l_returnflag_DET, "
         "l_linestatus_DET, "
-        "cnt, "
+        "row_id, "
         << pkinfo << ", " <<
         "\"" << filename << "\", 1, " << (RowColPackCipherSize/8) << ", 3, 1"
-      ") FROM ( "
-        "SELECT l_returnflag_DET, l_linestatus_DET, "
-        "@cnt := @cnt + 1 AS cnt, l_shipdate_OPE FROM lineitem_enc_noagg "
-      ") AS _anon_ "
+      ") FROM lineitem_enc_noagg_rowid "
       "WHERE l_shipdate_OPE <= " << encDATE
       ;
     cerr << s.str() << endl;

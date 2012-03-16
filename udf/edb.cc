@@ -670,7 +670,7 @@ agg(UDF_INIT *initid, UDF_ARGS *args, char *result,
 }
 
 struct sum_char2_state {
-    std::map<uint16_t, std::pair<uint64_t, double> > aggs;
+    std::map<uint16_t, std::pair<uint64_t, uint64_t> > aggs;
     void *rbuf;
 };
 
@@ -680,7 +680,7 @@ sum_char2_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
     sum_char2_state *as = new sum_char2_state;
     as->rbuf = NULL;
     initid->ptr = (char *) as;
-    args->arg_type[2] = REAL_RESULT; // coerce DECIMAL to REAL
+    //args->arg_type[2] = REAL_RESULT; // coerce DECIMAL to REAL
     return 0;
 }
 
@@ -713,18 +713,18 @@ sum_char2_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error)
 
     uint16_t key = (uint8_t(p0) << 8) | uint8_t(p1);
 
-    std::map<uint16_t, std::pair<uint64_t, double> >::iterator it =
+    std::map<uint16_t, std::pair<uint64_t, uint64_t> >::iterator it =
         as->aggs.find(key);
 
-    double real_val = *((double*) args->args[2]);
+    uint64_t val = *((long long *) args->args[2]);
 
     if (UNLIKELY(it == as->aggs.end())) {
-        std::pair<uint64_t, double>& p = as->aggs[key]; // creates on demand
+        std::pair<uint64_t, uint64_t>& p = as->aggs[key]; // creates on demand
         p.first  = 1;
-        p.second = real_val;
+        p.second = val;
     } else {
         it->second.first++;
-        it->second.second += real_val;
+        it->second.second += val;
     }
     return true;
 }
@@ -734,20 +734,20 @@ sum_char2(UDF_INIT *initid, UDF_ARGS *args, char *result,
     unsigned long *length, char *is_null, char *error)
 {
     sum_char2_state *as = (sum_char2_state *) initid->ptr;
-    *length = (2 + sizeof(uint64_t) + sizeof(double)) * as->aggs.size();
+    *length = (2 + sizeof(uint64_t) + sizeof(uint64_t)) * as->aggs.size();
     as->rbuf = malloc(*length);
     assert(as->rbuf); // TODO: handle OOM
     uint8_t* ptr = (uint8_t *) as->rbuf;
-    for (std::map<uint16_t, std::pair<uint64_t, double> >::iterator it = as->aggs.begin();
+    for (std::map<uint16_t, std::pair<uint64_t, uint64_t> >::iterator it = as->aggs.begin();
          it != as->aggs.end(); ++it) {
         *ptr++ = (uint8_t) ((it->first >> 8) & 0xFF);
         *ptr++ = (uint8_t) (it->first & 0xFF);
         uint64_t *iptr = (uint64_t *) ptr;
         *iptr = it->second.first;
         ptr += sizeof(uint64_t);
-        double *dptr = (double *)ptr;
+        uint64_t *dptr = (uint64_t *)ptr;
         *dptr = it->second.second;
-        ptr += sizeof(double);
+        ptr += sizeof(uint64_t);
     }
     return (char *) as->rbuf;
 }
