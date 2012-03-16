@@ -19,6 +19,7 @@
 #include <crypto-old/CryptoManager.hh> /* various functions for EDB */
 #include <util/params.hh>
 #include <util/util.hh>
+#include <util/timer.hh>
 #include <sys/time.h>
 #include <time.h>
 
@@ -1137,7 +1138,7 @@ struct AggRowColPack {
   //static const size_t AggSize = 1256 * 2 / 8;
   //static const size_t RowsPerBlock = 3;
 
-  static const size_t BufferSize = 1024;
+  static const size_t BufferSize = 80000000;
 
   static const size_t NumBlocksInternalBuffer = 524288;
   //static const size_t NumBlocksInternalBuffer = 4194304;
@@ -1333,14 +1334,31 @@ struct mult_entry {
 
 static void flush_group_buffers(agg_char2_row_pack_state *as) {
 
+    as->debug_stream << "flush_group_buffers: starting" << endl;
+    as->debug_stream.flush();
+    timer t;
+
+    typedef
+      map< uint64_t /*block_id*/, vector< vector< uint32_t > > /* masks (per user group) */ >
+      control_group;
+
     // value is ordered list based on the pair's first element
-    typedef vector< pair< uint16_t, list<mult_entry> > >
-            allocation_map;
+    typedef vector
+      <
+        pair
+        <
+          uint16_t /*group_id*/,
+          control_group
+        >
+      > allocation_map;
     allocation_map alloc_map;
-    alloc_map.reserve(as->element_buffer.size());
+
+    alloc_map.resize(as->element_buffer.size());
+
+    size_t eit_pos = 0;
     for (agg_char2_row_pack_state::element_buffer_map::iterator
             eit = as->element_buffer.begin();
-         eit != as->element_buffer.end(); ++eit) {
+         eit != as->element_buffer.end(); ++eit, ++eit_pos) {
       // lookup agg group
       agg_char2_row_pack_state::group_map::iterator it =
         as->aggs.find(eit->first);
@@ -1364,12 +1382,17 @@ static void flush_group_buffers(agg_char2_row_pack_state *as) {
       }
       s->count += eit->second.size();
 
-      map< uint64_t, vector< vector< uint32_t > > > m;
+      alloc_map[eit_pos].first = eit->first;
+      control_group &m = alloc_map[eit_pos].second;
+
+      as->debug_stream
+        << "going over " << eit->second.size() << " buffered entries for group: " << eit->first << endl;
+      timer t0;
       for (vector< pair< uint64_t, uint64_t > >::iterator it = eit->second.begin();
            it != eit->second.end(); ++it) {
-        pair< uint64_t, uint64_t >& p = *it;
-        uint64_t row_id = p.first;
-        uint64_t mask   = p.second;
+        uint64_t row_id = it->first;
+        uint64_t mask   = it->second;
+        //assert(mask != 0); // otherwise would not be here...
 
         // compute block ID from row ID
         uint64_t block_id = row_id / as->rows_per_agg;
@@ -1377,11 +1400,11 @@ static void flush_group_buffers(agg_char2_row_pack_state *as) {
         uint64_t block_offset = row_id % as->rows_per_agg;
 
         vector< vector< uint32_t > >&v = m[block_id]; // create on demand
-        v.resize(as->num_groups);
+        if (v.empty()) v.resize(as->num_groups);
 
         for (size_t i = 0; i < as->num_groups; i++) {
           if (!(mask & (0x1 << i))) continue;
-          vector<uint32_t>& masks = m[block_id][i];
+          vector<uint32_t>& masks = v[i];
           if (masks.empty()) {
             masks.push_back(0x1 << block_offset);
           } else {
@@ -1399,37 +1422,37 @@ static void flush_group_buffers(agg_char2_row_pack_state *as) {
           }
         }
       }
+      as->debug_stream << "finished iteration in " << t0.lap() << " usec" << endl;
       eit->second.clear(); // clear buffer
-
-      alloc_map.push_back(make_pair(eit->first, list<mult_entry>()));
-      list<mult_entry>& elems = alloc_map.back().second;
-      for (map< uint64_t, vector< vector< uint32_t > > >::iterator it = m.begin();
-           it != m.end(); ++it) {
-        for (size_t group_id = 0; group_id < it->second.size(); group_id++) {
-          for (vector<uint32_t>::iterator it0 = it->second[group_id].begin();
-               it0 != it->second[group_id].end(); ++it0) {
-            elems.push_back(mult_entry(it->first, group_id, *it0));
-          }
-          as->st.masks_sum += it->second[group_id].size();
-          as->st.masks_cnt++;
-        }
-      }
     }
+
+    typedef vector
+      <
+        pair< bool /*done?*/, control_group::iterator /* iterator to current group (if not done) */ >
+      > group_done_vec; // keeps track of which groups are done
+    group_done_vec group_done;
+    group_done.resize(alloc_map.size());
 
     size_t pos_first_non_empty = 0;
+    size_t alloc_map_pos = 0;
     for (allocation_map::iterator it = alloc_map.begin();
-         it != alloc_map.end(); ++it) {
-      if (it->second.empty()) pos_first_non_empty++;
-      else break;
+         it != alloc_map.end(); ++it, ++alloc_map_pos) {
+      assert(!it->second.empty());
+      group_done[alloc_map_pos].first  = false;
+      group_done[alloc_map_pos].second = it->second.begin();
     }
+
+    as->debug_stream << "flush_group_buffers: allocation took: " << t.lap() << " usec. IO reads starting" << endl;
+    as->debug_stream.flush();
 
     while (pos_first_non_empty < alloc_map.size()) {
       // find min block id for all groups
-      uint64_t minSoFar = alloc_map[pos_first_non_empty].second.front().row_id;
-      for (size_t i = pos_first_non_empty + 1; i < alloc_map.size(); i++) {
-        pair< uint16_t, list<mult_entry> > &group = alloc_map[i];
-        if (!group.second.empty() && group.second.front().row_id < minSoFar) {
-          minSoFar = group.second.front().row_id;
+      uint64_t minSoFar = group_done[pos_first_non_empty].second->first; // block_id
+      for (size_t i = pos_first_non_empty + 1; i < group_done.size(); i++) {
+        pair< bool, control_group::iterator > &group = group_done[i];
+        if (!group.first /* not done */ &&
+            group.second->first /* block_id */ < minSoFar) {
+          minSoFar = group.second->first;
         }
       }
 
@@ -1462,56 +1485,67 @@ static void flush_group_buffers(agg_char2_row_pack_state *as) {
       as->block_buf = as->internal_buffer + as->block_size * ( as->block_id - as->internal_block_id );
 
       // service the requests
-      for (size_t i = pos_first_non_empty; i < alloc_map.size(); i++) {
-        pair< uint16_t, list<mult_entry> > &group = alloc_map[i];
-        if (group.second.empty() ||
-            group.second.front().row_id != minSoFar) continue;
-
-        // use group.second.front().mask - 1 as an index into the running
-        // sums vector
+      for (size_t i = pos_first_non_empty; i < group_done.size(); i++) {
+        pair< bool, control_group::iterator > &group = group_done[i];
+        if (group.first /* done */ ||
+            group.second->first /* block_id */ != minSoFar) continue;
 
         if (as->run_in_parallel) {
-          worker_msg m;
-          m.shutdown  = false;
-          m.group_key = group.first;
-          m.group_id  = group.second.front().group_id;
-          m.idx       = group.second.front().mask - 1;
-          mpz_init2(m.value, as->agg_size * 8);
-          MPZFromBytes(
-              m.value,
-              (const uint8_t *) as->block_buf,
-              as->agg_size);
-          as->worker_states[ as->workerCnt++ % AggRowColPack::NumThreads ].q.push(m);
+          // push all these multiplications into the queue
+          size_t group_id_idx = 0;
+          for (vector< vector< uint32_t > >::iterator it = group.second->second.begin();
+               it != group.second->second.end(); ++it, ++group_id_idx) {
+            for (vector<uint32_t>::iterator it0 = it->begin();
+                 it0 != it->end(); ++it0) {
+              worker_msg m;
+              m.shutdown  = false;
+              m.group_key = alloc_map[i].first;
+              m.group_id  = group_id_idx;
+              m.idx       = (*it0) - 1;
+              mpz_init2(m.value, as->agg_size * 8);
+              MPZFromBytes(
+                  m.value,
+                  (const uint8_t *) as->block_buf,
+                  as->agg_size);
+              as->worker_states[ as->workerCnt++ % AggRowColPack::NumThreads ].q.push(m);
+
+              // stats
+              as->st.mults++;
+              //static const uint32_t AllPosHigh = (0x1 << as->rows_per_agg) - 1;
+              //if (group.second.front().mask == AllPosHigh) as->st.all_pos++;
+            }
+          }
         } else {
-          agg_char2_row_pack_state::per_group_state& s = as->aggs[group.first];
-          ZZ &sum =
-            s.running_sums
-              [group.second.front().group_id]
-              [group.second.front().mask - 1];
-          ZZ e;
-          ZZFromBytes(
-              e,
-              (const uint8_t *) as->block_buf,
-              as->agg_size);
-          MulMod(sum, sum, e, as->n2);
+          assert(false); // TODO: implement me
+          //agg_char2_row_pack_state::per_group_state& s = as->aggs[group.first];
+          //ZZ &sum =
+          //  s.running_sums
+          //    [group.second.front().group_id]
+          //    [group.second.front().mask - 1];
+          //ZZ e;
+          //ZZFromBytes(
+          //    e,
+          //    (const uint8_t *) as->block_buf,
+          //    as->agg_size);
+          //MulMod(sum, sum, e, as->n2);
         }
 
-        // stats
-        as->st.mults++;
-        static const uint32_t AllPosHigh = (0x1 << as->rows_per_agg) - 1;
-        if (group.second.front().mask == AllPosHigh) as->st.all_pos++;
+        // advance this group
 
-        group.second.pop_front();
+        group.second++;
+        group.first = group.second == alloc_map[i].second.end();
       }
 
       // find first non-empty
-      pos_first_non_empty = 0;
-      for (allocation_map::iterator it = alloc_map.begin();
-           it != alloc_map.end(); ++it) {
-        if (it->second.empty()) pos_first_non_empty++;
+      for (group_done_vec::iterator it = group_done.begin() + pos_first_non_empty;
+           it != group_done.end(); ++it) {
+        if (it->first /*done*/) pos_first_non_empty++;
         else break;
       }
     }
+
+    as->debug_stream << "flush_group_buffers: IO reads finished" << endl;
+    as->debug_stream.flush();
 }
 
 my_bool
