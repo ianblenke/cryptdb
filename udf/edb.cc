@@ -862,16 +862,13 @@ agg_char2(UDF_INIT *initid, UDF_ARGS *args, char *result,
 
 struct worker_msg {
   bool shutdown;
-
-  uint16_t group_key;
-  size_t group_id;
-  size_t idx;
-
-  bool already_alloc;
-  union {
-    mpz_t value;
-    char* buf;
-  } data;
+  struct ent {
+    uint16_t group_key;
+    size_t group_id;
+    size_t idx;
+  };
+  vector<ent> ents;
+  mpz_t value; // worker must free
 };
 
 struct mpz_wrapper { mpz_t mp; };
@@ -1144,16 +1141,17 @@ struct AggRowColPack {
   //static const size_t AggSize = 1256 * 2 / 8;
   //static const size_t RowsPerBlock = 3;
 
-  static const size_t BufferSize = 80000000;
+  //static const size_t BufferSize = 80000000;
+  static const size_t BufferSize = 1024;
 
-  static const size_t NumBlocksInternalBuffer = 5242880;
+  static const size_t NumBlocksInternalBuffer = 524288;
   //static const size_t NumBlocksInternalBuffer = 4194304;
 
   static const size_t NumThreads = 8;
 };
 
 static inline void
-MPZFromBytes(mpz_t rop, const uint8_t *p, size_t n) {
+MPZFromBytesSlow(mpz_t rop, const uint8_t *p, size_t n) {
     mpz_import(rop, n, -1, sizeof(uint8_t), 0, 0, p);
 }
 
@@ -1176,47 +1174,31 @@ InitMPZRunningSums(size_t rows_per_agg, vector<mpz_wrapper>& v) {
 static void* worker_main(void* p) {
   worker_state* ctx = (worker_state *) p;
   worker_msg m;
-  mpz_t cur;
-  mpz_init2(cur, ctx->as->agg_size * 8);
   while (true) {
     ctx->q.pop(m);
     if (UNLIKELY(m.shutdown)) break;
     else {
-      auto it = ctx->group_map.find(m.group_key);
-      vector< vector< mpz_wrapper > >* v = NULL;
-      if (it == ctx->group_map.end()) {
-        // init it
-        v = &ctx->group_map[m.group_key]; // create
-        v->resize(ctx->as->num_groups);
-        for (size_t i = 0; i < ctx->as->num_groups; i++) {
-          InitMPZRunningSums(ctx->as->rows_per_agg, v->operator[](i));
+      for (vector<worker_msg::ent>::iterator ent_it = m.ents.begin();
+           ent_it != m.ents.end(); ++ent_it) {
+        auto it = ctx->group_map.find(ent_it->group_key);
+        vector< vector< mpz_wrapper > >* v = NULL;
+        if (UNLIKELY(it == ctx->group_map.end())) {
+          // init it
+          v = &ctx->group_map[ent_it->group_key]; // create
+          v->resize(ctx->as->num_groups);
+          for (size_t i = 0; i < ctx->as->num_groups; i++) {
+            InitMPZRunningSums(ctx->as->rows_per_agg, v->operator[](i));
+          }
+        } else {
+          v = &it->second;
         }
-      } else {
-        v = &it->second;
+        vector<mpz_wrapper>& vr = v->operator[](ent_it->group_id);
+        mpz_mul(vr[ent_it->idx].mp, vr[ent_it->idx].mp, m.value);
+        mpz_mod(vr[ent_it->idx].mp, vr[ent_it->idx].mp, *ctx->mod);
       }
-
-      vector<mpz_wrapper>& vr = v->operator[](m.group_id);
-      if (!m.already_alloc) {
-        MPZFromBytes(
-            cur,
-            (const uint8_t *) m.data.buf,
-            ctx->as->agg_size);
-
-        mpz_mul(vr[m.idx].mp, vr[m.idx].mp, cur);
-        mpz_mod(vr[m.idx].mp, vr[m.idx].mp, *ctx->mod);
-
-        free(m.data.buf);
-      } else {
-
-        mpz_mul(vr[m.idx].mp, vr[m.idx].mp, m.data.value);
-        mpz_mod(vr[m.idx].mp, vr[m.idx].mp, *ctx->mod);
-
-        // need to free value (but not mod)
-        mpz_clear(m.data.value);
-      }
+      mpz_clear(m.value);
     }
   }
-  mpz_clear(cur);
   return NULL;
 }
 
@@ -1356,9 +1338,9 @@ struct mult_entry {
 
 static void flush_group_buffers(agg_char2_row_pack_state *as) {
 
-    as->debug_stream << "flush_group_buffers: starting" << endl;
-    as->debug_stream.flush();
-    timer t;
+    //as->debug_stream << "flush_group_buffers: starting" << endl;
+    //as->debug_stream.flush();
+    //timer t;
 
     typedef
       map< uint64_t /*block_id*/, vector< vector< uint32_t > > /* masks (per user group) */ >
@@ -1407,9 +1389,9 @@ static void flush_group_buffers(agg_char2_row_pack_state *as) {
       alloc_map[eit_pos].first = eit->first;
       control_group &m = alloc_map[eit_pos].second;
 
-      as->debug_stream
-        << "going over " << eit->second.size() << " buffered entries for group: " << eit->first << endl;
-      timer t0;
+      //as->debug_stream
+      //  << "going over " << eit->second.size() << " buffered entries for group: " << eit->first << endl;
+      //timer t0;
       for (vector< pair< uint64_t, uint64_t > >::iterator it = eit->second.begin();
            it != eit->second.end(); ++it) {
         uint64_t row_id = it->first;
@@ -1444,7 +1426,7 @@ static void flush_group_buffers(agg_char2_row_pack_state *as) {
           }
         }
       }
-      as->debug_stream << "finished iteration in " << t0.lap() << " usec" << endl;
+      //as->debug_stream << "finished iteration in " << t0.lap() << " usec" << endl;
       eit->second.clear(); // clear buffer
     }
 
@@ -1464,8 +1446,8 @@ static void flush_group_buffers(agg_char2_row_pack_state *as) {
       group_done[alloc_map_pos].second = it->second.begin();
     }
 
-    as->debug_stream << "flush_group_buffers: allocation took: " << t.lap() << " usec. IO reads starting" << endl;
-    as->debug_stream.flush();
+    //as->debug_stream << "flush_group_buffers: allocation took: " << t.lap() << " usec. IO reads starting" << endl;
+    //as->debug_stream.flush();
 
     while (pos_first_non_empty < alloc_map.size()) {
       // find min block id for all groups
@@ -1507,6 +1489,14 @@ static void flush_group_buffers(agg_char2_row_pack_state *as) {
       as->block_buf = as->internal_buffer + as->block_size * ( as->block_id - as->internal_block_id );
 
       // service the requests
+      worker_msg m;
+      m.shutdown = false;
+
+      // init the mpz_t
+      mpz_init2(m.value, as->agg_size * 8);
+      MPZFromBytes(m.value, (const uint8_t *) as->block_buf, as->agg_size);
+      //assert(((long)m.value->_mp_alloc * sizeof(mp_limb_t)) >= as->agg_size);
+
       for (size_t i = pos_first_non_empty; i < group_done.size(); i++) {
         pair< bool, control_group::iterator > &group = group_done[i];
         if (group.first /* done */ ||
@@ -1521,28 +1511,11 @@ static void flush_group_buffers(agg_char2_row_pack_state *as) {
                it != group.second->second.end(); ++it, ++group_id_idx) {
             for (vector<uint32_t>::iterator it0 = it->begin();
                  it0 != it->end(); ++it0) {
-              worker_msg m;
-              m.shutdown  = false;
-              m.group_key = group_key;
-              m.group_id  = group_id_idx;
-              m.idx       = (*it0) - 1;
-
-              static const bool DoInit = false;
-              m.already_alloc = DoInit;
-
-              if (DoInit) {
-                mpz_init2(m.data.value, as->agg_size * 8);
-                MPZFromBytes(
-                    m.data.value,
-                    (const uint8_t *) as->block_buf,
-                    as->agg_size);
-              } else {
-                m.data.buf = (char*) malloc(as->agg_size);
-                assert(m.data.buf);
-                memcpy(m.data.buf, (const void *) as->block_buf, as->agg_size);
-              }
-
-              as->worker_states[ as->workerCnt++ % AggRowColPack::NumThreads ].q.push(m);
+              worker_msg::ent e;
+              e.group_key = group_key;
+              e.group_id  = group_id_idx;
+              e.idx       = (*it0) - 1;
+              m.ents.push_back(e);
 
               // stats
               as->st.mults++;
@@ -1571,6 +1544,8 @@ static void flush_group_buffers(agg_char2_row_pack_state *as) {
         group.first = group.second == alloc_map[i].second.end();
       }
 
+      as->worker_states[ as->workerCnt++ % AggRowColPack::NumThreads ].q.push(m);
+
       // find first non-empty
       for (group_done_vec::iterator it = group_done.begin() + pos_first_non_empty;
            it != group_done.end(); ++it) {
@@ -1579,8 +1554,8 @@ static void flush_group_buffers(agg_char2_row_pack_state *as) {
       }
     }
 
-    as->debug_stream << "flush_group_buffers: IO reads finished: " << t.lap() << endl;
-    as->debug_stream.flush();
+    //as->debug_stream << "flush_group_buffers: IO reads finished: " << t.lap() << endl;
+    //as->debug_stream.flush();
 }
 
 my_bool

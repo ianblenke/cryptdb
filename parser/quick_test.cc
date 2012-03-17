@@ -14,6 +14,7 @@
 #include <type_traits>
 
 #include <unistd.h>
+#include <gmp.h>
 
 #include <parser/cdb_rewrite.hh>
 #include <parser/cdb_helpers.hh>
@@ -177,6 +178,27 @@ static void test_larger_hom() {
     }
 }
 
+static void test_readin_mpz() {
+    gmp_randstate_t state;
+    gmp_randinit_default(state);
+    mpz_t a, b;
+    mpz_init(a);
+    mpz_init(b);
+    for (size_t i = 0; i < 1000; i++) {
+      mpz_urandomb(a, state, 314 * 8);
+      string a0 = StringFromMPZ(a);
+      a0.resize(a0.size() + 2);// test corner case
+      MPZFromBytes(b, (const uint8_t *) a0.data(), a0.size());
+      assert( mpz_cmp(a, b) == 0 );
+
+      //gmp_printf("a: %Zd\n", a);
+      //gmp_printf("b: %Zd\n", b);
+    }
+    mpz_clear(a);
+    mpz_clear(b);
+    gmp_randclear(state);
+}
+
 static void test_copy_zz() {
     urandom u;
     for (size_t i = 0; i < 10; i++) {
@@ -218,6 +240,8 @@ static void test_zz_from_compatibility() {
 }
 
 int main(int argc, char **argv) {
+
+    test_readin_mpz();
 
     // test copying a ZZ object directly
     test_copy_zz();

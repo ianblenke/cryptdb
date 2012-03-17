@@ -304,6 +304,55 @@ void ZZFromBytesFast(ZZ& x, const unsigned char *p, long n) {
         &x.rep);
 }
 
+string StringFromMPZ(mpz_t mp) {
+    string s;
+    int size = mp->_mp_size;
+    if (size < 0) size = -size;
+    unsigned char *src = (unsigned char *) mp->_mp_d;
+    s.resize(size * sizeof(mp_limb_t));
+    memcpy(&s[0], src, s.size());
+    return s;
+}
+
+// p is in little endian order
+void MPZFromBytes(mpz_t mp, const unsigned char *p, long n) {
+  int alloc = mp->_mp_alloc;
+  if (((long)alloc * sizeof(mp_limb_t)) < n) {
+    // need to reallocate
+    mpz_realloc2(mp, n * 8);
+    alloc = mp->_mp_alloc;
+    assert(((long)alloc * sizeof(mp_limb_t)) >= n);
+  }
+
+  unsigned char *dst = (unsigned char *) mp->_mp_d;
+  memcpy(dst, p, n);
+
+  // need to zero out the bytes which are possibly not covered
+  // by the input array
+  int rem = n % sizeof(mp_limb_t);
+  if (rem) memset(dst + n, 0, sizeof(mp_limb_t) - rem);
+
+  if (n) {
+    // wind backwards, finding the last non-zero char
+    const unsigned char *p0 = p + n - 1;
+    int l = 0;
+    while (p0 >= p) {
+      if (!(*p0--)) l++;
+      else break;
+    }
+    int size = n - l;
+    if (size) {
+      mp->_mp_size = (size / sizeof(mp_limb_t)) +
+        ((size % sizeof(mp_limb_t)) ? 1 : 0);
+      assert(mp->_mp_d[mp->_mp_size-1] != 0);
+    } else {
+      mp->_mp_size = 0;
+    }
+  } else {
+    mp->_mp_size = 0;
+  }
+}
+
 ZZ
 UInt64_tToZZ (uint64_t value)
 {

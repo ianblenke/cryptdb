@@ -26,6 +26,8 @@
 #include <util/params.hh>
 #include <util/util.hh>
 
+#include <gmp.h>
+
 // ==== CONSTANTS ============== //
 
 #define SVAL2(s) #s
@@ -452,6 +454,10 @@ inline NTL::ZZ ZZFromStringFast(const std::string& s) {
 inline NTL::ZZ ZZFromBytesFast(const unsigned char *p, long n) {
   NTL::ZZ z; ZZFromBytesFast(z, p, n); return z;
 }
+
+std::string StringFromMPZ(mpz_t mp);
+
+void MPZFromBytes(mpz_t mp, const unsigned char *p, long n);
 
 //rolls an interator forward
 template<typename T> void
