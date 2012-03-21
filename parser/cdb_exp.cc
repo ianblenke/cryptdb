@@ -528,7 +528,7 @@ static void do_query_q1_nosort(Connect &conn,
     NamedTimer fcnTimer(__func__);
 
     ostringstream buf;
-    buf << "select SQL_NO_CACHE sum_char2(l_returnflag, l_linestatus, l_quantity) as sum_qty, sum_char2(l_returnflag, l_linestatus, l_extendedprice) as sum_base_price, sum_char2(l_returnflag, l_linestatus, l_extendedprice * (100 - l_discount)) as sum_disc_price, sum_char2(l_returnflag, l_linestatus, l_extendedprice * (100 - l_discount) * (100 + l_tax)) as sum_charge, sum_char2(l_returnflag, l_linestatus, l_discount) as sum_disc from LINEITEM_INT "
+    buf << "select SQL_NO_CACHE sum_char2(l_returnflag, l_linestatus, l_quantity) as sum_qty, sum_char2(l_returnflag, l_linestatus, l_extendedprice) as sum_base_price, sum_char2(l_returnflag, l_linestatus, l_extendedprice * (100 - l_discount)) as sum_disc_price, sum_char2(l_returnflag, l_linestatus, l_extendedprice * (100 - l_discount) * (100 + l_tax)) as sum_charge, sum_char2(l_returnflag, l_linestatus, l_discount) as sum_disc from LINEITEM_INT_MYISAM "
         << "where l_shipdate <= date '" << year << "-1-1'"
         ;
     cerr << buf.str() << endl;
@@ -1030,7 +1030,7 @@ static void do_query_q1_opt_row_col_pack(Connect &conn,
         "row_id, "
         << pkinfo << ", " <<
         "\"" << filename << "\", 1, " << (RowColPackCipherSize/8) << ", 3, 1"
-      ") FROM lineitem_enc_noagg_rowid "
+      ") FROM lineitem_enc_noagg_rowid_MYISAM "
       "WHERE l_shipdate_OPE <= " << encDATE
       ;
     cerr << s.str() << endl;
