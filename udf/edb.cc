@@ -40,6 +40,146 @@ using namespace tbb;
 #define TRACE()
 #define SANITY(x) assert(x)
 
+// templated code must go here, before the extern "C"
+
+template <typename T>
+struct mysql_item_result_type {};
+
+template <>
+struct mysql_item_result_type<uint64_t> {
+  static const Item_result value = INT_RESULT;
+  static inline uint64_t extract(UDF_ARGS* args, size_t pos) {
+    return *((long long *) args->args[pos]);
+  }
+};
+
+template <>
+struct mysql_item_result_type<double> {
+  static const Item_result value = REAL_RESULT;
+  static inline double extract(UDF_ARGS* args, size_t pos) {
+    return *((double *) args->args[pos]);
+  }
+};
+
+struct mpz_wrapper { mpz_t mp; };
+
+struct AggRowColPack {
+  //static const size_t AggSize = 1256 * 2 / 8;
+  //static const size_t RowsPerBlock = 3;
+
+  //static const size_t BufferSize = 80000000;
+  static const size_t BufferSize = 1024;
+
+  static const size_t NumBlocksInternalBuffer = 524288;
+  //static const size_t NumBlocksInternalBuffer = 4194304;
+
+  static const size_t NumThreads = 8;
+};
+
+static inline void
+BytesFromMPZ(uint8_t* p, mpz_t rop, size_t n) {
+    size_t count;
+    mpz_export(p, &count, -1, n, -1, 0, rop);
+    assert(count == 1);
+}
+
+static inline void
+InitMPZRunningSums(size_t rows_per_agg, vector<mpz_wrapper>& v) {
+    assert( rows_per_agg > 0 );
+    v.resize( (0x1u << rows_per_agg) - 1 );
+    for (size_t i = 0; i < (0x1u << rows_per_agg) - 1; i++) {
+      mpz_init_set_ui(v[i].mp, 1);
+    }
+}
+
+template <typename T>
+struct sum_char2_impl {
+  struct state {
+      // key -> (count, sum)
+      std::map<uint16_t, std::pair<uint64_t, T> > aggs;
+      void *rbuf;
+  };
+
+  static my_bool
+  init(UDF_INIT *initid, UDF_ARGS *args, char *message)
+  {
+      state *as = new state;
+      as->rbuf = NULL;
+      initid->ptr = (char *) as;
+      args->arg_type[2] = mysql_item_result_type<T>::value;
+      return 0;
+  }
+
+  static void
+  deinit(UDF_INIT *initid)
+  {
+      state *as = (state *) initid->ptr;
+      free(as->rbuf);
+      delete as;
+  }
+
+  static void
+  clear(UDF_INIT *initid, char *is_null, char *error)
+  {
+      state *as = (state *) initid->ptr;
+      as->aggs.clear();
+  }
+
+  static my_bool
+  add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error)
+  {
+      state *as = (state *) initid->ptr;
+
+      long long p0, p1;
+      p0 = *((long long *) args->args[0]);
+      p1 = *((long long *) args->args[1]);
+
+      //assert(p0 >= 0 && p0 <= 0xFF);
+      //assert(p1 >= 0 && p1 <= 0xFF);
+
+      uint16_t key = (uint8_t(p0) << 8) | uint8_t(p1);
+
+      typename std::map<uint16_t, std::pair<uint64_t, T> >::iterator it =
+          as->aggs.find(key);
+
+      T val = mysql_item_result_type<T>::extract(args, 2);
+
+      if (UNLIKELY(it == as->aggs.end())) {
+          std::pair<uint64_t, T>& p = as->aggs[key]; // creates on demand
+          p.first  = 1;
+          p.second = val;
+      } else {
+          it->second.first++;
+          it->second.second += val;
+      }
+      return true;
+  }
+
+  static char *
+  agg(UDF_INIT *initid, UDF_ARGS *args, char *result,
+      unsigned long *length, char *is_null, char *error)
+  {
+      state *as = (state *) initid->ptr;
+      *length = (2 + sizeof(uint64_t) + sizeof(T)) * as->aggs.size();
+      as->rbuf = malloc(*length);
+      assert(as->rbuf); // TODO: handle OOM
+      uint8_t* ptr = (uint8_t *) as->rbuf;
+      for (typename std::map<uint16_t, std::pair<uint64_t, T> >::iterator it
+              = as->aggs.begin();
+           it != as->aggs.end(); ++it) {
+          *ptr++ = (uint8_t) ((it->first >> 8) & 0xFF);
+          *ptr++ = (uint8_t) (it->first & 0xFF);
+          uint64_t *iptr = (uint64_t *) ptr;
+          *iptr = it->second.first;
+          ptr += sizeof(uint64_t);
+          T *dptr = (T *) ptr;
+          *dptr = it->second.second;
+          ptr += sizeof(T);
+      }
+      return (char *) as->rbuf;
+  }
+};
+
 extern "C" {
 #if MYSQL_S
 
@@ -82,11 +222,18 @@ my_bool  agg_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error);
 char *   agg(UDF_INIT *initid, UDF_ARGS *args, char *result,
              unsigned long *length, char *is_null, char *error);
 
-my_bool  sum_char2_init(UDF_INIT *initid, UDF_ARGS *args, char *message);
-void     sum_char2_deinit(UDF_INIT *initid);
-void     sum_char2_clear(UDF_INIT *initid, char *is_null, char *error);
-my_bool  sum_char2_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error);
-char *   sum_char2(UDF_INIT *initid, UDF_ARGS *args, char *result,
+my_bool  sum_char2_int_init(UDF_INIT *initid, UDF_ARGS *args, char *message);
+void     sum_char2_int_deinit(UDF_INIT *initid);
+void     sum_char2_int_clear(UDF_INIT *initid, char *is_null, char *error);
+my_bool  sum_char2_int_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error);
+char *   sum_char2_int(UDF_INIT *initid, UDF_ARGS *args, char *result,
+             unsigned long *length, char *is_null, char *error);
+
+my_bool  sum_char2_double_init(UDF_INIT *initid, UDF_ARGS *args, char *message);
+void     sum_char2_double_deinit(UDF_INIT *initid);
+void     sum_char2_double_clear(UDF_INIT *initid, char *is_null, char *error);
+my_bool  sum_char2_double_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error);
+char *   sum_char2_double(UDF_INIT *initid, UDF_ARGS *args, char *result,
              unsigned long *length, char *is_null, char *error);
 
 my_bool  agg_char2_init(UDF_INIT *initid, UDF_ARGS *args, char *message);
@@ -96,26 +243,12 @@ my_bool  agg_char2_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *er
 char *   agg_char2(UDF_INIT *initid, UDF_ARGS *args, char *result,
              unsigned long *length, char *is_null, char *error);
 
-my_bool  agg_char2_row_pack_init(UDF_INIT *initid, UDF_ARGS *args, char *message);
-void     agg_char2_row_pack_deinit(UDF_INIT *initid);
-void     agg_char2_row_pack_clear(UDF_INIT *initid, char *is_null, char *error);
-my_bool  agg_char2_row_pack_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error);
-char *   agg_char2_row_pack(UDF_INIT *initid, UDF_ARGS *args, char *result,
-             unsigned long *length, char *is_null, char *error);
-
 my_bool  agg_char2_row_col_pack_init(UDF_INIT *initid, UDF_ARGS *args, char *message);
 void     agg_char2_row_col_pack_deinit(UDF_INIT *initid);
 void     agg_char2_row_col_pack_clear(UDF_INIT *initid, char *is_null, char *error);
 my_bool  agg_char2_row_col_pack_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error);
 char *   agg_char2_row_col_pack(UDF_INIT *initid, UDF_ARGS *args, char *result,
              unsigned long *length, char *is_null, char *error);
-
-my_bool  agg_par_init(UDF_INIT *initid, UDF_ARGS *args, char *message);
-void     agg_par_deinit(UDF_INIT *initid);
-void     agg_par_clear(UDF_INIT *initid, char *is_null, char *error);
-my_bool  agg_par_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error);
-char *   agg_par(UDF_INIT *initid, UDF_ARGS *args, char *result,
-                 unsigned long *length, char *is_null, char *error);
 
 void     func_add_set_deinit(UDF_INIT *initid);
 char *   func_add_set(UDF_INIT *initid, UDF_ARGS *args, char *result,
@@ -670,99 +803,125 @@ agg(UDF_INIT *initid, UDF_ARGS *args, char *result,
     return (char *) as->rbuf;
 }
 
-struct sum_char2_state {
-    std::map<uint16_t, std::pair<uint64_t, uint64_t> > aggs;
-    void *rbuf;
-};
-
 my_bool
-sum_char2_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
+sum_char2_int_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
 {
-    sum_char2_state *as = new sum_char2_state;
-    as->rbuf = NULL;
-    initid->ptr = (char *) as;
-    //args->arg_type[2] = REAL_RESULT; // coerce DECIMAL to REAL
-    return 0;
+  return sum_char2_impl<uint64_t>::init(initid, args, message);
 }
 
 void
-sum_char2_deinit(UDF_INIT *initid)
+sum_char2_int_deinit(UDF_INIT *initid)
 {
-    sum_char2_state *as = (sum_char2_state *) initid->ptr;
-    free(as->rbuf);
-    delete as;
+  sum_char2_impl<uint64_t>::deinit(initid);
 }
 
 void
-sum_char2_clear(UDF_INIT *initid, char *is_null, char *error)
+sum_char2_int_clear(UDF_INIT *initid, char *is_null, char *error)
 {
-    sum_char2_state *as = (sum_char2_state *) initid->ptr;
-    as->aggs.clear();
+  sum_char2_impl<uint64_t>::clear(initid, is_null, error);
 }
 
 my_bool
-sum_char2_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error)
+sum_char2_int_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error)
 {
-    sum_char2_state *as = (sum_char2_state *) initid->ptr;
-
-    long long p0, p1;
-    p0 = *((long long *) args->args[0]);
-    p1 = *((long long *) args->args[1]);
-
-    //assert(p0 >= 0 && p0 <= 0xFF);
-    //assert(p1 >= 0 && p1 <= 0xFF);
-
-    uint16_t key = (uint8_t(p0) << 8) | uint8_t(p1);
-
-    std::map<uint16_t, std::pair<uint64_t, uint64_t> >::iterator it =
-        as->aggs.find(key);
-
-    uint64_t val = *((long long *) args->args[2]);
-
-    if (UNLIKELY(it == as->aggs.end())) {
-        std::pair<uint64_t, uint64_t>& p = as->aggs[key]; // creates on demand
-        p.first  = 1;
-        p.second = val;
-    } else {
-        it->second.first++;
-        it->second.second += val;
-    }
-    return true;
+  return sum_char2_impl<uint64_t>::add(initid, args, is_null, error);
 }
 
 char *
-sum_char2(UDF_INIT *initid, UDF_ARGS *args, char *result,
+sum_char2_int(UDF_INIT *initid, UDF_ARGS *args, char *result,
     unsigned long *length, char *is_null, char *error)
 {
-    sum_char2_state *as = (sum_char2_state *) initid->ptr;
-    *length = (2 + sizeof(uint64_t) + sizeof(uint64_t)) * as->aggs.size();
-    as->rbuf = malloc(*length);
-    assert(as->rbuf); // TODO: handle OOM
-    uint8_t* ptr = (uint8_t *) as->rbuf;
-    for (std::map<uint16_t, std::pair<uint64_t, uint64_t> >::iterator it = as->aggs.begin();
-         it != as->aggs.end(); ++it) {
-        *ptr++ = (uint8_t) ((it->first >> 8) & 0xFF);
-        *ptr++ = (uint8_t) (it->first & 0xFF);
-        uint64_t *iptr = (uint64_t *) ptr;
-        *iptr = it->second.first;
-        ptr += sizeof(uint64_t);
-        uint64_t *dptr = (uint64_t *)ptr;
-        *dptr = it->second.second;
-        ptr += sizeof(uint64_t);
-    }
-    return (char *) as->rbuf;
+  return sum_char2_impl<uint64_t>::agg(initid, args, result, length, is_null, error);
+}
+
+my_bool
+sum_char2_double_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
+{
+  return sum_char2_impl<double>::init(initid, args, message);
+}
+
+void
+sum_char2_double_deinit(UDF_INIT *initid)
+{
+  sum_char2_impl<double>::deinit(initid);
+}
+
+void
+sum_char2_double_clear(UDF_INIT *initid, char *is_null, char *error)
+{
+  sum_char2_impl<double>::clear(initid, is_null, error);
+}
+
+my_bool
+sum_char2_double_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error)
+{
+  return sum_char2_impl<double>::add(initid, args, is_null, error);
+}
+
+char *
+sum_char2_double(UDF_INIT *initid, UDF_ARGS *args, char *result,
+    unsigned long *length, char *is_null, char *error)
+{
+  return sum_char2_impl<double>::agg(initid, args, result, length, is_null, error);
 }
 
 struct agg_char2_state {
-    std::map<uint16_t, std::pair<uint64_t, ZZ> > aggs;
-    ZZ n2;
-    //bool n2_set;
+    struct worker_msg {
+      bool shutdown;
+      uint16_t key;
+      mpz_t value;
+    };
+
+    struct worker_state {
+      map<uint16_t, mpz_wrapper> aggs;
+      concurrent_bounded_queue<worker_msg> q;
+      agg_char2_state* as;
+    };
+
+    std::map<uint16_t, std::pair<uint64_t, mpz_wrapper> > aggs;
+    mpz_t n2_mp;
+
+    // parallel stuff
+    bool run_in_parallel;
+
+    std::vector< pthread_t > workers;
+    std::vector< worker_state > worker_states;
+    size_t workerCnt;
+
     void *rbuf;
+
+    static void* worker_main(void* p) {
+      worker_state* ctx = (worker_state *) p;
+      worker_msg m;
+      while (true) {
+        ctx->q.pop(m);
+        if (UNLIKELY(m.shutdown)) break;
+        else {
+          auto it = ctx->aggs.find(m.key);
+          mpz_wrapper* v = NULL;
+          if (UNLIKELY(it == ctx->aggs.end())) {
+            v = &ctx->aggs[m.key];
+            mpz_init_set_ui(v->mp, 1);
+          } else {
+            v = &it->second;
+          }
+          mpz_mul(v->mp, v->mp, m.value);
+          mpz_mod(v->mp, v->mp, ctx->as->n2_mp);
+          mpz_clear(m.value);
+        }
+      }
+      return NULL;
+    }
 };
 
 my_bool
 agg_char2_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
 {
+    if (args->arg_count != 5) {
+      strcpy(message, "need to provide 5 args");
+      return 1;
+    }
+
     agg_char2_state *as = new agg_char2_state;
     as->rbuf = NULL;
 
@@ -771,9 +930,26 @@ agg_char2_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
         return 1;
     }
 
-    ZZFromBytes(as->n2, (const uint8_t *) args->args[3],
-                args->lengths[3]);
-    //as->n2_set = 1;
+    if (args->args[4] == NULL) {
+        strcpy(message, "need to provide parallelism flag");
+        return 1;
+    }
+
+    mpz_init2(as->n2_mp, args->lengths[3] * 8);
+    MPZFromBytes(as->n2_mp, (const uint8_t *) args->args[3],
+                 args->lengths[3]);
+
+    as->run_in_parallel = *((long long *) args->args[4]);
+
+    if (as->run_in_parallel) {
+      as->workers.resize(AggRowColPack::NumThreads);
+      as->worker_states.resize(AggRowColPack::NumThreads);
+      for (size_t i = 0; i < AggRowColPack::NumThreads; i++) {
+        as->worker_states[i].as  = as;
+        pthread_create(&as->workers[i], NULL, agg_char2_state::worker_main, &as->worker_states[i]);
+      }
+      as->workerCnt = 0;
+    }
 
     initid->ptr = (char *) as;
     return 0;
@@ -790,6 +966,7 @@ agg_char2_deinit(UDF_INIT *initid)
 void
 agg_char2_clear(UDF_INIT *initid, char *is_null, char *error)
 {
+  // TODO: free the aggs
     agg_char2_state *as = (agg_char2_state *) initid->ptr;
     as->aggs.clear();
 }
@@ -798,11 +975,6 @@ my_bool
 agg_char2_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error)
 {
     agg_char2_state *as = (agg_char2_state *) initid->ptr;
-    //if (!as->n2_set) {
-    //    ZZFromBytes(as->n2, (const uint8_t *) args->args[3],
-    //                args->lengths[3]);
-    //    as->n2_set = 1;
-    //}
 
     long long p0, p1;
     p0 = *((long long *) args->args[0]);
@@ -813,27 +985,36 @@ agg_char2_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error)
 
     uint16_t key = (uint8_t(p0) << 8) | uint8_t(p1);
 
-    std::map<uint16_t, std::pair<uint64_t, ZZ> >::iterator it =
+    std::map<uint16_t, std::pair<uint64_t, mpz_wrapper> >::iterator it =
         as->aggs.find(key);
-    ZZ* sum = NULL;
+    mpz_wrapper* sum = NULL;
     if (UNLIKELY(it == as->aggs.end())) {
-        std::pair<uint64_t, ZZ>& p = as->aggs[key]; // creates on demand
+        std::pair<uint64_t, mpz_wrapper>& p = as->aggs[key]; // creates on demand
         p.first  = 1;
-        p.second = to_ZZ(1);
+        mpz_init_set_ui(p.second.mp, 1);
         sum = &p.second;
-
-        //assert(as->aggs[key].first == 1);
-        //assert(as->aggs[key].second == to_ZZ(1));
     } else {
         it->second.first++;
         sum = &it->second.second;
     }
-    //assert(sum);
 
-    ZZ e;
-    ZZFromBytes(e, (const uint8_t *) args->args[2], args->lengths[2]);
+    agg_char2_state::worker_msg m;
+    m.shutdown = false;
+    mpz_init2(m.value, args->lengths[2] * 8);
+    MPZFromBytes(m.value, (const uint8_t *) args->args[2],
+                 args->lengths[2]);
 
-    MulMod(*sum, *sum, e, as->n2);
+    if (as->run_in_parallel) {
+      // queue job
+      m.key = key;
+      as->worker_states[ as->workerCnt++ % AggRowColPack::NumThreads ].q.push(m);
+    } else {
+      // execute job
+      mpz_mul(sum->mp, sum->mp, m.value);
+      mpz_mod(sum->mp, sum->mp, as->n2_mp);
+      mpz_clear(m.value);
+    }
+
     return true;
 }
 
@@ -842,19 +1023,47 @@ agg_char2(UDF_INIT *initid, UDF_ARGS *args, char *result,
     unsigned long *length, char *is_null, char *error)
 {
     agg_char2_state *as = (agg_char2_state *) initid->ptr;
+
+    if (as->run_in_parallel) {
+      agg_char2_state::worker_msg m;
+      m.shutdown = true;
+
+      for (size_t i = 0; i < AggRowColPack::NumThreads; i++) {
+        // signal all threads to stop
+        as->worker_states[i].q.push(m);
+      }
+
+      for (size_t i = 0; i < AggRowColPack::NumThreads; i++) {
+        // wait until computation is done
+        pthread_join(as->workers[i], NULL);
+      }
+
+      for (size_t i = 0; i < AggRowColPack::NumThreads; i++) {
+        // merge (aggregate) results from workers into main results
+        agg_char2_state::worker_state& s = as->worker_states[i];
+        for (auto it = s.aggs.begin(); it != s.aggs.end(); ++it) {
+          mpz_wrapper& sum = as->aggs[it->first].second;
+          mpz_mul(sum.mp, sum.mp, it->second.mp);
+          mpz_mod(sum.mp, sum.mp, as->n2_mp);
+          mpz_clear(it->second.mp);
+        }
+      }
+    }
+
     *length = (2 + sizeof(uint64_t) + CryptoManager::Paillier_len_bytes) * as->aggs.size();
     as->rbuf = malloc(*length);
     assert(as->rbuf); // TODO: handle OOM
     uint8_t* ptr = (uint8_t *) as->rbuf;
-    for (std::map<uint16_t, std::pair<uint64_t, ZZ> >::iterator it = as->aggs.begin();
+    for (std::map<uint16_t, std::pair<uint64_t, mpz_wrapper> >::iterator
+            it = as->aggs.begin();
          it != as->aggs.end(); ++it) {
         *ptr++ = (uint8_t) ((it->first >> 8) & 0xFF);
         *ptr++ = (uint8_t) (it->first & 0xFF);
         uint64_t *iptr = (uint64_t *) ptr;
         *iptr = it->second.first;
         ptr += sizeof(uint64_t);
-        BytesFromZZ(ptr, it->second.second,
-                    CryptoManager::Paillier_len_bytes);
+        BytesFromMPZ(ptr, it->second.second.mp,
+                     CryptoManager::Paillier_len_bytes);
         ptr += CryptoManager::Paillier_len_bytes;
     }
     return (char *) as->rbuf;
@@ -871,7 +1080,7 @@ struct worker_msg {
   mpz_t value; // worker must free
 };
 
-struct mpz_wrapper { mpz_t mp; };
+
 
 // forward decl
 struct agg_char2_row_pack_state;
@@ -881,21 +1090,21 @@ struct worker_state {
     uint16_t,
     std::vector< std::vector< mpz_wrapper > > > group_map;
   concurrent_bounded_queue<worker_msg> q;
-  mpz_t* mod;
   agg_char2_row_pack_state* as;
 };
 
 struct agg_char2_row_pack_state {
     struct per_group_state {
-        std::vector< std::vector<ZZ> > running_sums;
         std::vector< std::vector< mpz_wrapper > > running_sums_mp;
         uint64_t count;
     };
+
     typedef std::map<uint16_t, per_group_state> group_map;
     group_map aggs;
+
     uint32_t fields_mask;
-    ZZ n2;
     mpz_t n2_mp;
+
     void *rbuf;
 
     // agg info
@@ -950,227 +1159,6 @@ struct agg_char2_row_pack_state {
     stats st;
 };
 
-static size_t NumBitsHigh(uint32_t t) {
-    size_t cnt = 0;
-    size_t s = sizeof(t) * 8;
-    while (s--) {
-        cnt += t & 0x1;
-        t >>= 1;
-    }
-    return cnt;
-}
-
-struct AggRowPack {
-  static const size_t AggSize = 256;
-  static const size_t RowsPerBlock = 12;
-};
-
-my_bool
-agg_char2_row_pack_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
-{
-    if (args->arg_count != 5) {
-        strcpy(message, "need to provide 5 args");
-        return 1;
-    }
-
-    agg_char2_row_pack_state *as = new agg_char2_row_pack_state;
-    as->rbuf = NULL;
-
-    if (args->args[3] == NULL) {
-        strcpy(message, "need to indicate which fields are of interest");
-        return 1;
-    }
-
-    as->fields_mask = *((long long *) args->args[3]);
-    if (as->fields_mask > 0x1F /* hardcode 5 fields for now */) {
-        sprintf(message, "fields out of range: %d", as->fields_mask);
-        return 1;
-    }
-
-    if (args->args[4] == NULL) {
-        strcpy(message, "need to provide PK");
-        return 1;
-    }
-
-    ZZFromBytes(as->n2, (const uint8_t *) args->args[4],
-                args->lengths[4]);
-
-    as->block_id = -1;
-
-    as->fp = fopen("/tmp/tpch-0.05/lineitem_enc/data", "rb");
-    assert(as->fp);
-
-    as->block_size = AggRowPack::AggSize * 5; // hardcode 5 for now
-    as->block_buf = (char *) malloc(as->block_size);
-
-    //as->debug_stream.open("/tmp/debug.txt");
-    //assert(as->debug_stream.good());
-
-    initid->ptr = (char *) as;
-    return 0;
-}
-
-void
-agg_char2_row_pack_deinit(UDF_INIT *initid)
-{
-    agg_char2_row_pack_state *as = (agg_char2_row_pack_state *) initid->ptr;
-    free(as->rbuf);
-    free(as->block_buf);
-    fclose(as->fp);
-    //as->debug_stream.flush();
-    delete as;
-}
-
-void
-agg_char2_row_pack_clear(UDF_INIT *initid, char *is_null, char *error)
-{
-    agg_char2_row_pack_state *as = (agg_char2_row_pack_state *) initid->ptr;
-    as->aggs.clear();
-    as->block_id = -1;
-    fseek(as->fp, 0, SEEK_SET);
-}
-
-my_bool
-agg_char2_row_pack_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error)
-{
-    agg_char2_row_pack_state *as = (agg_char2_row_pack_state *) initid->ptr;
-
-    long long p0, p1, row_id;
-    p0 = *((long long *) args->args[0]);
-    p1 = *((long long *) args->args[1]);
-
-    uint16_t key = (uint8_t(p0) << 8) | uint8_t(p1);
-
-    agg_char2_row_pack_state::group_map::iterator it = as->aggs.find(key);
-    agg_char2_row_pack_state::per_group_state* s = NULL;
-    if (UNLIKELY(it == as->aggs.end())) {
-        s = &as->aggs[key]; // creates on demand
-        vector<ZZ> cpy;
-        cpy.resize(AggRowPack::RowsPerBlock, to_ZZ(1));
-        s->running_sums.resize(NumBitsHigh(as->fields_mask), cpy);
-        s->count = 1;
-        //as->debug_stream <<
-        //  "create new group " << p0 << " " << p1 << ": "
-        //  << "fields_mask: " << as->fields_mask
-        //  << " num_bits_high: " << NumBitsHigh(as->fields_mask) << endl;
-    } else {
-        s = &it->second;
-        s->count++;
-    }
-
-    // compute block ID from row ID
-    row_id = *((long long *) args->args[2]);
-    size_t block_id = row_id / AggRowPack::RowsPerBlock;
-
-    assert((ssize_t)block_id >= as->block_id); // ONLY support scanning forward for now!
-
-    // read in block
-    while (as->block_id < (ssize_t)block_id) {
-        // scan forward
-        size_t bread = fread(as->block_buf, 1, as->block_size, as->fp);
-        assert(bread == as->block_size); // TODO: handle bad files
-        as->block_id++;
-        // TODO: seek if we are really far away instead?
-        //as->debug_stream << "read block " << as->block_id << endl;
-    }
-
-    // compute block offset
-    size_t block_offset = row_id % AggRowPack::RowsPerBlock;
-
-    //as->debug_stream << row_id << ": " << block_id << " " << block_offset << endl;
-
-    // do sum for each field of interest
-    size_t idx = 0;
-    for (size_t i = 0; i < 5; i++) { // TODO: don't hardcode 5
-        if (as->fields_mask & (0x1 << i)) {
-            //as->debug_stream << "  idx: " << idx << endl;
-            ZZ &sum = s->running_sums[idx][block_offset];
-            ZZ e;
-            ZZFromBytes(
-                e,
-                (const uint8_t *) as->block_buf + (i * AggRowPack::AggSize),
-                AggRowPack::AggSize);
-            MulMod(sum, sum, e, as->n2);
-            idx++;
-        }
-    }
-    return true;
-}
-
-char *
-agg_char2_row_pack(UDF_INIT *initid, UDF_ARGS *args, char *result,
-    unsigned long *length, char *is_null, char *error)
-{
-    agg_char2_row_pack_state *as = (agg_char2_row_pack_state *) initid->ptr;
-    *length =
-        (2 + sizeof(uint64_t) +
-         NumBitsHigh(as->fields_mask) * AggRowPack::RowsPerBlock *
-         CryptoManager::Paillier_len_bytes) * as->aggs.size();
-
-    as->rbuf = malloc(*length);
-    assert(as->rbuf); // TODO: handle OOM
-
-    uint8_t* ptr = (uint8_t *) as->rbuf;
-
-    for (agg_char2_row_pack_state::group_map::iterator it = as->aggs.begin();
-         it != as->aggs.end(); ++it) {
-        //as->debug_stream << "group :" << ((it->first >> 8) & 0xFF) << " " << (it->first & 0xFF) << endl;
-        *ptr++ = (uint8_t) ((it->first >> 8) & 0xFF);
-        *ptr++ = (uint8_t) (it->first & 0xFF);
-        uint64_t *iptr = (uint64_t *) ptr;
-        *iptr = it->second.count;
-        ptr += sizeof(uint64_t);
-
-        for (vector< vector<ZZ> >::iterator iit =
-                it->second.running_sums.begin();
-             iit != it->second.running_sums.end(); ++iit) {
-            for (vector<ZZ>::iterator zzt = iit->begin();
-                 zzt != iit->end(); ++zzt) {
-                BytesFromZZ(ptr, *zzt,
-                            CryptoManager::Paillier_len_bytes);
-                //as->debug_stream << marshallBinary(string((char*)ptr, 256U)) << endl;
-                ptr += CryptoManager::Paillier_len_bytes;
-            }
-        }
-
-    }
-    return (char *) as->rbuf;
-}
-
-struct AggRowColPack {
-  //static const size_t AggSize = 1256 * 2 / 8;
-  //static const size_t RowsPerBlock = 3;
-
-  //static const size_t BufferSize = 80000000;
-  static const size_t BufferSize = 1024;
-
-  static const size_t NumBlocksInternalBuffer = 524288;
-  //static const size_t NumBlocksInternalBuffer = 4194304;
-
-  static const size_t NumThreads = 8;
-};
-
-static inline void
-MPZFromBytesSlow(mpz_t rop, const uint8_t *p, size_t n) {
-    mpz_import(rop, n, -1, sizeof(uint8_t), 0, 0, p);
-}
-
-static inline void
-BytesFromMPZ(uint8_t* p, mpz_t rop, size_t n) {
-    size_t count;
-    mpz_export(p, &count, -1, n, -1, 0, rop);
-    assert(count == 1);
-}
-
-static inline void
-InitMPZRunningSums(size_t rows_per_agg, vector<mpz_wrapper>& v) {
-    assert( rows_per_agg > 0 );
-    v.resize( (0x1u << rows_per_agg) - 1 );
-    for (size_t i = 0; i < (0x1u << rows_per_agg) - 1; i++) {
-      mpz_init_set_ui(v[i].mp, 1);
-    }
-}
-
 static void* worker_main(void* p) {
   worker_state* ctx = (worker_state *) p;
   worker_msg m;
@@ -1194,7 +1182,7 @@ static void* worker_main(void* p) {
         }
         vector<mpz_wrapper>& vr = v->operator[](ent_it->group_id);
         mpz_mul(vr[ent_it->idx].mp, vr[ent_it->idx].mp, m.value);
-        mpz_mod(vr[ent_it->idx].mp, vr[ent_it->idx].mp, *ctx->mod);
+        mpz_mod(vr[ent_it->idx].mp, vr[ent_it->idx].mp, ctx->as->n2_mp);
       }
       mpz_clear(m.value);
     }
@@ -1251,24 +1239,19 @@ agg_char2_row_col_pack_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
     as->num_groups = args->arg_count - 8;
     assert(as->num_groups > 0);
 
-    if (as->run_in_parallel) {
-      // must use mpz for parallel (since ZZ is not thread-safe)
-      mpz_init(as->n2_mp);
-      MPZFromBytes(as->n2_mp, (const uint8_t *) args->args[3],
-                   args->lengths[3]);
+    mpz_init(as->n2_mp);
+    MPZFromBytes(as->n2_mp, (const uint8_t *) args->args[3],
+                 args->lengths[3]);
 
+    if (as->run_in_parallel) {
       // init the worker threads
       as->workers.resize(AggRowColPack::NumThreads);
       as->worker_states.resize(AggRowColPack::NumThreads);
       for (size_t i = 0; i < AggRowColPack::NumThreads; i++) {
-        as->worker_states[i].mod = &as->n2_mp;
         as->worker_states[i].as  = as;
         pthread_create(&as->workers[i], NULL, worker_main, &as->worker_states[i]);
       }
-      as->workerCnt = 0;
-    } else {
-      ZZFromBytes(as->n2, (const uint8_t *) args->args[3],
-                  args->lengths[3]);
+      as->workerCnt = 0; // for RR-ing work to all workers
     }
 
     as->fp = fopen(name.c_str(), "rb");
@@ -1302,9 +1285,7 @@ void
 agg_char2_row_col_pack_deinit(UDF_INIT *initid)
 {
     agg_char2_row_pack_state *as = (agg_char2_row_pack_state *) initid->ptr;
-
-    if (as->run_in_parallel) mpz_clear(as->n2_mp);
-
+    mpz_clear(as->n2_mp);
     free(as->rbuf);
     free(as->internal_buffer);
     fclose(as->fp);
@@ -1326,15 +1307,6 @@ agg_char2_row_col_pack_clear(UDF_INIT *initid, char *is_null, char *error)
           as->agg_size * AggRowColPack::NumBlocksInternalBuffer,
           as->fp);
 }
-
-struct mult_entry {
-  mult_entry() {}
-  mult_entry(uint64_t row_id, size_t group_id, uint32_t mask)
-    : row_id(row_id), group_id(group_id), mask(mask) {}
-  uint64_t row_id;
-  size_t group_id;
-  uint32_t mask;
-};
 
 static void flush_group_buffers(agg_char2_row_pack_state *as) {
 
@@ -1369,16 +1341,9 @@ static void flush_group_buffers(agg_char2_row_pack_state *as) {
       agg_char2_row_pack_state::per_group_state* s = NULL;
       if (UNLIKELY(it == as->aggs.end())) {
           s = &as->aggs[eit->first]; // creates on demand
-          if (as->run_in_parallel) {
-            s->running_sums_mp.resize(as->num_groups);
-            for (size_t i = 0; i < as->num_groups; i++) {
-              InitMPZRunningSums(as->rows_per_agg, s->running_sums_mp[i]);
-            }
-          } else {
-            s->running_sums.resize(as->num_groups);
-            for (size_t i = 0; i < as->num_groups; i++) {
-              s->running_sums[i].resize((0x1 << as->rows_per_agg) - 1, to_ZZ(1));
-            }
+          s->running_sums_mp.resize(as->num_groups);
+          for (size_t i = 0; i < as->num_groups; i++) {
+            InitMPZRunningSums(as->rows_per_agg, s->running_sums_mp[i]);
           }
           s->count = 0;
       } else {
@@ -1503,39 +1468,38 @@ static void flush_group_buffers(agg_char2_row_pack_state *as) {
             group.second->first /* block_id */ != minSoFar) continue;
 
         uint16_t group_key = alloc_map[i].first;
+        agg_char2_row_pack_state::per_group_state* s = NULL;
+        if (!as->run_in_parallel) s = &as->aggs[group_key];
 
-        if (as->run_in_parallel) {
-          // push all these multiplications into the queue
-          size_t group_id_idx = 0;
-          for (vector< vector< uint32_t > >::iterator it = group.second->second.begin();
-               it != group.second->second.end(); ++it, ++group_id_idx) {
-            for (vector<uint32_t>::iterator it0 = it->begin();
-                 it0 != it->end(); ++it0) {
+        // push all these multiplications into the queue
+        size_t group_id_idx = 0;
+        for (vector< vector< uint32_t > >::iterator it = group.second->second.begin();
+             it != group.second->second.end(); ++it, ++group_id_idx) {
+
+          vector<mpz_wrapper>* ss = NULL;
+          if (!as->run_in_parallel) ss = &s->running_sums_mp[group_id_idx];
+
+          for (vector<uint32_t>::iterator it0 = it->begin();
+               it0 != it->end(); ++it0) {
+
+            if (as->run_in_parallel) {
               worker_msg::ent e;
               e.group_key = group_key;
               e.group_id  = group_id_idx;
               e.idx       = (*it0) - 1;
               m.ents.push_back(e);
-
-              // stats
-              as->st.mults++;
-              //static const uint32_t AllPosHigh = (0x1 << as->rows_per_agg) - 1;
-              //if (group.second.front().mask == AllPosHigh) as->st.all_pos++;
+            } else {
+              vector<mpz_wrapper>& vr = *ss;
+              size_t idx = (*it0) - 1;
+              mpz_mul(vr[idx].mp, vr[idx].mp, m.value);
+              mpz_mod(vr[idx].mp, vr[idx].mp, as->n2_mp);
             }
+
+            // stats
+            as->st.mults++;
+            //static const uint32_t AllPosHigh = (0x1 << as->rows_per_agg) - 1;
+            //if (group.second.front().mask == AllPosHigh) as->st.all_pos++;
           }
-        } else {
-          assert(false); // TODO: implement me
-          //agg_char2_row_pack_state::per_group_state& s = as->aggs[group.first];
-          //ZZ &sum =
-          //  s.running_sums
-          //    [group.second.front().group_id]
-          //    [group.second.front().mask - 1];
-          //ZZ e;
-          //ZZFromBytes(
-          //    e,
-          //    (const uint8_t *) as->block_buf,
-          //    as->agg_size);
-          //MulMod(sum, sum, e, as->n2);
         }
 
         // advance this group
@@ -1544,7 +1508,12 @@ static void flush_group_buffers(agg_char2_row_pack_state *as) {
         group.first = group.second == alloc_map[i].second.end();
       }
 
-      as->worker_states[ as->workerCnt++ % AggRowColPack::NumThreads ].q.push(m);
+      if (as->run_in_parallel) {
+        as->worker_states[ as->workerCnt++ % AggRowColPack::NumThreads ].q.push(m);
+      } else {
+        // clear the memory
+        mpz_clear(m.value);
+      }
 
       // find first non-empty
       for (group_done_vec::iterator it = group_done.begin() + pos_first_non_empty;
@@ -1657,19 +1626,10 @@ agg_char2_row_col_pack(UDF_INIT *initid, UDF_ARGS *args, char *result,
       for (size_t i = 0; i < as->num_groups; i++) {
         *length += sizeof(uint32_t); /* number of (non-zero) configurations */
         size_t non_zero = 0;
-        if (as->run_in_parallel) {
-          size_t s = it->second.running_sums_mp[i].size();
-          assert(s == ((0x1 << as->rows_per_agg) - 1));
-          for (size_t idx = 0; idx < s; idx++) {
-            if (mpz_cmp_ui(it->second.running_sums_mp[i][idx].mp, 1)) non_zero++;
-          }
-
-        } else {
-          size_t s = it->second.running_sums[i].size();
-          assert(s == ((0x1 << as->rows_per_agg) - 1));
-          for (size_t idx = 0; idx < s; idx++) {
-            if (it->second.running_sums[i][idx] != 1) non_zero++;
-          }
+        size_t s = it->second.running_sums_mp[i].size();
+        assert(s == ((0x1 << as->rows_per_agg) - 1));
+        for (size_t idx = 0; idx < s; idx++) {
+          if (mpz_cmp_ui(it->second.running_sums_mp[i][idx].mp, 1)) non_zero++;
         }
         // all non_zero aggs (mask plus actual agg)
         *length += non_zero * (sizeof(uint32_t) + as->agg_size);
@@ -1705,33 +1665,18 @@ agg_char2_row_col_pack(UDF_INIT *initid, UDF_ARGS *args, char *result,
           *u32p = nn[i];
           ptr += sizeof(uint32_t);
 
-          if (as->run_in_parallel) {
-            size_t s = it->second.running_sums_mp[i].size();
-            for (size_t idx = 0; idx < s; idx++) {
-                if (!mpz_cmp_ui(it->second.running_sums_mp[i][idx].mp, 1)) {
-                  continue; // test usefullness
-                }
+          size_t s = it->second.running_sums_mp[i].size();
+          for (size_t idx = 0; idx < s; idx++) {
+              if (!mpz_cmp_ui(it->second.running_sums_mp[i][idx].mp, 1)) {
+                continue; // test usefullness
+              }
 
-                uint32_t *iptr = (uint32_t *) ptr;
-                *iptr = (idx + 1);
-                ptr += sizeof(uint32_t);
+              uint32_t *iptr = (uint32_t *) ptr;
+              *iptr = (idx + 1);
+              ptr += sizeof(uint32_t);
 
-                BytesFromMPZ(ptr, it->second.running_sums_mp[i][idx].mp, as->agg_size);
-                ptr += as->agg_size;
-            }
-          } else {
-            size_t s = it->second.running_sums[i].size();
-            for (size_t idx = 0; idx < s; idx++) {
-                ZZ& z = it->second.running_sums[i][idx];
-                if (z == 1) continue;
-
-                uint32_t *iptr = (uint32_t *) ptr;
-                *iptr = (idx + 1);
-                ptr += sizeof(uint32_t);
-
-                BytesFromZZ(ptr, z, as->agg_size);
-                ptr += as->agg_size;
-            }
+              BytesFromMPZ(ptr, it->second.running_sums_mp[i][idx].mp, as->agg_size);
+              ptr += as->agg_size;
           }
         }
     }
@@ -1754,270 +1699,6 @@ agg_char2_row_col_pack(UDF_INIT *initid, UDF_ARGS *args, char *result,
       }
     }
 
-    return (char *) as->rbuf;
-}
-
-// --------------------------------------------------
-
-struct memory_slab {
-public:
-  static const size_t NSlots = 32;
-  static const size_t SlabSize = 256 * NSlots;
-
-  memory_slab() : stream_end(false), is_raw(false), num_valid(0) {
-    memset(ptrs, 0, sizeof(ptrs));
-    memset(sizes, 0, sizeof(sizes));
-  }
-
-  bool stream_end;
-  bool is_raw;
-
-  uint8_t * ptrs[NSlots];
-  size_t sizes[NSlots];
-  size_t num_valid; // between 0-NSlots inclusive
-
-  inline bool needs_init() const { return ptrs[0] == NULL; }
-  inline void init() {
-    ptrs[0] = (uint8_t*) malloc(SlabSize);
-  }
-  inline uint8_t * init_raw(size_t bytes) {
-    ptrs[0] = (uint8_t*) malloc(bytes);
-    is_raw = true;
-    sizes[0] = bytes;
-    num_valid = 1;
-    return ptrs[0];
-  }
-
-  inline void free() {
-    ::free(ptrs[0]);
-  }
-
-  inline uint8_t * tail() {
-    SANITY(!is_raw);
-    SANITY(!needs_init());
-    if (num_valid == 0) return ptrs[0];
-    return ptrs[num_valid - 1] + sizes[num_valid - 1];
-  }
-
-  inline const uint8_t * const_tail() const {
-    SANITY(!is_raw);
-    SANITY(!needs_init());
-    if (num_valid == 0) return ptrs[0];
-    return ptrs[num_valid - 1] + sizes[num_valid - 1];
-  }
-
-  inline uint8_t * alloc(size_t bytes) {
-    SANITY(!is_raw);
-    SANITY(!needs_init());
-    SANITY(!slots_full());
-    SANITY(remaining() >= bytes);
-    uint8_t * end = tail();
-    num_valid++;
-    ptrs[num_valid - 1] = end;
-    sizes[num_valid - 1] = bytes;
-    return end;
-  }
-
-  inline bool slots_full() const {
-    SANITY(!is_raw);
-    return num_valid == NSlots;
-  }
-
-  inline size_t remaining() const {
-    SANITY(!is_raw);
-    if (num_valid == 0) return SlabSize;
-    SANITY(1 <= num_valid && num_valid <= NSlots);
-    const uint8_t * end = const_tail();
-    return SlabSize - (end - ptrs[0]);
-  }
-};
-
-static inline memory_slab mem_slab_end() {
-  memory_slab m;
-  m.stream_end = true;
-  return m;
-}
-
-struct agg_par_state;
-
-struct worker_ctx {
-public:
-  worker_ctx(agg_par_state *as) : as(as) { mpz_init_set_ui(sum, 1); }
-  ~worker_ctx() { mpz_clear(sum); }
-  agg_par_state *as;
-  mpz_t sum;
-  concurrent_bounded_queue<memory_slab> q;
-};
-
-struct agg_par_state {
-public:
-  agg_par_state() { mpz_init(mod); }
-  ~agg_par_state() { mpz_clear(mod); }
-
-  bool mod_set;
-  mpz_t mod;
-
-  bool threads_inited;
-  vector<pthread_t> thds;
-  vector<worker_ctx*> ctxs;
-
-  memory_slab cur_slab;
-  uint32_t ctr;
-
-  void *rbuf;
-
-  inline worker_ctx* next_ctx() {
-    return ctxs[ctr++ % ctxs.size()];
-  }
-};
-
-static void *thd_main(void *ptr) {
-  worker_ctx *ctx = (worker_ctx *)ptr;
-
-  mpz_t p;
-  mpz_init(p);
-
-  memory_slab slab;
-  while (true) {
-    ctx->q.pop(slab);
-    if (slab.stream_end) {
-      break;
-    } else {
-      for (size_t i = 0; i < slab.num_valid; i++) {
-        mpz_import(p, slab.sizes[i], -1, sizeof(uint8_t), 0, 0, slab.ptrs[i]);
-        mpz_mul(ctx->sum, ctx->sum, p);
-        mpz_mod(ctx->sum, ctx->sum, ctx->as->mod);
-      }
-      slab.free();
-    }
-  }
-
-  mpz_clear(p);
-  return NULL;
-}
-
-my_bool
-agg_par_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
-{
-    TRACE();
-    agg_par_state *as = new agg_par_state();
-    as->rbuf = malloc(CryptoManager::Paillier_len_bytes);
-    as->mod_set = 0;
-    as->threads_inited = false;
-    initid->ptr = (char *) as;
-    return 0;
-}
-
-void
-agg_par_deinit(UDF_INIT *initid)
-{
-    TRACE();
-    agg_par_state *as = (agg_par_state *) initid->ptr;
-    free(as->rbuf);
-    delete as;
-}
-
-void
-agg_par_clear(UDF_INIT *initid, char *is_null, char *error)
-{
-    TRACE();
-    agg_par_state *as = (agg_par_state *) initid->ptr;
-    SANITY(!as->threads_inited);
-    as->ctr = 0;
-}
-
-static const size_t nthreads = 16;
-
-//args will be element to add, constant N2
-my_bool
-agg_par_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error)
-{
-    TRACE();
-    agg_par_state *as = (agg_par_state *) initid->ptr;
-    if (UNLIKELY(!as->mod_set)) {
-        mpz_import(as->mod, args->lengths[1], -1, sizeof(uint8_t), 0, 0, args->args[1]);
-        as->mod_set = 1;
-    }
-
-    if (UNLIKELY(!as->threads_inited)) {
-      for (size_t i = 0; i < nthreads; i++) {
-        worker_ctx *ctx = new worker_ctx(as);
-        pthread_t t;
-        pthread_create(&t, NULL, thd_main, ctx);
-        as->thds.push_back(t);
-        as->ctxs.push_back(ctx);
-      }
-      as->threads_inited = true;
-    }
-
-    size_t count = args->lengths[0];
-    const uint8_t *buffer = (const uint8_t*) args->args[0];
-    if (UNLIKELY(count > memory_slab::SlabSize)) {
-      // won't fit in entire slab
-      memory_slab special;
-      uint8_t *p = special.init_raw(count);
-      memcpy(p, buffer, count);
-      as->next_ctx()->q.push(special);
-    } else {
-      if (count > as->cur_slab.remaining() /* won't fit */ ||
-          as->cur_slab.slots_full() /* no more slots */) {
-        // need new mem slab
-        SANITY(!as->cur_slab.needs_init());
-        SANITY(as->cur_slab.remaining() != memory_slab::SlabSize);
-        as->next_ctx()->q.push(as->cur_slab);
-        as->cur_slab = memory_slab(); // reset
-      }
-
-      SANITY(count <= as->cur_slab.remaining() &&
-             !as->cur_slab.slots_full());
-
-      if (as->cur_slab.needs_init()) as->cur_slab.init();
-      uint8_t *p = as->cur_slab.alloc(count);
-      memcpy(p, buffer, count);
-    }
-
-    return true;
-}
-
-char *
-agg_par(UDF_INIT *initid, UDF_ARGS *args, char *result,
-    unsigned long *length, char *is_null, char *error)
-{
-    TRACE();
-
-    agg_par_state *as = (agg_par_state *) initid->ptr;
-    SANITY(as->threads_inited);
-
-    // send outstanding slab
-    if (as->cur_slab.num_valid > 0) {
-      SANITY(!as->cur_slab.needs_init());
-      as->next_ctx()->q.push(as->cur_slab);
-      as->cur_slab = memory_slab();
-    }
-
-    // send signal to stop worker threads + join
-    mpz_t sum;
-    mpz_init_set_si(sum, 1);
-    for (size_t i = 0; i < as->ctxs.size(); i++) {
-      as->ctxs[i]->q.push(mem_slab_end());
-      pthread_join(as->thds[i], NULL);
-      mpz_mul(sum, sum, as->ctxs[i]->sum);
-      mpz_mod(sum, sum, as->mod);
-    }
-
-    // cleanup thread stuff
-    for (size_t i = 0; i < as->ctxs.size(); i++) {
-      delete as->ctxs[i];
-    }
-    as->thds.clear();
-    as->ctxs.clear();
-    as->threads_inited = false;
-
-    size_t count;
-    mpz_export(as->rbuf, &count, -1, CryptoManager::Paillier_len_bytes, -1, 0, sum);
-    SANITY(count == 1);
-    *length = CryptoManager::Paillier_len_bytes;
-    mpz_clear(sum);
     return (char *) as->rbuf;
 }
 

@@ -23,7 +23,7 @@ using namespace std;
 using namespace NTL;
 
 static bool UseOldOpe = false;
-static const bool DoParallel = true;
+static bool DoParallel = true;
 static const size_t NumThreads = 8;
 
 class NamedTimer : public Timer {
@@ -183,19 +183,60 @@ static void SplitRowsIntoGroups(
 }
 
 struct lineitem_group {
+    lineitem_group() :
+      l_quantity(0.0),
+      l_extendedprice(0.0),
+      disc_price(0.0),
+      charge(0.0),
+      l_discount(0.0),
+      l_tax(0.0),
+      count(0) {}
+
     lineitem_group(
-            double l_quantity,
-            double l_extendedprice,
-            double l_discount,
-            double l_tax) :
-        l_quantity(l_quantity),
-        l_extendedprice(l_extendedprice),
-        l_discount(l_discount),
-        l_tax(l_tax) {}
+      double l_quantity,
+      double l_extendedprice,
+      double disc_price,
+      double charge,
+      double l_discount,
+      double l_tax,
+      uint64_t count) :
+    l_quantity(l_quantity),
+    l_extendedprice(l_extendedprice),
+    disc_price(disc_price),
+    charge(charge),
+    l_discount(l_discount),
+    l_tax(l_tax),
+    count(count) {}
+
     double l_quantity;
     double l_extendedprice;
+    double disc_price;
+    double charge;
     double l_discount;
     double l_tax;
+    uint64_t count;
+
+    lineitem_group operator+(const lineitem_group& b) const {
+      return lineitem_group(
+        l_quantity + b.l_quantity,
+        l_extendedprice + b.l_extendedprice,
+        disc_price + b.disc_price,
+        charge + b.charge,
+        l_discount + b.l_discount,
+        l_tax + b.l_tax,
+        count + b.count);
+    }
+
+    lineitem_group& operator+=(const lineitem_group& b) {
+      l_quantity += b.l_quantity;
+      l_extendedprice += b.l_extendedprice;
+      disc_price += b.disc_price;
+      charge += b.charge;
+      l_discount += b.l_discount;
+      l_tax += b.l_tax;
+      count += b.count;
+      return *this;
+    }
 };
 
 class lineitem_key : public pair<string, string> {
@@ -207,7 +248,7 @@ public:
     inline string l_linestatus() const { return second; }
 };
 
-static map<lineitem_key, vector<lineitem_group> > agg_groups;
+
 
 // TODO: remove duplication
 enum lineitem {
@@ -501,35 +542,61 @@ static void do_query_q1(Connect &conn,
     }
 }
 
-typedef map< pair< uint8_t, uint8_t >,
-             pair< uint64_t, uint64_t > > Q1AggGroup;
+template <typename T>
+struct Q1NoSortImplInfo {};
 
-static void ReadChar2AggGroup(const string& data,
-                              Q1AggGroup& agg_group) {
+template <>
+struct Q1NoSortImplInfo<uint64_t> {
+  static inline const char * agg_func_name() { return "sum_char2_int"; }
+  static inline const char * table_name() { return "LINEITEM_INT_MYISAM"; }
+  static inline const char * unit() { return "100"; }
 
-  const uint8_t *p   = (const uint8_t *) data.data();
-  const uint8_t *end = (const uint8_t *) data.data() + data.size();
-  while (p < end) {
-    uint8_t l_returnflag = *p++;
-    uint8_t l_linestatus = *p++;
-    const uint64_t *u64p = (const uint64_t *) p;
-    uint64_t count = *u64p;
-    p += sizeof(uint64_t);
-    const uint64_t *dp = (const uint64_t *) p;
-    uint64_t value = *dp;
-    p += sizeof(uint64_t);
-    agg_group[make_pair(l_returnflag, l_linestatus)] = make_pair(count, value);
+  static inline double convert(uint64_t i) {
+    return double(i)/100.0;
   }
-}
+};
 
-static void do_query_q1_nosort(Connect &conn,
-                               uint32_t year,
-                               vector<q1entry> &results) {
+template <>
+struct Q1NoSortImplInfo<double> {
+  static inline const char * agg_func_name() { return "sum_char2_double"; }
+  static inline const char * table_name() { return "LINEITEM_MYISAM"; }
+  static inline const char * unit() { return "1.0"; }
+
+  static inline double convert(double i) { return i; }
+};
+
+template <typename T>
+struct Q1NoSortImpl {
+  typedef map< pair< uint8_t, uint8_t >,
+               pair< uint64_t, T > > Q1AggGroup;
+
+  static void ReadChar2AggGroup(const string& data,
+                                Q1AggGroup& agg_group) {
+
+    const uint8_t *p   = (const uint8_t *) data.data();
+    const uint8_t *end = (const uint8_t *) data.data() + data.size();
+    while (p < end) {
+      uint8_t l_returnflag = *p++;
+      uint8_t l_linestatus = *p++;
+      const uint64_t *u64p = (const uint64_t *) p;
+      uint64_t count = *u64p;
+      p += sizeof(uint64_t);
+      const T *dp = (const T *) p;
+      T value = *dp;
+      p += sizeof(T);
+      agg_group[make_pair(l_returnflag, l_linestatus)] = make_pair(count, value);
+    }
+  }
+
+  static void q1_impl(Connect& conn, uint32_t year, vector<q1entry>& results) {
     NamedTimer fcnTimer(__func__);
 
+    const char *agg_name = Q1NoSortImplInfo<T>::agg_func_name();
+    const char *unit = Q1NoSortImplInfo<T>::unit();
+
     ostringstream buf;
-    buf << "select SQL_NO_CACHE sum_char2(l_returnflag, l_linestatus, l_quantity) as sum_qty, sum_char2(l_returnflag, l_linestatus, l_extendedprice) as sum_base_price, sum_char2(l_returnflag, l_linestatus, l_extendedprice * (100 - l_discount)) as sum_disc_price, sum_char2(l_returnflag, l_linestatus, l_extendedprice * (100 - l_discount) * (100 + l_tax)) as sum_charge, sum_char2(l_returnflag, l_linestatus, l_discount) as sum_disc from LINEITEM_INT_MYISAM "
-        << "where l_shipdate <= date '" << year << "-1-1'"
+    buf << "select SQL_NO_CACHE " << agg_name << "(l_returnflag, l_linestatus, l_quantity) as sum_qty, " << agg_name << "(l_returnflag, l_linestatus, l_extendedprice) as sum_base_price, " << agg_name << "(l_returnflag, l_linestatus, l_extendedprice * (" << unit << " - l_discount)) as sum_disc_price, " << agg_name << "(l_returnflag, l_linestatus, l_extendedprice * (" << unit << " - l_discount) * (" << unit << " + l_tax)) as sum_charge, " << agg_name << "(l_returnflag, l_linestatus, l_discount) as sum_disc from " << Q1NoSortImplInfo<T>::table_name()
+        << " where l_shipdate <= date '" << year << "-1-1'"
         ;
     cerr << buf.str() << endl;
 
@@ -558,29 +625,42 @@ static void do_query_q1_nosort(Connect &conn,
     ReadChar2AggGroup(res.rows[0][3].data, sum_charge_group);
     ReadChar2AggGroup(res.rows[0][4].data, sum_disc_group);
 
-    for (Q1AggGroup::iterator it = sum_qty_group.begin();
+    for (typename Q1AggGroup::iterator it = sum_qty_group.begin();
          it != sum_qty_group.end(); ++it) {
 
-        pair< uint64_t, uint64_t >& p0 = it->second;
-        pair< uint64_t, uint64_t >& p1 = sum_base_price_group[it->first];
-        pair< uint64_t, uint64_t >& p2 = sum_disc_price_group[it->first];
-        pair< uint64_t, uint64_t >& p3 = sum_charge_group[it->first];
-        pair< uint64_t, uint64_t >& p4 = sum_disc_group[it->first];
+        pair< uint64_t, T >& p0 = it->second;
+        pair< uint64_t, T >& p1 = sum_base_price_group[it->first];
+        pair< uint64_t, T >& p2 = sum_disc_price_group[it->first];
+        pair< uint64_t, T >& p3 = sum_charge_group[it->first];
+        pair< uint64_t, T >& p4 = sum_disc_group[it->first];
 
         results.push_back(
                 q1entry(
                     string(1, it->first.first),
                     string(1, it->first.second),
-                    (double(p0.second)/100.0),
-                    (double(p1.second)/100.0),
-                    (double(p2.second)/100.0),
-                    (double(p3.second)/100.0),
-                    (double(p0.second)/100.0) / double(p0.first),
-                    (double(p1.second)/100.0) / double(p1.first),
-                    (double(p4.second)/100.0) / double(p4.first),
+                    Q1NoSortImplInfo<T>::convert(p0.second),
+                    Q1NoSortImplInfo<T>::convert(p1.second),
+                    Q1NoSortImplInfo<T>::convert(p2.second),
+                    Q1NoSortImplInfo<T>::convert(p3.second),
+                    Q1NoSortImplInfo<T>::convert(p0.second) / double(p0.first),
+                    Q1NoSortImplInfo<T>::convert(p1.second) / double(p1.first),
+                    Q1NoSortImplInfo<T>::convert(p4.second) / double(p4.first),
                     p0.first));
         // TODO: sort results
     }
+  }
+};
+
+static void do_query_q1_nosort_int(Connect &conn,
+                                   uint32_t year,
+                                   vector<q1entry> &results) {
+  Q1NoSortImpl<uint64_t>::q1_impl(conn, year, results);
+}
+
+static void do_query_q1_nosort_double(Connect &conn,
+                                      uint32_t year,
+                                      vector<q1entry> &results) {
+  Q1NoSortImpl<double>::q1_impl(conn, year, results);
 }
 
 static inline uint64_t ExtractTimeInfo(const string &data) {
@@ -765,8 +845,9 @@ static void do_query_q1_opt_nosort(Connect &conn,
     ostringstream s;
     s <<
       "SELECT SQL_NO_CACHE agg_char2("
-      "l_returnflag_DET, l_linestatus_DET, l_bitpacked_AGG, " << pkinfo <<
-      ") FROM lineitem_enc WHERE l_shipdate_OPE <= " << encDATE;
+      "l_returnflag_DET, l_linestatus_DET, l_bitpacked_AGG, "
+      << pkinfo << ", " << (DoParallel ? "1" : "0") <<
+      ") FROM lineitem_enc_MYISAM WHERE l_shipdate_OPE <= " << encDATE;
     cerr << s.str() << endl;
 
     {
@@ -868,131 +949,6 @@ static void do_query_q1_opt_nosort(Connect &conn,
     }
 }
 
-static void do_query_q1_opt_rowpack(Connect &conn,
-                                    CryptoManager &cm,
-                                    uint32_t year,
-                                    vector<q1entry> &results) {
-    crypto_manager_stub cm_stub(&cm, UseOldOpe);
-    NamedTimer fcnTimer(__func__);
-
-    // l_shipdate <= date '[year]-01-01'
-    bool isBin;
-    string encDATE = cm_stub.crypt<3>(cm.getmkey(), strFromVal(EncodeDate(1, 1, year)),
-                              TYPE_INTEGER, fieldname(lineitem::l_shipdate, "OPE"),
-                              getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
-
-    DBResult * dbres;
-
-    conn.execute("set @cnt := -1", dbres);
-
-    string pkinfo = marshallBinary(cm.getPKInfo());
-    ostringstream s;
-    s <<
-      "SELECT SQL_NO_CACHE agg_char2_row_pack("
-        "l_returnflag_DET, "
-        "l_linestatus_DET, "
-        "cnt, "
-        "31, "
-        << pkinfo <<
-      ") FROM ( "
-        "SELECT l_returnflag_DET, l_linestatus_DET, "
-        "@cnt := @cnt + 1 AS cnt, l_shipdate_OPE FROM lineitem_enc_noagg "
-      ") AS _anon_ "
-      "WHERE l_shipdate_OPE <= " << encDATE
-      ;
-    cerr << s.str() << endl;
-
-    {
-      NamedTimer t(__func__, "execute");
-      conn.execute(s.str(), dbres);
-    }
-    ResType res;
-    {
-      NamedTimer t(__func__, "unpack");
-      res = dbres->unpack();
-      assert(res.ok);
-    }
-
-    static const size_t BitsPerAggField = 83;
-    static const size_t FieldsPerAgg = 1024 / BitsPerAggField;
-    ZZ mask = to_ZZ(1); mask <<= BitsPerAggField; mask -= 1;
-    assert(NumBits(mask) == (int)BitsPerAggField);
-    {
-      assert(res.rows.size() == 1);
-      string data = res.rows[0][0].data;
-
-      // format of data is
-      // [ l_returnflag_DET (1 byte) | l_linestatus_DET (1 byte) |
-      //   count(*) (8 bytes) | [ rows (RowsPerAgg * 256 bytes) ]* ]*
-      typedef map< pair<unsigned char, unsigned char>, q1entry > GroupMap;
-      GroupMap groups;
-
-      const uint8_t *p   = (const uint8_t *) data.data();
-      const uint8_t *end = (const uint8_t *) data.data() + data.size();
-      while (p < end) {
-
-        unsigned char l_returnflag_DET = *p++;
-        unsigned char l_linestatus_DET = *p++;
-
-        // l_returnflag
-        unsigned char l_returnflag_ch = (unsigned char) decryptRow<uint32_t, 1>(
-                to_s((int)l_returnflag_DET),
-                12345,
-                fieldname(lineitem::l_returnflag, "DET"),
-                TYPE_INTEGER,
-                oDET,
-                cm);
-
-        // l_linestatus
-        unsigned char l_linestatus_ch = (unsigned char) decryptRow<uint32_t, 1>(
-                to_s((int)l_linestatus_DET),
-                12345,
-                fieldname(lineitem::l_linestatus, "DET"),
-                TYPE_INTEGER,
-                oDET,
-                cm);
-
-        // warning: endianness on DB machine must be same as this machine
-        const uint64_t *u64p = (const uint64_t *) p;
-        uint64_t count_order = *u64p;
-
-        p += sizeof(uint64_t);
-
-        q1entry q;
-        q.l_returnflag = string(1, (char) l_returnflag_ch);
-        q.l_linestatus = string(1, (char) l_linestatus_ch);
-        q.count_order = count_order;
-
-        for (size_t i = 0; i < 5; i++) {
-          double sum = 0.0;
-          for (size_t j = 0; j < FieldsPerAgg; j++) {
-            ZZ m;
-            cm.decrypt_Paillier(string((const char *) p, 256), m);
-            uint64_t e = to_long( (m >> (BitsPerAggField * j)) & mask );
-            sum += ((double)e)/100.0;
-            p += 256;
-          }
-          switch (i) {
-          case 0: q.sum_qty = sum; q.avg_qty = sum / ((double)count_order); break;
-          case 1: q.sum_base_price = sum; q.avg_price = sum / ((double)count_order); break;
-          case 2: q.avg_disc = sum / ((double)count_order); break;
-          case 3: q.sum_disc_price = sum; break;
-          case 4: q.sum_charge = sum; break;
-          default: assert(false);
-          }
-        }
-
-        groups[make_pair( l_returnflag_ch, l_linestatus_ch )] = q;
-      }
-
-      results.reserve(groups.size());
-      for (GroupMap::iterator it = groups.begin();
-           it != groups.end(); ++it) {
-        results.push_back(it->second);
-      }
-    }
-}
-
 static void do_query_q1_opt_row_col_pack(Connect &conn,
                                          CryptoManager &cm,
                                          uint32_t year,
@@ -1029,7 +985,8 @@ static void do_query_q1_opt_row_col_pack(Connect &conn,
         "l_linestatus_DET, "
         "row_id, "
         << pkinfo << ", " <<
-        "\"" << filename << "\", 1, " << (RowColPackCipherSize/8) << ", 3, 1"
+        "\"" << filename << "\", " << (DoParallel ? "1" : "0")
+        << ", " << (RowColPackCipherSize/8) << ", 3, 1"
       ") FROM lineitem_enc_noagg_rowid_MYISAM "
       "WHERE l_shipdate_OPE <= " << encDATE
       ;
@@ -1265,6 +1222,92 @@ static void do_query_q1_opt(Connect &conn,
     }
 }
 
+struct _q1_noopt_task_state {
+  _q1_noopt_task_state() {}
+  vector< vector< SqlItem > > rows;
+  map<lineitem_key, lineitem_group> agg_groups;
+};
+
+struct _q1_noopt_task {
+  void operator()() {
+      for (auto row : state->rows) {
+          // l_returnflag
+          unsigned char l_returnflag_ch = (unsigned char) decryptRow<uint32_t, 1>(
+                  row[0].data,
+                  12345,
+                  fieldname(lineitem::l_returnflag, "DET"),
+                  TYPE_INTEGER,
+                  oDET,
+                  *cm);
+          string l_returnflag(1, l_returnflag_ch);
+
+          // l_linestatus
+          unsigned char l_linestatus_ch = (unsigned char) decryptRow<uint32_t, 1>(
+                  row[1].data,
+                  12345,
+                  fieldname(lineitem::l_linestatus, "DET"),
+                  TYPE_INTEGER,
+                  oDET,
+                  *cm);
+          string l_linestatus(1, l_linestatus_ch);
+
+          // l_quantity
+          uint64_t l_quantity_int = decryptRow<uint64_t, 7>(
+                  row[2].data,
+                  12345,
+                  fieldname(lineitem::l_quantity, "DET"),
+                  TYPE_INTEGER,
+                  oDET,
+                  *cm);
+          double l_quantity = ((double)l_quantity_int)/100.0;
+
+          // l_extendedprice
+          uint64_t l_extendedprice_int = decryptRow<uint64_t, 7>(
+                  row[3].data,
+                  12345,
+                  fieldname(lineitem::l_extendedprice, "DET"),
+                  TYPE_INTEGER,
+                  oDET,
+                  *cm);
+          double l_extendedprice = ((double)l_extendedprice_int)/100.0;
+
+          // l_discount
+          uint64_t l_discount_int = decryptRow<uint64_t, 7>(
+                  row[4].data,
+                  12345,
+                  fieldname(lineitem::l_discount, "DET"),
+                  TYPE_INTEGER,
+                  oDET,
+                  *cm);
+          double l_discount = ((double)l_discount_int)/100.0;
+
+          // l_tax
+          uint64_t l_tax_int = decryptRow<uint64_t, 7>(
+                  row[5].data,
+                  12345,
+                  fieldname(lineitem::l_tax, "DET"),
+                  TYPE_INTEGER,
+                  oDET,
+                  *cm);
+          double l_tax = ((double)l_tax_int)/100.0;
+
+          lineitem_key key(l_returnflag, l_linestatus);
+          lineitem_group elem(
+              l_quantity,
+              l_extendedprice,
+              l_extendedprice * (1.0 - l_discount),
+              l_extendedprice * (1.0 - l_discount) * (1.0 + l_tax),
+              l_discount,
+              l_tax,
+              1);
+
+          state->agg_groups[key] += elem;
+      }
+  }
+  CryptoManager* cm;
+  _q1_noopt_task_state* state;
+};
+
 static void do_query_q1_noopt(Connect &conn,
                               CryptoManager &cm,
                               uint32_t year,
@@ -1291,7 +1334,7 @@ static void do_query_q1_noopt(Connect &conn,
           << "l_discount_DET, "
           << "l_tax_DET "
 
-      << "FROM lineitem_enc_noopt "
+      << "FROM lineitem_enc_noagg_rowid_MYISAM "
       << "WHERE l_shipdate_OPE <= " << encDATE;
     cerr << s.str() << endl;
 
@@ -1306,7 +1349,37 @@ static void do_query_q1_noopt(Connect &conn,
       assert(res.ok);
     }
 
-    {
+    map<lineitem_key, lineitem_group> agg_groups;
+    if (DoParallel) {
+      NamedTimer t(__func__, "decrypt-parallel");
+
+      using namespace exec_service;
+
+      vector<_q1_noopt_task_state> states( NumThreads );
+      vector<_q1_noopt_task> tasks( NumThreads );
+      vector<SqlRowGroup> groups;
+      SplitRowsIntoGroups(groups, res.rows, NumThreads);
+
+      for (size_t i = 0; i < NumThreads; i++) {
+        tasks[i].cm    = &cm;
+        tasks[i].state = &states[i];
+        states[i].rows = groups[i];
+      }
+
+      Exec<_q1_noopt_task>::DefaultExecutor exec( NumThreads );
+      exec.start();
+      for (size_t i = 0; i < NumThreads; i++) {
+        exec.submit(tasks[i]);
+      }
+      exec.stop(); // blocks until completion
+
+      for (size_t i = 0; i < NumThreads; i++) {
+        _q1_noopt_task_state& s = states[i];
+        for (auto it = s.agg_groups.begin(); it != s.agg_groups.end(); ++it) {
+          agg_groups[it->first] += it->second;
+        }
+      }
+    } else {
       NamedTimer t(__func__, "decrypt");
       for (auto row : res.rows) {
           // l_returnflag
@@ -1370,16 +1443,16 @@ static void do_query_q1_noopt(Connect &conn,
           double l_tax = ((double)l_tax_int)/100.0;
 
           lineitem_key key(l_returnflag, l_linestatus);
-          lineitem_group elem(l_quantity, l_extendedprice, l_discount, l_tax);
+          lineitem_group elem(
+              l_quantity,
+              l_extendedprice,
+              l_extendedprice * (1.0 - l_discount),
+              l_extendedprice * (1.0 - l_discount) * (1.0 + l_tax),
+              l_discount,
+              l_tax,
+              1);
 
-          auto it = agg_groups.find(key);
-          if (it == agg_groups.end()) {
-              vector<lineitem_group> v;
-              v.push_back(elem);
-              agg_groups[key] = v;
-          } else {
-              it->second.push_back(elem);
-          }
+          agg_groups[key] += elem;
       }
     }
 
@@ -1387,43 +1460,19 @@ static void do_query_q1_noopt(Connect &conn,
       NamedTimer t(__func__, "aggregation");
       for (auto it = agg_groups.begin();
            it != agg_groups.end(); ++it) {
-          double sum_qty = 0.0;
-          double sum_base_price = 0.0;
-          double sum_disc_price = 0.0;
-          double sum_charge = 0.0;
-          double sum_l_discount = 0.0;
-
           const lineitem_key &key = it->first;
-
-          for (auto it0 = it->second.begin();
-               it0 != it->second.end();
-               ++it0) {
-              const lineitem_group &elem = *it0;
-              sum_qty += elem.l_quantity;
-              sum_base_price += elem.l_extendedprice;
-              sum_disc_price += elem.l_extendedprice * (1.0 - elem.l_discount);
-              sum_charge += elem.l_extendedprice * (1.0 - elem.l_discount) * (1.0 + elem.l_tax);
-              sum_l_discount += elem.l_discount;
-          }
-
-          double count = (double) it->second.size();
-          double avg_qty = sum_qty / count;
-          double avg_price = sum_base_price / count;
-          double avg_disc = sum_l_discount / count;
-
-          uint64_t count_order = it->second.size();
 
           results.push_back(q1entry(
               key.l_returnflag(),
               key.l_linestatus(),
-              sum_qty,
-              sum_base_price,
-              sum_disc_price,
-              sum_charge,
-              avg_qty,
-              avg_price,
-              avg_disc,
-              count_order));
+              it->second.l_quantity,
+              it->second.l_extendedprice,
+              it->second.disc_price,
+              it->second.charge,
+              double(it->second.l_quantity) / double(it->second.count),
+              double(it->second.l_extendedprice) / double(it->second.count),
+              double(it->second.l_discount) / double(it->second.count),
+              it->second.count));
       }
     }
 }
@@ -4114,7 +4163,8 @@ int main(int argc, char **argv) {
 
     static const char * Query1Strings[] = {
         "--orig-query1",
-        "--orig-nosort-query1",
+        "--orig-nosort-int-query1",
+        "--orig-nosort-double-query1",
         "--crypt-query1",
         "--crypt-opt-query1",
         "--crypt-opt-packed-query1",
@@ -4192,19 +4242,23 @@ int main(int argc, char **argv) {
     int input_nruns;
     string db_name;
     string ope_type;
+    string do_par;
     string hostname;
     switch (q) {
-    case query1:  input_nruns = atoi(argv[3]); db_name = argv[4]; ope_type = argv[5]; hostname = argv[6]; break;
-    case query2:  input_nruns = atoi(argv[5]); db_name = argv[6]; ope_type = argv[7]; hostname = argv[8]; break;
-    case query11: input_nruns = atoi(argv[4]); db_name = argv[5]; ope_type = argv[6]; hostname = argv[7]; break;
-    case query14: input_nruns = atoi(argv[3]); db_name = argv[4]; ope_type = argv[5]; hostname = argv[6]; break;
-    case query18: input_nruns = atoi(argv[3]); db_name = argv[4]; ope_type = argv[5]; hostname = argv[6]; break;
-    case query20: input_nruns = atoi(argv[5]); db_name = argv[6]; ope_type = argv[7]; hostname = argv[8]; break;
+    case query1:  input_nruns = atoi(argv[3]); db_name = argv[4]; ope_type = argv[5]; do_par = argv[6]; hostname = argv[7]; break;
+    case query2:  input_nruns = atoi(argv[5]); db_name = argv[6]; ope_type = argv[7]; do_par = argv[8]; hostname = argv[9]; break;
+    case query11: input_nruns = atoi(argv[4]); db_name = argv[5]; ope_type = argv[6]; do_par = argv[7]; hostname = argv[8]; break;
+    case query14: input_nruns = atoi(argv[3]); db_name = argv[4]; ope_type = argv[5]; do_par = argv[6]; hostname = argv[7]; break;
+    case query18: input_nruns = atoi(argv[3]); db_name = argv[4]; ope_type = argv[5]; do_par = argv[6]; hostname = argv[7]; break;
+    case query20: input_nruns = atoi(argv[5]); db_name = argv[6]; ope_type = argv[7]; do_par = argv[8]; hostname = argv[9]; break;
     }
     uint32_t nruns = (uint32_t) input_nruns;
 
     assert(ope_type == "old_ope" || ope_type == "new_ope");
     UseOldOpe = ope_type == "old_ope";
+
+    assert(do_par == "no_parallel" || do_par == "parallel");
+    DoParallel = do_par == "parallel";
 
     unsigned long ctr = 0;
 
@@ -4238,9 +4292,16 @@ int main(int argc, char **argv) {
               PRINT_RESULTS();
               results.clear();
             }
-          } else if (mode == "orig-nosort-query1") {
+          } else if (mode == "orig-nosort-int-query1") {
             for (size_t i = 0; i < nruns; i++) {
-              do_query_q1_nosort(conn, year, results);
+              do_query_q1_nosort_int(conn, year, results);
+              ctr += results.size();
+              PRINT_RESULTS();
+              results.clear();
+            }
+          } else if (mode == "orig-nosort-double-query1") {
+            for (size_t i = 0; i < nruns; i++) {
+              do_query_q1_nosort_double(conn, year, results);
               ctr += results.size();
               PRINT_RESULTS();
               results.clear();
@@ -4269,13 +4330,6 @@ int main(int argc, char **argv) {
           } else if (mode == "crypt-opt-nosort-query1") {
             for (size_t i = 0; i < nruns; i++) {
               do_query_q1_opt_nosort(conn, cm, year, results);
-              ctr += results.size();
-              PRINT_RESULTS();
-              results.clear();
-            }
-          } else if (mode == "crypt-opt-row-packed-query1") {
-            for (size_t i = 0; i < nruns; i++) {
-              do_query_q1_opt_rowpack(conn, cm, year, results);
               ctr += results.size();
               PRINT_RESULTS();
               results.clear();
