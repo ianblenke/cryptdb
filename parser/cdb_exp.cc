@@ -24,7 +24,41 @@ using namespace NTL;
 
 static bool UseOldOpe = false;
 static bool DoParallel = true;
+static bool UseMYISAM = true;
 static const size_t NumThreads = 8;
+
+static inline uint32_t EncodeDate(uint32_t month, uint32_t day, uint32_t year) {
+  return day | (month << 5) | (year << 9);
+}
+
+static void tokenize(const string &s,
+                     const string &delim,
+                     vector<string> &tokens) {
+
+    size_t i = 0;
+    while (true) {
+        size_t p = s.find(delim, i);
+        tokens.push_back(
+                s.substr(
+                    i, (p == string::npos ? s.size() : p) - i));
+        if (p == string::npos) break;
+        i = p + delim.size();
+    }
+}
+
+struct date_t {
+  // dd-mm-yyyy
+  date_t(
+    uint32_t day,
+    uint32_t month,
+    uint32_t year) {}
+
+  inline uint32_t encode() const { return EncodeDate(month, day, year); }
+
+  uint32_t day;
+  uint32_t month;
+  uint32_t year;
+};
 
 class NamedTimer : public Timer {
 public:
@@ -432,6 +466,49 @@ struct q2entry {
   string s_comment;
 };
 
+struct q3entry {
+  q3entry(
+    uint64_t l_orderkey,
+    double revenue,
+    string o_orderdate,
+    uint64_t o_shippriority) :
+  l_orderkey(l_orderkey),
+  revenue(revenue),
+  o_orderdate(o_orderdate),
+  o_shippriority(o_shippriority) {}
+
+  uint64_t l_orderkey;
+  double revenue;
+  string o_orderdate;
+  uint64_t o_shippriority;
+};
+
+struct q3entry_enc {
+  q3entry_enc() {}
+  q3entry_enc(
+    uint64_t l_orderkey_DET,
+    double revenue,
+    uint64_t o_orderdate_OPE,
+    uint64_t o_orderdate_DET,
+    uint64_t o_shippriority_DET) :
+  l_orderkey_DET(l_orderkey_DET),
+  revenue(revenue),
+  o_orderdate_OPE(o_orderdate_OPE),
+  o_orderdate_DET(o_orderdate_DET),
+  o_shippriority_DET(o_shippriority_DET) {}
+
+  uint64_t l_orderkey_DET;
+  double revenue;
+  uint64_t o_orderdate_OPE;
+  uint64_t o_orderdate_DET;
+  uint64_t o_shippriority_DET;
+};
+
+inline ostream& operator<<(ostream &o, const q3entry &q) {
+  o << q.l_orderkey << "|" << q.revenue << "|" << q.o_orderdate << "|" << q.o_shippriority;
+  return o;
+}
+
 struct q18entry {
     q18entry(
         const string& c_name,
@@ -548,7 +625,8 @@ struct Q1NoSortImplInfo {};
 template <>
 struct Q1NoSortImplInfo<uint64_t> {
   static inline const char * agg_func_name() { return "sum_char2_int"; }
-  static inline const char * table_name() { return "LINEITEM_INT_MYISAM"; }
+  static inline const char * table_name()
+    { return UseMYISAM ? "LINEITEM_INT_MYISAM" : "LINEITEM_INT"; }
   static inline const char * unit() { return "100"; }
 
   static inline double convert(uint64_t i) {
@@ -559,7 +637,8 @@ struct Q1NoSortImplInfo<uint64_t> {
 template <>
 struct Q1NoSortImplInfo<double> {
   static inline const char * agg_func_name() { return "sum_char2_double"; }
-  static inline const char * table_name() { return "LINEITEM_MYISAM"; }
+  static inline const char * table_name()
+    { return UseMYISAM ? "LINEITEM_DOUBLE_MYISAM" : "LINEITEM_DOUBLE"; }
   static inline const char * unit() { return "1.0"; }
 
   static inline double convert(double i) { return i; }
@@ -679,11 +758,7 @@ static long extract_from_slot(const ZZ &m, size_t slot) {
   return to_long((m >> (slotbits * slot)) & mask);
 }
 
-static inline uint32_t EncodeDate(uint32_t month, uint32_t day, uint32_t year) {
-  return day | (month << 5) | (year << 9);
-}
-
-static inline void ExtractDate(uint32_t encoding,
+static void ExtractDate(uint32_t encoding,
                                uint32_t &month,
                                uint32_t &day,
                                uint32_t &year) {
@@ -694,6 +769,14 @@ static inline void ExtractDate(uint32_t encoding,
   day = encoding & DayMask;
   month = (encoding & MonthMask) >> 5;
   year = (encoding & YearMask) >> 9;
+}
+
+static string StringifyDateEncoding(uint32_t encoding) {
+  uint32_t month, day, year;
+  ExtractDate(encoding, month, day, year);
+  ostringstream oss;
+  oss << year << "-" << month << "-" << day;
+  return oss.str();
 }
 
 static void do_query_q1_packed_opt(Connect &conn,
@@ -847,7 +930,8 @@ static void do_query_q1_opt_nosort(Connect &conn,
       "SELECT SQL_NO_CACHE agg_char2("
       "l_returnflag_DET, l_linestatus_DET, l_bitpacked_AGG, "
       << pkinfo << ", " << (DoParallel ? "1" : "0") <<
-      ") FROM lineitem_enc_MYISAM WHERE l_shipdate_OPE <= " << encDATE;
+      ") FROM " << (UseMYISAM ? "lineitem_enc_MYISAM" : "lineitem_enc")
+      << "WHERE l_shipdate_OPE <= " << encDATE;
     cerr << s.str() << endl;
 
     {
@@ -987,8 +1071,8 @@ static void do_query_q1_opt_row_col_pack(Connect &conn,
         << pkinfo << ", " <<
         "\"" << filename << "\", " << (DoParallel ? "1" : "0")
         << ", " << (RowColPackCipherSize/8) << ", 3, 1"
-      ") FROM lineitem_enc_noagg_rowid_MYISAM "
-      "WHERE l_shipdate_OPE <= " << encDATE
+      ") FROM " << (UseMYISAM ? "lineitem_enc_noagg_rowid_MYISAM" : "lineitem_enc_noagg_rowid")
+      << " WHERE l_shipdate_OPE <= " << encDATE
       ;
     cerr << s.str() << endl;
 
@@ -1334,8 +1418,8 @@ static void do_query_q1_noopt(Connect &conn,
           << "l_discount_DET, "
           << "l_tax_DET "
 
-      << "FROM lineitem_enc_noagg_rowid_MYISAM "
-      << "WHERE l_shipdate_OPE <= " << encDATE;
+      << "FROM " << (UseMYISAM ? "lineitem_enc_noagg_rowid_MYISAM" : "lineitem_enc_noagg_rowid")
+      << " WHERE l_shipdate_OPE <= " << encDATE;
     cerr << s.str() << endl;
 
     {
@@ -1475,6 +1559,301 @@ static void do_query_q1_noopt(Connect &conn,
               it->second.count));
       }
     }
+}
+
+struct _q3_noopt_task_state {
+  _q3_noopt_task_state() {}
+  vector< vector< SqlItem > > rows;
+
+  list<q3entry_enc> bestSoFar;
+  static const size_t TopN = 10;
+};
+
+struct q3entry_enc_cmp {
+  inline bool operator()(const q3entry_enc& a,
+                         const q3entry_enc& b) const {
+    // TODO: floating point equality errors
+    return (a.revenue > b.revenue) ||
+           (a.revenue == b.revenue && a.o_orderdate_OPE < b.o_orderdate_OPE);
+  }
+};
+
+struct _q3_noopt_task {
+  void operator()() {
+      static q3entry_enc_cmp q3cmp;
+      for (auto row : state->rows) {
+          vector<string> ext_price_ciphers;
+          tokenize(row[1].data, ",", ext_price_ciphers);
+
+          vector<string> discount_ciphers;
+          tokenize(row[2].data, ",", discount_ciphers);
+          assert(!ext_price_ciphers.empty());
+          assert(ext_price_ciphers.size() == discount_ciphers.size());
+
+          double sum = 0.0;
+          for (size_t i = 0; i < ext_price_ciphers.size(); i++) {
+            uint64_t l_extendedprice_int = decryptRow<uint64_t, 7>(
+                    ext_price_ciphers[i],
+                    12345,
+                    fieldname(lineitem::l_extendedprice, "DET"),
+                    TYPE_INTEGER,
+                    oDET,
+                    *cm);
+            double l_extendedprice = ((double)l_extendedprice_int)/100.0;
+
+            uint64_t l_discount_int = decryptRow<uint64_t, 7>(
+                    discount_ciphers[i],
+                    12345,
+                    fieldname(lineitem::l_discount, "DET"),
+                    TYPE_INTEGER,
+                    oDET,
+                    *cm);
+            double l_discount = ((double)l_discount_int)/100.0;
+
+            sum += (l_extendedprice * (1.0 - l_discount));
+          }
+
+          q3entry_enc cur_group(
+                  resultFromStr<uint64_t>(row[0].data),
+                  sum,
+                  resultFromStr<uint64_t>(row[3].data),
+                  resultFromStr<uint64_t>(row[4].data),
+                  resultFromStr<uint64_t>(row[5].data));
+
+          if (state->bestSoFar.empty()) {
+            state->bestSoFar.push_back(cur_group);
+            continue;
+          }
+
+          // check to see if we can discard this candidate
+          // (linear search bestSoFar list, since topN size is small)
+          auto it = state->bestSoFar.begin();
+          for (; it != state->bestSoFar.end(); ++it) {
+            if (q3cmp(cur_group, *it)) {
+              break;
+            }
+          }
+
+          if (it == state->bestSoFar.end()) {
+            // cur group is smaller than every element on list
+            if (state->bestSoFar.size() < _q3_noopt_task_state::TopN) {
+              state->bestSoFar.push_back(cur_group);
+            } else { /* drop */ }
+          } else {
+            state->bestSoFar.insert(it, cur_group);
+            if (state->bestSoFar.size() > _q3_noopt_task_state::TopN) {
+              state->bestSoFar.resize(_q3_noopt_task_state::TopN);
+            }
+          }
+      }
+  }
+  CryptoManager* cm;
+  _q3_noopt_task_state* state;
+};
+
+
+static void do_query_q3(Connect &conn,
+                        const string& mktsegment,
+                        const string& d,
+                        vector<q3entry> &results) {
+    NamedTimer fcnTimer(__func__);
+
+    ostringstream s;
+    s << "select l_orderkey, sum(l_extendedprice * (1 - l_discount)) as revenue, o_orderdate, o_shippriority from CUSTOMER, ORDERS, LINEITEM where c_mktsegment = '" << mktsegment << "' and c_custkey = o_custkey and l_orderkey = o_orderkey and o_orderdate < date '" << d << "' and l_shipdate > date '" << d << "' group by l_orderkey, o_orderdate, o_shippriority order by revenue desc, o_orderdate limit 10;";
+    cerr << s.str() << endl;
+
+    DBResult * dbres;
+    {
+      NamedTimer t(__func__, "execute");
+      conn.execute(s.str(), dbres);
+    }
+    ResType res;
+    {
+      NamedTimer t(__func__, "unpack");
+      res = dbres->unpack();
+      assert(res.ok);
+    }
+
+    for (auto row : res.rows) {
+      results.push_back(
+          q3entry(
+            resultFromStr<uint64_t>(row[0].data),
+            resultFromStr<double>(row[1].data),
+            row[2].data,
+            resultFromStr<uint64_t>(row[3].data)));
+    }
+}
+
+static void do_query_q3_crypt(Connect &conn,
+                              CryptoManager &cm,
+                              const string& mktsegment,
+                              const string& d,
+                              vector<q3entry> &results) {
+
+    crypto_manager_stub cm_stub(&cm, UseOldOpe);
+    NamedTimer fcnTimer(__func__);
+
+    bool isBin = false;
+    string encMKT = cm_stub.crypt(cm.getmkey(), mktsegment, TYPE_TEXT,
+                              fieldname(customer::c_mktsegment, "DET"),
+                              getMin(oDET), SECLEVEL::DET, isBin, 12345);
+    assert(isBin);
+    assert(encMKT.size() == mktsegment.size());
+    encMKT.resize(10);
+
+    string enc_d_o_orderdate =
+      cm_stub.crypt<3>(cm.getmkey(), to_s(encode_yyyy_mm_dd(d)),
+                              TYPE_INTEGER, fieldname(orders::o_orderdate, "OPE"),
+                              getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
+
+    string enc_d_l_shipdate =
+      cm_stub.crypt<3>(cm.getmkey(), to_s(encode_yyyy_mm_dd(d)),
+                              TYPE_INTEGER, fieldname(lineitem::l_shipdate, "OPE"),
+                              getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
+
+    DBResult * dbres;
+
+    ostringstream s;
+    s << "select "
+         "  l_orderkey_DET, "
+         "  group_concat(l_extendedprice_DET), "
+         "  group_concat(l_discount_DET), "
+         "  o_orderdate_OPE, "
+         "  o_orderdate_DET, "
+         "  o_shippriority_DET "
+         "from customer_enc_MYISAM, orders_enc_MYISAM, lineitem_enc_noagg_rowid_MYISAM "
+         "where "
+         "  c_mktsegment_DET = " << marshallBinary(encMKT) <<
+         "  and c_custkey_DET = o_custkey_DET "
+         "  and l_orderkey_DET = o_orderkey_DET "
+         "  and o_orderdate_OPE < " << enc_d_o_orderdate <<
+         "  and l_shipdate_OPE > " << enc_d_l_shipdate <<
+         " group by l_orderkey_DET, o_orderdate_DET, o_shippriority_DET";
+    cerr << s.str() << endl;
+
+    {
+      NamedTimer t(__func__, "execute");
+      conn.execute(s.str(), dbres);
+    }
+    ResType res;
+    {
+      NamedTimer t(__func__, "unpack");
+      res = dbres->unpack();
+      assert(res.ok);
+    }
+
+    if (DoParallel) {
+      NamedTimer t(__func__, "decrypt-parallel");
+
+      using namespace exec_service;
+
+      vector<_q3_noopt_task_state> states( NumThreads );
+      vector<_q3_noopt_task> tasks( NumThreads );
+      vector<SqlRowGroup> groups;
+      SplitRowsIntoGroups(groups, res.rows, NumThreads);
+
+      for (size_t i = 0; i < NumThreads; i++) {
+        tasks[i].cm    = &cm;
+        tasks[i].state = &states[i];
+        states[i].rows = groups[i];
+      }
+
+      Exec<_q3_noopt_task>::DefaultExecutor exec( NumThreads );
+      exec.start();
+      for (size_t i = 0; i < NumThreads; i++) {
+        exec.submit(tasks[i]);
+      }
+      exec.stop(); // blocks until completion
+
+      // merge the topN lists from the threads, and add the results (
+      // remembering to do the final decryptions)
+
+      vector< list<q3entry_enc>::iterator > positions;
+      positions.resize( NumThreads );
+      for (size_t i = 0; i < NumThreads; i++) {
+        positions[i] = states[i].bestSoFar.begin();
+      }
+
+      list< q3entry_enc > merged;
+      static q3entry_enc_cmp q3cmp;
+      while (merged.size() < _q3_noopt_task_state::TopN) {
+        // look for next min
+        q3entry_enc* minSoFar = NULL;
+        size_t minSoFarIdx = 0;
+        for (size_t i = 0; i < NumThreads; i++) {
+          if (positions[i] != states[i].bestSoFar.end()) {
+            if (!minSoFar || q3cmp(*positions[i], *minSoFar)) {
+              minSoFar = &(*positions[i]);
+              minSoFarIdx = i;
+            }
+          }
+        }
+        if (!minSoFar) break;
+
+        positions[minSoFarIdx]++;
+
+        if (merged.empty()) {
+          merged.push_back(*minSoFar);
+          continue;
+        }
+
+        auto it = merged.begin();
+        for (; it != merged.end(); ++it) {
+          if (q3cmp(*minSoFar, *it)) {
+            break;
+          }
+        }
+
+        if (it == merged.end()) {
+          merged.push_back(*minSoFar);
+        } else {
+          merged.insert(it, *minSoFar);
+        }
+      }
+
+      // add the entries to the results
+      for (auto it = merged.begin(); it != merged.end(); ++it) {
+
+        // l_orderkey
+        uint64_t l_orderkey = decryptRowFromTo<uint64_t, 4>(
+                to_s(it->l_orderkey_DET),
+                12345,
+                fieldname(lineitem::l_orderkey, "DET"),
+                TYPE_INTEGER,
+                SECLEVEL::DETJOIN,
+                getMin(oDET),
+                cm);
+
+        // o_orderdate
+        uint32_t o_orderdate = decryptRow<uint32_t, 3>(
+                to_s(it->o_orderdate_DET),
+                12345,
+                fieldname(orders::o_orderkey, "DET"),
+                TYPE_INTEGER,
+                oDET,
+                cm);
+
+        // o_shippriority
+        uint64_t o_shippriority = decryptRow<uint64_t, 4>(
+                to_s(it->o_shippriority_DET),
+                12345,
+                fieldname(orders::o_shippriority, "DET"),
+                TYPE_INTEGER,
+                oDET,
+                cm);
+
+        results.push_back(
+            q3entry(
+              l_orderkey,
+              it->revenue,
+              StringifyDateEncoding(o_orderdate),
+              o_shippriority));
+      }
+
+    } else {
+      assert(false); // not implemented
+    }
+
 }
 
 static struct q11entry_sorter {
@@ -2198,20 +2577,7 @@ static inline long roundToLong(double x) {
     return ((x)>=0?(long)((x)+0.5):(long)((x)-0.5));
 }
 
-static void tokenize(const string &s,
-                     const string &delim,
-                     vector<string> &tokens) {
 
-    size_t i = 0;
-    while (true) {
-        size_t p = s.find(delim, i);
-        tokens.push_back(
-                s.substr(
-                    i, (p == string::npos ? s.size() : p) - i));
-        if (p == string::npos) break;
-        i = p + delim.size();
-    }
-}
 
 static void do_query_q11_opt_proj(Connect &conn,
                                   CryptoManager &cm,
@@ -4148,6 +4514,7 @@ static const bool PrintResults = true;
 enum query_selection {
   query1,
   query2,
+  query3,
   query11,
   query14,
   query18,
@@ -4181,6 +4548,13 @@ int main(int argc, char **argv) {
     };
     std::set<string> Query2Modes
       (Query2Strings, Query2Strings + NELEMS(Query2Strings));
+
+    static const char * Query3Strings[] = {
+        "--orig-query3",
+        "--crypt-query3",
+    };
+    std::set<string> Query3Modes
+      (Query3Strings, Query3Strings + NELEMS(Query3Strings));
 
     static const char * Query11Strings[] = {
         "--orig-query11",
@@ -4225,6 +4599,8 @@ int main(int argc, char **argv) {
         q = query1;
     } else if (Query2Modes.find(argv[1]) != Query2Modes.end()) {
         q = query2;
+    } else if (Query3Modes.find(argv[1]) != Query3Modes.end()) {
+        q = query3;
     } else if (Query11Modes.find(argv[1]) != Query11Modes.end()) {
         q = query11;
     } else if (Query14Modes.find(argv[1]) != Query14Modes.end()) {
@@ -4247,6 +4623,7 @@ int main(int argc, char **argv) {
     switch (q) {
     case query1:  input_nruns = atoi(argv[3]); db_name = argv[4]; ope_type = argv[5]; do_par = argv[6]; hostname = argv[7]; break;
     case query2:  input_nruns = atoi(argv[5]); db_name = argv[6]; ope_type = argv[7]; do_par = argv[8]; hostname = argv[9]; break;
+    case query3:  input_nruns = atoi(argv[4]); db_name = argv[5]; ope_type = argv[6]; do_par = argv[7]; hostname = argv[8]; break;
     case query11: input_nruns = atoi(argv[4]); db_name = argv[5]; ope_type = argv[6]; do_par = argv[7]; hostname = argv[8]; break;
     case query14: input_nruns = atoi(argv[3]); db_name = argv[4]; ope_type = argv[5]; do_par = argv[6]; hostname = argv[7]; break;
     case query18: input_nruns = atoi(argv[3]); db_name = argv[4]; ope_type = argv[5]; do_par = argv[6]; hostname = argv[7]; break;
@@ -4360,6 +4737,28 @@ int main(int argc, char **argv) {
           } else if (mode == "crypt-query2") {
             for (size_t i = 0; i < nruns; i++) {
               do_query_q2_noopt(conn, cm, size, type, name, results);
+              ctr += results.size();
+              PRINT_RESULTS();
+              results.clear();
+            }
+          } else assert(false);
+        }
+        break;
+      case query3:
+        {
+          string mktsegment = argv[2];
+          string d = argv[3];
+          vector<q3entry> results;
+          if (mode == "orig-query3") {
+            for (size_t i = 0; i < nruns; i++) {
+              do_query_q3(conn, mktsegment, d, results);
+              ctr += results.size();
+              PRINT_RESULTS();
+              results.clear();
+            }
+          } else if (mode == "crypt-query3") {
+            for (size_t i = 0; i < nruns; i++) {
+              do_query_q3_crypt(conn, cm, mktsegment, d, results);
               ctr += results.size();
               PRINT_RESULTS();
               results.clear();
