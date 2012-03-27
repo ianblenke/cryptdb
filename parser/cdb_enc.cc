@@ -86,15 +86,17 @@ enum onion_bitmask {
     ONION_DET     = 0x1,
     ONION_DETJOIN = 0x1 << 1,
     ONION_OPE     = 0x1 << 2,
-    ONION_AGG     = 0x1 << 3,
-    ONION_SEARCH  = 0x1 << 4,
+    ONION_OPEJOIN = 0x1 << 3,
+    ONION_AGG     = 0x1 << 4,
+    ONION_SEARCH  = 0x1 << 5,
 };
 
 static const int DET_BITMASK = ONION_DET | ONION_DETJOIN;
+static const int OPE_BITMASK = ONION_OPE | ONION_OPEJOIN;
 
-static inline bool DoDET(int m)    { return m & DET_BITMASK; }
-static inline bool DoOPE(int m)    { return m & ONION_OPE; }
-static inline bool DoAGG(int m)    { return m & ONION_AGG; }
+static inline bool DoDET(int m)    { return m & DET_BITMASK;  }
+static inline bool DoOPE(int m)    { return m & OPE_BITMASK;  }
+static inline bool DoAGG(int m)    { return m & ONION_AGG;    }
 static inline bool DoSEARCH(int m) { return m & ONION_SEARCH; }
 static inline bool DoAny(int m)    { return DoDET(m) || DoOPE(m) || DoAGG(m) || DoSEARCH(m); }
 
@@ -185,8 +187,11 @@ static void do_encrypt(size_t i,
 
             isBin = false;
             if (DoOPE(onions)) {
+                assert(OnlyOneBit(onions & OPE_BITMASK));
                 string encOPE = cm_stub.crypt<4>(cm.getmkey(), plaintext, TYPE_INTEGER,
-                                         fieldname(i, "OPE"),
+                                         (onions & ONION_OPEJOIN) ?
+                                          "ope_join" :
+                                          fieldname(i, "OPE"),
                                          getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
                 assert(!isBin);
                 enccols.push_back(encOPE);
@@ -299,8 +304,11 @@ static void do_encrypt(size_t i,
 
             isBin = false;
             if (DoOPE(onions)) {
+                assert(OnlyOneBit(onions & OPE_BITMASK));
                 string encOPE = cm_stub.crypt<1>(cm.getmkey(), pt, TYPE_INTEGER,
-                                         fieldname(i, "OPE"),
+                                         (onions & ONION_OPEJOIN) ?
+                                          "ope_join" :
+                                          fieldname(i, "OPE"),
                                          getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
                 assert(!isBin);
                 enccols.push_back(encOPE);
@@ -341,8 +349,11 @@ static void do_encrypt(size_t i,
 
             isBin = false;
             if (DoOPE(onions)) {
+                assert(OnlyOneBit(onions & OPE_BITMASK));
                 string encOPE = cm_stub.crypt(cm.getmkey(), plaintext, TYPE_TEXT,
-                                         fieldname(i, "OPE"),
+                                         (onions & ONION_OPEJOIN) ?
+                                          "ope_join" :
+                                          fieldname(i, "OPE"),
                                          getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
                 // NOT BINARY
                 assert(!isBin);
@@ -382,7 +393,10 @@ static void do_encrypt(size_t i,
 
             isBin = false;
             if (DoOPE(onions)) {
+                assert(OnlyOneBit(onions & OPE_BITMASK));
                 string encOPE = cm_stub.crypt<3>(cm.getmkey(), to_s(encoding), TYPE_INTEGER,
+                       (onions & ONION_OPEJOIN) ?
+                        "ope_join" :
                         fieldname(i, "OPE"),
                         getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
                 assert(!isBin);
@@ -612,6 +626,7 @@ public:
   enum opt_type {
       none,
       normal,
+      normal_agg,
       packed,
       row_packed,
       row_col_packed,
@@ -632,6 +647,7 @@ public:
         processrow = true;
         break;
       case normal:
+      case normal_agg:
         onions = Onions;
         usenull = false;
         processrow = true;
@@ -1022,7 +1038,7 @@ protected:
                       crypto_manager_stub        &cm) {
 
     switch (tpe) {
-      case opt_type::normal:
+      case opt_type::normal_agg:
         {
           ZZ z;
           typedef PallierSlotManager<uint64_t, 2> PSM;
@@ -1109,8 +1125,8 @@ vector<int> lineitem_encryptor::Onions = {
   ONION_DET,
 
   ONION_DET | ONION_OPE,
-  ONION_DET | ONION_OPE,
-  ONION_DET | ONION_OPE,
+  ONION_DET | ONION_OPEJOIN,
+  ONION_DET | ONION_OPEJOIN,
 
   ONION_DET,
   ONION_DET,
@@ -1156,6 +1172,7 @@ public:
   enum opt_type {
       none,
       normal,
+      normal_agg,
       projection,
   };
 
@@ -1266,7 +1283,7 @@ protected:
                       vector<string>       &enccols,
                       crypto_manager_stub        &cm) {
     switch (tpe) {
-      case opt_type::normal:
+      case opt_type::normal_agg:
         precomputeExprs(tokens, enccols, cm);
         break;
       default: break;

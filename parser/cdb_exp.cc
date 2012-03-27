@@ -509,6 +509,21 @@ inline ostream& operator<<(ostream &o, const q3entry &q) {
   return o;
 }
 
+struct q4entry {
+  q4entry(
+    string o_orderpriority,
+    uint64_t order_count)
+    : o_orderpriority(o_orderpriority),
+      order_count(order_count) {}
+  string o_orderpriority;
+  uint64_t order_count;
+};
+
+inline ostream& operator<<(ostream &o, const q4entry &q) {
+  o << q.o_orderpriority << "|" << q.order_count;
+  return o;
+}
+
 struct q18entry {
     q18entry(
         const string& c_name,
@@ -2046,6 +2061,107 @@ static void do_query_q3_crypt(Connect &conn,
       assert(false); // not implemented
     }
 
+}
+
+static void do_query_q4(Connect &conn,
+                        const string& d,
+                        vector<q4entry> &results) {
+    NamedTimer fcnTimer(__func__);
+
+    ostringstream s;
+    s <<
+      "select o_orderpriority, count(*) as order_count "
+      "from ORDERS "
+      "where o_orderdate >= date '" << d << "' "
+      "and o_orderdate < date '" << d << "' + interval '3' month "
+      "and exists ( "
+      "    select * from "
+      "      LINEITEM where l_orderkey = o_orderkey and l_commitdate < l_receiptdate) "
+      "group by o_orderpriority "
+      "order by o_orderpriority"
+      ;
+    cerr << s.str() << endl;
+
+    DBResult * dbres;
+    {
+      NamedTimer t(__func__, "execute");
+      conn.execute(s.str(), dbres);
+    }
+    ResType res;
+    {
+      NamedTimer t(__func__, "unpack");
+      res = dbres->unpack();
+      assert(res.ok);
+    }
+
+    for (auto row : res.rows) {
+      results.push_back(
+          q4entry(
+            row[0].data,
+            resultFromStr<uint64_t>(row[1].data)));
+    }
+}
+
+static void do_query_crypt_q4(Connect &conn,
+                              CryptoManager &cm,
+                              const string& d,
+                              vector<q4entry> &results) {
+
+    crypto_manager_stub cm_stub(&cm, UseOldOpe);
+    NamedTimer fcnTimer(__func__);
+
+    bool isBin;
+    string d0 =
+      cm_stub.crypt<3>(cm.getmkey(), to_s(encode_yyyy_mm_dd(d)),
+                              TYPE_INTEGER, fieldname(orders::o_orderdate, "OPE"),
+                              getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
+
+    string d1 =
+      cm_stub.crypt<3>(cm.getmkey(), to_s(encode_yyyy_mm_dd(d) + (3 << 5) /* + 3 months */),
+                              TYPE_INTEGER, fieldname(orders::o_orderdate, "OPE"),
+                              getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
+
+    ostringstream s;
+    s <<
+      "select o_orderpriority_DET, count(*) as order_count "
+      "from orders_enc "
+      "where o_orderdate_OPE >= " << d0 << " "
+      "and o_orderdate_OPE < " << d1 << " "
+      "and exists ( "
+      "    select * from "
+      "      lineitem_enc_noagg_rowid where l_orderkey_DET = o_orderkey_DET and l_commitdate_OPE < l_receiptdate_OPE) "
+      "group by o_orderpriority_DET "
+      ;
+    cerr << s.str() << endl;
+
+    DBResult * dbres;
+    {
+      NamedTimer t(__func__, "execute");
+      conn.execute(s.str(), dbres);
+    }
+    ResType res;
+    {
+      NamedTimer t(__func__, "unpack");
+      res = dbres->unpack();
+      assert(res.ok);
+    }
+
+    for (auto row : res.rows) {
+
+      string o_orderpriority = decryptRow<string>(
+              row[0].data,
+              12345,
+              fieldname(orders::o_orderpriority, "DET"),
+              TYPE_TEXT,
+              oDET,
+              cm);
+
+      // TODO: sort
+      results.push_back(
+          q4entry(
+            o_orderpriority,
+            resultFromStr<uint64_t>(row[1].data)));
+    }
 }
 
 static struct q11entry_sorter {
@@ -4502,6 +4618,7 @@ enum query_selection {
   query1,
   query2,
   query3,
+  query4,
   query11,
   query14,
   query18,
@@ -4542,6 +4659,13 @@ int main(int argc, char **argv) {
     };
     std::set<string> Query3Modes
       (Query3Strings, Query3Strings + NELEMS(Query3Strings));
+
+    static const char * Query4Strings[] = {
+        "--orig-query4",
+        "--crypt-query4",
+    };
+    std::set<string> Query4Modes
+      (Query4Strings, Query4Strings + NELEMS(Query4Strings));
 
     static const char * Query11Strings[] = {
         "--orig-query11",
@@ -4588,6 +4712,8 @@ int main(int argc, char **argv) {
         q = query2;
     } else if (Query3Modes.find(argv[1]) != Query3Modes.end()) {
         q = query3;
+    } else if (Query4Modes.find(argv[1]) != Query3Modes.end()) {
+        q = query4;
     } else if (Query11Modes.find(argv[1]) != Query11Modes.end()) {
         q = query11;
     } else if (Query14Modes.find(argv[1]) != Query14Modes.end()) {
@@ -4611,6 +4737,7 @@ int main(int argc, char **argv) {
     case query1:  input_nruns = atoi(argv[3]); db_name = argv[4]; ope_type = argv[5]; do_par = argv[6]; hostname = argv[7]; break;
     case query2:  input_nruns = atoi(argv[5]); db_name = argv[6]; ope_type = argv[7]; do_par = argv[8]; hostname = argv[9]; break;
     case query3:  input_nruns = atoi(argv[4]); db_name = argv[5]; ope_type = argv[6]; do_par = argv[7]; hostname = argv[8]; break;
+    case query4:  input_nruns = atoi(argv[3]); db_name = argv[4]; ope_type = argv[5]; do_par = argv[6]; hostname = argv[7]; break;
     case query11: input_nruns = atoi(argv[4]); db_name = argv[5]; ope_type = argv[6]; do_par = argv[7]; hostname = argv[8]; break;
     case query14: input_nruns = atoi(argv[3]); db_name = argv[4]; ope_type = argv[5]; do_par = argv[6]; hostname = argv[7]; break;
     case query18: input_nruns = atoi(argv[3]); db_name = argv[4]; ope_type = argv[5]; do_par = argv[6]; hostname = argv[7]; break;
@@ -4753,6 +4880,29 @@ int main(int argc, char **argv) {
           } else assert(false);
         }
         break;
+
+      case query4:
+        {
+          string d = argv[2];
+          vector<q4entry> results;
+          if (mode == "orig-query4") {
+            for (size_t i = 0; i < nruns; i++) {
+              do_query_q4(conn, d, results);
+              ctr += results.size();
+              PRINT_RESULTS();
+              results.clear();
+            }
+          } else if (mode == "crypt-query4") {
+            for (size_t i = 0; i < nruns; i++) {
+              do_query_crypt_q4(conn, cm, d, results);
+              ctr += results.size();
+              PRINT_RESULTS();
+              results.clear();
+            }
+          } else assert(false);
+        }
+        break;
+
       case query11:
         {
           string nation = argv[2];
