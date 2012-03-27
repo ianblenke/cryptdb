@@ -188,9 +188,11 @@ typedef vector<SqlRow>  SqlRowGroup;
 // groups. extra rows are placed into the last non-empty group.
 // empty groups are created if there are not enough rows to go
 // around
+
+template <typename T>
 static void SplitRowsIntoGroups(
-    vector< SqlRowGroup >& groups,
-    const vector< SqlRow >& allRows,
+    vector< vector<T> >& groups,
+    const vector< T >& allRows,
     size_t numGroups) {
   assert(numGroups > 0);
   groups.resize(numGroups);
@@ -521,6 +523,21 @@ struct q4entry {
 
 inline ostream& operator<<(ostream &o, const q4entry &q) {
   o << q.o_orderpriority << "|" << q.order_count;
+  return o;
+}
+
+struct q5entry {
+  q5entry(
+    string n_name,
+    double revenue)
+    : n_name(n_name),
+      revenue(revenue) {}
+  string n_name;
+  double revenue;
+};
+
+inline ostream& operator<<(ostream &o, const q5entry &q) {
+  o << q.n_name << "|" << q.revenue;
   return o;
 }
 
@@ -2161,6 +2178,233 @@ static void do_query_crypt_q4(Connect &conn,
           q4entry(
             o_orderpriority,
             resultFromStr<uint64_t>(row[1].data)));
+    }
+}
+
+static void do_query_q5(Connect &conn,
+                        const string& name,
+                        const string& d,
+                        vector<q5entry> &results) {
+    NamedTimer fcnTimer(__func__);
+
+    ostringstream s;
+    s <<
+      "select"
+      "	n_name,"
+      "	sum(l_extendedprice * (100 - l_discount)) as revenue "
+      "from"
+      "	CUSTOMER,"
+      "	ORDERS,"
+      "	LINEITEM_INT,"
+      "	SUPPLIER,"
+      "	NATION,"
+      "	REGION "
+      "where"
+      "	c_custkey = o_custkey"
+      "	and l_orderkey = o_orderkey"
+      "	and l_suppkey = s_suppkey"
+      "	and c_nationkey = s_nationkey"
+      "	and s_nationkey = n_nationkey"
+      "	and n_regionkey = r_regionkey"
+      "	and r_name = '" << name << "'"
+      "	and o_orderdate >= date '" << d << "'"
+      "	and o_orderdate < date '" << d << "' + interval '1' year "
+      "group by"
+      "	n_name "
+      "order by"
+      "	revenue desc;"
+      ;
+    cerr << s.str() << endl;
+
+    DBResult * dbres;
+    {
+      NamedTimer t(__func__, "execute");
+      conn.execute(s.str(), dbres);
+    }
+    ResType res;
+    {
+      NamedTimer t(__func__, "unpack");
+      res = dbres->unpack();
+      assert(res.ok);
+    }
+
+    for (auto row : res.rows) {
+      results.push_back(
+          q5entry(
+            row[0].data,
+            resultFromStr<double>(row[1].data) / 10000.0));
+    }
+}
+
+struct _q5_noopt_task_state {
+  _q5_noopt_task_state() {}
+  vector< string > xps;
+  vector< string > dcs;
+  vector< double > revenue;
+};
+
+struct _q5_noopt_task {
+  void operator()() {
+    for (size_t i = 0; i < state->xps.size(); i++) {
+
+        // l_extendedprice
+        uint64_t l_extendedprice_int = decryptRow<uint64_t, 7>(
+                state->xps[i],
+                12345,
+                fieldname(lineitem::l_extendedprice, "DET"),
+                TYPE_INTEGER,
+                oDET,
+                *cm);
+        double l_extendedprice = ((double)l_extendedprice_int)/100.0;
+
+        // l_discount
+        uint64_t l_discount_int = decryptRow<uint64_t, 7>(
+                state->dcs[i],
+                12345,
+                fieldname(lineitem::l_discount, "DET"),
+                TYPE_INTEGER,
+                oDET,
+                *cm);
+        double l_discount = ((double)l_discount_int)/100.0;
+
+        state->revenue.push_back(l_extendedprice * (1.0 - l_discount));
+    }
+  }
+  CryptoManager* cm;
+  _q5_noopt_task_state* state;
+};
+
+static void do_query_crypt_q5(Connect &conn,
+                              CryptoManager &cm,
+                              const string& name,
+                              const string& d,
+                              vector<q5entry> &results) {
+    crypto_manager_stub cm_stub(&cm, UseOldOpe);
+    NamedTimer fcnTimer(__func__);
+
+    bool isBin = false;
+    string encNAME = cm_stub.crypt(cm.getmkey(), name, TYPE_TEXT,
+                              fieldname(region::r_name, "DET"),
+                              getMin(oDET), SECLEVEL::DET, isBin, 12345);
+    assert(name.size() == encNAME.size());
+    assert(isBin);
+
+    // right-pad encNAME with 0's
+    encNAME.resize(25);
+
+    string d0 =
+      cm_stub.crypt<3>(cm.getmkey(), to_s(encode_yyyy_mm_dd(d)),
+                              TYPE_INTEGER, fieldname(orders::o_orderdate, "OPE"),
+                              getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
+    string d1 =
+      cm_stub.crypt<3>(cm.getmkey(), to_s(encode_yyyy_mm_dd(d) + (1 << 9) /* + 1 year */),
+                              TYPE_INTEGER, fieldname(orders::o_orderdate, "OPE"),
+                              getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
+
+    ostringstream s;
+    s <<
+      "select"
+      "	n_name_DET,"
+      " group_concat(l_extendedprice_DET),"
+      " group_concat(l_discount_DET) "
+      "from"
+      "	customer_enc,"
+      "	orders_enc,"
+      "	lineitem_enc_noagg_rowid,"
+      "	supplier_enc,"
+      "	nation_enc,"
+      "	region_enc "
+      "where"
+      "	c_custkey_DET = o_custkey_DET"
+      "	and l_orderkey_DET = o_orderkey_DET"
+      "	and l_suppkey_DET = s_suppkey_DET"
+      "	and c_nationkey_DET = s_nationkey_DET"
+      "	and s_nationkey_DET = n_nationkey_DET"
+      "	and n_regionkey_DET = r_regionkey_DET"
+      "	and r_name_DET = " << marshallBinary(encNAME) << " "
+      "	and o_orderdate_OPE >= " << d0 << " "
+      "	and o_orderdate_OPE < " << d1 << " "
+      "group by"
+      "	n_name_DET"
+      ;
+    cerr << s.str() << endl;
+
+    DBResult * dbres;
+    {
+      NamedTimer t(__func__, "execute");
+      conn.execute(s.str(), dbres);
+    }
+    ResType res;
+    {
+      NamedTimer t(__func__, "unpack");
+      res = dbres->unpack();
+      assert(res.ok);
+    }
+
+    assert(DoParallel);
+    vector<string> l_extendedprice_cts;
+    vector<string> l_discount_cts;
+    vector< pair<size_t, size_t> > offsets;
+    for (auto row : res.rows) {
+      size_t offset = l_extendedprice_cts.size();
+      tokenize(row[1].data, ",", l_extendedprice_cts);
+      tokenize(row[2].data, ",", l_discount_cts);
+
+      offsets.push_back(
+          make_pair(offset, l_extendedprice_cts.size() - offset));
+    }
+
+    assert(l_extendedprice_cts.size() ==
+           l_discount_cts.size());
+
+    vector< vector<string> > xp_groups;
+    vector< vector<string> > dc_groups;
+    SplitRowsIntoGroups(xp_groups, l_extendedprice_cts, NumThreads);
+    SplitRowsIntoGroups(dc_groups, l_discount_cts, NumThreads);
+
+    assert(xp_groups.size() == dc_groups.size());
+
+    vector<_q5_noopt_task_state> states( NumThreads );
+    vector<_q5_noopt_task> tasks( NumThreads );
+
+    for (size_t i = 0; i < NumThreads; i++) {
+      tasks[i].cm    = &cm;
+      tasks[i].state = &states[i];
+      states[i].xps  = xp_groups[i];
+      states[i].dcs  = dc_groups[i];
+      assert(states[i].xps.size() == states[i].dcs.size());
+    }
+
+    using namespace exec_service;
+    Exec<_q5_noopt_task>::DefaultExecutor exec( NumThreads );
+    exec.start();
+    for (size_t i = 0; i < NumThreads; i++) {
+      exec.submit(tasks[i]);
+    }
+    exec.stop();
+
+    vector<double> revenue;
+    for (size_t i = 0; i < NumThreads; i++) {
+      revenue.insert(revenue.end(), states[i].revenue.begin(), states[i].revenue.end());
+    }
+
+    size_t i = 0;
+    for (auto row : res.rows) {
+      string n_name = decryptRow<string>(
+          row[0].data,
+          12345,
+          fieldname(nation::n_name, "DET"),
+          TYPE_TEXT,
+          oDET,
+          cm);
+
+      double r = 0.0;
+      for (auto it = revenue.begin() + offsets[i].first;
+           it != revenue.begin() + offsets[i].first + offsets[i].second;
+           ++it) { r += *it; }
+
+      results.push_back(q5entry(n_name, r));
+      i++;
     }
 }
 
@@ -4619,6 +4863,7 @@ enum query_selection {
   query2,
   query3,
   query4,
+  query5,
   query11,
   query14,
   query18,
@@ -4667,6 +4912,13 @@ int main(int argc, char **argv) {
     std::set<string> Query4Modes
       (Query4Strings, Query4Strings + NELEMS(Query4Strings));
 
+    static const char * Query5Strings[] = {
+        "--orig-query5",
+        "--crypt-query5",
+    };
+    std::set<string> Query5Modes
+      (Query5Strings, Query5Strings + NELEMS(Query5Strings));
+
     static const char * Query11Strings[] = {
         "--orig-query11",
         "--orig-query11-nosubquery",
@@ -4712,8 +4964,10 @@ int main(int argc, char **argv) {
         q = query2;
     } else if (Query3Modes.find(argv[1]) != Query3Modes.end()) {
         q = query3;
-    } else if (Query4Modes.find(argv[1]) != Query3Modes.end()) {
+    } else if (Query4Modes.find(argv[1]) != Query4Modes.end()) {
         q = query4;
+    } else if (Query5Modes.find(argv[1]) != Query5Modes.end()) {
+        q = query5;
     } else if (Query11Modes.find(argv[1]) != Query11Modes.end()) {
         q = query11;
     } else if (Query14Modes.find(argv[1]) != Query14Modes.end()) {
@@ -4738,6 +4992,7 @@ int main(int argc, char **argv) {
     case query2:  input_nruns = atoi(argv[5]); db_name = argv[6]; ope_type = argv[7]; do_par = argv[8]; hostname = argv[9]; break;
     case query3:  input_nruns = atoi(argv[4]); db_name = argv[5]; ope_type = argv[6]; do_par = argv[7]; hostname = argv[8]; break;
     case query4:  input_nruns = atoi(argv[3]); db_name = argv[4]; ope_type = argv[5]; do_par = argv[6]; hostname = argv[7]; break;
+    case query5:  input_nruns = atoi(argv[4]); db_name = argv[5]; ope_type = argv[6]; do_par = argv[7]; hostname = argv[8]; break;
     case query11: input_nruns = atoi(argv[4]); db_name = argv[5]; ope_type = argv[6]; do_par = argv[7]; hostname = argv[8]; break;
     case query14: input_nruns = atoi(argv[3]); db_name = argv[4]; ope_type = argv[5]; do_par = argv[6]; hostname = argv[7]; break;
     case query18: input_nruns = atoi(argv[3]); db_name = argv[4]; ope_type = argv[5]; do_par = argv[6]; hostname = argv[7]; break;
@@ -4895,6 +5150,29 @@ int main(int argc, char **argv) {
           } else if (mode == "crypt-query4") {
             for (size_t i = 0; i < nruns; i++) {
               do_query_crypt_q4(conn, cm, d, results);
+              ctr += results.size();
+              PRINT_RESULTS();
+              results.clear();
+            }
+          } else assert(false);
+        }
+        break;
+
+      case query5:
+        {
+          string name = argv[2];
+          string d = argv[3];
+          vector<q5entry> results;
+          if (mode == "orig-query5") {
+            for (size_t i = 0; i < nruns; i++) {
+              do_query_q5(conn, name, d, results);
+              ctr += results.size();
+              PRINT_RESULTS();
+              results.clear();
+            }
+          } else if (mode == "crypt-query5") {
+            for (size_t i = 0; i < nruns; i++) {
+              do_query_crypt_q5(conn, cm, name, d, results);
               ctr += results.size();
               PRINT_RESULTS();
               results.clear();

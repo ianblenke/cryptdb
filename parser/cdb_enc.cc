@@ -515,7 +515,7 @@ static const vector<int> CustOnions = {
     ONION_DETJOIN,
     ONION_DET,
     ONION_DET,
-    ONION_DET,
+    ONION_DETJOIN,
     ONION_DET,
     ONION_DET | ONION_OPE,
     ONION_DET,
