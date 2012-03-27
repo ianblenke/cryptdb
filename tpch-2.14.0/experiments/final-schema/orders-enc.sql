@@ -10,4 +10,5 @@ CREATE TABLE orders_enc  (
     o_clerk_DET          binary(15) not null, 
     o_shippriority_DET   integer unsigned not null,
     o_comment_DET        varbinary(79) not null,
+    o_orderdate_YEAR_DET smallint unsigned not null, 
     PRIMARY KEY (o_orderkey_DET)) Engine=InnoDB;

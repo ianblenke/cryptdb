@@ -47,6 +47,34 @@ int encode_yyyy_mm_dd(const string &datestr) {
   return encoding;
 }
 
+void extract_date_from_encoding(uint32_t encoding,
+                                uint32_t &month,
+                                uint32_t &day,
+                                uint32_t &year);
+
+void extract_date_from_encoding(uint32_t encoding,
+                                uint32_t &month,
+                                uint32_t &day,
+                                uint32_t &year) {
+  static const uint32_t DayMask = 0x1F;
+  static const uint32_t MonthMask = 0x1E0;
+  static const uint32_t YearMask = ((uint32_t)-1) << 9;
+
+  day = encoding & DayMask;
+  month = (encoding & MonthMask) >> 5;
+  year = (encoding & YearMask) >> 9;
+}
+
+std::string stringify_date_from_encoding(uint32_t encoding);
+
+std::string stringify_date_from_encoding(uint32_t encoding) {
+  uint32_t month, day, year;
+  extract_date_from_encoding(encoding, month, day, year);
+  std::ostringstream oss;
+  oss << year << "-" << month << "-" << day;
+  return oss.str();
+}
+
 string join(const vector<string> &tokens, const string &sep);
 
 string join(const vector<string> &tokens, const string &sep) {

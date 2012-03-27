@@ -417,6 +417,8 @@ int main(int argc, char **argv) {
                                "my_field_name", SECLEVEL::OPE, SECLEVEL::PLAIN_OPE,
                                isBin, 12345);
         assert(to_s(encoding) == pt);
+        assert(stringify_date_from_encoding(resultFromStr<uint32_t>(pt)) ==
+               "1988-12-10");
 
         int encoding1 = encode_yyyy_mm_dd("1988-12-13");
         string ct1 = stub.crypt<3>(cm.getmkey(), to_s(encoding1), TYPE_INTEGER,
@@ -428,6 +430,8 @@ int main(int argc, char **argv) {
                                "my_field_name", SECLEVEL::OPE, SECLEVEL::PLAIN_OPE,
                                isBin, 12345);
         assert(to_s(encoding1) == pt1);
+        assert(stringify_date_from_encoding(resultFromStr<uint32_t>(pt1)) ==
+               "1988-12-13");
 
         assert((encoding < encoding1) ==
                (resultFromStr<uint64_t>(ct) < resultFromStr<uint64_t>(ct1)));

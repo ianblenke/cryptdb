@@ -24,7 +24,7 @@ using namespace NTL;
 
 static bool UseOldOpe = false;
 static bool DoParallel = true;
-static bool UseMYISAM = true;
+static bool UseMYISAM = false;
 static const size_t NumThreads = 8;
 
 static inline uint32_t EncodeDate(uint32_t month, uint32_t day, uint32_t year) {
@@ -629,8 +629,8 @@ struct Q1NoSortImplInfo<uint64_t> {
     { return UseMYISAM ? "LINEITEM_INT_MYISAM" : "LINEITEM_INT"; }
   static inline const char * unit() { return "100"; }
 
-  static inline double convert(uint64_t i) {
-    return double(i)/100.0;
+  static inline double convert(uint64_t i, size_t n) {
+    return double(i)/pow(100.0, n);
   }
 };
 
@@ -641,7 +641,7 @@ struct Q1NoSortImplInfo<double> {
     { return UseMYISAM ? "LINEITEM_DOUBLE_MYISAM" : "LINEITEM_DOUBLE"; }
   static inline const char * unit() { return "1.0"; }
 
-  static inline double convert(double i) { return i; }
+  static inline double convert(double i, size_t n) { return i; }
 };
 
 template <typename T>
@@ -717,13 +717,13 @@ struct Q1NoSortImpl {
                 q1entry(
                     string(1, it->first.first),
                     string(1, it->first.second),
-                    Q1NoSortImplInfo<T>::convert(p0.second),
-                    Q1NoSortImplInfo<T>::convert(p1.second),
-                    Q1NoSortImplInfo<T>::convert(p2.second),
-                    Q1NoSortImplInfo<T>::convert(p3.second),
-                    Q1NoSortImplInfo<T>::convert(p0.second) / double(p0.first),
-                    Q1NoSortImplInfo<T>::convert(p1.second) / double(p1.first),
-                    Q1NoSortImplInfo<T>::convert(p4.second) / double(p4.first),
+                    Q1NoSortImplInfo<T>::convert(p0.second, 1),
+                    Q1NoSortImplInfo<T>::convert(p1.second, 1),
+                    Q1NoSortImplInfo<T>::convert(p2.second, 2),
+                    Q1NoSortImplInfo<T>::convert(p3.second, 3),
+                    Q1NoSortImplInfo<T>::convert(p0.second, 1) / double(p0.first),
+                    Q1NoSortImplInfo<T>::convert(p1.second, 1) / double(p1.first),
+                    Q1NoSortImplInfo<T>::convert(p4.second, 1) / double(p4.first),
                     p0.first));
         // TODO: sort results
     }
@@ -756,27 +756,6 @@ static long extract_from_slot(const ZZ &m, size_t slot) {
   static const size_t slotbits = wordbits * 2;
   ZZ mask = to_ZZ((uint64_t)-1);
   return to_long((m >> (slotbits * slot)) & mask);
-}
-
-static void ExtractDate(uint32_t encoding,
-                               uint32_t &month,
-                               uint32_t &day,
-                               uint32_t &year) {
-  static const uint32_t DayMask = 0x1F;
-  static const uint32_t MonthMask = 0x1E0;
-  static const uint32_t YearMask = ((uint32_t)-1) << 9;
-
-  day = encoding & DayMask;
-  month = (encoding & MonthMask) >> 5;
-  year = (encoding & YearMask) >> 9;
-}
-
-static string StringifyDateEncoding(uint32_t encoding) {
-  uint32_t month, day, year;
-  ExtractDate(encoding, month, day, year);
-  ostringstream oss;
-  oss << year << "-" << month << "-" << day;
-  return oss.str();
 }
 
 static void do_query_q1_packed_opt(Connect &conn,
@@ -1561,6 +1540,211 @@ static void do_query_q1_noopt(Connect &conn,
     }
 }
 
+static void do_query_q2(Connect &conn,
+                        uint64_t size,
+                        const string &type,
+                        const string &name,
+                        vector<q2entry> &results) {
+    NamedTimer fcnTimer(__func__);
+
+    ostringstream s;
+    s << "select SQL_NO_CACHE s_acctbal, s_name, n_name, p_partkey, p_mfgr, s_address, s_phone, s_comment from PART, SUPPLIER, PARTSUPP, NATION, REGION where p_partkey = ps_partkey and s_suppkey = ps_suppkey and p_size = " << size << " and p_type like '%" << type << "' and s_nationkey = n_nationkey and n_regionkey = r_regionkey and r_name = '" << name << "' and ps_supplycost = ( select min(ps_supplycost) from PARTSUPP, SUPPLIER, NATION, REGION where p_partkey = ps_partkey and s_suppkey = ps_suppkey and s_nationkey = n_nationkey and n_regionkey = r_regionkey and r_name = '" << name << "') order by s_acctbal desc, n_name, s_name, p_partkey limit 100";
+    cerr << s.str() << endl;
+
+    DBResult * dbres;
+    {
+      NamedTimer t(__func__, "execute");
+      conn.execute(s.str(), dbres);
+    }
+    ResType res;
+    {
+      NamedTimer t(__func__, "unpack");
+      res = dbres->unpack();
+      assert(res.ok);
+    }
+
+    for (auto row : res.rows) {
+      results.push_back(
+          q2entry(resultFromStr<double>(row[0].data),
+                  row[1].data,
+                  row[2].data,
+                  resultFromStr<uint64_t>(row[3].data),
+                  row[4].data,
+                  row[5].data,
+                  row[6].data,
+                  row[7].data));
+    }
+
+}
+
+static void do_query_q2_noopt(Connect &conn,
+                              CryptoManager &cm,
+                              uint64_t size,
+                              const string &type,
+                              const string &name,
+                              vector<q2entry> &results) {
+    assert(name.size() <= 26);
+
+    crypto_manager_stub cm_stub(&cm, UseOldOpe);
+    NamedTimer fcnTimer(__func__);
+
+    string lowertype(lower_s(type));
+
+    bool isBin = false;
+    string encSIZE = cm_stub.crypt(cm.getmkey(), to_s(size), TYPE_INTEGER,
+                              fieldname(part::p_size, "DET"),
+                              getMin(oDET), SECLEVEL::DET, isBin, 12345);
+    assert(!isBin);
+
+    string encNAME = cm_stub.crypt(cm.getmkey(), name, TYPE_TEXT,
+                              fieldname(region::r_name, "DET"),
+                              getMin(oDET), SECLEVEL::DET, isBin, 12345);
+    assert(name.size() == encNAME.size());
+    assert(isBin);
+
+    // right-pad encNAME with 0's
+    encNAME.resize(25);
+
+    Binary key(cm.getKey(cm.getmkey(), fieldname(part::p_type, "SWP"), SECLEVEL::SWP));
+    Token t = CryptoManager::token(key, Binary(lowertype));
+
+    ostringstream s;
+    s << "SELECT SQL_NO_CACHE "
+        << "s_acctbal_DET, s_name_DET, n_name_DET, p_partkey_DET, "
+        << "p_mfgr_DET, s_address_DET, s_phone_DET, s_comment_DET, p_type_DET "
+      << "FROM part_enc, supplier_enc, partsupp_enc_noopt, nation_enc, region_enc "
+      << "WHERE "
+        << "p_partkey_DET = ps_partkey_DET AND "
+        << "s_suppkey_DET = ps_suppkey_DET AND "
+        << "p_size_DET = " << encSIZE << " AND "
+        << "searchSWP("
+          << marshallBinary(string((char *)t.ciph.content, t.ciph.len))
+          << ", "
+          << marshallBinary(string((char *)t.wordKey.content, t.wordKey.len))
+          << ", p_type_SWP) = 1 AND "
+        << "s_nationkey_DET = n_nationkey_DET AND "
+        << "n_regionkey_DET = r_regionkey_DET AND "
+        << "r_name_DET = " << marshallBinary(encNAME) << " AND "
+        << "ps_supplycost_OPE = ("
+          << "SELECT "
+            << "min(ps_supplycost_OPE) "
+          << "FROM partsupp_enc_noopt, supplier_enc, nation_enc, region_enc "
+          << "WHERE "
+            << "p_partkey_DET = ps_partkey_DET AND "
+            << "s_suppkey_DET = ps_suppkey_DET AND "
+            << "s_nationkey_DET = n_nationkey_DET AND "
+            << "n_regionkey_DET = r_regionkey_DET AND "
+            << "r_name_DET = " << marshallBinary(encNAME) << ") "
+      << "ORDER BY "
+        << "s_acctbal_OPE DESC, n_name_OPE, s_name_OPE, p_partkey_OPE "
+      << "LIMIT 100";
+    cerr << s.str() << endl;
+
+    DBResult * dbres;
+    {
+      NamedTimer t(__func__, "execute");
+      conn.execute(s.str(), dbres);
+    }
+    ResType res;
+    {
+      NamedTimer t(__func__, "unpack");
+      res = dbres->unpack();
+      assert(res.ok);
+    }
+
+    for (auto row : res.rows) {
+
+        uint64_t s_acctbal_int = decryptRow<uint64_t, 7>(
+                row[0].data,
+                12345,
+                fieldname(supplier::s_acctbal, "DET"),
+                TYPE_INTEGER,
+                oDET,
+                cm);
+        double s_acctbal = ((double)s_acctbal_int)/100.0;
+
+        string s_name = decryptRow<string>(
+                row[1].data,
+                12345,
+                fieldname(supplier::s_name, "DET"),
+                TYPE_TEXT,
+                oDET,
+                cm);
+
+        string n_name = decryptRow<string>(
+                row[2].data,
+                12345,
+                fieldname(nation::n_name, "DET"),
+                TYPE_TEXT,
+                oDET,
+                cm);
+
+        uint64_t p_partkey = decryptRowFromTo<uint64_t>(
+                row[3].data,
+                12345,
+                fieldname(part::p_partkey, "DET"),
+                TYPE_INTEGER,
+                SECLEVEL::DETJOIN,
+                getMin(oDET),
+                cm);
+
+        string p_mfgr = decryptRow<string>(
+                row[4].data,
+                12345,
+                fieldname(part::p_mfgr, "DET"),
+                TYPE_TEXT,
+                oDET,
+                cm);
+
+        string s_address = decryptRow<string>(
+                row[5].data,
+                12345,
+                fieldname(supplier::s_address, "DET"),
+                TYPE_TEXT,
+                oDET,
+                cm);
+
+        string s_phone = decryptRow<string>(
+                row[6].data,
+                12345,
+                fieldname(supplier::s_phone, "DET"),
+                TYPE_TEXT,
+                oDET,
+                cm);
+
+        string s_comment = decryptRow<string>(
+                row[7].data,
+                12345,
+                fieldname(supplier::s_comment, "DET"),
+                TYPE_TEXT,
+                oDET,
+                cm);
+
+        string p_type = decryptRow<string>(
+                row[8].data,
+                12345,
+                fieldname(part::p_type, "DET"),
+                TYPE_TEXT,
+                oDET,
+                cm);
+
+        q2entry entry(s_acctbal,
+                      s_name,
+                      n_name,
+                      p_partkey,
+                      p_mfgr,
+                      s_address,
+                      s_phone,
+                      s_comment);
+
+        if (lower_s(p_type).find(lowertype) != string::npos) {
+          results.push_back(entry);
+        } else {
+          cerr << "bad row found (p_type = " << p_type << "): " << entry << endl;
+        }
+    }
+}
+
 struct _q3_noopt_task_state {
   _q3_noopt_task_state() {}
   vector< vector< SqlItem > > rows;
@@ -1659,7 +1843,15 @@ static void do_query_q3(Connect &conn,
     NamedTimer fcnTimer(__func__);
 
     ostringstream s;
-    s << "select l_orderkey, sum(l_extendedprice * (1 - l_discount)) as revenue, o_orderdate, o_shippriority from CUSTOMER, ORDERS, LINEITEM where c_mktsegment = '" << mktsegment << "' and c_custkey = o_custkey and l_orderkey = o_orderkey and o_orderdate < date '" << d << "' and l_shipdate > date '" << d << "' group by l_orderkey, o_orderdate, o_shippriority order by revenue desc, o_orderdate limit 10;";
+    s <<
+      "select l_orderkey, sum(l_extendedprice * (100 - l_discount)) as revenue, o_orderdate, o_shippriority, group_concat('a') "
+      "from LINEITEM_INT straight_join ORDERS_INT on l_orderkey = o_orderkey straight_join CUSTOMER_INT on c_custkey = o_custkey "
+      //"from LINEITEM_INT_MYISAM straight_join ORDERS_INT_MYISAM on l_orderkey = o_orderkey straight_join CUSTOMER_INT_MYISAM on c_custkey = o_custkey "
+      //"from LINEITEM_INT_2 straight_join ORDERS_INT_INNODB on l_orderkey = o_orderkey straight_join CUSTOMER_INT_INNODB on c_custkey = o_custkey "
+      "where c_mktsegment = '" << mktsegment << "' and o_orderdate < date '" << d << "' and l_shipdate > date '" << d << "' "
+      "group by l_orderkey, o_orderdate, o_shippriority "
+      "order by revenue desc, o_orderdate limit 10;"
+      ;
     cerr << s.str() << endl;
 
     DBResult * dbres;
@@ -1678,7 +1870,7 @@ static void do_query_q3(Connect &conn,
       results.push_back(
           q3entry(
             resultFromStr<uint64_t>(row[0].data),
-            resultFromStr<double>(row[1].data),
+            resultFromStr<double>(row[1].data) / 10000.0,
             row[2].data,
             resultFromStr<uint64_t>(row[3].data)));
     }
@@ -1721,11 +1913,11 @@ static void do_query_q3_crypt(Connect &conn,
          "  o_orderdate_OPE, "
          "  o_orderdate_DET, "
          "  o_shippriority_DET "
-         "from customer_enc_MYISAM, orders_enc_MYISAM, lineitem_enc_noagg_rowid_MYISAM "
+         "from lineitem_enc_noagg_rowid straight_join orders_enc on l_orderkey_DET = o_orderkey_DET straight_join customer_enc on c_custkey_DET = o_custkey_DET "
+         //"from lineitem_enc_noagg_rowid_MYISAM straight_join orders_enc_MYISAM on l_orderkey_DET = o_orderkey_DET straight_join customer_enc_MYISAM on c_custkey_DET = o_custkey_DET "
+         //"from lineitem_enc_noagg_rowid straight_join orders_enc_INNODB on l_orderkey_DET = o_orderkey_DET straight_join customer_enc_INNODB on c_custkey_DET = o_custkey_DET "
          "where "
          "  c_mktsegment_DET = " << marshallBinary(encMKT) <<
-         "  and c_custkey_DET = o_custkey_DET "
-         "  and l_orderkey_DET = o_orderkey_DET "
          "  and o_orderdate_OPE < " << enc_d_o_orderdate <<
          "  and l_shipdate_OPE > " << enc_d_l_shipdate <<
          " group by l_orderkey_DET, o_orderdate_DET, o_shippriority_DET";
@@ -1825,10 +2017,10 @@ static void do_query_q3_crypt(Connect &conn,
                 cm);
 
         // o_orderdate
-        uint32_t o_orderdate = decryptRow<uint32_t, 3>(
+        uint32_t o_orderdate_PT = decryptRow<uint32_t, 3>(
                 to_s(it->o_orderdate_DET),
                 12345,
-                fieldname(orders::o_orderkey, "DET"),
+                fieldname(orders::o_orderdate, "DET"),
                 TYPE_INTEGER,
                 oDET,
                 cm);
@@ -1846,7 +2038,7 @@ static void do_query_q3_crypt(Connect &conn,
             q3entry(
               l_orderkey,
               it->revenue,
-              StringifyDateEncoding(o_orderdate),
+              stringify_date_from_encoding(o_orderdate_PT),
               o_shippriority));
       }
 
@@ -3116,211 +3308,6 @@ static void do_query_q11_opt(Connect &conn,
 //    }
 //}
 
-static void do_query_q2(Connect &conn,
-                        uint64_t size,
-                        const string &type,
-                        const string &name,
-                        vector<q2entry> &results) {
-    NamedTimer fcnTimer(__func__);
-
-    ostringstream s;
-    s << "select SQL_NO_CACHE s_acctbal, s_name, n_name, p_partkey, p_mfgr, s_address, s_phone, s_comment from PART, SUPPLIER, PARTSUPP, NATION, REGION where p_partkey = ps_partkey and s_suppkey = ps_suppkey and p_size = " << size << " and p_type like '%" << type << "' and s_nationkey = n_nationkey and n_regionkey = r_regionkey and r_name = '" << name << "' and ps_supplycost = ( select min(ps_supplycost) from PARTSUPP, SUPPLIER, NATION, REGION where p_partkey = ps_partkey and s_suppkey = ps_suppkey and s_nationkey = n_nationkey and n_regionkey = r_regionkey and r_name = '" << name << "') order by s_acctbal desc, n_name, s_name, p_partkey limit 100";
-    cerr << s.str() << endl;
-
-    DBResult * dbres;
-    {
-      NamedTimer t(__func__, "execute");
-      conn.execute(s.str(), dbres);
-    }
-    ResType res;
-    {
-      NamedTimer t(__func__, "unpack");
-      res = dbres->unpack();
-      assert(res.ok);
-    }
-
-    for (auto row : res.rows) {
-      results.push_back(
-          q2entry(resultFromStr<double>(row[0].data),
-                  row[1].data,
-                  row[2].data,
-                  resultFromStr<uint64_t>(row[3].data),
-                  row[4].data,
-                  row[5].data,
-                  row[6].data,
-                  row[7].data));
-    }
-
-}
-
-static void do_query_q2_noopt(Connect &conn,
-                              CryptoManager &cm,
-                              uint64_t size,
-                              const string &type,
-                              const string &name,
-                              vector<q2entry> &results) {
-    assert(name.size() <= 26);
-
-    crypto_manager_stub cm_stub(&cm, UseOldOpe);
-    NamedTimer fcnTimer(__func__);
-
-    string lowertype(lower_s(type));
-
-    bool isBin = false;
-    string encSIZE = cm_stub.crypt(cm.getmkey(), to_s(size), TYPE_INTEGER,
-                              fieldname(part::p_size, "DET"),
-                              getMin(oDET), SECLEVEL::DET, isBin, 12345);
-    assert(!isBin);
-
-    string encNAME = cm_stub.crypt(cm.getmkey(), name, TYPE_TEXT,
-                              fieldname(region::r_name, "DET"),
-                              getMin(oDET), SECLEVEL::DET, isBin, 12345);
-    assert(name.size() == encNAME.size());
-    assert(isBin);
-
-    // right-pad encNAME with 0's
-    encNAME.resize(25);
-
-    Binary key(cm.getKey(cm.getmkey(), fieldname(part::p_type, "SWP"), SECLEVEL::SWP));
-    Token t = CryptoManager::token(key, Binary(lowertype));
-
-    ostringstream s;
-    s << "SELECT SQL_NO_CACHE "
-        << "s_acctbal_DET, s_name_DET, n_name_DET, p_partkey_DET, "
-        << "p_mfgr_DET, s_address_DET, s_phone_DET, s_comment_DET, p_type_DET "
-      << "FROM part_enc, supplier_enc, partsupp_enc_noopt, nation_enc, region_enc "
-      << "WHERE "
-        << "p_partkey_DET = ps_partkey_DET AND "
-        << "s_suppkey_DET = ps_suppkey_DET AND "
-        << "p_size_DET = " << encSIZE << " AND "
-        << "searchSWP("
-          << marshallBinary(string((char *)t.ciph.content, t.ciph.len))
-          << ", "
-          << marshallBinary(string((char *)t.wordKey.content, t.wordKey.len))
-          << ", p_type_SWP) = 1 AND "
-        << "s_nationkey_DET = n_nationkey_DET AND "
-        << "n_regionkey_DET = r_regionkey_DET AND "
-        << "r_name_DET = " << marshallBinary(encNAME) << " AND "
-        << "ps_supplycost_OPE = ("
-          << "SELECT "
-            << "min(ps_supplycost_OPE) "
-          << "FROM partsupp_enc_noopt, supplier_enc, nation_enc, region_enc "
-          << "WHERE "
-            << "p_partkey_DET = ps_partkey_DET AND "
-            << "s_suppkey_DET = ps_suppkey_DET AND "
-            << "s_nationkey_DET = n_nationkey_DET AND "
-            << "n_regionkey_DET = r_regionkey_DET AND "
-            << "r_name_DET = " << marshallBinary(encNAME) << ") "
-      << "ORDER BY "
-        << "s_acctbal_OPE DESC, n_name_OPE, s_name_OPE, p_partkey_OPE "
-      << "LIMIT 100";
-    cerr << s.str() << endl;
-
-    DBResult * dbres;
-    {
-      NamedTimer t(__func__, "execute");
-      conn.execute(s.str(), dbres);
-    }
-    ResType res;
-    {
-      NamedTimer t(__func__, "unpack");
-      res = dbres->unpack();
-      assert(res.ok);
-    }
-
-    for (auto row : res.rows) {
-
-        uint64_t s_acctbal_int = decryptRow<uint64_t, 7>(
-                row[0].data,
-                12345,
-                fieldname(supplier::s_acctbal, "DET"),
-                TYPE_INTEGER,
-                oDET,
-                cm);
-        double s_acctbal = ((double)s_acctbal_int)/100.0;
-
-        string s_name = decryptRow<string>(
-                row[1].data,
-                12345,
-                fieldname(supplier::s_name, "DET"),
-                TYPE_TEXT,
-                oDET,
-                cm);
-
-        string n_name = decryptRow<string>(
-                row[2].data,
-                12345,
-                fieldname(nation::n_name, "DET"),
-                TYPE_TEXT,
-                oDET,
-                cm);
-
-        uint64_t p_partkey = decryptRowFromTo<uint64_t>(
-                row[3].data,
-                12345,
-                fieldname(part::p_partkey, "DET"),
-                TYPE_INTEGER,
-                SECLEVEL::DETJOIN,
-                getMin(oDET),
-                cm);
-
-        string p_mfgr = decryptRow<string>(
-                row[4].data,
-                12345,
-                fieldname(part::p_mfgr, "DET"),
-                TYPE_TEXT,
-                oDET,
-                cm);
-
-        string s_address = decryptRow<string>(
-                row[5].data,
-                12345,
-                fieldname(supplier::s_address, "DET"),
-                TYPE_TEXT,
-                oDET,
-                cm);
-
-        string s_phone = decryptRow<string>(
-                row[6].data,
-                12345,
-                fieldname(supplier::s_phone, "DET"),
-                TYPE_TEXT,
-                oDET,
-                cm);
-
-        string s_comment = decryptRow<string>(
-                row[7].data,
-                12345,
-                fieldname(supplier::s_comment, "DET"),
-                TYPE_TEXT,
-                oDET,
-                cm);
-
-        string p_type = decryptRow<string>(
-                row[8].data,
-                12345,
-                fieldname(part::p_type, "DET"),
-                TYPE_TEXT,
-                oDET,
-                cm);
-
-        q2entry entry(s_acctbal,
-                      s_name,
-                      n_name,
-                      p_partkey,
-                      p_mfgr,
-                      s_address,
-                      s_phone,
-                      s_comment);
-
-        if (lower_s(p_type).find(lowertype) != string::npos) {
-          results.push_back(entry);
-        } else {
-          cerr << "bad row found (p_type = " << p_type << "): " << entry << endl;
-        }
-    }
-}
-
 static void do_query_q18(Connect &conn,
                          uint64_t threshold,
                          vector<q18entry> &results) {
@@ -4523,7 +4510,7 @@ enum query_selection {
 
 int main(int argc, char **argv) {
     srand(time(NULL));
-    if (argc != 6 && argc != 7 && argc != 8 && argc != 9) {
+    if (argc != 6 && argc != 7 && argc != 8 && argc != 9 && argc != 10) {
         usage(argv);
         return 1;
     }

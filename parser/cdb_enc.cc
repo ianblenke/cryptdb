@@ -503,7 +503,7 @@ static const vector<int> CustOnions = {
     ONION_DET,
     ONION_DET,
     ONION_DET,
-    ONION_DET,
+    ONION_DET | ONION_OPE,
     ONION_DET,
     ONION_DET,
 };
@@ -546,6 +546,40 @@ static const vector<int> OrdersOnions = {
     ONION_DET,
     ONION_DET,
 };
+
+class orders_encryptor : public table_encryptor {
+public:
+  orders_encryptor() {
+    schema = OrdersSchema;
+    onions = OrdersOnions;
+    usenull = false;
+    processrow = true;
+  }
+
+protected:
+  virtual
+  void postprocessRow(const vector<string> &tokens,
+                      vector<string>       &enccols,
+                      crypto_manager_stub        &cm) {
+    // write o_orderdate_YEAR_DET
+
+    const string& orderdate = tokens[orders::o_orderdate];
+    int year, month, day;
+    int ret = sscanf(orderdate.c_str(), "%d-%d-%d", &year, &month, &day);
+    assert(ret == 3);
+    assert(1 <= day && day <= 31);
+    assert(1 <= month && month <= 12);
+    assert(year >= 0);
+
+    bool isBin = false;
+    string encDET = cm.crypt<2>(cm.cm->getmkey(), to_s(year), TYPE_INTEGER,
+                             fieldname(orders::o_orderdate, "DET"),
+                             getMin(oDET), SECLEVEL::DET, isBin, 12345);
+    assert(!isBin);
+    enccols.push_back(encDET);
+  }
+};
+
 
 //----------------------------------------------------------------------------
 // lineitem
@@ -1066,17 +1100,17 @@ vector<int> lineitem_encryptor::Onions = {
   ONION_DETJOIN,
   ONION_DETJOIN,
 
+  ONION_DET | ONION_OPE,
   ONION_DET,
+  ONION_DET | ONION_OPE,
   ONION_DET,
+
   ONION_DET,
   ONION_DET,
 
   ONION_DET | ONION_OPE,
   ONION_DET | ONION_OPE,
-
   ONION_DET | ONION_OPE,
-  ONION_DET,
-  ONION_DET,
 
   ONION_DET,
   ONION_DET,
@@ -1363,7 +1397,7 @@ static const vector<int> PartOnions = {
   ONION_DET,
   ONION_DET,
   ONION_DET | ONION_SEARCH,
-  ONION_DET,
+  ONION_DET | ONION_OPE,
   ONION_DET,
   ONION_DET,
   ONION_DET,
@@ -1411,7 +1445,7 @@ static map<string, table_encryptor *> EncryptorMap = {
 
   {"region-none", new table_encryptor(RegionSchema, RegionOnions, false, true)},
 
-  {"orders-none", new table_encryptor(OrdersSchema, OrdersOnions, false, true)},
+  {"orders-none", new orders_encryptor},
 
   {"customer-none", new table_encryptor(CustSchema, CustOnions, false, true)},
 };
