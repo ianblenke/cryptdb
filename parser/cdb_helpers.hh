@@ -16,6 +16,10 @@
 
 #define NELEMS(array) (sizeof(array) / sizeof(array[0]))
 
+inline long roundToLong(double x) {
+    return ((x)>=0?(long)((x)+0.5):(long)((x)-0.5));
+}
+
 template <typename R>
 R resultFromStr(const string &r) {
     stringstream ss(r);

@@ -541,6 +541,8 @@ inline ostream& operator<<(ostream &o, const q5entry &q) {
   return o;
 }
 
+typedef double q6entry;
+
 struct q18entry {
     q18entry(
         const string& c_name,
@@ -1070,7 +1072,7 @@ static void do_query_q1_opt_row_col_pack(Connect &conn,
     //conn.execute("set @cnt := -1", dbres);
 
     string filename =
-      "/tmp/" + db + "/lineitem_enc/row_col_pack/data";
+      "/space/stephentu/data/" + db + "/lineitem_enc/row_col_pack/data";
 
     string pkinfo = marshallBinary(StringFromZZ(pk[0] * pk[0]));
     ostringstream s;
@@ -2408,6 +2410,176 @@ static void do_query_crypt_q5(Connect &conn,
     }
 }
 
+static void do_query_q6(Connect &conn,
+                        const string& d,
+                        double discount,
+                        uint64_t quantity,
+                        vector<q6entry> &results) {
+    NamedTimer fcnTimer(__func__);
+
+    ostringstream s;
+    s <<
+      "select"
+      "	sum(l_extendedprice * l_discount) as revenue "
+      "from"
+      "	LINEITEM_INT "
+      "where"
+      "	l_shipdate >= date '" << d << "'"
+      "	and l_shipdate < date '" << d << "' + interval '1' year"
+      "	and l_discount between " << roundToLong(discount*100.0)
+        << " - 1 and " << roundToLong(discount*100.0) << " + 1.0"
+      "	and l_quantity < " << roundToLong (quantity * 100.0 )
+      ;
+    cerr << s.str() << endl;
+
+    DBResult * dbres;
+    {
+      NamedTimer t(__func__, "execute");
+      conn.execute(s.str(), dbres);
+    }
+    ResType res;
+    {
+      NamedTimer t(__func__, "unpack");
+      res = dbres->unpack();
+      assert(res.ok);
+    }
+
+    for (auto row : res.rows) {
+      results.push_back(
+          q6entry(
+            resultFromStr<double>(row[0].data) / 10000.0));
+    }
+}
+
+static void do_query_crypt_q6(Connect &conn,
+                              CryptoManager &cm,
+                              const string& d,
+                              double discount,
+                              uint64_t quantity,
+                              vector<q6entry> &results,
+                              const string& db) {
+    crypto_manager_stub cm_stub(&cm, UseOldOpe);
+    NamedTimer fcnTimer(__func__);
+
+    bool isBin = false;
+    string d0 = cm_stub.crypt<3>(cm.getmkey(), to_s(encode_yyyy_mm_dd(d)),
+                              TYPE_INTEGER, fieldname(lineitem::l_shipdate, "OPE"),
+                              getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
+    assert(!isBin);
+
+    string d1 = cm_stub.crypt<3>(cm.getmkey(), to_s(encode_yyyy_mm_dd(d) + (1 << 9) /* + 1 yr */),
+                              TYPE_INTEGER, fieldname(lineitem::l_shipdate, "OPE"),
+                              getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
+    assert(!isBin);
+
+    string dsc0 = cm_stub.crypt<7>(
+        cm.getmkey(), to_s(roundToLong( (discount - 0.01) * 100.0 )),
+        TYPE_INTEGER, fieldname(lineitem::l_discount, "OPE"),
+        getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
+    assert(isBin);
+    dsc0.resize( 16 ); dsc0 = str_reverse( dsc0 );
+
+    isBin = false;
+    string dsc1 = cm_stub.crypt<7>(
+        cm.getmkey(), to_s(roundToLong( (discount + 0.01) * 100.0 )),
+        TYPE_INTEGER, fieldname(lineitem::l_discount, "OPE"),
+        getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
+    assert(isBin);
+    dsc1.resize( 16 ); dsc1 = str_reverse( dsc1 );
+
+    isBin = false;
+    string qty = cm_stub.crypt<7>(
+        cm.getmkey(), to_s(roundToLong( double(quantity) * 100.0 )),
+        TYPE_INTEGER, fieldname(lineitem::l_quantity, "OPE"),
+        getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
+    assert(isBin);
+    qty.resize( 16 ); qty = str_reverse( qty );
+
+    string filename =
+      "/space/stephentu/data/" + db + "/lineitem_enc/row_pack/revenue";
+
+    string pkinfo = marshallBinary(cm.getPKInfo());
+
+    ostringstream s;
+    s <<
+      "select"
+      " agg_char2_row_col_pack(1, 1, row_id, "
+        << pkinfo << ", " << "\"" << filename << "\", 1, 256, 12, 1) "
+      "from"
+      "	lineitem_enc_noagg_rowid "
+      "where"
+      "	l_shipdate_OPE >= " << d0 << " "
+      "	and l_shipdate_OPE < " << d1 << " "
+      "	and l_discount_OPE >= " << marshallBinary(dsc0) << " "
+      " and l_discount_OPE <= " << marshallBinary(dsc1) << " "
+      "	and l_quantity_OPE < " << marshallBinary(qty)
+      ;
+    cerr << s.str() << endl;
+
+    DBResult * dbres;
+    {
+      NamedTimer t(__func__, "execute");
+      conn.execute(s.str(), dbres);
+    }
+    ResType res;
+    {
+      NamedTimer t(__func__, "unpack");
+      res = dbres->unpack();
+      assert(res.ok);
+    }
+
+    static const size_t BitsPerAggField = 83;
+    ZZ mask = to_ZZ(1); mask <<= BitsPerAggField; mask -= 1;
+    assert(NumBits(mask) == (int)BitsPerAggField);
+    {
+      assert(res.rows.size() == 1);
+      string data = res.rows[0][0].data;
+
+      double revenue = 0.0;
+
+      const uint8_t *p   = (const uint8_t *) data.data();
+      const uint8_t *end = (const uint8_t *) data.data() + data.size();
+      while (p < end) {
+
+        unsigned char dummy0 = *p++;
+        unsigned char dummy1 = *p++;
+
+        assert(unsigned(dummy0) == 1);
+        assert(unsigned(dummy1) == 1);
+
+        // skip over count
+        p += sizeof(uint64_t);
+
+#define TAKE_FROM_SLOT(z, slot) \
+        (to_long(((z) >> (BitsPerAggField * (slot))) & mask))
+
+        const uint32_t *u32p = (const uint32_t *) p;
+        uint32_t n_aggs = *u32p;
+        p += sizeof(uint32_t);
+
+        for (size_t group_i = 0; group_i < n_aggs; group_i++) {
+          // interest mask
+          const uint32_t *u32p = (const uint32_t *) p;
+          uint32_t interest_mask = *u32p;
+          p += sizeof(uint32_t);
+
+          string ct = string((const char *) p, (size_t) 256);
+          ZZ m;
+          cm.decrypt_Paillier(ct, m);
+          p += 256;
+
+          for (size_t i = 0; i < 12; i++) {
+            if (!(interest_mask & (0x1 << i))) continue;
+            long l = TAKE_FROM_SLOT(m, i);
+            revenue += ((double)l)/100.0;
+          }
+        }
+      }
+
+      results.push_back( revenue );
+    }
+}
+
 static struct q11entry_sorter {
   inline bool operator()(const q11entry &lhs, const q11entry &rhs) const {
     return lhs.value > rhs.value;
@@ -2815,7 +2987,7 @@ static void do_query_q14_opt2(Connect &conn,
     ostringstream s;
 
     string filename =
-      "/tmp/" + db + "/lineitem_enc/row_pack/disc_price";
+      "/space/stephentu/data/" + db + "/lineitem_enc/row_pack/disc_price";
 
     s << "SELECT SQL_NO_CACHE agg_char2_row_col_pack(1, 1, row_id, "
         << pkinfo << ", " <<
@@ -3124,12 +3296,6 @@ static void do_query_q14(Connect &conn,
       results.push_back(resultFromStr<double>(row[0].data));
     }
 }
-
-static inline long roundToLong(double x) {
-    return ((x)>=0?(long)((x)+0.5):(long)((x)-0.5));
-}
-
-
 
 static void do_query_q11_opt_proj(Connect &conn,
                                   CryptoManager &cm,
@@ -4864,6 +5030,7 @@ enum query_selection {
   query3,
   query4,
   query5,
+  query6,
   query11,
   query14,
   query18,
@@ -4919,6 +5086,13 @@ int main(int argc, char **argv) {
     std::set<string> Query5Modes
       (Query5Strings, Query5Strings + NELEMS(Query5Strings));
 
+    static const char * Query6Strings[] = {
+        "--orig-query6",
+        "--crypt-query6",
+    };
+    std::set<string> Query6Modes
+      (Query6Strings, Query6Strings + NELEMS(Query6Strings));
+
     static const char * Query11Strings[] = {
         "--orig-query11",
         "--orig-query11-nosubquery",
@@ -4968,6 +5142,8 @@ int main(int argc, char **argv) {
         q = query4;
     } else if (Query5Modes.find(argv[1]) != Query5Modes.end()) {
         q = query5;
+    } else if (Query6Modes.find(argv[1]) != Query6Modes.end()) {
+        q = query6;
     } else if (Query11Modes.find(argv[1]) != Query11Modes.end()) {
         q = query11;
     } else if (Query14Modes.find(argv[1]) != Query14Modes.end()) {
@@ -4993,6 +5169,7 @@ int main(int argc, char **argv) {
     case query3:  input_nruns = atoi(argv[4]); db_name = argv[5]; ope_type = argv[6]; do_par = argv[7]; hostname = argv[8]; break;
     case query4:  input_nruns = atoi(argv[3]); db_name = argv[4]; ope_type = argv[5]; do_par = argv[6]; hostname = argv[7]; break;
     case query5:  input_nruns = atoi(argv[4]); db_name = argv[5]; ope_type = argv[6]; do_par = argv[7]; hostname = argv[8]; break;
+    case query6:  input_nruns = atoi(argv[5]); db_name = argv[6]; ope_type = argv[7]; do_par = argv[8]; hostname = argv[9]; break;
     case query11: input_nruns = atoi(argv[4]); db_name = argv[5]; ope_type = argv[6]; do_par = argv[7]; hostname = argv[8]; break;
     case query14: input_nruns = atoi(argv[3]); db_name = argv[4]; ope_type = argv[5]; do_par = argv[6]; hostname = argv[7]; break;
     case query18: input_nruns = atoi(argv[3]); db_name = argv[4]; ope_type = argv[5]; do_par = argv[6]; hostname = argv[7]; break;
@@ -5090,6 +5267,7 @@ int main(int argc, char **argv) {
           } else assert(false);
           break;
         }
+
       case query2:
         {
           uint64_t size = (uint64_t) atoi(argv[2]);
@@ -5173,6 +5351,30 @@ int main(int argc, char **argv) {
           } else if (mode == "crypt-query5") {
             for (size_t i = 0; i < nruns; i++) {
               do_query_crypt_q5(conn, cm, name, d, results);
+              ctr += results.size();
+              PRINT_RESULTS();
+              results.clear();
+            }
+          } else assert(false);
+        }
+        break;
+
+      case query6:
+        {
+          string d = argv[2];
+          double discount = atof(argv[3]);
+          uint64_t quantity = atoi(argv[4]);
+          vector<q6entry> results;
+          if (mode == "orig-query6") {
+            for (size_t i = 0; i < nruns; i++) {
+              do_query_q6(conn, d, discount, quantity, results);
+              ctr += results.size();
+              PRINT_RESULTS();
+              results.clear();
+            }
+          } else if (mode == "crypt-query6") {
+            for (size_t i = 0; i < nruns; i++) {
+              do_query_crypt_q6(conn, cm, d, discount, quantity, results, db_name);
               ctr += results.size();
               PRINT_RESULTS();
               results.clear();

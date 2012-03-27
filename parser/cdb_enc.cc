@@ -78,10 +78,6 @@ static inline string to_mysql_hex(T t) {
     return buf.str();
 }
 
-static inline long roundToLong(double x) {
-    return ((x)>=0?(long)((x)+0.5):(long)((x)-0.5));
-}
-
 enum onion_bitmask {
     ONION_DET     = 0x1,
     ONION_DETJOIN = 0x1 << 1,
@@ -250,8 +246,11 @@ static void do_encrypt(size_t i,
 
             isBin = false;
             if (DoOPE(onions)) {
+                assert(OnlyOneBit(onions & OPE_BITMASK));
                 string encOPE = cm_stub.crypt<7>(cm.getmkey(), to_s(t), TYPE_INTEGER,
-                                         fieldname(i, "OPE"),
+                                         (onions & ONION_OPEJOIN) ?
+                                          "ope_join" :
+                                          fieldname(i, "OPE"),
                                          getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
                 assert(isBin);
                 assert(encOPE.size() <= (7 * 2));
@@ -628,7 +627,8 @@ public:
       normal,
       normal_agg,
       packed,
-      row_packed,
+      row_packed_disc_price,
+      row_packed_revenue,
       row_col_packed,
   };
 
@@ -653,7 +653,8 @@ public:
         processrow = true;
         break;
       case packed:
-      case row_packed:
+      case row_packed_disc_price:
+      case row_packed_revenue:
       case row_col_packed:
         onions = PackedOnions;
         usenull = false;
@@ -928,20 +929,23 @@ protected:
                    crypto_manager_stub &cm) {
       // ASSUMES ROWS SORTED BY ENCRYPTED PRIMARY KEY
 
+      assert(OnlyOneBit(fields_mask)); // only handles 1 bit for now
+
       bool do_l_quantity = fields_mask & 0x1;
       bool do_l_extendedprice = fields_mask & (0x1 << 1);
       bool do_l_discount = fields_mask & (0x1 << 2);
       bool do_l_disc_price = fields_mask & (0x1 << 3);
       bool do_l_charge = fields_mask & (0x1 << 4);
+      bool do_l_revenue = fields_mask & (0x1 << 5);
 
       _static_assert(FieldsPerAgg == 12); // this is hardcoded various places
       size_t nAggs = rows.size() / FieldsPerAgg +
           (rows.size() % FieldsPerAgg ? 1 : 0);
       for (size_t i = 0; i < nAggs; i++) {
           size_t base = i * FieldsPerAgg;
-          ZZ z0, z1, z2, z3, z4;
+          ZZ z0, z1, z2, z3, z4, z5;
           z0 = to_ZZ(0); z1 = to_ZZ(0); z2 = to_ZZ(0);
-          z3 = to_ZZ(0); z4 = to_ZZ(0);
+          z3 = to_ZZ(0); z4 = to_ZZ(0); z5 = to_ZZ(0);
           for (size_t j = 0; j < min(FieldsPerAgg, rows.size() - base); j++) {
               size_t row_id = base + j;
               const vector<string>& tokens = rows[row_id];
@@ -980,6 +984,15 @@ protected:
                 long   l_charge_int = roundToLong(l_charge * 100.0);
                 insert_into_slot<BitsPerAggField>(z4, l_charge_int, j);
               }
+
+              // l_revenue = l_extendedprice * l_discount
+              if (do_l_revenue) {
+                double l_extendedprice = resultFromStr<double>(tokens[lineitem::l_extendedprice]);
+                double l_discount    = resultFromStr<double>(tokens[lineitem::l_discount]);
+                double l_revenue     = l_extendedprice * l_discount;
+                long   l_revenue_int = roundToLong(l_revenue * 100.0);
+                insert_into_slot<BitsPerAggField>(z5, l_revenue_int, j);
+              }
           }
 
           // write the block out
@@ -1013,7 +1026,13 @@ protected:
             e4.resize(256);
           }
 
-          cout << e0 << e1 << e2 << e3 << e4;
+          string e5;
+          if (do_l_revenue) {
+            e5 = cm.encrypt_Paillier(z5);
+            e5.resize(256);
+          }
+
+          cout << e0 << e1 << e2 << e3 << e4 << e5;
       }
   }
 
@@ -1022,12 +1041,14 @@ protected:
                     vector<vector<string> >       &enccols,
                     crypto_manager_stub &cm) {
     assert(tpe == opt_type::packed ||
-           tpe == opt_type::row_packed ||
+           tpe == opt_type::row_packed_disc_price ||
+           tpe == opt_type::row_packed_revenue ||
            tpe == opt_type::row_col_packed);
     switch (tpe) {
-    case opt_type::packed:         do_group_pack  (tokens, enccols, cm); break;
-    case opt_type::row_packed:     do_row_pack    (tokens, enccols, (0x1 << 3), cm); break;
-    case opt_type::row_col_packed: do_row_col_pack(tokens, enccols, cm); break;
+    case opt_type::packed:                do_group_pack  (tokens, enccols, cm); break;
+    case opt_type::row_packed_disc_price: do_row_pack    (tokens, enccols, (0x1 << 3), cm); break;
+    case opt_type::row_packed_revenue:    do_row_pack    (tokens, enccols, (0x1 << 5), cm); break;
+    case opt_type::row_col_packed:        do_row_col_pack(tokens, enccols, cm); break;
     default: assert(false);
     }
   }
@@ -1447,7 +1468,8 @@ static map<string, table_encryptor *> EncryptorMap = {
   {"lineitem-none", new lineitem_encryptor(lineitem_encryptor::none)},
   {"lineitem-normal", new lineitem_encryptor(lineitem_encryptor::normal)},
   {"lineitem-packed", new lineitem_encryptor(lineitem_encryptor::packed)},
-  {"lineitem-row-packed", new lineitem_encryptor(lineitem_encryptor::row_packed)},
+  {"lineitem-row-packed-disc-price", new lineitem_encryptor(lineitem_encryptor::row_packed_disc_price)},
+  {"lineitem-row-packed-revenue", new lineitem_encryptor(lineitem_encryptor::row_packed_revenue)},
   {"lineitem-row-col-packed", new lineitem_encryptor(lineitem_encryptor::row_col_packed)},
 
   {"partsupp-none", new partsupp_encryptor(partsupp_encryptor::none)},
