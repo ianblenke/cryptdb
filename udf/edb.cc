@@ -73,8 +73,6 @@ struct AggRowColPack {
 
   static const size_t NumBlocksInternalBuffer = 524288;
   //static const size_t NumBlocksInternalBuffer = 4194304;
-
-  static const size_t NumThreads = 8;
 };
 
 static inline void
@@ -93,11 +91,133 @@ InitMPZRunningSums(size_t rows_per_agg, vector<mpz_wrapper>& v) {
     }
 }
 
+struct agg_group_key {
+  struct elem {
+    Item_result type;
+    int64_t i;
+    double d;
+    string s;
+  };
+  vector<elem> elems;
+
+  static void coerce_types(
+      UDF_ARGS* args,
+      size_t off, size_t len) {
+    // coerce decimal keys into real
+    for (size_t i = off; i < off + len; i++) {
+      if (args->arg_type[i] == DECIMAL_RESULT) {
+        args->arg_type[i] = REAL_RESULT;
+      }
+    }
+  }
+
+  static void make_key(
+      UDF_ARGS* args, size_t off, size_t len,
+      agg_group_key& k) {
+    k.elems.clear();
+    k.elems.resize(len);
+    assert(args->arg_count >= (off + len));
+    for (size_t i = off; i < len; i++) {
+      switch (args->arg_type[i]) {
+      case INT_RESULT:
+        k.elems[i].i = *((long long *)args->args[i]);
+        break;
+      case REAL_RESULT:
+        k.elems[i].d = *((long long *)args->args[i]);
+        break;
+      case STRING_RESULT:
+        k.elems[i].s = string(args->args[i], (size_t) args->lengths[i]);
+        break;
+      default: assert(false);
+      }
+    }
+  }
+
+  // key is framed as:
+  // [type (1-byte) | (int64_t (8 bytes) | double (8 bytes) | [len + len bytes])]+
+  uint8_t* write_key(uint8_t* buf) const {
+    for (size_t i = 0; i < elems.size(); i++) {
+      const elem& e = elems[i];
+      *buf++ = (uint8_t) e.type;
+      switch (e.type) {
+      case INT_RESULT: {
+        int64_t* p = (int64_t *)buf;
+        *p = e.i;
+        p += sizeof(int64_t);
+        break;
+      }
+      case REAL_RESULT: {
+        double* p = (double *)buf;
+        *p = e.d;
+        p += sizeof(double);
+        break;
+      }
+      case STRING_RESULT: {
+        uint32_t* p = (uint32_t *)buf;
+        *p = e.s.size();
+        p += sizeof(uint32_t);
+        memcpy(p, e.s.data(), (uint32_t)e.s.size());
+        p += (uint32_t)e.s.size();
+        break;
+      }
+      default: assert(false);
+      }
+    }
+    return buf;
+  }
+
+  size_t size_needed() const {
+    size_t r = 0;
+    for (size_t i = 0; i < elems.size(); i++) {
+      const elem& e = elems[i];
+      switch (e.type) {
+      case INT_RESULT: {
+        r += sizeof(int64_t);
+        break;
+      }
+      case REAL_RESULT: {
+        r += sizeof(double);
+        break;
+      }
+      case STRING_RESULT: {
+        r += sizeof(uint32_t);
+        r += (uint32_t)e.s.size();
+        break;
+      }
+      default: assert(false);
+      }
+    }
+    return r;
+  }
+};
+
+static bool operator<(const agg_group_key& a, const agg_group_key& b) {
+  assert(a.elems.size() == b.elems.size());
+  for (size_t i = 0; i < a.elems.size(); i++) {
+    const agg_group_key::elem& lhs = a.elems[i];
+    const agg_group_key::elem& rhs = b.elems[i];
+    assert(lhs.type == rhs.type);
+    switch (lhs.type) {
+    case INT_RESULT:
+      if (lhs.i < rhs.i) return true;
+      break;
+    case REAL_RESULT:
+      if (lhs.d < rhs.d) return true;
+      break;
+    case STRING_RESULT:
+      if (lhs.s < rhs.s) return true;
+      break;
+    default: assert(false);
+    }
+  }
+  return false;
+}
+
 template <typename T>
-struct sum_char2_impl {
+struct sum_hash_agg_impl {
   struct state {
       // key -> (count, sum)
-      std::map<uint16_t, std::pair<uint64_t, T> > aggs;
+      std::map<agg_group_key, std::pair<uint64_t, T> > aggs;
       void *rbuf;
   };
 
@@ -107,7 +227,18 @@ struct sum_char2_impl {
       state *as = new state;
       as->rbuf = NULL;
       initid->ptr = (char *) as;
-      args->arg_type[2] = mysql_item_result_type<T>::value;
+
+      // input argument is:
+      // first N-1 args => key, last arg => summation argument
+
+      if (args->arg_count <= 1) {
+        strcpy(message, "need > 1 arg");
+        return 1;
+      }
+
+      agg_group_key::coerce_types(args, 0, args->arg_count - 1);
+
+      args->arg_type[args->arg_count - 1] = mysql_item_result_type<T>::value;
       return 0;
   }
 
@@ -131,19 +262,13 @@ struct sum_char2_impl {
   {
       state *as = (state *) initid->ptr;
 
-      long long p0, p1;
-      p0 = *((long long *) args->args[0]);
-      p1 = *((long long *) args->args[1]);
+      agg_group_key key;
+      agg_group_key::make_key(args, 0, args->arg_count - 1, key);
 
-      //assert(p0 >= 0 && p0 <= 0xFF);
-      //assert(p1 >= 0 && p1 <= 0xFF);
-
-      uint16_t key = (uint8_t(p0) << 8) | uint8_t(p1);
-
-      typename std::map<uint16_t, std::pair<uint64_t, T> >::iterator it =
+      typename std::map<agg_group_key, std::pair<uint64_t, T> >::iterator it =
           as->aggs.find(key);
 
-      T val = mysql_item_result_type<T>::extract(args, 2);
+      T val = mysql_item_result_type<T>::extract(args, args->arg_count - 1);
 
       if (UNLIKELY(it == as->aggs.end())) {
           std::pair<uint64_t, T>& p = as->aggs[key]; // creates on demand
@@ -161,15 +286,21 @@ struct sum_char2_impl {
       unsigned long *length, char *is_null, char *error)
   {
       state *as = (state *) initid->ptr;
-      *length = (2 + sizeof(uint64_t) + sizeof(T)) * as->aggs.size();
+      *length = (sizeof(uint64_t) + sizeof(T)) * as->aggs.size();
+
+      typedef
+        typename std::map<agg_group_key, std::pair<uint64_t, T> >::iterator
+        iter;
+      for (iter it = as->aggs.begin(); it != as->aggs.end(); ++it) {
+        *length += it->first.size_needed();
+      }
+
       as->rbuf = malloc(*length);
       assert(as->rbuf); // TODO: handle OOM
       uint8_t* ptr = (uint8_t *) as->rbuf;
-      for (typename std::map<uint16_t, std::pair<uint64_t, T> >::iterator it
-              = as->aggs.begin();
-           it != as->aggs.end(); ++it) {
-          *ptr++ = (uint8_t) ((it->first >> 8) & 0xFF);
-          *ptr++ = (uint8_t) (it->first & 0xFF);
+
+      for (iter it = as->aggs.begin(); it != as->aggs.end(); ++it) {
+          ptr = it->first.write_key(ptr);
           uint64_t *iptr = (uint64_t *) ptr;
           *iptr = it->second.first;
           ptr += sizeof(uint64_t);
@@ -223,20 +354,21 @@ my_bool  agg_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error);
 char *   agg(UDF_INIT *initid, UDF_ARGS *args, char *result,
              unsigned long *length, char *is_null, char *error);
 
-my_bool  sum_char2_int_init(UDF_INIT *initid, UDF_ARGS *args, char *message);
-void     sum_char2_int_deinit(UDF_INIT *initid);
-void     sum_char2_int_clear(UDF_INIT *initid, char *is_null, char *error);
-my_bool  sum_char2_int_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error);
-char *   sum_char2_int(UDF_INIT *initid, UDF_ARGS *args, char *result,
+my_bool  sum_hash_agg_int_init(UDF_INIT *initid, UDF_ARGS *args, char *message);
+void     sum_hash_agg_int_deinit(UDF_INIT *initid);
+void     sum_hash_agg_int_clear(UDF_INIT *initid, char *is_null, char *error);
+my_bool  sum_hash_agg_int_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error);
+char *   sum_hash_agg_int(UDF_INIT *initid, UDF_ARGS *args, char *result,
              unsigned long *length, char *is_null, char *error);
 
-my_bool  sum_char2_double_init(UDF_INIT *initid, UDF_ARGS *args, char *message);
-void     sum_char2_double_deinit(UDF_INIT *initid);
-void     sum_char2_double_clear(UDF_INIT *initid, char *is_null, char *error);
-my_bool  sum_char2_double_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error);
-char *   sum_char2_double(UDF_INIT *initid, UDF_ARGS *args, char *result,
+my_bool  sum_hash_agg_double_init(UDF_INIT *initid, UDF_ARGS *args, char *message);
+void     sum_hash_agg_double_deinit(UDF_INIT *initid);
+void     sum_hash_agg_double_clear(UDF_INIT *initid, char *is_null, char *error);
+my_bool  sum_hash_agg_double_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error);
+char *   sum_hash_agg_double(UDF_INIT *initid, UDF_ARGS *args, char *result,
              unsigned long *length, char *is_null, char *error);
 
+// TODO: fixup to be more general
 my_bool  agg_char2_init(UDF_INIT *initid, UDF_ARGS *args, char *message);
 void     agg_char2_deinit(UDF_INIT *initid);
 void     agg_char2_clear(UDF_INIT *initid, char *is_null, char *error);
@@ -244,11 +376,11 @@ my_bool  agg_char2_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *er
 char *   agg_char2(UDF_INIT *initid, UDF_ARGS *args, char *result,
              unsigned long *length, char *is_null, char *error);
 
-my_bool  agg_char2_row_col_pack_init(UDF_INIT *initid, UDF_ARGS *args, char *message);
-void     agg_char2_row_col_pack_deinit(UDF_INIT *initid);
-void     agg_char2_row_col_pack_clear(UDF_INIT *initid, char *is_null, char *error);
-my_bool  agg_char2_row_col_pack_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error);
-char *   agg_char2_row_col_pack(UDF_INIT *initid, UDF_ARGS *args, char *result,
+my_bool  agg_hash_agg_row_col_pack_init(UDF_INIT *initid, UDF_ARGS *args, char *message);
+void     agg_hash_agg_row_col_pack_deinit(UDF_INIT *initid);
+void     agg_hash_agg_row_col_pack_clear(UDF_INIT *initid, char *is_null, char *error);
+my_bool  agg_hash_agg_row_col_pack_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error);
+char *   agg_hash_agg_row_col_pack(UDF_INIT *initid, UDF_ARGS *args, char *result,
              unsigned long *length, char *is_null, char *error);
 
 void     func_add_set_deinit(UDF_INIT *initid);
@@ -805,65 +937,65 @@ agg(UDF_INIT *initid, UDF_ARGS *args, char *result,
 }
 
 my_bool
-sum_char2_int_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
+sum_hash_agg_int_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
 {
-  return sum_char2_impl<uint64_t>::init(initid, args, message);
+  return sum_hash_agg_impl<uint64_t>::init(initid, args, message);
 }
 
 void
-sum_char2_int_deinit(UDF_INIT *initid)
+sum_hash_agg_int_deinit(UDF_INIT *initid)
 {
-  sum_char2_impl<uint64_t>::deinit(initid);
+  sum_hash_agg_impl<uint64_t>::deinit(initid);
 }
 
 void
-sum_char2_int_clear(UDF_INIT *initid, char *is_null, char *error)
+sum_hash_agg_int_clear(UDF_INIT *initid, char *is_null, char *error)
 {
-  sum_char2_impl<uint64_t>::clear(initid, is_null, error);
+  sum_hash_agg_impl<uint64_t>::clear(initid, is_null, error);
 }
 
 my_bool
-sum_char2_int_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error)
+sum_hash_agg_int_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error)
 {
-  return sum_char2_impl<uint64_t>::add(initid, args, is_null, error);
+  return sum_hash_agg_impl<uint64_t>::add(initid, args, is_null, error);
 }
 
 char *
-sum_char2_int(UDF_INIT *initid, UDF_ARGS *args, char *result,
+sum_hash_agg_int(UDF_INIT *initid, UDF_ARGS *args, char *result,
     unsigned long *length, char *is_null, char *error)
 {
-  return sum_char2_impl<uint64_t>::agg(initid, args, result, length, is_null, error);
+  return sum_hash_agg_impl<uint64_t>::agg(initid, args, result, length, is_null, error);
 }
 
 my_bool
-sum_char2_double_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
+sum_hash_agg_double_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
 {
-  return sum_char2_impl<double>::init(initid, args, message);
+  return sum_hash_agg_impl<double>::init(initid, args, message);
 }
 
 void
-sum_char2_double_deinit(UDF_INIT *initid)
+sum_hash_agg_double_deinit(UDF_INIT *initid)
 {
-  sum_char2_impl<double>::deinit(initid);
+  sum_hash_agg_impl<double>::deinit(initid);
 }
 
 void
-sum_char2_double_clear(UDF_INIT *initid, char *is_null, char *error)
+sum_hash_agg_double_clear(UDF_INIT *initid, char *is_null, char *error)
 {
-  sum_char2_impl<double>::clear(initid, is_null, error);
+  sum_hash_agg_impl<double>::clear(initid, is_null, error);
 }
 
 my_bool
-sum_char2_double_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error)
+sum_hash_agg_double_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error)
 {
-  return sum_char2_impl<double>::add(initid, args, is_null, error);
+  return sum_hash_agg_impl<double>::add(initid, args, is_null, error);
 }
 
 char *
-sum_char2_double(UDF_INIT *initid, UDF_ARGS *args, char *result,
+sum_hash_agg_double(UDF_INIT *initid, UDF_ARGS *args, char *result,
     unsigned long *length, char *is_null, char *error)
 {
-  return sum_char2_impl<double>::agg(initid, args, result, length, is_null, error);
+  return sum_hash_agg_impl<double>::agg(initid, args, result, length, is_null, error);
 }
 
 struct agg_char2_state {
@@ -883,7 +1015,7 @@ struct agg_char2_state {
     mpz_t n2_mp;
 
     // parallel stuff
-    bool run_in_parallel;
+    size_t num_threads; /* 0 means don't run in || */
 
     std::vector< pthread_t > workers;
     std::vector< worker_state > worker_states;
@@ -940,12 +1072,12 @@ agg_char2_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
     MPZFromBytes(as->n2_mp, (const uint8_t *) args->args[3],
                  args->lengths[3]);
 
-    as->run_in_parallel = *((long long *) args->args[4]);
+    as->num_threads = *((long long *) args->args[4]);
 
-    if (as->run_in_parallel) {
-      as->workers.resize(AggRowColPack::NumThreads);
-      as->worker_states.resize(AggRowColPack::NumThreads);
-      for (size_t i = 0; i < AggRowColPack::NumThreads; i++) {
+    if (as->num_threads) {
+      as->workers.resize(as->num_threads);
+      as->worker_states.resize(as->num_threads);
+      for (size_t i = 0; i < as->num_threads; i++) {
         as->worker_states[i].as  = as;
         pthread_create(&as->workers[i], NULL, agg_char2_state::worker_main, &as->worker_states[i]);
       }
@@ -1005,10 +1137,10 @@ agg_char2_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error)
     MPZFromBytes(m.value, (const uint8_t *) args->args[2],
                  args->lengths[2]);
 
-    if (as->run_in_parallel) {
+    if (as->num_threads) {
       // queue job
       m.key = key;
-      as->worker_states[ as->workerCnt++ % AggRowColPack::NumThreads ].q.push(m);
+      as->worker_states[ as->workerCnt++ % as->num_threads ].q.push(m);
     } else {
       // execute job
       mpz_mul(sum->mp, sum->mp, m.value);
@@ -1025,21 +1157,21 @@ agg_char2(UDF_INIT *initid, UDF_ARGS *args, char *result,
 {
     agg_char2_state *as = (agg_char2_state *) initid->ptr;
 
-    if (as->run_in_parallel) {
+    if (as->num_threads) {
       agg_char2_state::worker_msg m;
       m.shutdown = true;
 
-      for (size_t i = 0; i < AggRowColPack::NumThreads; i++) {
+      for (size_t i = 0; i < as->num_threads; i++) {
         // signal all threads to stop
         as->worker_states[i].q.push(m);
       }
 
-      for (size_t i = 0; i < AggRowColPack::NumThreads; i++) {
+      for (size_t i = 0; i < as->num_threads; i++) {
         // wait until computation is done
         pthread_join(as->workers[i], NULL);
       }
 
-      for (size_t i = 0; i < AggRowColPack::NumThreads; i++) {
+      for (size_t i = 0; i < as->num_threads; i++) {
         // merge (aggregate) results from workers into main results
         agg_char2_state::worker_state& s = as->worker_states[i];
         for (auto it = s.aggs.begin(); it != s.aggs.end(); ++it) {
@@ -1073,7 +1205,7 @@ agg_char2(UDF_INIT *initid, UDF_ARGS *args, char *result,
 struct worker_msg {
   bool shutdown;
   struct ent {
-    uint16_t group_key;
+    agg_group_key group_key;
     size_t group_id;
     size_t idx;
   };
@@ -1081,29 +1213,28 @@ struct worker_msg {
   mpz_t value; // worker must free
 };
 
-
-
 // forward decl
-struct agg_char2_row_pack_state;
+struct agg_hash_agg_row_pack_state;
 
 struct worker_state {
   std::map<
-    uint16_t,
+    agg_group_key,
     std::vector< std::vector< mpz_wrapper > > > group_map;
   concurrent_bounded_queue<worker_msg> q;
-  agg_char2_row_pack_state* as;
+  agg_hash_agg_row_pack_state* as;
 };
 
-struct agg_char2_row_pack_state {
+struct agg_hash_agg_row_pack_state {
     struct per_group_state {
         std::vector< std::vector< mpz_wrapper > > running_sums_mp;
         uint64_t count;
     };
 
-    typedef std::map<uint16_t, per_group_state> group_map;
+    size_t num_group_fields;
+
+    typedef std::map<agg_group_key, per_group_state> group_map;
     group_map aggs;
 
-    uint32_t fields_mask;
     mpz_t n2_mp;
 
     void *rbuf;
@@ -1115,14 +1246,14 @@ struct agg_char2_row_pack_state {
     size_t num_groups;
 
     // parallel data structures
-    bool run_in_parallel;
+    size_t num_threads; /* 0 means don't run in || */
     std::vector< pthread_t > workers;
     std::vector< worker_state > worker_states;
     size_t workerCnt;
 
     // internal element buffer
     typedef std::map<
-      uint16_t,
+      agg_group_key,
       std::vector< std::pair< uint64_t, uint64_t > > > element_buffer_map;
     element_buffer_map element_buffer;
 
@@ -1191,72 +1322,110 @@ static void* worker_main(void* p) {
   return NULL;
 }
 
-my_bool
-agg_char2_row_col_pack_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
-{
-    if (args->arg_count <= 8) {
-        strcpy(message, "need to provide more than 8 args");
-        return 1;
-    }
+#define EXTRACT_INT(pos) \
+  *((long long *)args->args[(pos)])
 
-    agg_char2_row_pack_state *as = new agg_char2_row_pack_state;
+#define EXTRACT_DBL(pos) \
+  *((double *)args->args[(pos)])
+
+#define EXTRACT_STR(pos) \
+  string(args->args[(pos)], (size_t) args->lengths[(pos)])
+
+my_bool
+agg_hash_agg_row_col_pack_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
+{
+
+    // input args:
+    //
+    // num_group_key_elems,
+    // ...,
+    // row_id,
+    // public_key,
+    // filename,
+    // use_parallelism,
+    // agg_size,
+    // rows_per_agg,
+    // group_0,
+    // group_1,
+    // ...,
+    // group_N
+
+#define BAIL(msg) \
+  do { \
+    strcpy(message, (msg)); \
+    return 1; \
+  } while (0)
+
+#define EXPECT_CONST(pos, msg) \
+  do { \
+    if (args->arg_count <= (pos)) { \
+      BAIL(msg); \
+    } \
+    if (args->args[(pos)] == NULL) { \
+      BAIL(msg); \
+    } \
+  } while (0)
+
+#define EXPECT_CONST_TYPE(pos, type, msg) \
+  do { \
+    if (args->arg_count <= (pos)) { \
+      BAIL(msg); \
+    } \
+    if (args->args[(pos)] == NULL || \
+        args->arg_type[(pos)] != (type)) { \
+      BAIL(msg); \
+    } \
+  } while (0)
+
+    EXPECT_CONST_TYPE(0, INT_RESULT, "num_group_fields");
+
+    agg_hash_agg_row_pack_state *as = new agg_hash_agg_row_pack_state;
+    as->num_group_fields = EXTRACT_INT(0);
     as->rbuf = NULL;
 
-    if (args->args[3] == NULL) {
-        strcpy(message, "need to provide PK");
-        return 1;
-    }
+    agg_group_key::coerce_types(args, 1, as->num_group_fields);
 
-    if (args->args[4] == NULL) {
-        strcpy(message, "need to provide filename");
-        return 1;
-    }
+    EXPECT_CONST(as->num_group_fields + 2 , "primary_key");
+    mpz_init(as->n2_mp);
+    MPZFromBytes(as->n2_mp,
+                 (const uint8_t *) args->args[as->num_group_fields + 2],
+                 args->lengths[as->num_group_fields + 2]);
 
-    if (args->args[5] == NULL) {
-        strcpy(message, "need to provide parallelism flag");
-        return 1;
-    }
-
-    if (args->args[6] == NULL) {
-        strcpy(message, "need to provide agg_size (bytes)");
-        return 1;
-    }
-
-    if (args->args[7] == NULL) {
-        strcpy(message, "need to provide rows_per_agg");
-        return 1;
-    }
+    EXPECT_CONST_TYPE(as->num_group_fields + 3, STRING_RESULT, "filename");
 
     // TODO: fix security
-    string name(args->args[4], args->lengths[4]);
+    string name = EXTRACT_STR(as->num_group_fields + 3);
+    as->fp = fopen(name.c_str(), "rb");
+    assert(as->fp);
 
-    as->run_in_parallel = *((long long *) args->args[5]);
-    as->agg_size = *((long long *) args->args[6]);
-    as->rows_per_agg = *((long long *) args->args[7]);
+    EXPECT_CONST_TYPE(as->num_group_fields + 4, INT_RESULT, "parallelism_flag");
+    assert(EXTRACT_INT(as->num_group_fields + 4) >= 0);
+    as->num_threads = EXTRACT_INT(as->num_group_fields + 4);
+
+    EXPECT_CONST_TYPE(as->num_group_fields + 5, INT_RESULT, "agg_size");
+    as->agg_size = EXTRACT_INT(as->num_group_fields + 5);
+
+    EXPECT_CONST_TYPE(as->num_group_fields + 6, INT_RESULT, "rows_per_agg");
+    as->rows_per_agg = EXTRACT_INT(as->num_group_fields + 6);
 
     assert(as->agg_size > 0);
     assert(as->rows_per_agg > 0);
 
-    as->num_groups = args->arg_count - 8;
+    as->num_groups =
+      (ssize_t)args->arg_count -
+      (ssize_t)(as->num_group_fields + 7);
     assert(as->num_groups > 0);
 
-    mpz_init(as->n2_mp);
-    MPZFromBytes(as->n2_mp, (const uint8_t *) args->args[3],
-                 args->lengths[3]);
-
-    if (as->run_in_parallel) {
+    if (as->num_threads) {
       // init the worker threads
-      as->workers.resize(AggRowColPack::NumThreads);
-      as->worker_states.resize(AggRowColPack::NumThreads);
-      for (size_t i = 0; i < AggRowColPack::NumThreads; i++) {
+      as->workers.resize(as->num_threads);
+      as->worker_states.resize(as->num_threads);
+      for (size_t i = 0; i < as->num_threads; i++) {
         as->worker_states[i].as  = as;
         pthread_create(&as->workers[i], NULL, worker_main, &as->worker_states[i]);
       }
       as->workerCnt = 0; // for RR-ing work to all workers
     }
-
-    as->fp = fopen(name.c_str(), "rb");
-    assert(as->fp);
 
     // load the first block
     as->internal_buffer =
@@ -1284,9 +1453,9 @@ agg_char2_row_col_pack_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
 }
 
 void
-agg_char2_row_col_pack_deinit(UDF_INIT *initid)
+agg_hash_agg_row_col_pack_deinit(UDF_INIT *initid)
 {
-    agg_char2_row_pack_state *as = (agg_char2_row_pack_state *) initid->ptr;
+    agg_hash_agg_row_pack_state *as = (agg_hash_agg_row_pack_state *) initid->ptr;
     mpz_clear(as->n2_mp);
     free(as->rbuf);
     free(as->internal_buffer);
@@ -1296,9 +1465,9 @@ agg_char2_row_col_pack_deinit(UDF_INIT *initid)
 }
 
 void
-agg_char2_row_col_pack_clear(UDF_INIT *initid, char *is_null, char *error)
+agg_hash_agg_row_col_pack_clear(UDF_INIT *initid, char *is_null, char *error)
 {
-    agg_char2_row_pack_state *as = (agg_char2_row_pack_state *) initid->ptr;
+    agg_hash_agg_row_pack_state *as = (agg_hash_agg_row_pack_state *) initid->ptr;
     as->aggs.clear();
     as->block_id = 0;
     as->block_buf = as->internal_buffer;
@@ -1311,14 +1480,18 @@ agg_char2_row_col_pack_clear(UDF_INIT *initid, char *is_null, char *error)
             as->fp);
 }
 
-static void flush_group_buffers(agg_char2_row_pack_state *as) {
+static void flush_group_buffers(agg_hash_agg_row_pack_state *as) {
 
     //as->debug_stream << "flush_group_buffers: starting" << endl;
     //as->debug_stream.flush();
     //timer t;
 
     typedef
-      map< uint64_t /*block_id*/, vector< vector< uint32_t > > /* masks (per user group) */ >
+      map
+       <
+        uint64_t /*block_id*/,
+        vector< vector< uint32_t > > /* masks (per user group) */
+       >
       control_group;
 
     // value is ordered list based on the pair's first element
@@ -1326,7 +1499,7 @@ static void flush_group_buffers(agg_char2_row_pack_state *as) {
       <
         pair
         <
-          uint16_t /*group_id*/,
+          agg_group_key /*group_id*/,
           control_group
         >
       > allocation_map;
@@ -1335,13 +1508,13 @@ static void flush_group_buffers(agg_char2_row_pack_state *as) {
     alloc_map.resize(as->element_buffer.size());
 
     size_t eit_pos = 0;
-    for (agg_char2_row_pack_state::element_buffer_map::iterator
+    for (agg_hash_agg_row_pack_state::element_buffer_map::iterator
             eit = as->element_buffer.begin();
          eit != as->element_buffer.end(); ++eit, ++eit_pos) {
       // lookup agg group
-      agg_char2_row_pack_state::group_map::iterator it =
+      agg_hash_agg_row_pack_state::group_map::iterator it =
         as->aggs.find(eit->first);
-      agg_char2_row_pack_state::per_group_state* s = NULL;
+      agg_hash_agg_row_pack_state::per_group_state* s = NULL;
       if (UNLIKELY(it == as->aggs.end())) {
           s = &as->aggs[eit->first]; // creates on demand
           s->running_sums_mp.resize(as->num_groups);
@@ -1470,9 +1643,9 @@ static void flush_group_buffers(agg_char2_row_pack_state *as) {
         if (group.first /* done */ ||
             group.second->first /* block_id */ != minSoFar) continue;
 
-        uint16_t group_key = alloc_map[i].first;
-        agg_char2_row_pack_state::per_group_state* s = NULL;
-        if (!as->run_in_parallel) s = &as->aggs[group_key];
+        agg_group_key& group_key = alloc_map[i].first;
+        agg_hash_agg_row_pack_state::per_group_state* s = NULL;
+        if (!as->num_threads) s = &as->aggs[group_key];
 
         // push all these multiplications into the queue
         size_t group_id_idx = 0;
@@ -1480,12 +1653,12 @@ static void flush_group_buffers(agg_char2_row_pack_state *as) {
              it != group.second->second.end(); ++it, ++group_id_idx) {
 
           vector<mpz_wrapper>* ss = NULL;
-          if (!as->run_in_parallel) ss = &s->running_sums_mp[group_id_idx];
+          if (!as->num_threads) ss = &s->running_sums_mp[group_id_idx];
 
           for (vector<uint32_t>::iterator it0 = it->begin();
                it0 != it->end(); ++it0) {
 
-            if (as->run_in_parallel) {
+            if (as->num_threads) {
               worker_msg::ent e;
               e.group_key = group_key;
               e.group_id  = group_id_idx;
@@ -1511,8 +1684,8 @@ static void flush_group_buffers(agg_char2_row_pack_state *as) {
         group.first = group.second == alloc_map[i].second.end();
       }
 
-      if (as->run_in_parallel) {
-        as->worker_states[ as->workerCnt++ % AggRowColPack::NumThreads ].q.push(m);
+      if (as->num_threads) {
+        as->worker_states[ as->workerCnt++ % as->num_threads ].q.push(m);
       } else {
         // clear the memory
         mpz_clear(m.value);
@@ -1531,19 +1704,16 @@ static void flush_group_buffers(agg_char2_row_pack_state *as) {
 }
 
 my_bool
-agg_char2_row_col_pack_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error)
+agg_hash_agg_row_col_pack_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error)
 {
-    agg_char2_row_pack_state *as = (agg_char2_row_pack_state *) initid->ptr;
+    agg_hash_agg_row_pack_state *as = (agg_hash_agg_row_pack_state *) initid->ptr;
 
-    long long p0, p1, row_id;
-    p0     = *((long long *) args->args[0]);
-    p1     = *((long long *) args->args[1]);
-    row_id = *((long long *) args->args[2]);
-
-    uint16_t key = (uint8_t(p0) << 8) | uint8_t(p1);
+    agg_group_key key;
+    agg_group_key::make_key(args, 1, as->num_group_fields, key);
+    uint64_t row_id = EXTRACT_INT(as->num_group_fields + 1);
 
     // insert into buffer
-    agg_char2_row_pack_state::element_buffer_map::iterator it =
+    agg_hash_agg_row_pack_state::element_buffer_map::iterator it =
       as->element_buffer.find(key);
     vector< pair<uint64_t, uint64_t> >* elem_buffer = NULL;
     if (UNLIKELY(it == as->element_buffer.end())) {
@@ -1556,7 +1726,7 @@ agg_char2_row_col_pack_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char
     // create bitmap
     uint64_t m = 0;
     for (size_t i = 0; i < as->num_groups; i++) {
-      long long emit = *((long long *) args->args[i + 8]);
+      long long emit = EXTRACT_INT(as->num_group_fields + 7 + i);
       if (emit) m |= (0x1 << i);
     }
 
@@ -1573,33 +1743,33 @@ agg_char2_row_col_pack_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char
 }
 
 char *
-agg_char2_row_col_pack(UDF_INIT *initid, UDF_ARGS *args, char *result,
+agg_hash_agg_row_col_pack(UDF_INIT *initid, UDF_ARGS *args, char *result,
     unsigned long *length, char *is_null, char *error)
 {
-    agg_char2_row_pack_state *as = (agg_char2_row_pack_state *) initid->ptr;
+    agg_hash_agg_row_pack_state *as = (agg_hash_agg_row_pack_state *) initid->ptr;
 
     // flush all buffers
     flush_group_buffers(as);
 
-    if (as->run_in_parallel) {
+    if (as->num_threads) {
       // wait until workers are done
       worker_msg m;
       m.shutdown = true;
 
-      for (size_t i = 0; i < AggRowColPack::NumThreads; i++) {
+      for (size_t i = 0; i < as->num_threads; i++) {
         // signal all threads to stop
         as->worker_states[i].q.push(m);
       }
 
-      for (size_t i = 0; i < AggRowColPack::NumThreads; i++) {
+      for (size_t i = 0; i < as->num_threads; i++) {
         // wait until computation is done
         pthread_join(as->workers[i], NULL);
       }
 
-      for (size_t i = 0; i < AggRowColPack::NumThreads; i++) {
+      for (size_t i = 0; i < as->num_threads; i++) {
         // merge (aggregate) results from workers into main results
         worker_state& s = as->worker_states[i];
-        for (map< uint16_t, vector< vector<mpz_wrapper> > >::iterator
+        for (map< agg_group_key, vector< vector<mpz_wrapper> > >::iterator
               it = s.group_map.begin();
              it != s.group_map.end(); ++it) {
           assert( it->second.size() == as->num_groups );
@@ -1617,11 +1787,11 @@ agg_char2_row_col_pack(UDF_INIT *initid, UDF_ARGS *args, char *result,
     }
 
     // calculate length
-    map< uint16_t, vector< size_t > > non_zero_m;
+    map< agg_group_key, vector< size_t > > non_zero_m;
     *length = 0;
-    for (agg_char2_row_pack_state::group_map::iterator it = as->aggs.begin();
+    for (agg_hash_agg_row_pack_state::group_map::iterator it = as->aggs.begin();
          it != as->aggs.end(); ++it) {
-      *length += 2; /* group key */
+      *length += it->first.size_needed(); /* group key */
       *length += sizeof(uint64_t); /* number of data items in this group (ie count(*)) */
 
       vector<size_t>& nn = non_zero_m[it->first];
@@ -1641,7 +1811,7 @@ agg_char2_row_col_pack(UDF_INIT *initid, UDF_ARGS *args, char *result,
     }
 
     //as->debug_stream << "seeks = " << as->st.seeks << endl;
-    as->debug_stream << "run_in_parallel = " << (as->run_in_parallel ? "yes" : "no") << endl;
+    as->debug_stream << "run_in_parallel = " << (as->num_threads ? "yes" : "no") << endl;
     as->debug_stream << "length = " << *length << endl;
     as->debug_stream << "mults = " << as->st.mults << endl;
     as->debug_stream << "all_pos = " << as->st.all_pos << endl;
@@ -1653,10 +1823,9 @@ agg_char2_row_col_pack(UDF_INIT *initid, UDF_ARGS *args, char *result,
 
     uint8_t* ptr = (uint8_t *) as->rbuf;
 
-    for (agg_char2_row_pack_state::group_map::iterator it = as->aggs.begin();
+    for (agg_hash_agg_row_pack_state::group_map::iterator it = as->aggs.begin();
          it != as->aggs.end(); ++it) {
-        *ptr++ = (uint8_t) ((it->first >> 8) & 0xFF);
-        *ptr++ = (uint8_t) (it->first & 0xFF);
+        ptr = it->first.write_key(ptr);
 
         uint64_t *iptr = (uint64_t *) ptr;
         *iptr = it->second.count;
@@ -1684,11 +1853,11 @@ agg_char2_row_col_pack(UDF_INIT *initid, UDF_ARGS *args, char *result,
         }
     }
 
-    if (as->run_in_parallel) {
+    if (as->num_threads) {
       // need to clear worker states
-      for (size_t i = 0; i < AggRowColPack::NumThreads; i++) {
+      for (size_t i = 0; i < as->num_threads; i++) {
         worker_state& s = as->worker_states[i];
-        for (map<uint16_t, vector< vector<mpz_wrapper> > >::iterator
+        for (map<agg_group_key, vector< vector<mpz_wrapper> > >::iterator
               it = s.group_map.begin();
              it != s.group_map.end(); ++it) {
           for (vector< vector<mpz_wrapper> >::iterator it0 = it->second.begin();

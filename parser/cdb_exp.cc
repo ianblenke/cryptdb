@@ -27,6 +27,40 @@ static bool DoParallel = true;
 static bool UseMYISAM = false;
 static const size_t NumThreads = 8;
 
+template <typename T> struct ctype_to_itemres {};
+
+template <> struct ctype_to_itemres<int64_t> {
+  static const uint8_t type = INT_RESULT;
+};
+template <> struct ctype_to_itemres<double> {
+  static const uint8_t type = REAL_RESULT;
+};
+template <> struct ctype_to_itemres<string> {
+  static const uint8_t type = STRING_RESULT;
+};
+
+template <typename T>
+T ReadKeyElem(const uint8_t*& buf) {
+  uint8_t type = *buf++;
+  assert(type == ctype_to_itemres<T>::type);
+  const T* p = (const T *) buf;
+  T r = *p;
+  buf += sizeof(T);
+  return r;
+}
+
+template <>
+string ReadKeyElem<string>(const uint8_t*& buf) {
+  uint8_t type = *buf++;
+  assert(type == ctype_to_itemres<string>::type);
+  const uint32_t* p = (const uint32_t *) buf;
+  uint32_t s = *p;
+  buf += sizeof(uint32_t);
+  string r((const char *)buf, (size_t) s);
+  buf += s;
+  return r;
+}
+
 static inline uint32_t EncodeDate(uint32_t month, uint32_t day, uint32_t year) {
   return day | (month << 5) | (year << 9);
 }
@@ -658,7 +692,7 @@ struct Q1NoSortImplInfo {};
 
 template <>
 struct Q1NoSortImplInfo<uint64_t> {
-  static inline const char * agg_func_name() { return "sum_char2_int"; }
+  static inline const char * agg_func_name() { return "sum_hash_agg_int"; }
   static inline const char * table_name()
     { return UseMYISAM ? "LINEITEM_INT_MYISAM" : "LINEITEM_INT"; }
   static inline const char * unit() { return "100"; }
@@ -670,7 +704,7 @@ struct Q1NoSortImplInfo<uint64_t> {
 
 template <>
 struct Q1NoSortImplInfo<double> {
-  static inline const char * agg_func_name() { return "sum_char2_double"; }
+  static inline const char * agg_func_name() { return "sum_hash_agg_double"; }
   static inline const char * table_name()
     { return UseMYISAM ? "LINEITEM_DOUBLE_MYISAM" : "LINEITEM_DOUBLE"; }
   static inline const char * unit() { return "1.0"; }
@@ -678,10 +712,14 @@ struct Q1NoSortImplInfo<double> {
   static inline double convert(double i, size_t n) { return i; }
 };
 
+
+
 template <typename T>
 struct Q1NoSortImpl {
   typedef map< pair< uint8_t, uint8_t >,
                pair< uint64_t, T > > Q1AggGroup;
+
+
 
   static void ReadChar2AggGroup(const string& data,
                                 Q1AggGroup& agg_group) {
@@ -689,8 +727,8 @@ struct Q1NoSortImpl {
     const uint8_t *p   = (const uint8_t *) data.data();
     const uint8_t *end = (const uint8_t *) data.data() + data.size();
     while (p < end) {
-      uint8_t l_returnflag = *p++;
-      uint8_t l_linestatus = *p++;
+      uint8_t l_returnflag = ReadKeyElem<int64_t>(p);
+      uint8_t l_linestatus = ReadKeyElem<int64_t>(p);
       const uint64_t *u64p = (const uint64_t *) p;
       uint64_t count = *u64p;
       p += sizeof(uint64_t);
@@ -708,7 +746,7 @@ struct Q1NoSortImpl {
     const char *unit = Q1NoSortImplInfo<T>::unit();
 
     ostringstream buf;
-    buf << "select SQL_NO_CACHE " << agg_name << "(l_returnflag, l_linestatus, l_quantity) as sum_qty, " << agg_name << "(l_returnflag, l_linestatus, l_extendedprice) as sum_base_price, " << agg_name << "(l_returnflag, l_linestatus, l_extendedprice * (" << unit << " - l_discount)) as sum_disc_price, " << agg_name << "(l_returnflag, l_linestatus, l_extendedprice * (" << unit << " - l_discount) * (" << unit << " + l_tax)) as sum_charge, " << agg_name << "(l_returnflag, l_linestatus, l_discount) as sum_disc from " << Q1NoSortImplInfo<T>::table_name()
+    buf << "select SQL_NO_CACHE " <<  agg_name << "(2, l_returnflag, l_linestatus, l_quantity) as sum_qty, " <<  agg_name << "(2, l_returnflag, l_linestatus, l_extendedprice) as sum_base_price, " <<  agg_name << "(2, l_returnflag, l_linestatus, l_extendedprice * (" << unit << " - l_discount)) as sum_disc_price, " <<  agg_name << "(2, l_returnflag, l_linestatus, l_extendedprice * (" << unit << " - l_discount) * (" << unit << " + l_tax)) as sum_charge, " <<  agg_name << "(2, l_returnflag, l_linestatus, l_discount) as sum_disc from " << Q1NoSortImplInfo<T>::table_name()
         << " where l_shipdate <= date '" << year << "-1-1'"
         ;
     cerr << buf.str() << endl;
@@ -1077,12 +1115,13 @@ static void do_query_q1_opt_row_col_pack(Connect &conn,
     string pkinfo = marshallBinary(StringFromZZ(pk[0] * pk[0]));
     ostringstream s;
     s <<
-      "SELECT SQL_NO_CACHE agg_char2_row_col_pack("
+      "SELECT SQL_NO_CACHE agg_hash_agg_row_col_pack("
+        "2, "
         "l_returnflag_DET, "
         "l_linestatus_DET, "
         "row_id, "
         << pkinfo << ", " <<
-        "\"" << filename << "\", " << (DoParallel ? "1" : "0")
+        "\"" << filename << "\", " << (DoParallel ? to_s(NumThreads) : string("0"))
         << ", " << (RowColPackCipherSize/8) << ", 3, 1"
       ") FROM " << (UseMYISAM ? "lineitem_enc_noagg_rowid_MYISAM" : "lineitem_enc_noagg_rowid")
       << " WHERE l_shipdate_OPE <= " << encDATE
@@ -1117,8 +1156,8 @@ static void do_query_q1_opt_row_col_pack(Connect &conn,
       const uint8_t *end = (const uint8_t *) data.data() + data.size();
       while (p < end) {
 
-        unsigned char l_returnflag_DET = *p++;
-        unsigned char l_linestatus_DET = *p++;
+        unsigned char l_returnflag_DET = ReadKeyElem<int64_t>(p);
+        unsigned char l_linestatus_DET = ReadKeyElem<int64_t>(p);
 
         // l_returnflag
         unsigned char l_returnflag_ch = (unsigned char) decryptRow<uint32_t, 1>(
@@ -2503,8 +2542,9 @@ static void do_query_crypt_q6(Connect &conn,
     ostringstream s;
     s <<
       "select"
-      " agg_char2_row_col_pack(1, 1, row_id, "
-        << pkinfo << ", " << "\"" << filename << "\", 1, 256, 12, 1) "
+      " agg_hash_agg_row_col_pack(0, row_id, "
+        << pkinfo << ", " << "\"" << filename << "\", "
+        << NumThreads << ", 256, 12, 1) "
       "from"
       "	lineitem_enc_noagg_rowid "
       "where"
@@ -2540,12 +2580,6 @@ static void do_query_crypt_q6(Connect &conn,
       const uint8_t *p   = (const uint8_t *) data.data();
       const uint8_t *end = (const uint8_t *) data.data() + data.size();
       while (p < end) {
-
-        unsigned char dummy0 = *p++;
-        unsigned char dummy1 = *p++;
-
-        assert(unsigned(dummy0) == 1);
-        assert(unsigned(dummy1) == 1);
 
         // skip over count
         p += sizeof(uint64_t);
@@ -2989,9 +3023,9 @@ static void do_query_q14_opt2(Connect &conn,
     string filename =
       "/space/stephentu/data/" + db + "/lineitem_enc/row_pack/disc_price";
 
-    s << "SELECT SQL_NO_CACHE agg_char2_row_col_pack(1, 1, row_id, "
+    s << "SELECT SQL_NO_CACHE agg_hash_agg_row_col_pack(0, row_id, "
         << pkinfo << ", " <<
-        "\"" << filename << "\", 1, 256, 12, "
+        "\"" << filename << "\", " << NumThreads << ", 256, 12, "
         << "searchSWP("
           << marshallBinary(string((char *)t.ciph.content, t.ciph.len))
           << ", "
@@ -3030,12 +3064,6 @@ static void do_query_q14_opt2(Connect &conn,
       const uint8_t *p   = (const uint8_t *) data.data();
       const uint8_t *end = (const uint8_t *) data.data() + data.size();
       while (p < end) {
-
-        unsigned char dummy0 = *p++;
-        unsigned char dummy1 = *p++;
-
-        assert(unsigned(dummy0) == 1);
-        assert(unsigned(dummy1) == 1);
 
         // skip over count
         p += sizeof(uint64_t);
