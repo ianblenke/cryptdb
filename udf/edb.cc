@@ -36,6 +36,7 @@ using namespace tbb;
 
 #define LIKELY(pred)   __builtin_expect(!!(pred), true)
 #define UNLIKELY(pred) __builtin_expect(!!(pred), false)
+#define ATTR_UNUSED    __attribute__ ((unused))
 
 #define TRACE()
 #define SANITY(x) assert(x)
@@ -1262,9 +1263,10 @@ agg_char2_row_col_pack_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
       (char *) malloc( as->agg_size * AggRowColPack::NumBlocksInternalBuffer );
     assert(as->internal_buffer);
     as->internal_block_id = 0;
-    fread(as->internal_buffer, 1,
-          as->agg_size * AggRowColPack::NumBlocksInternalBuffer,
-          as->fp);
+    size_t n ATTR_UNUSED =
+      fread(as->internal_buffer, 1,
+            as->agg_size * AggRowColPack::NumBlocksInternalBuffer,
+            as->fp);
 
     as->block_id = 0;
     as->block_size = as->agg_size;
@@ -1303,9 +1305,10 @@ agg_char2_row_col_pack_clear(UDF_INIT *initid, char *is_null, char *error)
     as->internal_block_id = 0;
     fseek(as->fp, 0, SEEK_SET);
     // reload the first block
-    fread(as->internal_buffer, 1,
-          as->agg_size * AggRowColPack::NumBlocksInternalBuffer,
-          as->fp);
+    size_t n ATTR_UNUSED =
+      fread(as->internal_buffer, 1,
+            as->agg_size * AggRowColPack::NumBlocksInternalBuffer,
+            as->fp);
 }
 
 static void flush_group_buffers(agg_char2_row_pack_state *as) {
