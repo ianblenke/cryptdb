@@ -127,13 +127,14 @@ struct agg_group_key {
         elems[i].i = *((long long *)args->args[j]);
         break;
       case REAL_RESULT:
-        elems[i].d = *((long long *)args->args[j]);
+        elems[i].d = *((double *)args->args[j]);
         break;
       case STRING_RESULT:
         elems[i].s = string(args->args[j], (size_t) args->lengths[j]);
         break;
       default: assert(false);
       }
+      elems[i].type = args->arg_type[i];
     }
   }
 
@@ -201,7 +202,7 @@ namespace {
       switch (e.type) {
       case INT_RESULT:    o << e.i << " (int)"; break;
       case REAL_RESULT:   o << e.d << " (dbl)"; break;
-      case STRING_RESULT: o << e.s << " (str)"; break;
+      case STRING_RESULT: o << marshallBinary(e.s) << " (str)"; break;
       default: assert(false);
       }
       if (i != k.elems.size() - 1) {
@@ -1822,6 +1823,9 @@ agg_hash_agg_row_col_pack(UDF_INIT *initid, UDF_ARGS *args, char *result,
     *length = 0;
     for (agg_hash_agg_row_pack_state::group_map::iterator it = as->aggs.begin();
          it != as->aggs.end(); ++it) {
+
+      as->debug_stream << "final group: " << it->first << endl;
+
       *length += it->first.size_needed(); /* group key */
       *length += sizeof(uint64_t); /* number of data items in this group (ie count(*)) */
 
