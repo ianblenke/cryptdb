@@ -749,8 +749,8 @@ struct Q1NoSortImpl {
     const uint8_t *p   = (const uint8_t *) data.data();
     const uint8_t *end = (const uint8_t *) data.data() + data.size();
     while (p < end) {
-      uint8_t l_returnflag = ReadKeyElem<int64_t>(p);
-      uint8_t l_linestatus = ReadKeyElem<int64_t>(p);
+      uint8_t l_returnflag = ReadKeyElem<string>(p)[0];
+      uint8_t l_linestatus = ReadKeyElem<string>(p)[0];
       const uint64_t *u64p = (const uint64_t *) p;
       uint64_t count = *u64p;
       p += sizeof(uint64_t);
@@ -768,7 +768,7 @@ struct Q1NoSortImpl {
     const char *unit = Q1NoSortImplInfo<T>::unit();
 
     ostringstream buf;
-    buf << "select SQL_NO_CACHE " <<  agg_name << "(2, l_returnflag, l_linestatus, l_quantity) as sum_qty, " <<  agg_name << "(2, l_returnflag, l_linestatus, l_extendedprice) as sum_base_price, " <<  agg_name << "(2, l_returnflag, l_linestatus, l_extendedprice * (" << unit << " - l_discount)) as sum_disc_price, " <<  agg_name << "(2, l_returnflag, l_linestatus, l_extendedprice * (" << unit << " - l_discount) * (" << unit << " + l_tax)) as sum_charge, " <<  agg_name << "(2, l_returnflag, l_linestatus, l_discount) as sum_disc from " << Q1NoSortImplInfo<T>::table_name()
+    buf << "select SQL_NO_CACHE " <<  agg_name << "(l_returnflag, l_linestatus, l_quantity) as sum_qty, " <<  agg_name << "(l_returnflag, l_linestatus, l_extendedprice) as sum_base_price, " <<  agg_name << "(l_returnflag, l_linestatus, l_extendedprice * (" << unit << " - l_discount)) as sum_disc_price, " <<  agg_name << "(l_returnflag, l_linestatus, l_extendedprice * (" << unit << " - l_discount) * (" << unit << " + l_tax)) as sum_charge, " <<  agg_name << "(l_returnflag, l_linestatus, l_discount) as sum_disc from " << Q1NoSortImplInfo<T>::table_name()
         << " where l_shipdate <= date '" << year << "-1-1'"
         ;
     cerr << buf.str() << endl;

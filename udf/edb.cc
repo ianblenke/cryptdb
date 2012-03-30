@@ -43,6 +43,8 @@ using namespace tbb;
 
 // templated code must go here, before the extern "C"
 
+static ofstream trace_file("/tmp/trace.txt");
+
 template <typename T>
 struct mysql_item_result_type {};
 
@@ -98,12 +100,14 @@ struct agg_group_key {
     double d;
     string s;
   };
+
   vector<elem> elems;
 
   static void coerce_types(
       UDF_ARGS* args,
       size_t off, size_t len) {
     // coerce decimal keys into real
+    assert(args->arg_count >= (off + len));
     for (size_t i = off; i < off + len; i++) {
       if (args->arg_type[i] == DECIMAL_RESULT) {
         args->arg_type[i] = REAL_RESULT;
@@ -111,22 +115,22 @@ struct agg_group_key {
     }
   }
 
-  static void make_key(
-      UDF_ARGS* args, size_t off, size_t len,
-      agg_group_key& k) {
-    k.elems.clear();
-    k.elems.resize(len);
+  agg_group_key() { assert(elems.size() == 0); }
+
+  agg_group_key(UDF_ARGS* args, size_t off, size_t len) {
+    elems.resize(len);
     assert(args->arg_count >= (off + len));
-    for (size_t i = off; i < len; i++) {
+    assert(elems.size() == len);
+    for (size_t i = 0, j = off; j < off + len; i++, j++) {
       switch (args->arg_type[i]) {
       case INT_RESULT:
-        k.elems[i].i = *((long long *)args->args[i]);
+        elems[i].i = *((long long *)args->args[j]);
         break;
       case REAL_RESULT:
-        k.elems[i].d = *((long long *)args->args[i]);
+        elems[i].d = *((long long *)args->args[j]);
         break;
       case STRING_RESULT:
-        k.elems[i].s = string(args->args[i], (size_t) args->lengths[i]);
+        elems[i].s = string(args->args[j], (size_t) args->lengths[j]);
         break;
       default: assert(false);
       }
@@ -141,23 +145,20 @@ struct agg_group_key {
       *buf++ = (uint8_t) e.type;
       switch (e.type) {
       case INT_RESULT: {
-        int64_t* p = (int64_t *)buf;
-        *p = e.i;
-        p += sizeof(int64_t);
+        int64_t* p = (int64_t *)buf; *p = e.i;
+        buf += sizeof(int64_t);
         break;
       }
       case REAL_RESULT: {
-        double* p = (double *)buf;
-        *p = e.d;
-        p += sizeof(double);
+        double* p = (double *)buf; *p = e.d;
+        buf += sizeof(double);
         break;
       }
       case STRING_RESULT: {
-        uint32_t* p = (uint32_t *)buf;
-        *p = e.s.size();
-        p += sizeof(uint32_t);
-        memcpy(p, e.s.data(), (uint32_t)e.s.size());
-        p += (uint32_t)e.s.size();
+        uint32_t* p = (uint32_t *)buf; *p = e.s.size();
+        buf += sizeof(uint32_t);
+        memcpy(buf, e.s.data(), (uint32_t)e.s.size());
+        buf += (uint32_t)e.s.size();
         break;
       }
       default: assert(false);
@@ -170,6 +171,7 @@ struct agg_group_key {
     size_t r = 0;
     for (size_t i = 0; i < elems.size(); i++) {
       const elem& e = elems[i];
+      r += sizeof(uint8_t);
       switch (e.type) {
       case INT_RESULT: {
         r += sizeof(int64_t);
@@ -191,6 +193,26 @@ struct agg_group_key {
   }
 };
 
+namespace {
+  ostream& operator<<(ostream& o, const agg_group_key& k) {
+    o << "[";
+    for (size_t i = 0; i < k.elems.size(); i++) {
+      const agg_group_key::elem& e = k.elems[i];
+      switch (e.type) {
+      case INT_RESULT:    o << e.i << " (int)"; break;
+      case REAL_RESULT:   o << e.d << " (dbl)"; break;
+      case STRING_RESULT: o << e.s << " (str)"; break;
+      default: assert(false);
+      }
+      if (i != k.elems.size() - 1) {
+        o << ", ";
+      }
+    }
+    o << "]";
+    return o;
+  }
+}
+
 static bool operator<(const agg_group_key& a, const agg_group_key& b) {
   assert(a.elems.size() == b.elems.size());
   for (size_t i = 0; i < a.elems.size(); i++) {
@@ -200,12 +222,15 @@ static bool operator<(const agg_group_key& a, const agg_group_key& b) {
     switch (lhs.type) {
     case INT_RESULT:
       if (lhs.i < rhs.i) return true;
+      if (lhs.i > rhs.i) return false;
       break;
     case REAL_RESULT:
       if (lhs.d < rhs.d) return true;
+      if (lhs.d > rhs.d) return false;
       break;
     case STRING_RESULT:
       if (lhs.s < rhs.s) return true;
+      if (lhs.s > rhs.s) return false;
       break;
     default: assert(false);
     }
@@ -257,13 +282,19 @@ struct sum_hash_agg_impl {
       as->aggs.clear();
   }
 
+  static void print_agg_map(state* as) {
+    for (auto it = as->aggs.begin(); it != as->aggs.end(); ++it) {
+      trace_file << it->first << " : " << it->second.first << endl;
+    }
+    trace_file.flush();
+  }
+
   static my_bool
   add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error)
   {
       state *as = (state *) initid->ptr;
 
-      agg_group_key key;
-      agg_group_key::make_key(args, 0, args->arg_count - 1, key);
+      agg_group_key key(args, 0, args->arg_count - 1);
 
       typename std::map<agg_group_key, std::pair<uint64_t, T> >::iterator it =
           as->aggs.find(key);
@@ -272,6 +303,7 @@ struct sum_hash_agg_impl {
 
       if (UNLIKELY(it == as->aggs.end())) {
           std::pair<uint64_t, T>& p = as->aggs[key]; // creates on demand
+          assert(as->aggs.find(key) != as->aggs.end());
           p.first  = 1;
           p.second = val;
       } else {
@@ -1708,8 +1740,7 @@ agg_hash_agg_row_col_pack_add(UDF_INIT *initid, UDF_ARGS *args, char *is_null, c
 {
     agg_hash_agg_row_pack_state *as = (agg_hash_agg_row_pack_state *) initid->ptr;
 
-    agg_group_key key;
-    agg_group_key::make_key(args, 1, as->num_group_fields, key);
+    agg_group_key key(args, 1, as->num_group_fields);
     uint64_t row_id = EXTRACT_INT(as->num_group_fields + 1);
 
     // insert into buffer
