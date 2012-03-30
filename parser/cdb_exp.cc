@@ -42,6 +42,7 @@ template <> struct ctype_to_itemres<string> {
 template <typename T>
 T ReadKeyElem(const uint8_t*& buf) {
   uint8_t type = *buf++;
+  cerr << "type: " << (int)type << endl;
   assert(type == ctype_to_itemres<T>::type);
   const T* p = (const T *) buf;
   T r = *p;
@@ -2644,46 +2645,30 @@ static void do_query_q7(Connect &conn,
 
     ostringstream s;
     s <<
-      "select"
-      "	supp_nation,"
-      "	cust_nation,"
-      "	l_year,"
-      "	sum(volume) as revenue "
-      "from"
-      "	("
-      "		select"
-      "			n1.n_name as supp_nation,"
-      "			n2.n_name as cust_nation,"
-      "			extract(year from l_shipdate) as l_year,"
-      "			l_extendedprice * (100 - l_discount) as volume"
-      "		from"
-      "			SUPPLIER,"
-      "			LINEITEM_INT,"
-      "			ORDERS,"
-      "			CUSTOMER,"
-      "			NATION n1,"
-      "			NATION n2"
-      "		where"
-      "			s_suppkey = l_suppkey"
-      "			and o_orderkey = l_orderkey"
-      "			and c_custkey = o_custkey"
-      "			and s_nationkey = n1.n_nationkey"
-      "			and c_nationkey = n2.n_nationkey"
-      "			and ("
-      "				(n1.n_name = '" << n_a << "' and n2.n_name = '" << n_b << "')"
-      "				or (n1.n_name = '" << n_b << "' and n2.n_name = '" << n_a << "')"
-      "			)"
-      "			and l_shipdate between date '1995-01-01' and date '1996-12-31'"
-      "	) as shipping "
-      "group by"
-      "	supp_nation,"
-      "	cust_nation,"
-      "	l_year "
-      "order by"
-      "	supp_nation,"
-      "	cust_nation,"
-      "	l_year"
-      ;
+    "select"
+    "	sum_hash_agg_int("
+    "   n1.n_name as supp_nation,"
+    "   n2.n_name as cust_nation,"
+    "   extract(year from l_shipdate) as l_year,"
+    "	  l_extendedprice * (100 - l_discount) as volume) "
+    "from"
+    "	SUPPLIER,"
+    "	LINEITEM_INT,"
+    "	ORDERS,"
+    "	CUSTOMER,"
+    "	NATION n1,"
+    "	NATION n2 "
+    "where"
+    "	s_suppkey = l_suppkey"
+    "	and o_orderkey = l_orderkey"
+    "	and c_custkey = o_custkey"
+    "	and s_nationkey = n1.n_nationkey"
+    "	and c_nationkey = n2.n_nationkey"
+    "	and ("
+    "		(n1.n_name = '" << n_a << "' and n2.n_name = '" << n_b << "')"
+    "		or (n1.n_name = '" << n_b << "' and n2.n_name = '" << n_a << "')"
+    "	)"
+    "	and l_shipdate between date '1995-01-01' and date '1996-12-31'";
     cerr << s.str() << endl;
 
     DBResult * dbres;
@@ -2698,13 +2683,28 @@ static void do_query_q7(Connect &conn,
       assert(res.ok);
     }
 
-    for (auto row : res.rows) {
+    assert(res.rows.size() == 1);
+    const string& data = res.rows[0][0].data;
+    const uint8_t *p   = (const uint8_t *) data.data();
+    const uint8_t *end = (const uint8_t *) data.data() + data.size();
+    while (p < end) {
+      string supp_nation = ReadKeyElem<string>(p);
+      string cust_nation = ReadKeyElem<string>(p);
+      uint64_t l_year    = ReadKeyElem<int64_t>(p);
+
+      // skip count
+      p += sizeof(uint64_t);
+
+      const uint64_t *dp = (const uint64_t *) p;
+      uint64_t value = *dp;
+      p += sizeof(uint64_t);
+
       results.push_back(
           q7entry(
-            row[0].data,
-            row[1].data,
-            resultFromStr<uint64_t>(row[2].data),
-            resultFromStr<double>(row[3].data)/10000.0));
+            supp_nation,
+            cust_nation,
+            l_year,
+            double(value) / 10000.0));
     }
 }
 
@@ -2714,7 +2714,151 @@ static void do_query_crypt_q7(Connect &conn,
                               const string& n_b,
                               vector<q7entry> &results,
                               const string& db) {
+    crypto_manager_stub cm_stub(&cm, UseOldOpe);
+    NamedTimer fcnTimer(__func__);
 
+    bool isBin = false;
+    string d0 = cm_stub.crypt<3>(cm.getmkey(), strFromVal(EncodeDate(1, 1, 1995)),
+                                   TYPE_INTEGER, fieldname(lineitem::l_shipdate, "OPE"),
+                                   getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
+    assert(!isBin);
+    string d1 = cm_stub.crypt<3>(cm.getmkey(), strFromVal(EncodeDate(12, 31, 1996)),
+                                   TYPE_INTEGER, fieldname(lineitem::l_shipdate, "OPE"),
+                                   getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
+    assert(!isBin);
+
+    string n_a_enc = cm_stub.crypt(cm.getmkey(), n_a, TYPE_TEXT,
+                              fieldname(nation::n_name, "DET"),
+                              getMin(oDET), SECLEVEL::DET, isBin, 12345);
+    assert(isBin);
+    assert(n_a.size() == n_a_enc.size());
+    n_a_enc.resize(25);
+
+    isBin = false;
+    string n_b_enc = cm_stub.crypt(cm.getmkey(), n_b, TYPE_TEXT,
+                              fieldname(nation::n_name, "DET"),
+                              getMin(oDET), SECLEVEL::DET, isBin, 12345);
+    assert(isBin);
+    assert(n_b.size() == n_b_enc.size());
+    n_b_enc.resize(25);
+
+    string pkinfo = marshallBinary(cm.getPKInfo());
+    string filename =
+      "/space/stephentu/data/" + db + "/lineitem_enc/row_pack/disc_price";
+
+    ostringstream s;
+    s <<
+    "select"
+    "	agg_hash_agg_row_col_pack("
+    "   3,"
+    "   n1.n_name_DET,"
+    "   n2.n_name_DET,"
+    "   l_shipdate_year_DET,"
+    "   row_id," << pkinfo << ", " <<
+    "\"" << filename << "\", " << NumThreads << ", 256, 12, "
+    "	  1) "
+    "from"
+    "	supplier_enc,"
+    "	lineitem_enc_noagg_rowid,"
+    "	orders_enc,"
+    "	customer_enc,"
+    "	nation_enc n1,"
+    "	nation_enc n2 "
+    "where"
+    "	s_suppkey_DET = l_suppkey_DET"
+    "	and o_orderkey_DET = l_orderkey_DET"
+    "	and c_custkey_DET = o_custkey_DET"
+    "	and s_nationkey_DET = n1.n_nationkey_DET"
+    "	and c_nationkey_DET = n2.n_nationkey_DET"
+    "	and ("
+    "		(n1.n_name_DET = " << marshallBinary(n_a_enc)
+    << " and n2.n_name_DET = " << marshallBinary(n_b_enc) << ")"
+    "		or (n1.n_name_DET = " << marshallBinary(n_b_enc)
+    << " and n2.n_name_DET = " << marshallBinary(n_a_enc) << ")"
+    "	)"
+    "	and l_shipdate_OPE >= " << d0 << " and l_shipdate_OPE <= " << d1;
+    cerr << s.str() << endl;
+
+    DBResult * dbres;
+    {
+      NamedTimer t(__func__, "execute");
+      conn.execute(s.str(), dbres);
+    }
+    ResType res;
+    {
+      NamedTimer t(__func__, "unpack");
+      res = dbres->unpack();
+      assert(res.ok);
+    }
+
+    static const size_t BitsPerAggField = 83;
+    ZZ mask = to_ZZ(1); mask <<= BitsPerAggField; mask -= 1;
+    assert(NumBits(mask) == (int)BitsPerAggField);
+    assert(res.rows.size() == 1);
+    const string& data = res.rows[0][0].data;
+    const uint8_t *p   = (const uint8_t *) data.data();
+    const uint8_t *end = (const uint8_t *) data.data() + data.size();
+    while (p < end) {
+      string supp_nation_DET = ReadKeyElem<string>(p);
+      string cust_nation_DET = ReadKeyElem<string>(p);
+      uint64_t l_year_DET    = ReadKeyElem<int64_t>(p);
+
+      string supp_nation = decryptRow<string>(
+              supp_nation_DET,
+              12345,
+              fieldname(nation::n_name, "DET"),
+              TYPE_TEXT,
+              oDET,
+              cm);
+
+      string cust_nation = decryptRow<string>(
+              cust_nation_DET,
+              12345,
+              fieldname(nation::n_name, "DET"),
+              TYPE_TEXT,
+              oDET,
+              cm);
+
+      uint64_t l_year = decryptRow<uint64_t, 2>(
+              to_s(l_year_DET),
+              12345,
+              fieldname(0, "DET"),
+              TYPE_INTEGER,
+              oDET,
+              cm);
+
+      // skip over count
+      p += sizeof(uint64_t);
+
+#define TAKE_FROM_SLOT(z, slot) \
+        (to_long(((z) >> (BitsPerAggField * (slot))) & mask))
+
+      const uint32_t *u32p = (const uint32_t *) p;
+      uint32_t n_aggs = *u32p;
+      p += sizeof(uint32_t);
+
+      double sum = 0.0;
+      for (size_t group_i = 0; group_i < n_aggs; group_i++) {
+        // interest mask
+        const uint32_t *u32p = (const uint32_t *) p;
+        uint32_t interest_mask = *u32p;
+        p += sizeof(uint32_t);
+
+        string ct = string((const char *) p, (size_t) 256);
+        ZZ m;
+        cm.decrypt_Paillier(ct, m);
+        p += 256;
+
+        for (size_t i = 0; i < 12; i++) {
+          if (!(interest_mask & (0x1 << i))) continue;
+          long l = TAKE_FROM_SLOT(m, i);
+          sum += ((double)l)/100.0;
+        }
+      }
+
+      results.push_back(
+          q7entry(supp_nation, cust_nation, l_year, sum));
+    }
 }
 
 static struct q11entry_sorter {

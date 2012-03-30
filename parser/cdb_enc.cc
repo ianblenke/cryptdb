@@ -1059,6 +1059,22 @@ protected:
                       crypto_manager_stub        &cm) {
 
     switch (tpe) {
+      case opt_type::normal:
+        {
+          // l_shipdate's year
+          const string& l_shipdate = tokens[lineitem::l_shipdate];
+          int year, month, day;
+          int ret = sscanf(l_shipdate.c_str(), "%d-%d-%d", &year, &month, &day);
+          assert(ret == 3);
+          assert(year >= 0);
+          bool isBin = false;
+          string enc = cm.crypt<2>(
+              cm.cm->getmkey(), to_s(year), TYPE_INTEGER,
+              fieldname(0, "DET"), getMin(oDET), SECLEVEL::DET, isBin, 12345);
+          assert(!isBin);
+          enccols.push_back(enc);
+        }
+        break;
       case opt_type::normal_agg:
         {
           ZZ z;

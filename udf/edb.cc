@@ -122,7 +122,7 @@ struct agg_group_key {
     assert(args->arg_count >= (off + len));
     assert(elems.size() == len);
     for (size_t i = 0, j = off; j < off + len; i++, j++) {
-      switch (args->arg_type[i]) {
+      switch (args->arg_type[j]) {
       case INT_RESULT:
         elems[i].i = *((long long *)args->args[j]);
         break;
@@ -134,7 +134,7 @@ struct agg_group_key {
         break;
       default: assert(false);
       }
-      elems[i].type = args->arg_type[i];
+      elems[i].type = args->arg_type[j];
     }
   }
 
