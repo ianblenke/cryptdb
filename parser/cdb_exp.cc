@@ -600,6 +600,20 @@ inline ostream& operator<<(ostream &o, const q7entry &q) {
   return o;
 }
 
+struct q8entry {
+  q8entry(
+      uint64_t o_year,
+      double mkt_share)
+    : o_year(o_year), mkt_share(mkt_share) {}
+  uint64_t o_year;
+  double mkt_share;
+};
+
+inline ostream& operator<<(ostream& o, const q8entry& q) {
+  o << q.o_year << "|" << q.mkt_share;
+  return o;
+}
+
 struct q18entry {
     q18entry(
         const string& c_name,
@@ -2858,6 +2872,254 @@ static void do_query_crypt_q7(Connect &conn,
 
       results.push_back(
           q7entry(supp_nation, cust_nation, l_year, sum));
+    }
+}
+
+static void do_query_q8(Connect &conn,
+                        const string& n_a,
+                        const string& r_a,
+                        const string& p_a,
+                        vector<q8entry> &results) {
+    NamedTimer fcnTimer(__func__);
+
+    ostringstream s;
+    s <<
+      "select"
+      "	o_year,"
+      "	sum(case"
+      "		when nation = '" << n_a << "' then volume"
+      "		else 0"
+      "	end) / sum(volume) as mkt_share "
+      "from"
+      "	("
+      "		select"
+      "			extract(year from o_orderdate) as o_year,"
+      "			l_extendedprice * (100 - l_discount) as volume,"
+      "			n2.n_name as nation"
+      "		from"
+      "			PART,"
+      "			SUPPLIER,"
+      "			LINEITEM_INT,"
+      "			ORDERS,"
+      "			CUSTOMER,"
+      "			NATION n1,"
+      "			NATION n2,"
+      "			REGION"
+      "		where"
+      "			p_partkey = l_partkey"
+      "			and s_suppkey = l_suppkey"
+      "			and l_orderkey = o_orderkey"
+      "			and o_custkey = c_custkey"
+      "			and c_nationkey = n1.n_nationkey"
+      "			and n1.n_regionkey = r_regionkey"
+      "			and r_name = '" << r_a << "'"
+      "			and s_nationkey = n2.n_nationkey"
+      "			and o_orderdate between date '1995-01-01' and date '1996-12-31'"
+      "			and p_type = '" << p_a <<"'"
+      "	) as all_nations "
+      "group by"
+      "	o_year "
+      "order by"
+      "	o_year;";
+    cerr << s.str() << endl;
+
+    DBResult * dbres;
+    {
+      NamedTimer t(__func__, "execute");
+      conn.execute(s.str(), dbres);
+    }
+    ResType res;
+    {
+      NamedTimer t(__func__, "unpack");
+      res = dbres->unpack();
+      assert(res.ok);
+    }
+
+    for (auto row : res.rows) {
+      results.push_back(
+          q8entry(
+            resultFromStr<uint64_t>(row[0].data),
+            resultFromStr<double>(row[1].data)));
+    }
+}
+
+struct _q8_noopt_task_state {
+  _q8_noopt_task_state() {}
+  vector< vector< SqlItem > > rows;
+  map<uint64_t, pair<double, double> > aggState;
+};
+
+struct _q8_noopt_task {
+  void operator()() {
+      for (auto row : state->rows) {
+        uint64_t offset = resultFromStr<uint64_t>(row[0].data);
+
+        uint64_t l_extendedprice_int = decryptRow<uint64_t, 7>(
+                row[1].data,
+                12345,
+                fieldname(lineitem::l_extendedprice, "DET"),
+                TYPE_INTEGER,
+                oDET,
+                *cm);
+        double l_extendedprice = ((double)l_extendedprice_int)/100.0;
+
+        uint64_t l_discount_int = decryptRow<uint64_t, 7>(
+                row[2].data,
+                12345,
+                fieldname(lineitem::l_discount, "DET"),
+                TYPE_INTEGER,
+                oDET,
+                *cm);
+        double l_discount = ((double)l_discount_int)/100.0;
+
+        double value = l_extendedprice * (1.0 - l_discount);
+
+        bool flag = row[3].data == "1";
+
+        uint64_t key = 1995 + offset;
+        auto it = state->aggState.find(key);
+        if ((it == state->aggState.end())) {
+          pair<double, double>& p = state->aggState[key];
+          p.first = flag ? value : 0.0;
+          p.second = value;
+        } else {
+          if (flag) it->second.first += value;
+          it->second.second += value;
+        }
+      }
+  }
+  CryptoManager* cm;
+  _q8_noopt_task_state* state;
+};
+
+static void do_query_crypt_q8(Connect &conn,
+                              CryptoManager &cm,
+                              const string& n_a,
+                              const string& r_a,
+                              const string& p_a,
+                              vector<q8entry> &results) {
+    crypto_manager_stub cm_stub(&cm, UseOldOpe);
+    NamedTimer fcnTimer(__func__);
+
+    bool isBin = false;
+    string d0 = cm_stub.crypt<3>(cm.getmkey(), strFromVal(EncodeDate(1, 1, 1995)),
+                                   TYPE_INTEGER, fieldname(orders::o_orderdate, "OPE"),
+                                   getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
+    assert(!isBin);
+    string d1 = cm_stub.crypt<3>(cm.getmkey(), strFromVal(EncodeDate(12, 31, 1996)),
+                                   TYPE_INTEGER, fieldname(orders::o_orderdate, "OPE"),
+                                   getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
+    assert(!isBin);
+
+    string boundary1 = cm_stub.crypt<3>(cm.getmkey(), strFromVal(EncodeDate(1, 1, 1996)),
+                                   TYPE_INTEGER, fieldname(orders::o_orderdate, "OPE"),
+                                   getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
+
+    string n_a_enc = cm_stub.crypt(cm.getmkey(), n_a, TYPE_TEXT,
+                              fieldname(nation::n_name, "DET"),
+                              getMin(oDET), SECLEVEL::DET, isBin, 12345);
+    assert(isBin);
+    assert(n_a.size() == n_a_enc.size());
+    n_a_enc.resize(25);
+
+    isBin = false;
+    string r_a_enc = cm_stub.crypt(cm.getmkey(), r_a, TYPE_TEXT,
+                              fieldname(region::r_name, "DET"),
+                              getMin(oDET), SECLEVEL::DET, isBin, 12345);
+    assert(isBin);
+    assert(r_a.size() == r_a_enc.size());
+    r_a_enc.resize(25);
+
+    isBin = false;
+    string p_a_enc = cm_stub.crypt(cm.getmkey(), p_a, TYPE_TEXT,
+                              fieldname(part::p_type, "DET"),
+                              getMin(oDET), SECLEVEL::DET, isBin, 12345);
+    assert(isBin);
+    assert(p_a.size() == p_a_enc.size());
+
+    ostringstream s;
+    s <<
+      "select"
+      "	IF(o_orderdate_OPE < " << boundary1 << ", 0, 1),"
+      "	l_extendedprice_DET,"
+      " l_discount_DET,"
+      "	n2.n_name_DET = " << marshallBinary(n_a_enc) << " "
+      "from"
+      "	part_enc,"
+      "	supplier_enc,"
+      "	lineitem_enc_noagg_rowid,"
+      "	orders_enc,"
+      "	customer_enc,"
+      "	nation_enc n1,"
+      "	nation_enc n2,"
+      "	region_enc "
+      "where"
+      "	p_partkey_DET = l_partkey_DET"
+      "	and s_suppkey_DET = l_suppkey_DET"
+      "	and l_orderkey_DET = o_orderkey_DET"
+      "	and o_custkey_DET = c_custkey_DET"
+      "	and c_nationkey_DET = n1.n_nationkey_DET"
+      "	and n1.n_regionkey_DET = r_regionkey_DET"
+      "	and r_name_DET = " << marshallBinary(r_a_enc) << " "
+      "	and s_nationkey_DET = n2.n_nationkey_DET"
+      "	and o_orderdate_OPE >= " << d0 << " and o_orderdate_OPE <= " << d1 <<
+      "	and p_type_DET = " << marshallBinary(p_a_enc)
+      ;
+    cerr << s.str() << endl;
+
+    DBResult * dbres;
+    {
+      NamedTimer t(__func__, "execute");
+      conn.execute(s.str(), dbres);
+    }
+    ResType res;
+    {
+      NamedTimer t(__func__, "unpack");
+      res = dbres->unpack();
+      assert(res.ok);
+    }
+
+    {
+      assert(DoParallel);
+      using namespace exec_service;
+      vector<_q8_noopt_task_state> states( NumThreads );
+      vector<_q8_noopt_task> tasks( NumThreads );
+      vector<SqlRowGroup> groups;
+      SplitRowsIntoGroups(groups, res.rows, NumThreads);
+
+      for (size_t i = 0; i < NumThreads; i++) {
+        tasks[i].cm    = &cm;
+        tasks[i].state = &states[i];
+        states[i].rows = groups[i];
+      }
+
+      Exec<_q8_noopt_task>::DefaultExecutor exec( NumThreads );
+      exec.start();
+      for (size_t i = 0; i < NumThreads; i++) {
+        exec.submit(tasks[i]);
+      }
+      exec.stop(); // blocks until completion
+
+      map<uint64_t, pair<double, double> > merged;
+      for (size_t i = 0; i < NumThreads; i++) {
+        for (auto it = states[i].aggState.begin();
+             it != states[i].aggState.end(); ++it) {
+          auto it0 = merged.find(it->first);
+          if ((it0 == merged.end())) {
+            merged[it->first] = it->second;
+          } else {
+            it0->second.first  += it->second.first;
+            it0->second.second += it->second.second;
+          }
+        }
+      }
+
+      for (auto it = merged.begin(); it != merged.end(); ++it) {
+        results.push_back(
+            q8entry(
+              it->first,
+              it->second.first / it->second.second));
+      }
     }
 }
 
@@ -5307,6 +5569,7 @@ enum query_selection {
   query5,
   query6,
   query7,
+  query8,
   query11,
   query14,
   query18,
@@ -5376,6 +5639,13 @@ int main(int argc, char **argv) {
     std::set<string> Query7Modes
       (Query7Strings, Query7Strings + NELEMS(Query7Strings));
 
+    static const char * Query8Strings[] = {
+        "--orig-query8",
+        "--crypt-query8",
+    };
+    std::set<string> Query8Modes
+      (Query8Strings, Query8Strings + NELEMS(Query8Strings));
+
     static const char * Query11Strings[] = {
         "--orig-query11",
         "--orig-query11-nosubquery",
@@ -5429,6 +5699,8 @@ int main(int argc, char **argv) {
         q = query6;
     } else if (Query7Modes.find(argv[1]) != Query7Modes.end()) {
         q = query7;
+    } else if (Query8Modes.find(argv[1]) != Query8Modes.end()) {
+        q = query8;
     } else if (Query11Modes.find(argv[1]) != Query11Modes.end()) {
         q = query11;
     } else if (Query14Modes.find(argv[1]) != Query14Modes.end()) {
@@ -5456,6 +5728,8 @@ int main(int argc, char **argv) {
     case query5:  input_nruns = atoi(argv[4]); db_name = argv[5]; ope_type = argv[6]; do_par = argv[7]; hostname = argv[8]; break;
     case query6:  input_nruns = atoi(argv[5]); db_name = argv[6]; ope_type = argv[7]; do_par = argv[8]; hostname = argv[9]; break;
     case query7:  input_nruns = atoi(argv[4]); db_name = argv[5]; ope_type = argv[6]; do_par = argv[7]; hostname = argv[8]; break;
+    case query8:  input_nruns = atoi(argv[5]); db_name = argv[6]; ope_type = argv[7]; do_par = argv[8]; hostname = argv[9]; break;
+
     case query11: input_nruns = atoi(argv[4]); db_name = argv[5]; ope_type = argv[6]; do_par = argv[7]; hostname = argv[8]; break;
     case query14: input_nruns = atoi(argv[3]); db_name = argv[4]; ope_type = argv[5]; do_par = argv[6]; hostname = argv[7]; break;
     case query18: input_nruns = atoi(argv[3]); db_name = argv[4]; ope_type = argv[5]; do_par = argv[6]; hostname = argv[7]; break;
@@ -5685,6 +5959,30 @@ int main(int argc, char **argv) {
           } else if (mode == "crypt-query7") {
             for (size_t i = 0; i < nruns; i++) {
               do_query_crypt_q7(conn, cm, n_a, n_b, results, db_name);
+              ctr += results.size();
+              PRINT_RESULTS();
+              results.clear();
+            }
+          } else assert(false);
+        }
+        break;
+
+      case query8:
+        {
+          string n_a = argv[2];
+          string r_a = argv[3];
+          string p_a = argv[4];
+          vector<q8entry> results;
+          if (mode == "orig-query8") {
+            for (size_t i = 0; i < nruns; i++) {
+              do_query_q8(conn, n_a, r_a, p_a, results);
+              ctr += results.size();
+              PRINT_RESULTS();
+              results.clear();
+            }
+          } else if (mode == "crypt-query8") {
+            for (size_t i = 0; i < nruns; i++) {
+              do_query_crypt_q8(conn, cm, n_a, r_a, p_a, results);
               ctr += results.size();
               PRINT_RESULTS();
               results.clear();
