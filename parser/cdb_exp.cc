@@ -3201,11 +3201,194 @@ static void do_query_q9(Connect &conn,
     }
 }
 
+static string make_if_predicate(
+    size_t cur, const vector<string>& boundaries, const string& ope_field) {
+  assert(cur <= boundaries.size());
+  ostringstream buf;
+  if (cur == boundaries.size()) {
+    buf << cur;
+  } else {
+    buf << "IF(" << ope_field << " < " << boundaries[cur] << ", " << cur << ", "
+        << make_if_predicate(cur + 1, boundaries, ope_field) << ")";
+  }
+  return buf.str();
+}
+
+struct _q9_noopt_task_state {
+  _q9_noopt_task_state() {}
+  vector< vector< SqlItem > > rows;
+  map< pair<string, uint64_t> , double> aggState;
+};
+
+struct _q9_noopt_task {
+  void operator()() {
+    for (auto row : state->rows) {
+      pair<string, uint64_t> key =
+        make_pair( row[0].data, resultFromStr<uint64_t>(row[1].data) + 1992 );
+
+      uint64_t l_extendedprice_int = decryptRow<uint64_t, 7>(
+          row[2].data,
+          12345,
+          fieldname(lineitem::l_extendedprice, "DET"),
+          TYPE_INTEGER,
+          oDET,
+          *cm);
+      double l_extendedprice = ((double)l_extendedprice_int)/100.0;
+
+      uint64_t l_discount_int = decryptRow<uint64_t, 7>(
+          row[3].data,
+          12345,
+          fieldname(lineitem::l_discount, "DET"),
+          TYPE_INTEGER,
+          oDET,
+          *cm);
+      double l_discount = ((double)l_discount_int)/100.0;
+
+      uint64_t ps_supplycost_int = decryptRow<uint64_t, 7>(
+          row[4].data,
+          12345,
+          fieldname(partsupp::ps_supplycost, "DET"),
+          TYPE_INTEGER,
+          oDET,
+          *cm);
+      double ps_supplycost = ((double)ps_supplycost_int)/100.0;
+
+      uint64_t l_quantity_int = decryptRow<uint64_t, 7>(
+          row[5].data,
+          12345,
+          fieldname(lineitem::l_quantity, "DET"),
+          TYPE_INTEGER,
+          oDET,
+          *cm);
+      double l_quantity = ((double)l_quantity_int)/100.0;
+
+      double value = l_extendedprice * (1.0 - l_discount) -
+        ps_supplycost * l_quantity;
+
+      auto it = state->aggState.find(key);
+      if (it == state->aggState.end()) {
+        state->aggState[key] = value;
+      } else {
+        it->second += value;
+      }
+    }
+  }
+  CryptoManager* cm;
+  _q9_noopt_task_state* state;
+};
+
 static void do_query_crypt_q9(Connect &conn,
                               CryptoManager& cm,
                               const string& p_a,
                               vector<q9entry> &results) {
+  crypto_manager_stub cm_stub(&cm, UseOldOpe);
+  NamedTimer fcnTimer(__func__);
 
+  // min order year (inclusive)
+  static const size_t MinOrderYear = 1992;
+
+  // max order year (inclusive)
+  static const size_t MaxOrderYear = 1998;
+
+  vector<string> boundaries;
+  for (size_t i = MinOrderYear + 1; i <= MaxOrderYear; i++) {
+    bool isBin = false;
+    string b = cm_stub.crypt<3>(cm.getmkey(), strFromVal(EncodeDate(1, 1, i)),
+                                TYPE_INTEGER, fieldname(orders::o_orderdate, "OPE"),
+                                getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
+    assert(!isBin);
+    boundaries.push_back(b);
+  }
+
+  Binary key(cm.getKey(cm.getmkey(), fieldname(part::p_name, "SWP"), SECLEVEL::SWP));
+  Token t = CryptoManager::token(key, Binary(p_a));
+
+  ostringstream s;
+  s <<
+		"select "
+		"	n_name_DET, " << make_if_predicate(0, boundaries, "o_orderdate_OPE") << ", "
+		"	l_extendedprice_DET, l_discount_DET, ps_supplycost_DET, l_quantity_DET "
+		"from "
+		"	part_enc, "
+		"	supplier_enc, "
+		"	lineitem_enc_noagg_rowid, "
+		"	partsupp_enc_noopt, "
+		"	orders_enc, "
+		"	nation_enc "
+		"where "
+		"	s_suppkey_DET = l_suppkey_DET "
+		"	and ps_suppkey_DET = l_suppkey_DET "
+		"	and ps_partkey_DET = l_partkey_DET "
+		"	and p_partkey_DET = l_partkey_DET "
+		"	and o_orderkey_DET = l_orderkey_DET "
+		"	and s_nationkey_DET = n_nationkey_DET "
+		"	and searchSWP("
+          << marshallBinary(string((char *)t.ciph.content, t.ciph.len))
+          << ", "
+          << marshallBinary(string((char *)t.wordKey.content, t.wordKey.len))
+          << ", p_name_SWP) = 1";
+  cerr << s.str() << endl;
+
+  DBResult * dbres;
+  {
+    NamedTimer t(__func__, "execute");
+    conn.execute(s.str(), dbres);
+  }
+  ResType res;
+  {
+    NamedTimer t(__func__, "unpack");
+    res = dbres->unpack();
+    assert(res.ok);
+  }
+
+  assert(DoParallel);
+
+  using namespace exec_service;
+
+  vector<_q9_noopt_task_state> states( NumThreads );
+  vector<_q9_noopt_task> tasks( NumThreads );
+  vector<SqlRowGroup> groups;
+  SplitRowsIntoGroups(groups, res.rows, NumThreads);
+
+  for (size_t i = 0; i < NumThreads; i++) {
+    tasks[i].cm    = &cm;
+    tasks[i].state = &states[i];
+    states[i].rows = groups[i];
+  }
+
+  Exec<_q9_noopt_task>::DefaultExecutor exec( NumThreads );
+  exec.start();
+  for (size_t i = 0; i < NumThreads; i++) {
+    exec.submit(tasks[i]);
+  }
+  exec.stop();
+
+  map< pair<string, uint64_t> , double> aggState;
+  for (size_t i = 0; i < NumThreads; i++) {
+    for (auto it = states[i].aggState.begin();
+         it != states[i].aggState.end(); ++it) {
+      auto it0 = aggState.find(it->first);
+      if (it0 == aggState.end()) {
+        aggState[it->first] = it->second;
+      } else {
+        it0->second += it->second;
+      }
+    }
+  }
+  for (auto it = aggState.begin(); it != aggState.end(); ++it) {
+    string n_name = decryptRow<string>(
+            it->first.first,
+            12345,
+            fieldname(nation::n_name, "DET"),
+            TYPE_TEXT,
+            oDET,
+            cm);
+    results.push_back(
+        q9entry(
+          n_name,
+          it->first.second,
+          it->second));
+  }
 }
 
 static struct q11entry_sorter {
