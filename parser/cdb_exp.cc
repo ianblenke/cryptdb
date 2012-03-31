@@ -614,6 +614,22 @@ inline ostream& operator<<(ostream& o, const q8entry& q) {
   return o;
 }
 
+struct q9entry {
+  q9entry(
+      string nation,
+      uint64_t o_year,
+      double sum_profit)
+    : nation(nation), o_year(o_year), sum_profit(sum_profit) {}
+  string nation;
+  uint64_t o_year;
+  double sum_profit;
+};
+
+inline ostream& operator<<(ostream& o, const q9entry& q) {
+  o << q.nation << "|" << q.o_year << "|" << q.sum_profit;
+  return o;
+}
+
 struct q18entry {
     q18entry(
         const string& c_name,
@@ -3123,6 +3139,75 @@ static void do_query_crypt_q8(Connect &conn,
     }
 }
 
+static void do_query_q9(Connect &conn,
+                        const string& p_a,
+                        vector<q9entry> &results) {
+    NamedTimer fcnTimer(__func__);
+
+    ostringstream s;
+    s <<
+      "select "
+      "	nation, "
+      "	o_year, "
+      "	sum(amount) as sum_profit "
+      "from "
+      "	( "
+      "		select "
+      "			n_name as nation, "
+      "			extract(year from o_orderdate) as o_year, "
+      "			l_extendedprice * (100 - l_discount) - ps_supplycost * l_quantity as amount "
+      "		from "
+      "			PART, "
+      "			SUPPLIER, "
+      "			LINEITEM_INT, "
+      "			PARTSUPP_INT, "
+      "			ORDERS, "
+      "			NATION "
+      "		where "
+      "			s_suppkey = l_suppkey "
+      "			and ps_suppkey = l_suppkey "
+      "			and ps_partkey = l_partkey "
+      "			and p_partkey = l_partkey "
+      "			and o_orderkey = l_orderkey "
+      "			and s_nationkey = n_nationkey "
+      "			and p_name like '%" << p_a << "%' "
+      "	) as profit "
+      "group by "
+      "	nation, "
+      "	o_year "
+      "order by "
+      "	nation, "
+      "	o_year desc; ";
+    cerr << s.str() << endl;
+
+    DBResult * dbres;
+    {
+      NamedTimer t(__func__, "execute");
+      conn.execute(s.str(), dbres);
+    }
+    ResType res;
+    {
+      NamedTimer t(__func__, "unpack");
+      res = dbres->unpack();
+      assert(res.ok);
+    }
+
+    for (auto row : res.rows) {
+      results.push_back(
+          q9entry(
+            row[0].data,
+            resultFromStr<uint64_t>(row[1].data),
+            resultFromStr<double>(row[2].data)/10000.0));
+    }
+}
+
+static void do_query_crypt_q9(Connect &conn,
+                              CryptoManager& cm,
+                              const string& p_a,
+                              vector<q9entry> &results) {
+
+}
+
 static struct q11entry_sorter {
   inline bool operator()(const q11entry &lhs, const q11entry &rhs) const {
     return lhs.value > rhs.value;
@@ -5570,6 +5655,7 @@ enum query_selection {
   query6,
   query7,
   query8,
+  query9,
   query11,
   query14,
   query18,
@@ -5646,6 +5732,13 @@ int main(int argc, char **argv) {
     std::set<string> Query8Modes
       (Query8Strings, Query8Strings + NELEMS(Query8Strings));
 
+    static const char * Query9Strings[] = {
+        "--orig-query9",
+        "--crypt-query9",
+    };
+    std::set<string> Query9Modes
+      (Query9Strings, Query9Strings + NELEMS(Query9Strings));
+
     static const char * Query11Strings[] = {
         "--orig-query11",
         "--orig-query11-nosubquery",
@@ -5701,6 +5794,8 @@ int main(int argc, char **argv) {
         q = query7;
     } else if (Query8Modes.find(argv[1]) != Query8Modes.end()) {
         q = query8;
+    } else if (Query9Modes.find(argv[1]) != Query9Modes.end()) {
+        q = query9;
     } else if (Query11Modes.find(argv[1]) != Query11Modes.end()) {
         q = query11;
     } else if (Query14Modes.find(argv[1]) != Query14Modes.end()) {
@@ -5729,6 +5824,7 @@ int main(int argc, char **argv) {
     case query6:  input_nruns = atoi(argv[5]); db_name = argv[6]; ope_type = argv[7]; do_par = argv[8]; hostname = argv[9]; break;
     case query7:  input_nruns = atoi(argv[4]); db_name = argv[5]; ope_type = argv[6]; do_par = argv[7]; hostname = argv[8]; break;
     case query8:  input_nruns = atoi(argv[5]); db_name = argv[6]; ope_type = argv[7]; do_par = argv[8]; hostname = argv[9]; break;
+    case query9:  input_nruns = atoi(argv[3]); db_name = argv[4]; ope_type = argv[5]; do_par = argv[6]; hostname = argv[7]; break;
 
     case query11: input_nruns = atoi(argv[4]); db_name = argv[5]; ope_type = argv[6]; do_par = argv[7]; hostname = argv[8]; break;
     case query14: input_nruns = atoi(argv[3]); db_name = argv[4]; ope_type = argv[5]; do_par = argv[6]; hostname = argv[7]; break;
@@ -5983,6 +6079,28 @@ int main(int argc, char **argv) {
           } else if (mode == "crypt-query8") {
             for (size_t i = 0; i < nruns; i++) {
               do_query_crypt_q8(conn, cm, n_a, r_a, p_a, results);
+              ctr += results.size();
+              PRINT_RESULTS();
+              results.clear();
+            }
+          } else assert(false);
+        }
+        break;
+
+      case query9:
+        {
+          string p_a = argv[2];
+          vector<q9entry> results;
+          if (mode == "orig-query9") {
+            for (size_t i = 0; i < nruns; i++) {
+              do_query_q9(conn, p_a, results);
+              ctr += results.size();
+              PRINT_RESULTS();
+              results.clear();
+            }
+          } else if (mode == "crypt-query9") {
+            for (size_t i = 0; i < nruns; i++) {
+              do_query_crypt_q9(conn, cm, p_a, results);
               ctr += results.size();
               PRINT_RESULTS();
               results.clear();
