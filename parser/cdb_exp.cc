@@ -630,6 +630,42 @@ inline ostream& operator<<(ostream& o, const q9entry& q) {
   return o;
 }
 
+struct q10entry {
+  q10entry(
+    uint64_t c_custkey,
+    const string& c_name,
+    double revenue,
+    double c_acctbal,
+    const string& n_name,
+    const string& c_address,
+    const string& c_phone,
+    const string& c_comment) :
+  c_custkey(c_custkey),
+  c_name(c_name),
+  revenue(revenue),
+  c_acctbal(c_acctbal),
+  n_name(n_name),
+  c_address(c_address),
+  c_phone(c_phone),
+  c_comment(c_comment) {}
+
+  uint64_t c_custkey;
+  string c_name;
+  double revenue;
+  double c_acctbal;
+  string n_name;
+  string c_address;
+  string c_phone;
+  string c_comment;
+};
+
+inline ostream& operator<<(ostream& o, const q10entry& q) {
+  o << q.c_custkey << "|" << q.c_name << "|" << q.revenue << "|" <<
+  q.c_acctbal << "|" << q.n_name << "|" << q.c_address << "|" <<
+  q.c_phone << "|" << q.c_comment;
+  return o;
+}
+
 struct q18entry {
     q18entry(
         const string& c_name,
@@ -3391,6 +3427,22 @@ static void do_query_crypt_q9(Connect &conn,
   }
 }
 
+static void do_query_q10(Connect &conn,
+                         const string& o_a,
+                         vector<q10entry> &results) {
+  NamedTimer fcnTimer(__func__);
+
+}
+
+static void do_query_crypt_q10(Connect &conn,
+                               CryptoManager& cm,
+                               const string& o_a,
+                               vector<q10entry> &results) {
+  crypto_manager_stub cm_stub(&cm, UseOldOpe);
+  NamedTimer fcnTimer(__func__);
+
+}
+
 static struct q11entry_sorter {
   inline bool operator()(const q11entry &lhs, const q11entry &rhs) const {
     return lhs.value > rhs.value;
@@ -5839,6 +5891,7 @@ enum query_selection {
   query7,
   query8,
   query9,
+  query10,
   query11,
   query14,
   query18,
@@ -5866,61 +5919,25 @@ int main(int argc, char **argv) {
     std::set<string> Query1Modes
       (Query1Strings, Query1Strings + NELEMS(Query1Strings));
 
-    static const char * Query2Strings[] = {
-        "--orig-query2",
-        "--crypt-query2",
-    };
-    std::set<string> Query2Modes
-      (Query2Strings, Query2Strings + NELEMS(Query2Strings));
+#define REGULAR_QUERY_IMPL(n) \
+    static const char * Query ## n ## Strings[] = { \
+        "--orig-query" #n, \
+        "--crypt-query" #n, \
+    }; \
+    std::set<string> Query ## n ## Modes \
+      (Query ## n ## Strings, Query ## n ## Strings + NELEMS(Query ## n ## Strings));
 
-    static const char * Query3Strings[] = {
-        "--orig-query3",
-        "--crypt-query3",
-    };
-    std::set<string> Query3Modes
-      (Query3Strings, Query3Strings + NELEMS(Query3Strings));
+    REGULAR_QUERY_IMPL(2)
+    REGULAR_QUERY_IMPL(3)
+    REGULAR_QUERY_IMPL(4)
+    REGULAR_QUERY_IMPL(5)
+    REGULAR_QUERY_IMPL(6)
+    REGULAR_QUERY_IMPL(7)
+    REGULAR_QUERY_IMPL(8)
+    REGULAR_QUERY_IMPL(9)
+    REGULAR_QUERY_IMPL(10)
 
-    static const char * Query4Strings[] = {
-        "--orig-query4",
-        "--crypt-query4",
-    };
-    std::set<string> Query4Modes
-      (Query4Strings, Query4Strings + NELEMS(Query4Strings));
-
-    static const char * Query5Strings[] = {
-        "--orig-query5",
-        "--crypt-query5",
-    };
-    std::set<string> Query5Modes
-      (Query5Strings, Query5Strings + NELEMS(Query5Strings));
-
-    static const char * Query6Strings[] = {
-        "--orig-query6",
-        "--crypt-query6",
-    };
-    std::set<string> Query6Modes
-      (Query6Strings, Query6Strings + NELEMS(Query6Strings));
-
-    static const char * Query7Strings[] = {
-        "--orig-query7",
-        "--crypt-query7",
-    };
-    std::set<string> Query7Modes
-      (Query7Strings, Query7Strings + NELEMS(Query7Strings));
-
-    static const char * Query8Strings[] = {
-        "--orig-query8",
-        "--crypt-query8",
-    };
-    std::set<string> Query8Modes
-      (Query8Strings, Query8Strings + NELEMS(Query8Strings));
-
-    static const char * Query9Strings[] = {
-        "--orig-query9",
-        "--crypt-query9",
-    };
-    std::set<string> Query9Modes
-      (Query9Strings, Query9Strings + NELEMS(Query9Strings));
+#undef REGULAR_QUERY_IMPL
 
     static const char * Query11Strings[] = {
         "--orig-query11",
@@ -5961,58 +5978,63 @@ int main(int argc, char **argv) {
 
     enum query_selection q;
 
-    if (Query1Modes.find(argv[1]) != Query1Modes.end()) {
-        q = query1;
-    } else if (Query2Modes.find(argv[1]) != Query2Modes.end()) {
-        q = query2;
-    } else if (Query3Modes.find(argv[1]) != Query3Modes.end()) {
-        q = query3;
-    } else if (Query4Modes.find(argv[1]) != Query4Modes.end()) {
-        q = query4;
-    } else if (Query5Modes.find(argv[1]) != Query5Modes.end()) {
-        q = query5;
-    } else if (Query6Modes.find(argv[1]) != Query6Modes.end()) {
-        q = query6;
-    } else if (Query7Modes.find(argv[1]) != Query7Modes.end()) {
-        q = query7;
-    } else if (Query8Modes.find(argv[1]) != Query8Modes.end()) {
-        q = query8;
-    } else if (Query9Modes.find(argv[1]) != Query9Modes.end()) {
-        q = query9;
-    } else if (Query11Modes.find(argv[1]) != Query11Modes.end()) {
-        q = query11;
-    } else if (Query14Modes.find(argv[1]) != Query14Modes.end()) {
-        q = query14;
-    } else if (Query18Modes.find(argv[1]) != Query18Modes.end()) {
-        q = query18;
-    } else if (Query20Modes.find(argv[1]) != Query20Modes.end()) {
-        q = query20;
-    } else {
+    pair< std::set<string>*, enum query_selection > modes[] = {
+#define CASE_IMPL(n) { &Query ## n ## Modes, query ## n }
+      CASE_IMPL(1), CASE_IMPL(2), CASE_IMPL(3), CASE_IMPL(4),
+      CASE_IMPL(5), CASE_IMPL(6), CASE_IMPL(7), CASE_IMPL(8),
+      CASE_IMPL(9), CASE_IMPL(10), CASE_IMPL(11),
+
+      CASE_IMPL(14),
+      CASE_IMPL(18),
+      CASE_IMPL(20),
+#undef CASE_IMPL
+    };
+
+    for (size_t i = 0; i < NELEMS(modes); i++) {
+      if (modes[i].first->find(argv[1]) != modes[i].first->end()) {
+        q = modes[i].second;
+        break;
+      }
+      if (i + 1 == NELEMS(modes)) {
         usage(argv);
         return 1;
+      }
     }
 
-
-    int input_nruns;
+    int input_nruns = 0;
     string db_name;
     string ope_type;
     string do_par;
     string hostname;
     switch (q) {
-    case query1:  input_nruns = atoi(argv[3]); db_name = argv[4]; ope_type = argv[5]; do_par = argv[6]; hostname = argv[7]; break;
-    case query2:  input_nruns = atoi(argv[5]); db_name = argv[6]; ope_type = argv[7]; do_par = argv[8]; hostname = argv[9]; break;
-    case query3:  input_nruns = atoi(argv[4]); db_name = argv[5]; ope_type = argv[6]; do_par = argv[7]; hostname = argv[8]; break;
-    case query4:  input_nruns = atoi(argv[3]); db_name = argv[4]; ope_type = argv[5]; do_par = argv[6]; hostname = argv[7]; break;
-    case query5:  input_nruns = atoi(argv[4]); db_name = argv[5]; ope_type = argv[6]; do_par = argv[7]; hostname = argv[8]; break;
-    case query6:  input_nruns = atoi(argv[5]); db_name = argv[6]; ope_type = argv[7]; do_par = argv[8]; hostname = argv[9]; break;
-    case query7:  input_nruns = atoi(argv[4]); db_name = argv[5]; ope_type = argv[6]; do_par = argv[7]; hostname = argv[8]; break;
-    case query8:  input_nruns = atoi(argv[5]); db_name = argv[6]; ope_type = argv[7]; do_par = argv[8]; hostname = argv[9]; break;
-    case query9:  input_nruns = atoi(argv[3]); db_name = argv[4]; ope_type = argv[5]; do_par = argv[6]; hostname = argv[7]; break;
 
-    case query11: input_nruns = atoi(argv[4]); db_name = argv[5]; ope_type = argv[6]; do_par = argv[7]; hostname = argv[8]; break;
-    case query14: input_nruns = atoi(argv[3]); db_name = argv[4]; ope_type = argv[5]; do_par = argv[6]; hostname = argv[7]; break;
-    case query18: input_nruns = atoi(argv[3]); db_name = argv[4]; ope_type = argv[5]; do_par = argv[6]; hostname = argv[7]; break;
-    case query20: input_nruns = atoi(argv[5]); db_name = argv[6]; ope_type = argv[7]; do_par = argv[8]; hostname = argv[9]; break;
+#define CASE_IMPL(n, o) \
+    case query ## n: { \
+      input_nruns = atoi(argv[o + 2]); \
+      db_name     =      argv[o + 3]; \
+      ope_type    =      argv[o + 4]; \
+      do_par      =      argv[o + 5]; \
+      hostname    =      argv[o + 6]; \
+      break; \
+    }
+
+    CASE_IMPL( 1, 1)
+    CASE_IMPL( 2, 3)
+    CASE_IMPL( 3, 2)
+    CASE_IMPL( 4, 1)
+    CASE_IMPL( 5, 2)
+    CASE_IMPL( 6, 3)
+    CASE_IMPL( 7, 2)
+    CASE_IMPL( 8, 3)
+    CASE_IMPL( 9, 1)
+    CASE_IMPL(10, 1)
+    CASE_IMPL(11, 2)
+    CASE_IMPL(14, 1)
+    CASE_IMPL(18, 1)
+    CASE_IMPL(20, 3)
+
+#undef CASE_IMPL
+
     }
     uint32_t nruns = (uint32_t) input_nruns;
 
@@ -6284,6 +6306,28 @@ int main(int argc, char **argv) {
           } else if (mode == "crypt-query9") {
             for (size_t i = 0; i < nruns; i++) {
               do_query_crypt_q9(conn, cm, p_a, results);
+              ctr += results.size();
+              PRINT_RESULTS();
+              results.clear();
+            }
+          } else assert(false);
+        }
+        break;
+
+      case query10:
+        {
+          string o_a = argv[2];
+          vector<q10entry> results;
+          if (mode == "orig-query9") {
+            for (size_t i = 0; i < nruns; i++) {
+              do_query_q10(conn, o_a, results);
+              ctr += results.size();
+              PRINT_RESULTS();
+              results.clear();
+            }
+          } else if (mode == "crypt-query9") {
+            for (size_t i = 0; i < nruns; i++) {
+              do_query_crypt_q10(conn, cm, o_a, results);
               ctr += results.size();
               PRINT_RESULTS();
               results.clear();
