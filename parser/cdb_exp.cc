@@ -460,19 +460,6 @@ inline ostream& operator<<(ostream &o, const q1entry &q) {
     return o;
 }
 
-struct q11entry {
-  q11entry(uint64_t ps_partkey,
-           double   value) :
-    ps_partkey(ps_partkey), value(value) {}
-  uint64_t ps_partkey;
-  double   value;
-};
-
-inline ostream& operator<<(ostream &o, const q11entry &q) {
-  o << q.ps_partkey << "|" << q.value;
-  return o;
-}
-
 struct q2entry {
   q2entry(
     double s_acctbal,
@@ -502,6 +489,18 @@ struct q2entry {
   string s_phone;
   string s_comment;
 };
+
+inline ostream& operator<<(ostream &o, const q2entry &q) {
+  o << q.s_acctbal << "|"
+    << q.s_name << "|"
+    << q.n_name << "|"
+    << q.p_partkey << "|"
+    << q.p_mfgr << "|"
+    << q.s_address << "|"
+    << q.s_phone << "|"
+    << q.s_comment;
+  return o;
+}
 
 struct q3entry {
   q3entry(
@@ -666,6 +665,39 @@ inline ostream& operator<<(ostream& o, const q10entry& q) {
   return o;
 }
 
+struct q11entry {
+  q11entry(uint64_t ps_partkey,
+           double   value) :
+    ps_partkey(ps_partkey), value(value) {}
+  uint64_t ps_partkey;
+  double   value;
+};
+
+inline ostream& operator<<(ostream &o, const q11entry &q) {
+  o << q.ps_partkey << "|" << q.value;
+  return o;
+}
+
+struct q12entry {
+  q12entry(
+    const string& l_shipmode,
+    uint64_t high_line_count,
+    uint64_t low_line_count) :
+    l_shipmode(l_shipmode),
+    high_line_count(high_line_count),
+    low_line_count(low_line_count) {}
+  string l_shipmode;
+  uint64_t high_line_count;
+  uint64_t low_line_count;
+};
+
+inline ostream& operator<<(ostream &o, const q12entry &q) {
+  o << q.l_shipmode << "|" << q.high_line_count << "|" << q.low_line_count;
+  return o;
+}
+
+typedef double q14entry;
+
 struct q18entry {
     q18entry(
         const string& c_name,
@@ -711,20 +743,6 @@ inline ostream& operator<<(ostream &o, const q20entry &q) {
     o << q.s_name << "|" << q.s_address;
     return o;
 }
-
-inline ostream& operator<<(ostream &o, const q2entry &q) {
-  o << q.s_acctbal << "|"
-    << q.s_name << "|"
-    << q.n_name << "|"
-    << q.p_partkey << "|"
-    << q.p_mfgr << "|"
-    << q.s_address << "|"
-    << q.s_phone << "|"
-    << q.s_comment;
-  return o;
-}
-
-typedef double q14entry;
 
 static void do_query_q1(Connect &conn,
                         uint32_t year,
@@ -929,7 +947,7 @@ static void do_query_q1_packed_opt(Connect &conn,
     // l_shipdate <= date '[year]-01-01'
     bool isBin;
     string encDATE = cm_stub.crypt(cm.getmkey(), strFromVal(EncodeDate(1, 1, year)),
-                              TYPE_INTEGER, fieldname(lineitem::l_shipdate, "OPE"),
+                              TYPE_INTEGER, "ope_join",
                               getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
 
     // do aggregation per group on all entries with enddate <= date.
@@ -1059,7 +1077,7 @@ static void do_query_q1_opt_nosort(Connect &conn,
     // l_shipdate <= date '[year]-01-01'
     bool isBin;
     string encDATE = cm_stub.crypt<3>(cm.getmkey(), strFromVal(EncodeDate(1, 1, year)),
-                              TYPE_INTEGER, fieldname(lineitem::l_shipdate, "OPE"),
+                              TYPE_INTEGER, "ope_join",
                               getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
 
     DBResult * dbres;
@@ -1191,7 +1209,7 @@ static void do_query_q1_opt_row_col_pack(Connect &conn,
     // l_shipdate <= date '[year]-01-01'
     bool isBin;
     string encDATE = cm_stub.crypt<3>(cm.getmkey(), strFromVal(EncodeDate(1, 1, year)),
-                              TYPE_INTEGER, fieldname(lineitem::l_shipdate, "OPE"),
+                              TYPE_INTEGER, "ope_join",
                               getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
 
     DBResult * dbres;
@@ -1349,7 +1367,7 @@ static void do_query_q1_opt(Connect &conn,
     // l_shipdate <= date '[year]-01-01'
     bool isBin;
     string encDATE = cm_stub.crypt<3>(cm.getmkey(), strFromVal(EncodeDate(1, 1, year)),
-                              TYPE_INTEGER, fieldname(lineitem::l_shipdate, "OPE"),
+                              TYPE_INTEGER, "ope_join",
                               getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
 
     DBResult * dbres;
@@ -1543,7 +1561,7 @@ static void do_query_q1_noopt(Connect &conn,
     // l_shipdate <= date '[year]-01-01'
     bool isBin;
     string encDATE = cm_stub.crypt<3>(cm.getmkey(), strFromVal(EncodeDate(1, 1, year)),
-                              TYPE_INTEGER, fieldname(lineitem::l_shipdate, "OPE"),
+                              TYPE_INTEGER, "ope_join",
                               getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
 
 
@@ -2113,7 +2131,7 @@ static void do_query_q3_crypt(Connect &conn,
 
     string enc_d_l_shipdate =
       cm_stub.crypt<3>(cm.getmkey(), to_s(encode_yyyy_mm_dd(d)),
-                              TYPE_INTEGER, fieldname(lineitem::l_shipdate, "OPE"),
+                              TYPE_INTEGER, "ope_join",
                               getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
 
     DBResult * dbres;
@@ -2611,12 +2629,12 @@ static void do_query_crypt_q6(Connect &conn,
 
     bool isBin = false;
     string d0 = cm_stub.crypt<3>(cm.getmkey(), to_s(encode_yyyy_mm_dd(d)),
-                              TYPE_INTEGER, fieldname(lineitem::l_shipdate, "OPE"),
+                              TYPE_INTEGER, "ope_join",
                               getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
     assert(!isBin);
 
     string d1 = cm_stub.crypt<3>(cm.getmkey(), to_s(encode_yyyy_mm_dd(d) + (1 << 9) /* + 1 yr */),
-                              TYPE_INTEGER, fieldname(lineitem::l_shipdate, "OPE"),
+                              TYPE_INTEGER, "ope_join",
                               getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
     assert(!isBin);
 
@@ -2805,11 +2823,11 @@ static void do_query_crypt_q7(Connect &conn,
 
     bool isBin = false;
     string d0 = cm_stub.crypt<3>(cm.getmkey(), strFromVal(EncodeDate(1, 1, 1995)),
-                                   TYPE_INTEGER, fieldname(lineitem::l_shipdate, "OPE"),
+                                   TYPE_INTEGER, "ope_join",
                                    getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
     assert(!isBin);
     string d1 = cm_stub.crypt<3>(cm.getmkey(), strFromVal(EncodeDate(12, 31, 1996)),
-                                   TYPE_INTEGER, fieldname(lineitem::l_shipdate, "OPE"),
+                                   TYPE_INTEGER, "ope_join",
                                    getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
     assert(!isBin);
 
@@ -4089,6 +4107,178 @@ static void do_query_q11_nosubquery(Connect &conn,
     }
 }
 
+static void do_query_q12(Connect &conn,
+                         const string& l_a,
+                         const string& l_b,
+                         const string& l_c,
+                         vector<q12entry> &results) {
+  NamedTimer fcnTimer(__func__);
+  ostringstream s;
+  s <<
+    "select "
+    "  l_shipmode, "
+    "  sum(case "
+    "    when o_orderpriority = '1-URGENT' "
+    "      or o_orderpriority = '2-HIGH' "
+    "      then 1 "
+    "    else 0 "
+    "  end) as high_line_count, "
+    "  sum(case "
+    "    when o_orderpriority <> '1-URGENT' "
+    "      and o_orderpriority <> '2-HIGH' "
+    "      then 1 "
+    "    else 0 "
+    "  end) as low_line_count "
+    "from "
+    "  orders, "
+    "  lineitem "
+    "where "
+    "  o_orderkey = l_orderkey "
+    "  and l_shipmode in ('" << l_a << "', '" << l_b << "') "
+    "  and l_commitdate < l_receiptdate "
+    "  and l_shipdate < l_commitdate "
+    "  and l_receiptdate >= date '" << l_c << "' "
+    "  and l_receiptdate < date '" << l_c << "' + interval '1' year "
+    "group by "
+    "  l_shipmode "
+    "order by "
+    "  l_shipmode"
+    ;
+  cerr << s.str() << endl;
+
+  DBResult * dbres;
+  {
+    NamedTimer t(__func__, "execute");
+    conn.execute(s.str(), dbres);
+  }
+  ResType res;
+  {
+    NamedTimer t(__func__, "unpack");
+    res = dbres->unpack();
+    assert(res.ok);
+  }
+
+  for (auto row : res.rows) {
+    results.push_back(
+        q12entry(
+          row[0].data,
+          resultFromStr<uint64_t>(row[1].data),
+          resultFromStr<uint64_t>(row[2].data)));
+  }
+}
+
+static string enc_fixed_len_str(
+    const string& pt,
+    const string& fieldname,
+    CryptoManager& cm,
+    size_t fixed_len) {
+  crypto_manager_stub cm_stub(&cm, UseOldOpe);
+  assert(pt.size() <= fixed_len);
+  bool isBin = false;
+  string ct = cm_stub.crypt(cm.getmkey(), pt, TYPE_TEXT,
+                            fieldname, getMin(oDET), SECLEVEL::DET,
+                            isBin, 12345);
+  assert(isBin);
+  assert(ct.size() == pt.size());
+  ct.resize(25);
+  return ct;
+}
+
+static void do_query_crypt_q12(Connect &conn,
+                               CryptoManager &cm,
+                               const string& l_a,
+                               const string& l_b,
+                               const string& l_c,
+                               vector<q12entry> &results) {
+  crypto_manager_stub cm_stub(&cm, UseOldOpe);
+  NamedTimer fcnTimer(__func__);
+
+  string ourgent_ct =
+    enc_fixed_len_str(
+        "1-URGENT", fieldname(orders::o_orderpriority, "DET"), cm, 15);
+
+  string ohigh_ct =
+    enc_fixed_len_str(
+        "2-HIGH", fieldname(orders::o_orderpriority, "DET"), cm, 15);
+
+  string l_a_enc =
+    enc_fixed_len_str(
+        l_a, fieldname(lineitem::l_shipmode, "DET"), cm, 10);
+
+  string l_b_enc =
+    enc_fixed_len_str(
+        l_b, fieldname(lineitem::l_shipmode, "DET"), cm, 10);
+
+  bool isBin = false;
+  string d0 = cm_stub.crypt<3>(cm.getmkey(), to_s(encode_yyyy_mm_dd(l_c)),
+                                 TYPE_INTEGER, "ope_join",
+                                 getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
+  assert(!isBin);
+
+  string d1 = cm_stub.crypt<3>(cm.getmkey(), to_s(encode_yyyy_mm_dd(l_c) + (1 << 9) /* 1 year */),
+                                 TYPE_INTEGER, "ope_join",
+                                 getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
+  assert(!isBin);
+
+  ostringstream s;
+  s <<
+    "select "
+    "  l_shipmode_DET, "
+    "  sum(case "
+    "    when o_orderpriority_DET = " << ourgent_ct << " "
+    "      or o_orderpriority_DET = " << ohigh_ct   << " "
+    "      then 1 "
+    "    else 0 "
+    "  end) as high_line_count, "
+    "  sum(case "
+    "    when o_orderpriority_DET  <> " << ourgent_ct << " "
+    "      and o_orderpriority_DET <> " << ohigh_ct   << " "
+    "      then 1 "
+    "    else 0 "
+    "  end) as low_line_count "
+    "from "
+    "  orders_enc, "
+    "  lineitem_enc_noagg_rowid "
+    "where "
+    "  o_orderkey_DET = l_orderkey_DET "
+    "  and l_shipmode_DET in (" << l_a_enc << ", " << l_b_enc << ") "
+    "  and l_commitdate_OPE < l_receiptdate_OPE "
+    "  and l_shipdate_OPE < l_commitdate_OPE "
+    "  and l_receiptdate_OPE >= " << d0 << " "
+    "  and l_receiptdate_OPE < "  << d1 << " "
+    "group by "
+    "  l_shipmode_DET "
+    ;
+  cerr << s.str() << endl;
+
+  DBResult * dbres;
+  {
+    NamedTimer t(__func__, "execute");
+    conn.execute(s.str(), dbres);
+  }
+  ResType res;
+  {
+    NamedTimer t(__func__, "unpack");
+    res = dbres->unpack();
+    assert(res.ok);
+  }
+
+  for (auto row : res.rows) {
+    string l_shipmode = decryptRow<string>(
+        row[0].data,
+        12345,
+        fieldname(lineitem::l_shipmode, "DET"),
+        TYPE_TEXT,
+        oDET,
+        cm);
+    results.push_back(
+        q12entry(
+          l_shipmode,
+          resultFromStr<uint64_t>(row[1].data),
+          resultFromStr<uint64_t>(row[2].data)));
+  }
+}
+
 static void do_query_q14_opt(Connect &conn,
                              CryptoManager &cm,
                              uint32_t year,
@@ -4098,10 +4288,10 @@ static void do_query_q14_opt(Connect &conn,
 
     bool isBin;
     string encDateLower = cm_stub.crypt<3>(cm.getmkey(), strFromVal(EncodeDate(7, 1, year)),
-                                   TYPE_INTEGER, fieldname(lineitem::l_shipdate, "OPE"),
+                                   TYPE_INTEGER, "ope_join",
                                    getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
     string encDateUpper = cm_stub.crypt<3>(cm.getmkey(), strFromVal(EncodeDate(8, 1, year)),
-                                   TYPE_INTEGER, fieldname(lineitem::l_shipdate, "OPE"),
+                                   TYPE_INTEGER, "ope_join",
                                    getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
 
     Binary key(cm.getKey(cm.getmkey(), fieldname(part::p_type, "SWP"), SECLEVEL::SWP));
@@ -4180,10 +4370,10 @@ static void do_query_q14_opt2(Connect &conn,
 
     bool isBin;
     string encDateLower = cm_stub.crypt<3>(cm.getmkey(), strFromVal(EncodeDate(7, 1, year)),
-                                   TYPE_INTEGER, fieldname(lineitem::l_shipdate, "OPE"),
+                                   TYPE_INTEGER, "ope_join",
                                    getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
     string encDateUpper = cm_stub.crypt<3>(cm.getmkey(), strFromVal(EncodeDate(8, 1, year)),
-                                   TYPE_INTEGER, fieldname(lineitem::l_shipdate, "OPE"),
+                                   TYPE_INTEGER, "ope_join",
                                    getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
 
     Binary key(cm.getKey(cm.getmkey(), fieldname(part::p_type, "SWP"), SECLEVEL::SWP));
@@ -4353,10 +4543,10 @@ static void do_query_q14_noopt(Connect &conn,
 
     bool isBin;
     string encDateLower = cm_stub.crypt<3>(cm.getmkey(), strFromVal(EncodeDate(7, 1, year)),
-            TYPE_INTEGER, fieldname(lineitem::l_shipdate, "OPE"),
+            TYPE_INTEGER, "ope_join",
             getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
     string encDateUpper = cm_stub.crypt<3>(cm.getmkey(), strFromVal(EncodeDate(8, 1, year)),
-            TYPE_INTEGER, fieldname(lineitem::l_shipdate, "OPE"),
+            TYPE_INTEGER, "ope_join",
             getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
     ostringstream s;
     s << "SELECT SQL_NO_CACHE p_type_DET, l_extendedprice_DET, l_discount_DET "
@@ -5857,11 +6047,11 @@ static void do_query_q20_opt_noagg(Connect &conn,
 
     bool isBin = false;
     string encDATE_START = cm_stub.crypt<3>(cm.getmkey(), strFromVal(EncodeDate(1, 1, year)),
-                              TYPE_INTEGER, fieldname(lineitem::l_shipdate, "OPE"),
+                              TYPE_INTEGER, "ope_join",
                               getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
     assert(!isBin);
     string encDATE_END = cm_stub.crypt<3>(cm.getmkey(), strFromVal(EncodeDate(1, 1, year + 1)),
-                              TYPE_INTEGER, fieldname(lineitem::l_shipdate, "OPE"),
+                              TYPE_INTEGER, "ope_join",
                               getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
     assert(!isBin);
 
@@ -6061,11 +6251,11 @@ static void do_query_q20_opt(Connect &conn,
 
     bool isBin = false;
     string encDATE_START = cm_stub.crypt<3>(cm.getmkey(), strFromVal(EncodeDate(1, 1, year)),
-                              TYPE_INTEGER, fieldname(lineitem::l_shipdate, "OPE"),
+                              TYPE_INTEGER, "ope_join",
                               getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
     assert(!isBin);
     string encDATE_END = cm_stub.crypt<3>(cm.getmkey(), strFromVal(EncodeDate(1, 1, year + 1)),
-                              TYPE_INTEGER, fieldname(lineitem::l_shipdate, "OPE"),
+                              TYPE_INTEGER, "ope_join",
                               getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
     assert(!isBin);
 
@@ -6236,6 +6426,8 @@ enum query_selection {
   query9,
   query10,
   query11,
+  query12,
+
   query14,
   query18,
   query20,
@@ -6279,6 +6471,8 @@ int main(int argc, char **argv) {
     REGULAR_QUERY_IMPL(8)
     REGULAR_QUERY_IMPL(9)
     REGULAR_QUERY_IMPL(10)
+
+    REGULAR_QUERY_IMPL(12)
 
 #undef REGULAR_QUERY_IMPL
 
@@ -6325,7 +6519,7 @@ int main(int argc, char **argv) {
 #define CASE_IMPL(n) { &Query ## n ## Modes, query ## n }
       CASE_IMPL(1), CASE_IMPL(2), CASE_IMPL(3), CASE_IMPL(4),
       CASE_IMPL(5), CASE_IMPL(6), CASE_IMPL(7), CASE_IMPL(8),
-      CASE_IMPL(9), CASE_IMPL(10), CASE_IMPL(11),
+      CASE_IMPL(9), CASE_IMPL(10), CASE_IMPL(11), CASE_IMPL(12),
 
       CASE_IMPL(14),
       CASE_IMPL(18),
@@ -6372,6 +6566,7 @@ int main(int argc, char **argv) {
     CASE_IMPL( 9, 1)
     CASE_IMPL(10, 1)
     CASE_IMPL(11, 2)
+    CASE_IMPL(12, 3)
     CASE_IMPL(14, 1)
     CASE_IMPL(18, 1)
     CASE_IMPL(20, 3)
@@ -6726,6 +6921,31 @@ int main(int argc, char **argv) {
           } else assert(false);
         }
         break;
+
+      case query12:
+        {
+          string l_a = argv[2];
+          string l_b = argv[3];
+          string l_c = argv[3];
+          vector<q12entry> results;
+          if (mode == "orig-query12") {
+            for (size_t i = 0; i < nruns; i++) {
+              do_query_q12(conn, l_a, l_b, l_c, results);
+              ctr += results.size();
+              PRINT_RESULTS();
+              results.clear();
+            }
+          } else if (mode == "crypt-query12") {
+            for (size_t i = 0; i < nruns; i++) {
+              do_query_crypt_q12(conn, cm, l_a, l_b, l_c, results);
+              ctr += results.size();
+              PRINT_RESULTS();
+              results.clear();
+            }
+          } else assert(false);
+        }
+        break;
+
       case query14:
         {
           int input_year = atoi(argv[2]);

@@ -1161,7 +1161,7 @@ vector<int> lineitem_encryptor::Onions = {
   ONION_DET,
   ONION_DET,
 
-  ONION_DET | ONION_OPE,
+  ONION_DET | ONION_OPEJOIN,
   ONION_DET | ONION_OPEJOIN,
   ONION_DET | ONION_OPEJOIN,
 
