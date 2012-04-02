@@ -1907,13 +1907,81 @@ static void do_query_q2_noopt(Connect &conn,
     }
 }
 
-struct _q3_noopt_task_state {
-  _q3_noopt_task_state() {}
-  vector< vector< SqlItem > > rows;
+template <typename T, typename Comparator = less<T> >
+class topN_list {
+public:
+  //typedef typename list<T>::iterator iterator;
+  typedef typename list<T>::const_iterator const_iterator;
 
-  list<q3entry_enc> bestSoFar;
-  static const size_t TopN = 10;
+  topN_list(size_t n, Comparator c = Comparator())
+    : n(n), c(c) { assert(n > 0); }
+
+  // true if elem was added, false if it was dropped (b/c it was not
+  // top N)
+  bool add_elem(const T& elem) {
+    if (elems.empty()) {
+      elems.push_back(elem);
+      return true;
+    }
+
+    // check to see if we can discard this candidate
+    // (linear search bestSoFar list, assuming topN size is small)
+    auto it = elems.begin();
+    for (; it != elems.end(); ++it) {
+      if (c(elem, *it)) {
+        break;
+      }
+    }
+
+    if (it == elems.end()) {
+      // cur group is smaller than every element on list
+      if (elems.size() < n) {
+        elems.push_back(elem);
+        return true;
+      } else { /* drop */ return false; }
+    } else {
+      elems.insert(it, elem);
+      if (elems.size() > n) {
+        elems.resize(n);
+      }
+      return true;
+    }
+  }
+
+  inline const_iterator begin() const { return elems.begin(); }
+  inline const_iterator end() const   { return elems.end();   }
+private:
+  size_t n;
+  Comparator c;
+  list<T> elems;
 };
+
+template <typename InputIterator, typename OutputIterator, typename Comparator>
+void n_way_merge(const vector<pair<InputIterator, InputIterator> >& input_sources,
+                 OutputIterator output_sink, Comparator c = Comparator(),
+                 size_t limit = (size_t)-1) {
+  vector<InputIterator> positions;
+  positions.reserve(input_sources.size());
+  for (auto p : input_sources) positions.push_back(p.first);
+  size_t n = 0;
+  while (n < limit) {
+    // look for next min
+    typename InputIterator::pointer minSoFar = NULL;
+    size_t minSoFarIdx = 0;
+    for (size_t i = 0; i < positions.size(); i++) {
+      if (positions[i] != input_sources[i].second) {
+        if (!minSoFar || c(*positions[i], *minSoFar)) {
+          minSoFar = &(*positions[i]);
+          minSoFarIdx = i;
+        }
+      }
+    }
+    if (!minSoFar) break;
+    positions[minSoFarIdx]++;
+    *output_sink++ = *minSoFar;
+    n++;
+  }
+}
 
 struct q3entry_enc_cmp {
   inline bool operator()(const q3entry_enc& a,
@@ -1924,9 +1992,16 @@ struct q3entry_enc_cmp {
   }
 };
 
+struct _q3_noopt_task_state {
+  _q3_noopt_task_state() : bestSoFar(10) {}
+  vector< vector< SqlItem > > rows;
+
+  topN_list<q3entry_enc, q3entry_enc_cmp> bestSoFar;
+  static const size_t TopN = 10;
+};
+
 struct _q3_noopt_task {
   void operator()() {
-      static q3entry_enc_cmp q3cmp;
       for (auto row : state->rows) {
           vector<string> ext_price_ciphers;
           tokenize(row[1].data, ",", ext_price_ciphers);
@@ -1966,31 +2041,7 @@ struct _q3_noopt_task {
                   resultFromStr<uint64_t>(row[4].data),
                   resultFromStr<uint64_t>(row[5].data));
 
-          if (state->bestSoFar.empty()) {
-            state->bestSoFar.push_back(cur_group);
-            continue;
-          }
-
-          // check to see if we can discard this candidate
-          // (linear search bestSoFar list, since topN size is small)
-          auto it = state->bestSoFar.begin();
-          for (; it != state->bestSoFar.end(); ++it) {
-            if (q3cmp(cur_group, *it)) {
-              break;
-            }
-          }
-
-          if (it == state->bestSoFar.end()) {
-            // cur group is smaller than every element on list
-            if (state->bestSoFar.size() < _q3_noopt_task_state::TopN) {
-              state->bestSoFar.push_back(cur_group);
-            } else { /* drop */ }
-          } else {
-            state->bestSoFar.insert(it, cur_group);
-            if (state->bestSoFar.size() > _q3_noopt_task_state::TopN) {
-              state->bestSoFar.resize(_q3_noopt_task_state::TopN);
-            }
-          }
+          state->bestSoFar.add_elem(cur_group);
       }
   }
   CryptoManager* cm;
@@ -2122,48 +2173,17 @@ static void do_query_q3_crypt(Connect &conn,
       // merge the topN lists from the threads, and add the results (
       // remembering to do the final decryptions)
 
-      vector< list<q3entry_enc>::iterator > positions;
+      typedef topN_list<q3entry_enc, q3entry_enc_cmp>::const_iterator iter;
+      vector<pair<iter, iter> > positions;
       positions.resize( NumThreads );
       for (size_t i = 0; i < NumThreads; i++) {
-        positions[i] = states[i].bestSoFar.begin();
+        positions[i].first  = states[i].bestSoFar.begin();
+        positions[i].second = states[i].bestSoFar.end();
       }
 
-      list< q3entry_enc > merged;
-      static q3entry_enc_cmp q3cmp;
-      while (merged.size() < _q3_noopt_task_state::TopN) {
-        // look for next min
-        q3entry_enc* minSoFar = NULL;
-        size_t minSoFarIdx = 0;
-        for (size_t i = 0; i < NumThreads; i++) {
-          if (positions[i] != states[i].bestSoFar.end()) {
-            if (!minSoFar || q3cmp(*positions[i], *minSoFar)) {
-              minSoFar = &(*positions[i]);
-              minSoFarIdx = i;
-            }
-          }
-        }
-        if (!minSoFar) break;
-
-        positions[minSoFarIdx]++;
-
-        if (merged.empty()) {
-          merged.push_back(*minSoFar);
-          continue;
-        }
-
-        auto it = merged.begin();
-        for (; it != merged.end(); ++it) {
-          if (q3cmp(*minSoFar, *it)) {
-            break;
-          }
-        }
-
-        if (it == merged.end()) {
-          merged.push_back(*minSoFar);
-        } else {
-          merged.insert(it, *minSoFar);
-        }
-      }
+      vector<q3entry_enc> merged(_q3_noopt_task_state::TopN);
+      n_way_merge(positions, merged.begin(), q3entry_enc_cmp(),
+                  _q3_noopt_task_state::TopN);
 
       // add the entries to the results
       for (auto it = merged.begin(); it != merged.end(); ++it) {
@@ -3432,7 +3452,161 @@ static void do_query_q10(Connect &conn,
                          vector<q10entry> &results) {
   NamedTimer fcnTimer(__func__);
 
+  ostringstream s;
+  s <<
+    "select "
+    "	c_custkey, "
+    "	c_name, "
+    "	sum(l_extendedprice * (100 - l_discount)) as revenue, "
+    "	c_acctbal, "
+    "	n_name, "
+    "	c_address, "
+    "	c_phone, "
+    "	c_comment "
+    "from "
+    "	CUSTOMER, "
+    "	ORDERS, "
+    "	LINEITEM_INT, "
+    "	NATION "
+    "where "
+    "	c_custkey = o_custkey "
+    "	and l_orderkey = o_orderkey "
+    "	and o_orderdate >= date '" << o_a << "' "
+    "	and o_orderdate < date '" << o_a << "' + interval '3' month "
+    "	and l_returnflag = 'R' "
+    "	and c_nationkey = n_nationkey "
+    "group by "
+    "	c_custkey, "
+    "	c_name, "
+    "	c_acctbal, "
+    "	c_phone, "
+    "	n_name, "
+    "	c_address, "
+    "	c_comment "
+    "order by "
+    "	revenue desc "
+    "limit 20;"
+  ;
+  cerr << s.str() << endl;
+
+  DBResult * dbres;
+  {
+    NamedTimer t(__func__, "execute");
+    conn.execute(s.str(), dbres);
+  }
+  ResType res;
+  {
+    NamedTimer t(__func__, "unpack");
+    res = dbres->unpack();
+    assert(res.ok);
+  }
+
+  for (auto row : res.rows) {
+    results.push_back(
+        q10entry(
+          resultFromStr<uint64_t>(row[0].data),
+          row[1].data,
+          resultFromStr<double>(row[2].data)/10000.0,
+          resultFromStr<double>(row[3].data),
+          row[4].data,
+          row[5].data,
+          row[6].data,
+          row[7].data));
+  }
 }
+
+struct q10entry_enc {
+  q10entry_enc() {}
+  q10entry_enc(
+      uint64_t c_custkey_DET,
+      const string& c_name_DET,
+      uint64_t c_acctbal_DET,
+      const string& n_name_DET,
+      const string& c_address_DET,
+      const string& c_phone_DET,
+      const string& c_comment_DET,
+      double revenue) :
+    c_custkey_DET(c_custkey_DET),
+    c_name_DET(c_name_DET),
+    c_acctbal_DET(c_acctbal_DET),
+    n_name_DET(n_name_DET),
+    c_address_DET(c_address_DET),
+    c_phone_DET(c_phone_DET),
+    c_comment_DET(c_comment_DET),
+    revenue(revenue) {}
+
+  uint64_t c_custkey_DET;
+  string c_name_DET;
+  uint64_t c_acctbal_DET;
+  string n_name_DET;
+  string c_address_DET;
+  string c_phone_DET;
+  string c_comment_DET;
+  double revenue;
+};
+
+struct q10entry_enc_cmp {
+  inline bool operator()(
+      const q10entry_enc& a,
+      const q10entry_enc& b) const {
+    return a.revenue > b.revenue;
+  }
+};
+
+struct _q10_noopt_task_state {
+  _q10_noopt_task_state() : bestSoFar(20) {}
+  vector< vector< SqlItem > > rows;
+  topN_list< q10entry_enc, q10entry_enc_cmp > bestSoFar;
+};
+
+struct _q10_noopt_task {
+  void operator()() {
+    for (auto row : state->rows) {
+      vector<string> l_extendedprice_cts;
+      vector<string> l_discount_cts;
+      tokenize(row[7].data, ",", l_extendedprice_cts);
+      tokenize(row[8].data, ",", l_discount_cts);
+      assert(l_extendedprice_cts.size() ==
+             l_discount_cts.size());
+
+      double sum = 0.0;
+      for (size_t i = 0; i < l_extendedprice_cts.size(); i++) {
+        uint64_t l_extendedprice_int = decryptRow<uint64_t, 7>(
+                l_extendedprice_cts[i],
+                12345,
+                fieldname(lineitem::l_extendedprice, "DET"),
+                TYPE_INTEGER,
+                oDET,
+                *cm);
+        double l_extendedprice = ((double)l_extendedprice_int)/100.0;
+
+        uint64_t l_discount_int = decryptRow<uint64_t, 7>(
+                l_discount_cts[i],
+                12345,
+                fieldname(lineitem::l_discount, "DET"),
+                TYPE_INTEGER,
+                oDET,
+                *cm);
+        double l_discount = ((double)l_discount_int)/100.0;
+
+        sum += l_extendedprice * (1.0 - l_discount);
+      }
+
+      q10entry_enc entry(
+          resultFromStr<uint64_t>(row[0].data),
+          row[1].data,
+          resultFromStr<uint64_t>(row[2].data),
+          row[3].data,
+          row[4].data,
+          row[5].data,
+          row[6].data,
+          sum);
+      state->bestSoFar.add_elem(entry);
+    }
+  }
+  CryptoManager* cm;
+  _q10_noopt_task_state* state;
+};
 
 static void do_query_crypt_q10(Connect &conn,
                                CryptoManager& cm,
@@ -3441,7 +3615,176 @@ static void do_query_crypt_q10(Connect &conn,
   crypto_manager_stub cm_stub(&cm, UseOldOpe);
   NamedTimer fcnTimer(__func__);
 
+  bool isBin = false;
+  string d0 =
+    cm_stub.crypt<3>(cm.getmkey(), to_s(encode_yyyy_mm_dd(o_a)),
+                            TYPE_INTEGER, fieldname(orders::o_orderdate, "OPE"),
+                            getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
+  assert(!isBin);
+
+  string d1 =
+    cm_stub.crypt<3>(cm.getmkey(), to_s(encode_yyyy_mm_dd(o_a) + (3 << 5) /* + 3 months */),
+                            TYPE_INTEGER, fieldname(orders::o_orderdate, "OPE"),
+                            getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
+  assert(!isBin);
+
+  string l0 =
+    cm_stub.crypt<1>(cm.getmkey(), to_s((unsigned int)'R'),
+                            TYPE_INTEGER, fieldname(lineitem::l_returnflag, "DET"),
+                            getMin(oDET), SECLEVEL::DET, isBin, 12345);
+  assert(!isBin);
+
+  ostringstream s;
+  s <<
+    "select "
+    "	c_custkey_DET, "
+    "	c_name_DET, "
+    "	c_acctbal_DET, "
+    "	n_name_DET, "
+    "	c_address_DET, "
+    "	c_phone_DET, "
+    "	c_comment_DET, "
+    " group_concat(l_extendedprice_DET), "
+    " group_concat(l_discount_DET) "
+    "from "
+    "	customer_enc, "
+    "	orders_enc, "
+    "	lineitem_enc_noagg_rowid, "
+    "	nation_enc "
+    "where "
+    "	c_custkey_DET = o_custkey_DET "
+    "	and l_orderkey_DET = o_orderkey_DET "
+    "	and o_orderdate_OPE >= " << d0 << " "
+    "	and o_orderdate_OPE < " << d1 << " "
+    "	and l_returnflag_DET = " << l0 << " "
+    "	and c_nationkey_DET = n_nationkey_DET "
+    "group by "
+    "	c_custkey_DET, "
+    "	c_name_DET, "
+    "	c_acctbal_DET, "
+    "	c_phone_DET, "
+    "	n_name_DET, "
+    "	c_address_DET, "
+    "	c_comment_DET "
+  ;
+  cerr << s.str() << endl;
+
+  DBResult * dbres;
+  {
+    NamedTimer t(__func__, "execute");
+    conn.execute(s.str(), dbres);
+  }
+  ResType res;
+  {
+    NamedTimer t(__func__, "unpack");
+    res = dbres->unpack();
+    assert(res.ok);
+  }
+
+  assert(DoParallel);
+  using namespace exec_service;
+
+  vector<_q10_noopt_task_state> states( NumThreads );
+  vector<_q10_noopt_task> tasks( NumThreads );
+  vector<SqlRowGroup> groups;
+  SplitRowsIntoGroups(groups, res.rows, NumThreads);
+
+  for (size_t i = 0; i < NumThreads; i++) {
+    tasks[i].cm    = &cm;
+    tasks[i].state = &states[i];
+    states[i].rows = groups[i];
+  }
+
+  Exec<_q10_noopt_task>::DefaultExecutor exec( NumThreads );
+  exec.start();
+  for (size_t i = 0; i < NumThreads; i++) {
+    exec.submit(tasks[i]);
+  }
+  exec.stop();
+
+  typedef topN_list<q10entry_enc, q10entry_enc_cmp>::const_iterator iter;
+  vector<pair<iter, iter> > positions;
+  positions.resize( NumThreads );
+  for (size_t i = 0; i < NumThreads; i++) {
+    positions[i].first  = states[i].bestSoFar.begin();
+    positions[i].second = states[i].bestSoFar.end();
+  }
+
+  vector<q10entry_enc> merged(20);
+  n_way_merge(positions, merged.begin(), q10entry_enc_cmp(), 20);
+
+  for (auto it = merged.begin(); it != merged.end(); ++it) {
+    uint64_t c_custkey = decryptRowFromTo<uint64_t>(
+            to_s(it->c_custkey_DET),
+            12345,
+            fieldname(customer::c_custkey, "DET"),
+            TYPE_INTEGER,
+            SECLEVEL::DETJOIN,
+            getMin(oDET),
+            cm);
+
+    string c_name = decryptRow<string>(
+            it->c_name_DET,
+            12345,
+            fieldname(customer::c_name, "DET"),
+            TYPE_TEXT,
+            oDET,
+            cm);
+
+    uint64_t c_acctbal_int = decryptRow<uint64_t, 7>(
+            to_s(it->c_acctbal_DET),
+            12345,
+            fieldname(customer::c_acctbal, "DET"),
+            TYPE_INTEGER,
+            oDET,
+            cm);
+    double c_acctbal = ((double)c_acctbal_int)/100.0;
+
+    string n_name = decryptRow<string>(
+            it->n_name_DET,
+            12345,
+            fieldname(nation::n_name, "DET"),
+            TYPE_TEXT,
+            oDET,
+            cm);
+
+    string c_address = decryptRow<string>(
+            it->c_address_DET,
+            12345,
+            fieldname(customer::c_address, "DET"),
+            TYPE_TEXT,
+            oDET,
+            cm);
+
+    string c_phone = decryptRow<string>(
+            it->c_phone_DET,
+            12345,
+            fieldname(customer::c_phone, "DET"),
+            TYPE_TEXT,
+            oDET,
+            cm);
+
+    string c_comment = decryptRow<string>(
+            it->c_comment_DET,
+            12345,
+            fieldname(customer::c_comment, "DET"),
+            TYPE_TEXT,
+            oDET,
+            cm);
+
+    results.push_back(
+        q10entry(
+          c_custkey,
+          c_name,
+          it->revenue,
+          c_acctbal,
+          n_name,
+          c_address,
+          c_phone,
+          c_comment));
+  }
 }
+
 
 static struct q11entry_sorter {
   inline bool operator()(const q11entry &lhs, const q11entry &rhs) const {
@@ -6318,14 +6661,14 @@ int main(int argc, char **argv) {
         {
           string o_a = argv[2];
           vector<q10entry> results;
-          if (mode == "orig-query9") {
+          if (mode == "orig-query10") {
             for (size_t i = 0; i < nruns; i++) {
               do_query_q10(conn, o_a, results);
               ctr += results.size();
               PRINT_RESULTS();
               results.clear();
             }
-          } else if (mode == "crypt-query9") {
+          } else if (mode == "crypt-query10") {
             for (size_t i = 0; i < nruns; i++) {
               do_query_crypt_q10(conn, cm, o_a, results);
               ctr += results.size();
