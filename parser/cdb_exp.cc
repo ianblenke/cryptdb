@@ -725,6 +725,8 @@ inline ostream& operator<<(ostream &o, const q15entry &q) {
   return o;
 }
 
+typedef double q17entry;
+
 struct q18entry {
     q18entry(
         const string& c_name,
@@ -2384,29 +2386,29 @@ static void do_query_q5(Connect &conn,
     ostringstream s;
     s <<
       "select"
-      "	n_name,"
-      "	sum(l_extendedprice * (100 - l_discount)) as revenue "
+      "  n_name,"
+      "  sum(l_extendedprice * (100 - l_discount)) as revenue "
       "from"
-      "	CUSTOMER,"
-      "	ORDERS,"
-      "	LINEITEM_INT,"
-      "	SUPPLIER,"
-      "	NATION,"
-      "	REGION "
+      "  CUSTOMER,"
+      "  ORDERS,"
+      "  LINEITEM_INT,"
+      "  SUPPLIER,"
+      "  NATION,"
+      "  REGION "
       "where"
-      "	c_custkey = o_custkey"
-      "	and l_orderkey = o_orderkey"
-      "	and l_suppkey = s_suppkey"
-      "	and c_nationkey = s_nationkey"
-      "	and s_nationkey = n_nationkey"
-      "	and n_regionkey = r_regionkey"
-      "	and r_name = '" << name << "'"
-      "	and o_orderdate >= date '" << d << "'"
-      "	and o_orderdate < date '" << d << "' + interval '1' year "
+      "  c_custkey = o_custkey"
+      "  and l_orderkey = o_orderkey"
+      "  and l_suppkey = s_suppkey"
+      "  and c_nationkey = s_nationkey"
+      "  and s_nationkey = n_nationkey"
+      "  and n_regionkey = r_regionkey"
+      "  and r_name = '" << name << "'"
+      "  and o_orderdate >= date '" << d << "'"
+      "  and o_orderdate < date '" << d << "' + interval '1' year "
       "group by"
-      "	n_name "
+      "  n_name "
       "order by"
-      "	revenue desc;"
+      "  revenue desc;"
       ;
     cerr << s.str() << endl;
 
@@ -2498,28 +2500,28 @@ static void do_query_crypt_q5(Connect &conn,
     ostringstream s;
     s <<
       "select"
-      "	n_name_DET,"
+      "  n_name_DET,"
       " group_concat(l_extendedprice_DET),"
       " group_concat(l_discount_DET) "
       "from"
-      "	customer_enc,"
-      "	orders_enc,"
-      "	lineitem_enc_noagg_rowid,"
-      "	supplier_enc,"
-      "	nation_enc,"
-      "	region_enc "
+      "  customer_enc,"
+      "  orders_enc,"
+      "  lineitem_enc_noagg_rowid,"
+      "  supplier_enc,"
+      "  nation_enc,"
+      "  region_enc "
       "where"
-      "	c_custkey_DET = o_custkey_DET"
-      "	and l_orderkey_DET = o_orderkey_DET"
-      "	and l_suppkey_DET = s_suppkey_DET"
-      "	and c_nationkey_DET = s_nationkey_DET"
-      "	and s_nationkey_DET = n_nationkey_DET"
-      "	and n_regionkey_DET = r_regionkey_DET"
-      "	and r_name_DET = " << marshallBinary(encNAME) << " "
-      "	and o_orderdate_OPE >= " << d0 << " "
-      "	and o_orderdate_OPE < " << d1 << " "
+      "  c_custkey_DET = o_custkey_DET"
+      "  and l_orderkey_DET = o_orderkey_DET"
+      "  and l_suppkey_DET = s_suppkey_DET"
+      "  and c_nationkey_DET = s_nationkey_DET"
+      "  and s_nationkey_DET = n_nationkey_DET"
+      "  and n_regionkey_DET = r_regionkey_DET"
+      "  and r_name_DET = " << marshallBinary(encNAME) << " "
+      "  and o_orderdate_OPE >= " << d0 << " "
+      "  and o_orderdate_OPE < " << d1 << " "
       "group by"
-      "	n_name_DET"
+      "  n_name_DET"
       ;
     cerr << s.str() << endl;
 
@@ -2612,15 +2614,15 @@ static void do_query_q6(Connect &conn,
     ostringstream s;
     s <<
       "select"
-      "	sum(l_extendedprice * l_discount) as revenue "
+      "  sum(l_extendedprice * l_discount) as revenue "
       "from"
-      "	LINEITEM_INT "
+      "  LINEITEM_INT "
       "where"
-      "	l_shipdate >= date '" << d << "'"
-      "	and l_shipdate < date '" << d << "' + interval '1' year"
-      "	and l_discount between " << roundToLong(discount*100.0)
+      "  l_shipdate >= date '" << d << "'"
+      "  and l_shipdate < date '" << d << "' + interval '1' year"
+      "  and l_discount between " << roundToLong(discount*100.0)
         << " - 1 and " << roundToLong(discount*100.0) << " + 1.0"
-      "	and l_quantity < " << roundToLong (quantity * 100.0 )
+      "  and l_quantity < " << roundToLong (quantity * 100.0 )
       ;
     cerr << s.str() << endl;
 
@@ -2699,13 +2701,13 @@ static void do_query_crypt_q6(Connect &conn,
         << pkinfo << ", " << "\"" << filename << "\", "
         << NumThreads << ", 256, 12, 1) "
       "from"
-      "	lineitem_enc_noagg_rowid "
+      "  lineitem_enc_noagg_rowid "
       "where"
-      "	l_shipdate_OPE >= " << d0 << " "
-      "	and l_shipdate_OPE < " << d1 << " "
-      "	and l_discount_OPE >= " << marshallBinary(dsc0) << " "
+      "  l_shipdate_OPE >= " << d0 << " "
+      "  and l_shipdate_OPE < " << d1 << " "
+      "  and l_discount_OPE >= " << marshallBinary(dsc0) << " "
       " and l_discount_OPE <= " << marshallBinary(dsc1) << " "
-      "	and l_quantity_OPE < " << marshallBinary(qty)
+      "  and l_quantity_OPE < " << marshallBinary(qty)
       ;
     cerr << s.str() << endl;
 
@@ -2776,29 +2778,29 @@ static void do_query_q7(Connect &conn,
     ostringstream s;
     s <<
     "select"
-    "	sum_hash_agg_int("
+    "  sum_hash_agg_int("
     "   n1.n_name as supp_nation,"
     "   n2.n_name as cust_nation,"
     "   extract(year from l_shipdate) as l_year,"
-    "	  l_extendedprice * (100 - l_discount) as volume) "
+    "    l_extendedprice * (100 - l_discount) as volume) "
     "from"
-    "	SUPPLIER,"
-    "	LINEITEM_INT,"
-    "	ORDERS,"
-    "	CUSTOMER,"
-    "	NATION n1,"
-    "	NATION n2 "
+    "  SUPPLIER,"
+    "  LINEITEM_INT,"
+    "  ORDERS,"
+    "  CUSTOMER,"
+    "  NATION n1,"
+    "  NATION n2 "
     "where"
-    "	s_suppkey = l_suppkey"
-    "	and o_orderkey = l_orderkey"
-    "	and c_custkey = o_custkey"
-    "	and s_nationkey = n1.n_nationkey"
-    "	and c_nationkey = n2.n_nationkey"
-    "	and ("
-    "		(n1.n_name = '" << n_a << "' and n2.n_name = '" << n_b << "')"
-    "		or (n1.n_name = '" << n_b << "' and n2.n_name = '" << n_a << "')"
-    "	)"
-    "	and l_shipdate between date '1995-01-01' and date '1996-12-31'";
+    "  s_suppkey = l_suppkey"
+    "  and o_orderkey = l_orderkey"
+    "  and c_custkey = o_custkey"
+    "  and s_nationkey = n1.n_nationkey"
+    "  and c_nationkey = n2.n_nationkey"
+    "  and ("
+    "    (n1.n_name = '" << n_a << "' and n2.n_name = '" << n_b << "')"
+    "    or (n1.n_name = '" << n_b << "' and n2.n_name = '" << n_a << "')"
+    "  )"
+    "  and l_shipdate between date '1995-01-01' and date '1996-12-31'";
     cerr << s.str() << endl;
 
     DBResult * dbres;
@@ -2879,34 +2881,34 @@ static void do_query_crypt_q7(Connect &conn,
     ostringstream s;
     s <<
     "select"
-    "	agg_hash_agg_row_col_pack("
+    "  agg_hash_agg_row_col_pack("
     "   3,"
     "   n1.n_name_DET,"
     "   n2.n_name_DET,"
     "   l_shipdate_year_DET,"
     "   row_id," << pkinfo << ", " <<
     "\"" << filename << "\", " << NumThreads << ", 256, 12, "
-    "	  1) "
+    "    1) "
     "from"
-    "	supplier_enc,"
-    "	lineitem_enc_noagg_rowid,"
-    "	orders_enc,"
-    "	customer_enc,"
-    "	nation_enc n1,"
-    "	nation_enc n2 "
+    "  supplier_enc,"
+    "  lineitem_enc_noagg_rowid,"
+    "  orders_enc,"
+    "  customer_enc,"
+    "  nation_enc n1,"
+    "  nation_enc n2 "
     "where"
-    "	s_suppkey_DET = l_suppkey_DET"
-    "	and o_orderkey_DET = l_orderkey_DET"
-    "	and c_custkey_DET = o_custkey_DET"
-    "	and s_nationkey_DET = n1.n_nationkey_DET"
-    "	and c_nationkey_DET = n2.n_nationkey_DET"
-    "	and ("
-    "		(n1.n_name_DET = " << marshallBinary(n_a_enc)
+    "  s_suppkey_DET = l_suppkey_DET"
+    "  and o_orderkey_DET = l_orderkey_DET"
+    "  and c_custkey_DET = o_custkey_DET"
+    "  and s_nationkey_DET = n1.n_nationkey_DET"
+    "  and c_nationkey_DET = n2.n_nationkey_DET"
+    "  and ("
+    "    (n1.n_name_DET = " << marshallBinary(n_a_enc)
     << " and n2.n_name_DET = " << marshallBinary(n_b_enc) << ")"
-    "		or (n1.n_name_DET = " << marshallBinary(n_b_enc)
+    "    or (n1.n_name_DET = " << marshallBinary(n_b_enc)
     << " and n2.n_name_DET = " << marshallBinary(n_a_enc) << ")"
-    "	)"
-    "	and l_shipdate_OPE >= " << d0 << " and l_shipdate_OPE <= " << d1;
+    "  )"
+    "  and l_shipdate_OPE >= " << d0 << " and l_shipdate_OPE <= " << d1;
     cerr << s.str() << endl;
 
     DBResult * dbres;
@@ -3001,42 +3003,42 @@ static void do_query_q8(Connect &conn,
     ostringstream s;
     s <<
       "select"
-      "	o_year,"
-      "	sum(case"
-      "		when nation = '" << n_a << "' then volume"
-      "		else 0"
-      "	end) / sum(volume) as mkt_share "
+      "  o_year,"
+      "  sum(case"
+      "    when nation = '" << n_a << "' then volume"
+      "    else 0"
+      "  end) / sum(volume) as mkt_share "
       "from"
-      "	("
-      "		select"
-      "			extract(year from o_orderdate) as o_year,"
-      "			l_extendedprice * (100 - l_discount) as volume,"
-      "			n2.n_name as nation"
-      "		from"
-      "			PART,"
-      "			SUPPLIER,"
-      "			LINEITEM_INT,"
-      "			ORDERS,"
-      "			CUSTOMER,"
-      "			NATION n1,"
-      "			NATION n2,"
-      "			REGION"
-      "		where"
-      "			p_partkey = l_partkey"
-      "			and s_suppkey = l_suppkey"
-      "			and l_orderkey = o_orderkey"
-      "			and o_custkey = c_custkey"
-      "			and c_nationkey = n1.n_nationkey"
-      "			and n1.n_regionkey = r_regionkey"
-      "			and r_name = '" << r_a << "'"
-      "			and s_nationkey = n2.n_nationkey"
-      "			and o_orderdate between date '1995-01-01' and date '1996-12-31'"
-      "			and p_type = '" << p_a <<"'"
-      "	) as all_nations "
+      "  ("
+      "    select"
+      "      extract(year from o_orderdate) as o_year,"
+      "      l_extendedprice * (100 - l_discount) as volume,"
+      "      n2.n_name as nation"
+      "    from"
+      "      PART,"
+      "      SUPPLIER,"
+      "      LINEITEM_INT,"
+      "      ORDERS,"
+      "      CUSTOMER,"
+      "      NATION n1,"
+      "      NATION n2,"
+      "      REGION"
+      "    where"
+      "      p_partkey = l_partkey"
+      "      and s_suppkey = l_suppkey"
+      "      and l_orderkey = o_orderkey"
+      "      and o_custkey = c_custkey"
+      "      and c_nationkey = n1.n_nationkey"
+      "      and n1.n_regionkey = r_regionkey"
+      "      and r_name = '" << r_a << "'"
+      "      and s_nationkey = n2.n_nationkey"
+      "      and o_orderdate between date '1995-01-01' and date '1996-12-31'"
+      "      and p_type = '" << p_a <<"'"
+      "  ) as all_nations "
       "group by"
-      "	o_year "
+      "  o_year "
       "order by"
-      "	o_year;";
+      "  o_year;";
     cerr << s.str() << endl;
 
     DBResult * dbres;
@@ -3156,30 +3158,30 @@ static void do_query_crypt_q8(Connect &conn,
     ostringstream s;
     s <<
       "select"
-      "	IF(o_orderdate_OPE < " << boundary1 << ", 0, 1),"
-      "	l_extendedprice_DET,"
+      "  IF(o_orderdate_OPE < " << boundary1 << ", 0, 1),"
+      "  l_extendedprice_DET,"
       " l_discount_DET,"
-      "	n2.n_name_DET = " << marshallBinary(n_a_enc) << " "
+      "  n2.n_name_DET = " << marshallBinary(n_a_enc) << " "
       "from"
-      "	part_enc,"
-      "	supplier_enc,"
-      "	lineitem_enc_noagg_rowid,"
-      "	orders_enc,"
-      "	customer_enc,"
-      "	nation_enc n1,"
-      "	nation_enc n2,"
-      "	region_enc "
+      "  part_enc,"
+      "  supplier_enc,"
+      "  lineitem_enc_noagg_rowid,"
+      "  orders_enc,"
+      "  customer_enc,"
+      "  nation_enc n1,"
+      "  nation_enc n2,"
+      "  region_enc "
       "where"
-      "	p_partkey_DET = l_partkey_DET"
-      "	and s_suppkey_DET = l_suppkey_DET"
-      "	and l_orderkey_DET = o_orderkey_DET"
-      "	and o_custkey_DET = c_custkey_DET"
-      "	and c_nationkey_DET = n1.n_nationkey_DET"
-      "	and n1.n_regionkey_DET = r_regionkey_DET"
-      "	and r_name_DET = " << marshallBinary(r_a_enc) << " "
-      "	and s_nationkey_DET = n2.n_nationkey_DET"
-      "	and o_orderdate_OPE >= " << d0 << " and o_orderdate_OPE <= " << d1 <<
-      "	and p_type_DET = " << marshallBinary(p_a_enc)
+      "  p_partkey_DET = l_partkey_DET"
+      "  and s_suppkey_DET = l_suppkey_DET"
+      "  and l_orderkey_DET = o_orderkey_DET"
+      "  and o_custkey_DET = c_custkey_DET"
+      "  and c_nationkey_DET = n1.n_nationkey_DET"
+      "  and n1.n_regionkey_DET = r_regionkey_DET"
+      "  and r_name_DET = " << marshallBinary(r_a_enc) << " "
+      "  and s_nationkey_DET = n2.n_nationkey_DET"
+      "  and o_orderdate_OPE >= " << d0 << " and o_orderdate_OPE <= " << d1 <<
+      "  and p_type_DET = " << marshallBinary(p_a_enc)
       ;
     cerr << s.str() << endl;
 
@@ -3247,37 +3249,37 @@ static void do_query_q9(Connect &conn,
     ostringstream s;
     s <<
       "select "
-      "	nation, "
-      "	o_year, "
-      "	sum(amount) as sum_profit "
+      "  nation, "
+      "  o_year, "
+      "  sum(amount) as sum_profit "
       "from "
-      "	( "
-      "		select "
-      "			n_name as nation, "
-      "			extract(year from o_orderdate) as o_year, "
-      "			l_extendedprice * (100 - l_discount) - ps_supplycost * l_quantity as amount "
-      "		from "
-      "			PART, "
-      "			SUPPLIER, "
-      "			LINEITEM_INT, "
-      "			PARTSUPP_INT, "
-      "			ORDERS, "
-      "			NATION "
-      "		where "
-      "			s_suppkey = l_suppkey "
-      "			and ps_suppkey = l_suppkey "
-      "			and ps_partkey = l_partkey "
-      "			and p_partkey = l_partkey "
-      "			and o_orderkey = l_orderkey "
-      "			and s_nationkey = n_nationkey "
-      "			and p_name like '%" << p_a << "%' "
-      "	) as profit "
+      "  ( "
+      "    select "
+      "      n_name as nation, "
+      "      extract(year from o_orderdate) as o_year, "
+      "      l_extendedprice * (100 - l_discount) - ps_supplycost * l_quantity as amount "
+      "    from "
+      "      PART, "
+      "      SUPPLIER, "
+      "      LINEITEM_INT, "
+      "      PARTSUPP_INT, "
+      "      ORDERS, "
+      "      NATION "
+      "    where "
+      "      s_suppkey = l_suppkey "
+      "      and ps_suppkey = l_suppkey "
+      "      and ps_partkey = l_partkey "
+      "      and p_partkey = l_partkey "
+      "      and o_orderkey = l_orderkey "
+      "      and s_nationkey = n_nationkey "
+      "      and p_name like '%" << p_a << "%' "
+      "  ) as profit "
       "group by "
-      "	nation, "
-      "	o_year "
+      "  nation, "
+      "  o_year "
       "order by "
-      "	nation, "
-      "	o_year desc; ";
+      "  nation, "
+      "  o_year desc; ";
     cerr << s.str() << endl;
 
     DBResult * dbres;
@@ -3405,24 +3407,24 @@ static void do_query_crypt_q9(Connect &conn,
 
   ostringstream s;
   s <<
-		"select "
-		"	n_name_DET, " << make_if_predicate(0, boundaries, "o_orderdate_OPE") << ", "
-		"	l_extendedprice_DET, l_discount_DET, ps_supplycost_DET, l_quantity_DET "
-		"from "
-		"	part_enc, "
-		"	supplier_enc, "
-		"	lineitem_enc_noagg_rowid, "
-		"	partsupp_enc_noopt, "
-		"	orders_enc, "
-		"	nation_enc "
-		"where "
-		"	s_suppkey_DET = l_suppkey_DET "
-		"	and ps_suppkey_DET = l_suppkey_DET "
-		"	and ps_partkey_DET = l_partkey_DET "
-		"	and p_partkey_DET = l_partkey_DET "
-		"	and o_orderkey_DET = l_orderkey_DET "
-		"	and s_nationkey_DET = n_nationkey_DET "
-		"	and searchSWP("
+    "select "
+    "  n_name_DET, " << make_if_predicate(0, boundaries, "o_orderdate_OPE") << ", "
+    "  l_extendedprice_DET, l_discount_DET, ps_supplycost_DET, l_quantity_DET "
+    "from "
+    "  part_enc, "
+    "  supplier_enc, "
+    "  lineitem_enc_noagg_rowid, "
+    "  partsupp_enc_noopt, "
+    "  orders_enc, "
+    "  nation_enc "
+    "where "
+    "  s_suppkey_DET = l_suppkey_DET "
+    "  and ps_suppkey_DET = l_suppkey_DET "
+    "  and ps_partkey_DET = l_partkey_DET "
+    "  and p_partkey_DET = l_partkey_DET "
+    "  and o_orderkey_DET = l_orderkey_DET "
+    "  and s_nationkey_DET = n_nationkey_DET "
+    "  and searchSWP("
           << marshallBinary(string((char *)t.ciph.content, t.ciph.len))
           << ", "
           << marshallBinary(string((char *)t.wordKey.content, t.wordKey.len))
@@ -3499,36 +3501,36 @@ static void do_query_q10(Connect &conn,
   ostringstream s;
   s <<
     "select "
-    "	c_custkey, "
-    "	c_name, "
-    "	sum(l_extendedprice * (100 - l_discount)) as revenue, "
-    "	c_acctbal, "
-    "	n_name, "
-    "	c_address, "
-    "	c_phone, "
-    "	c_comment "
+    "  c_custkey, "
+    "  c_name, "
+    "  sum(l_extendedprice * (100 - l_discount)) as revenue, "
+    "  c_acctbal, "
+    "  n_name, "
+    "  c_address, "
+    "  c_phone, "
+    "  c_comment "
     "from "
-    "	CUSTOMER, "
-    "	ORDERS, "
-    "	LINEITEM_INT, "
-    "	NATION "
+    "  CUSTOMER, "
+    "  ORDERS, "
+    "  LINEITEM_INT, "
+    "  NATION "
     "where "
-    "	c_custkey = o_custkey "
-    "	and l_orderkey = o_orderkey "
-    "	and o_orderdate >= date '" << o_a << "' "
-    "	and o_orderdate < date '" << o_a << "' + interval '3' month "
-    "	and l_returnflag = 'R' "
-    "	and c_nationkey = n_nationkey "
+    "  c_custkey = o_custkey "
+    "  and l_orderkey = o_orderkey "
+    "  and o_orderdate >= date '" << o_a << "' "
+    "  and o_orderdate < date '" << o_a << "' + interval '3' month "
+    "  and l_returnflag = 'R' "
+    "  and c_nationkey = n_nationkey "
     "group by "
-    "	c_custkey, "
-    "	c_name, "
-    "	c_acctbal, "
-    "	c_phone, "
-    "	n_name, "
-    "	c_address, "
-    "	c_comment "
+    "  c_custkey, "
+    "  c_name, "
+    "  c_acctbal, "
+    "  c_phone, "
+    "  n_name, "
+    "  c_address, "
+    "  c_comment "
     "order by "
-    "	revenue desc "
+    "  revenue desc "
     "limit 20;"
   ;
   cerr << s.str() << endl;
@@ -3681,35 +3683,35 @@ static void do_query_crypt_q10(Connect &conn,
   ostringstream s;
   s <<
     "select "
-    "	c_custkey_DET, "
-    "	c_name_DET, "
-    "	c_acctbal_DET, "
-    "	n_name_DET, "
-    "	c_address_DET, "
-    "	c_phone_DET, "
-    "	c_comment_DET, "
+    "  c_custkey_DET, "
+    "  c_name_DET, "
+    "  c_acctbal_DET, "
+    "  n_name_DET, "
+    "  c_address_DET, "
+    "  c_phone_DET, "
+    "  c_comment_DET, "
     " group_concat(l_extendedprice_DET), "
     " group_concat(l_discount_DET) "
     "from "
-    "	customer_enc, "
-    "	orders_enc, "
-    "	lineitem_enc_noagg_rowid, "
-    "	nation_enc "
+    "  customer_enc, "
+    "  orders_enc, "
+    "  lineitem_enc_noagg_rowid, "
+    "  nation_enc "
     "where "
-    "	c_custkey_DET = o_custkey_DET "
-    "	and l_orderkey_DET = o_orderkey_DET "
-    "	and o_orderdate_OPE >= " << d0 << " "
-    "	and o_orderdate_OPE < " << d1 << " "
-    "	and l_returnflag_DET = " << l0 << " "
-    "	and c_nationkey_DET = n_nationkey_DET "
+    "  c_custkey_DET = o_custkey_DET "
+    "  and l_orderkey_DET = o_orderkey_DET "
+    "  and o_orderdate_OPE >= " << d0 << " "
+    "  and o_orderdate_OPE < " << d1 << " "
+    "  and l_returnflag_DET = " << l0 << " "
+    "  and c_nationkey_DET = n_nationkey_DET "
     "group by "
-    "	c_custkey_DET, "
-    "	c_name_DET, "
-    "	c_acctbal_DET, "
-    "	c_phone_DET, "
-    "	n_name_DET, "
-    "	c_address_DET, "
-    "	c_comment_DET "
+    "  c_custkey_DET, "
+    "  c_name_DET, "
+    "  c_acctbal_DET, "
+    "  c_phone_DET, "
+    "  n_name_DET, "
+    "  c_address_DET, "
+    "  c_comment_DET "
   ;
   cerr << s.str() << endl;
 
@@ -5259,15 +5261,15 @@ static void do_query_q15(Connect &conn,
   ostringstream s;
   s <<
     "select "
-    "	l_suppkey, "
-    "	sum(l_extendedprice * (100 - l_discount)) as revenue "
+    "  l_suppkey, "
+    "  sum(l_extendedprice * (100 - l_discount)) as revenue "
     "from "
-    "	LINEITEM_INT "
+    "  LINEITEM_INT "
     "where "
-    "	l_shipdate >= date '" << l_a << "' "
-    "	and l_shipdate < date '"<< l_a << "' + interval '3' month "
+    "  l_shipdate >= date '" << l_a << "' "
+    "  and l_shipdate < date '"<< l_a << "' + interval '3' month "
     "group by "
-    "	l_suppkey "
+    "  l_suppkey "
     "order by "
     " revenue desc "
     "limit 1";
@@ -5291,16 +5293,16 @@ static void do_query_q15(Connect &conn,
   ostringstream s1;
   s1 <<
     "select "
-    "	s_suppkey, "
-    "	s_name, "
-    "	s_address, "
-    "	s_phone, "
+    "  s_suppkey, "
+    "  s_name, "
+    "  s_address, "
+    "  s_phone, "
     "from "
-    "	SUPPLIER, "
+    "  SUPPLIER, "
     "where "
-    "	s_suppkey = " << res.rows[0][0].data << " "
+    "  s_suppkey = " << res.rows[0][0].data << " "
     "order by "
-    "	s_suppkey; "
+    "  s_suppkey; "
     ;
 
   {
@@ -5396,15 +5398,15 @@ static void do_query_crypt_q15(Connect &conn,
   ostringstream s;
   s <<
     "select "
-    "	l_suppkey_DET, "
-    "	group_concat(l_disc_price_DET) "
+    "  l_suppkey_DET, "
+    "  group_concat(l_disc_price_DET) "
     "from "
-    "	lineitem_enc_noagg_rowid "
+    "  lineitem_enc_noagg_rowid "
     "where "
-    "	l_shipdate_OPE >= " << d0 << " "
-    "	and l_shipdate_OPE < "<< d1 << " "
+    "  l_shipdate_OPE >= " << d0 << " "
+    "  and l_shipdate_OPE < "<< d1 << " "
     "group by "
-    "	l_suppkey_DET"
+    "  l_suppkey_DET"
     ;
   cerr << s.str() << endl;
 
@@ -5458,14 +5460,14 @@ static void do_query_crypt_q15(Connect &conn,
   ostringstream s1;
   s1 <<
     "select "
-    "	s_suppkey_DET, "
-    "	s_name_DET, "
-    "	s_address_DET, "
-    "	s_phone_DET, "
+    "  s_suppkey_DET, "
+    "  s_name_DET, "
+    "  s_address_DET, "
+    "  s_phone_DET, "
     "from "
-    "	supplier_enc, "
+    "  supplier_enc, "
     "where "
-    "	s_suppkey_DET = " << merged.front().l_suppkey_DET
+    "  s_suppkey_DET = " << merged.front().l_suppkey_DET
     ;
 
   {
@@ -5518,6 +5520,97 @@ static void do_query_crypt_q15(Connect &conn,
         s_suppkey, s_name, s_address, s_phone,
         merged.front().revenue));
   }
+}
+
+static void do_query_q17(Connect &conn,
+                         const string& p_a,
+                         const string& p_b,
+                         vector<q17entry> &results) {
+  NamedTimer fcnTimer(__func__);
+
+  DBResult * dbres;
+  ResType res;
+
+  // get the partkeys we might care about
+  vector<string> partkeys;
+  {
+    ostringstream s;
+    s <<
+      "select l_partkey from LINEITEM_INT, PART "
+      "where p_partkey = l_partkey and "
+      "p_brand = '" << p_a << "' and "
+      "p_container = '" << p_b << "'";
+    cerr << s.str() << endl;
+    {
+      NamedTimer t(__func__, "execute-1");
+      conn.execute(s.str(), dbres);
+    }
+    {
+      NamedTimer t(__func__, "unpack-1");
+      res = dbres->unpack();
+      assert(res.ok);
+    }
+    for (auto row : res.rows) { partkeys.push_back(row[0].data); }
+  }
+
+  {
+    conn.execute("CREATE TEMPORARY TABLE inner_tmp ("
+                 "p integer unsigned, "
+                 "q bigint unsigned, "
+                 "PRIMARY KEY (p_partkey)) ENGINE=MEMORY");
+
+    ostringstream s;
+    s <<
+      "INSERT INTO inner_tmp "
+      "SELECT l_partkey, 0.2 * avg(l_quantity) FROM LINEITEM_INT WHERE l_partkey IN ("
+      << join(partkeys, ",") << ") GROUP BY l_partkey"
+      ;
+
+    {
+      NamedTimer t(__func__, "execute-2");
+      conn.execute(s.str(), dbres);
+    }
+  }
+
+  ostringstream s;
+  s <<
+    "select "
+    "  sum(l_extendedprice) / 700.0 as avg_yearly "
+    "from "
+    "  LINEITEM_INT, "
+    "  PART, "
+    " inner_tmp "
+    "where "
+    "  p_partkey = l_partkey "
+    "  and p_partkey = p "
+    "  and p_brand = '" << p_a << "' "
+    "  and p_container = '"<< p_b << "' "
+    "  and l_quantity < q; "
+    ;
+  cerr << s.str() << endl;
+
+  {
+    NamedTimer t(__func__, "execute-3");
+    conn.execute(s.str(), dbres);
+  }
+  {
+    NamedTimer t(__func__, "unpack-3");
+    res = dbres->unpack();
+    assert(res.ok);
+  }
+
+  for (auto row : res.rows) {
+    results.push_back(resultFromStr<double>(row[0].data));
+  }
+}
+
+static void do_query_crypt_q17(Connect &conn,
+                               CryptoManager& cm,
+                               const string& p_a,
+                               const string& p_b,
+                               vector<q17entry> &results) {
+  crypto_manager_stub stub(&cm, UseOldOpe);
+  NamedTimer fcnTimer(__func__);
 }
 
 static void do_query_q18(Connect &conn,
@@ -6727,6 +6820,7 @@ enum query_selection {
   query14,
   query15,
 
+  query17,
   query18,
   query20,
 };
@@ -6772,6 +6866,7 @@ int main(int argc, char **argv) {
 
     REGULAR_QUERY_IMPL(12)
     REGULAR_QUERY_IMPL(15)
+    REGULAR_QUERY_IMPL(17)
 
 #undef REGULAR_QUERY_IMPL
 
@@ -6821,8 +6916,7 @@ int main(int argc, char **argv) {
       CASE_IMPL(9), CASE_IMPL(10), CASE_IMPL(11), CASE_IMPL(12),
 
       CASE_IMPL(14), CASE_IMPL(15),
-      CASE_IMPL(18),
-      CASE_IMPL(20),
+      CASE_IMPL(17), CASE_IMPL(18), CASE_IMPL(20),
 #undef CASE_IMPL
     };
 
@@ -6868,6 +6962,7 @@ int main(int argc, char **argv) {
     CASE_IMPL(12, 3)
     CASE_IMPL(14, 1)
     CASE_IMPL(15, 1)
+    CASE_IMPL(17, 2)
     CASE_IMPL(18, 1)
     CASE_IMPL(20, 3)
 
@@ -7305,6 +7400,29 @@ int main(int argc, char **argv) {
           } else if (mode == "crypt-query15") {
             for (size_t i = 0; i < nruns; i++) {
               do_query_crypt_q15(conn, cm, l_a, results, db_name);
+              ctr += results.size();
+              PRINT_RESULTS();
+              results.clear();
+            }
+          } else assert(false);
+        }
+        break;
+
+      case query17:
+        {
+          string p_a = argv[2];
+          string p_b = argv[3];
+          vector<q17entry> results;
+          if (mode == "orig-query17") {
+            for (size_t i = 0; i < nruns; i++) {
+              do_query_q17(conn, p_a, p_b, results);
+              ctr += results.size();
+              PRINT_RESULTS();
+              results.clear();
+            }
+          } else if (mode == "crypt-query17") {
+            for (size_t i = 0; i < nruns; i++) {
+              do_query_crypt_q17(conn, cm, p_a, p_b, results);
               ctr += results.size();
               PRINT_RESULTS();
               results.clear();
