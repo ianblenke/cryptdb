@@ -28,11 +28,9 @@ create table lineitem_enc (
 
   -- field 8
   `l_returnflag_DET` tinyint unsigned NOT NULL,
-  `l_returnflag_OPE` smallint unsigned NOT NULL,
 
   -- field 9
   `l_linestatus_DET` tinyint unsigned NOT NULL,
-  `l_linestatus_OPE` smallint unsigned NOT NULL,
 
   -- field 10 
   `l_shipdate_DET` mediumint unsigned NOT NULL,
@@ -54,6 +52,11 @@ create table lineitem_enc (
 
   -- field 15
   `l_comment_DET` varbinary(44) NOT NULL,
+
+  -- pre-computed fields
+
+  `l_shipdate_year_DET` smallint unsigned NOT NULL,
+  `l_disc_price_DET` bigint(20) unsigned NOT NULL,
 
   PRIMARY KEY (l_orderkey_DET, l_linenumber_DET)
 
