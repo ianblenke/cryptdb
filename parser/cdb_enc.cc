@@ -1073,6 +1073,13 @@ protected:
               fieldname(0, "DET"), getMin(oDET), SECLEVEL::DET, isBin, 12345);
           assert(!isBin);
           enccols.push_back(enc);
+
+          // l_disc_price = l_extendedprice * (1 - l_discount)
+          double l_extendedprice  = resultFromStr<double>(tokens[lineitem::l_extendedprice]);
+          double l_discount       = resultFromStr<double>(tokens[lineitem::l_discount]);
+          double l_disc_price     = l_extendedprice * (1.0 - l_discount);
+          do_encrypt(0, DT_FLOAT, ONION_DET, to_s(l_disc_price),
+                     enccols, cm, false);
         }
         break;
       case opt_type::normal_agg:
