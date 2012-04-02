@@ -698,6 +698,33 @@ inline ostream& operator<<(ostream &o, const q12entry &q) {
 
 typedef double q14entry;
 
+struct q15entry {
+  q15entry(
+    uint64_t s_suppkey,
+    const string& s_name,
+    const string& s_address,
+    const string& s_phone,
+    double total_revenue) :
+  s_suppkey(s_suppkey),
+  s_name(s_name),
+  s_address(s_address),
+  s_phone(s_phone),
+  total_revenue(total_revenue) {}
+
+  uint64_t s_suppkey;
+  string s_name;
+  string s_address;
+  string s_phone;
+  double total_revenue;
+};
+
+inline ostream& operator<<(ostream &o, const q15entry &q) {
+  o <<
+    q.s_suppkey << "|" << q.s_name << "|" << q.s_address << "|" <<
+    q.s_phone << "|" << q.total_revenue;
+  return o;
+}
+
 struct q18entry {
     q18entry(
         const string& c_name,
@@ -4107,6 +4134,543 @@ static void do_query_q11_nosubquery(Connect &conn,
     }
 }
 
+static void do_query_q11_opt_proj(Connect &conn,
+                                  CryptoManager &cm,
+                                   const string &name,
+                                   double fraction,
+                                   vector<q11entry> &results) {
+    crypto_manager_stub cm_stub(&cm, UseOldOpe);
+    NamedTimer fcnTimer(__func__);
+    assert(name == "IRAQ"); // TODO: can only handle IRAQ for now
+
+    bool isBin;
+    string encNAME = cm_stub.crypt(cm.getmkey(), name, TYPE_TEXT,
+                              fieldname(nation::n_name, "DET"),
+                              getMin(oDET), SECLEVEL::DET, isBin, 12345);
+
+    string pkinfo = marshallBinary(cm.getPKInfo());
+    ostringstream s;
+    s << "SELECT SQL_NO_CACHE "
+        << "agg(ps_value_bitpacked_AGG, " << pkinfo << ") "
+      << "FROM partsupp_enc_proj, nation_enc "
+      << "WHERE "
+        << "n_nationkey_DET = nationkey_DET AND "
+        << "n_name_DET = " << marshallBinary(encNAME);
+
+    DBResult * dbres;
+    {
+      NamedTimer t(__func__, "execute_agg");
+      conn.execute(s.str(), dbres);
+    }
+    ResType res;
+    {
+      NamedTimer t(__func__, "unpack_agg");
+      res = dbres->unpack();
+      assert(res.ok);
+    }
+    assert(res.rows.size() == 1);
+
+    ZZ mask = to_ZZ((uint64_t)-1);
+    auto row = res.rows[0];
+    ZZ m;
+    cm.decrypt_Paillier(row[0].data, m);
+    static const size_t nslots =
+      CryptoManager::Paillier_len_bytes / sizeof(uint64_t);
+    uint64_t sum_int = 0L;
+    for (size_t i = 0; i < nslots; i++) {
+      sum_int += (uint64_t) to_long(m & mask);
+      m >>= sizeof(uint64_t) * 8;
+    }
+    double sum = ((double)sum_int)/100.0;
+    //cerr << "sum_int: " << sum_int << endl;
+    //cerr << "sum: " << sum << endl;
+
+    double threshold = sum * fraction;
+    // encrypt threshold for ps_value_OPE
+    uint64_t threshold_int = (uint64_t) roundToLong(threshold * 100.0);
+    //cerr << "threshold_int: " << threshold_int << endl;
+    string encVALUE = cm_stub.crypt(cm.getmkey(), to_s(threshold_int), TYPE_INTEGER,
+                               fieldname(partsupp::ps_value, "OPE"),
+                               getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
+
+    // do all the one element agg group cases first.
+    // this is a very hacky query where we try to do several things at the
+    // same time, while optimizing for minimum data sent back
+    ostringstream s1;
+    s1
+      << "SELECT SQL_NO_CACHE ps_partkey_DET, ps_value_DET, cnt, suppkeys FROM ("
+        << "SELECT SQL_NO_CACHE "
+          << "ps_partkey_DET, ps_value_DET, "
+          << "COUNT(*) AS cnt, COUNT(*) > 1 OR ps_value_OPE > "
+            << encVALUE << " AS filter, "
+          << "CASE COUNT(*) WHEN 1 THEN NULL ELSE GROUP_CONCAT(ps_suppkey_DET) END AS suppkeys "
+        << "FROM partsupp_enc, supplier_enc, nation_enc "
+        << "WHERE "
+          << "ps_suppkey_DET = s_suppkey_DET AND "
+          << "s_nationkey_DET = n_nationkey_DET AND "
+          << "n_name_DET = " << marshallBinary(encNAME) << " "
+        << "GROUP BY ps_partkey_DET"
+      << ") AS __ANON__ WHERE filter = 1";
+    //cerr << s1.str() << endl;
+
+    {
+      NamedTimer t(__func__, "execute_groups");
+      conn.execute(s1.str(), dbres);
+    }
+    {
+      NamedTimer t(__func__, "unpack_groups");
+      res = dbres->unpack();
+      assert(res.ok);
+    }
+
+    typedef pair<string, vector<string> > GroupEntry;
+    vector<GroupEntry> savedKeys;
+    {
+      NamedTimer t(__func__, "decrypt_groups");
+      for (auto row : res.rows) {
+        // first, check count(*). if count(*) == 1, go ahead
+        // and do the decryption. if count(*) > 1, then save ps_partkey_DET
+        // away for later (but do NOT decrypt it)
+
+        if (valFromStr(row[2].data) == 1) {
+          // ps_partkey
+          uint64_t ps_partkey = decryptRowFromTo<uint64_t>(
+                  row[0].data,
+                  12345,
+                  fieldname(partsupp::ps_partkey, "DET"),
+                  TYPE_INTEGER,
+                  SECLEVEL::DETJOIN,
+                  getMin(oDET),
+                  cm);
+
+          // ps_value
+          uint64_t ps_value_int = decryptRow<uint64_t>(
+                  row[1].data,
+                  12345,
+                  fieldname(partsupp::ps_value, "DET"),
+                  TYPE_INTEGER,
+                  oDET,
+                  cm);
+          double ps_value = ((double)ps_value_int)/100.0;
+          assert(ps_value_int > threshold_int);
+
+          results.push_back(q11entry(ps_partkey, ps_value));
+        } else {
+          vector<string> suppkeys;
+          tokenize(row[3].data, ",", suppkeys);
+          assert(suppkeys.size() > 1);
+          savedKeys.push_back(GroupEntry(row[0].data, suppkeys));
+        }
+      }
+    }
+
+    //cerr << "results.size (w/ 1 groups): " << results.size() << endl;
+    //sort(results.begin(), results.end(), q11entry_functor);
+    //for (auto r : results) {
+    //  cerr << r << endl;
+    //}
+
+    // 1) map each GroupEntry into strings of
+    //  (ps_partkey_DET = X AND ps_suppkey IN (s1, s2, ..., sN))
+    // 2) join each of the strings from above with OR
+
+    struct gentry_mapper {
+      inline string operator()(const GroupEntry &e) const {
+        ostringstream o;
+        o << "(ps_partkey_DET = "
+          << e.first << " AND ps_suppkey_DET IN ("
+            << join(e.second, ",")
+          << "))";
+        return o.str();
+      }
+    };
+
+    vector<string> mapped;
+    mapped.resize(savedKeys.size());
+    transform(savedKeys.begin(), savedKeys.end(),
+              mapped.begin(), gentry_mapper());
+
+    ostringstream s2;
+    s2
+      << "SELECT SQL_NO_CACHE "
+        << "ps_partkey_DET, ps_value_DET "
+      << "FROM partsupp_enc "
+      << "WHERE " << join(mapped, " OR ");
+
+    {
+      NamedTimer t(__func__, "execute_more_one_groups");
+      conn.execute(s2.str(), dbres);
+    }
+    {
+      NamedTimer t(__func__, "unpack_more_one_groups");
+      res = dbres->unpack();
+      assert(res.ok);
+    }
+
+    map<uint64_t, double> aggState;
+    {
+      NamedTimer t(__func__, "decrypt_more_one_groups");
+      for (auto row : res.rows) {
+
+        // ps_partkey
+        uint64_t ps_partkey = decryptRowFromTo<uint64_t>(
+                row[0].data,
+                12345,
+                fieldname(partsupp::ps_partkey, "DET"),
+                TYPE_INTEGER,
+                SECLEVEL::DETJOIN,
+                getMin(oDET),
+                cm);
+
+        // ps_value
+        uint64_t ps_value_int = decryptRow<uint64_t>(
+                row[1].data,
+                12345,
+                fieldname(partsupp::ps_value, "DET"),
+                TYPE_INTEGER,
+                oDET,
+                cm);
+        double ps_value = ((double)ps_value_int)/100.0;
+
+        auto it = aggState.find(ps_partkey);
+        if (it == aggState.end()) {
+          aggState[ps_partkey] = ps_value;
+        } else {
+          aggState[ps_partkey] += ps_value;
+        }
+      }
+    }
+
+    {
+      NamedTimer t(__func__, "agg");
+      for (map<uint64_t, double>::iterator it = aggState.begin();
+           it != aggState.end();
+           ++it) {
+        if (it->second > threshold) {
+          q11entry e(it->first, it->second);
+          results.push_back(e);
+        }
+      }
+      // sort
+      sort(results.begin(), results.end(), q11entry_functor);
+    }
+}
+
+static void do_query_q11_opt(Connect &conn,
+                             CryptoManager &cm,
+                             const string &name,
+                             double fraction,
+                             vector<q11entry> &results) {
+    crypto_manager_stub cm_stub(&cm, UseOldOpe);
+    assert(name.size() <= 25);
+    NamedTimer fcnTimer(__func__);
+
+    bool isBin = false;
+    string encNAME = cm_stub.crypt(cm.getmkey(), name, TYPE_TEXT,
+                              fieldname(nation::n_name, "DET"),
+                              getMin(oDET), SECLEVEL::DET, isBin, 12345);
+    assert(isBin);
+    assert(encNAME.size() == name.size());
+    encNAME.resize(25);
+
+    string pkinfo = marshallBinary(cm.getPKInfo());
+    ostringstream s;
+    s << "SELECT SQL_NO_CACHE "
+        << "agg(ps_value_AGG, " << pkinfo << ") "
+      << "FROM partsupp_enc, supplier_enc, nation_enc "
+      << "WHERE "
+        << "ps_suppkey_DET = s_suppkey_DET AND "
+        << "s_nationkey_DET = n_nationkey_DET AND "
+        << "n_name_DET = " << marshallBinary(encNAME)
+        ;
+    cerr << s.str() << endl;
+
+    DBResult * dbres;
+    {
+      NamedTimer t(__func__, "execute");
+      conn.execute(s.str(), dbres);
+    }
+    ResType res;
+    {
+      NamedTimer t(__func__, "unpack");
+      res = dbres->unpack();
+      assert(res.ok);
+    }
+
+    double threshold;
+    {
+        assert(res.rows.size() == 1);
+
+        // ps_value
+        ZZ z;
+        cm.decrypt_Paillier(res.rows[0][0].data, z);
+        typedef PallierSlotManager<uint64_t, 2> PSM;
+        uint64_t ps_value_int = PSM::extract_from_slot<uint64_t>(z, 0);
+        double ps_value = ((double)ps_value_int)/100.0;
+        threshold = ps_value * fraction;
+    }
+
+    //cerr << "threshold: " << threshold << endl;
+
+    // encrypt threshold for ps_value_OPE
+    uint64_t threshold_int = (uint64_t) roundToLong(threshold * 100.0);
+
+    isBin = false;
+    string encVALUE = cm_stub.crypt<7>(cm.getmkey(), to_s(threshold_int), TYPE_INTEGER,
+                               fieldname(partsupp::ps_value, "OPE"),
+                               getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
+    assert(isBin);
+    assert(encVALUE.size() <= 14);
+    encVALUE.resize(16); // pad
+    encVALUE = str_reverse(encVALUE); // reverse
+
+    // do all the one element agg group cases first.
+    // this is a very hacky query where we try to do several things at the
+    // same time, while optimizing for minimum data sent back
+    ostringstream s1;
+    s1
+      << "SELECT SQL_NO_CACHE ps_partkey_DET, ps_value_DET, cnt, suppkeys FROM ("
+        << "SELECT "
+          << "ps_partkey_DET, ps_value_DET, "
+          << "COUNT(*) AS cnt, COUNT(*) > 1 OR ps_value_OPE > "
+            << marshallBinary(encVALUE) << " AS filter, "
+          << "CASE COUNT(*) WHEN 1 THEN NULL ELSE GROUP_CONCAT(ps_suppkey_DET) END AS suppkeys "
+        << "FROM partsupp_enc, supplier_enc, nation_enc "
+        << "WHERE "
+          << "ps_suppkey_DET = s_suppkey_DET AND "
+          << "s_nationkey_DET = n_nationkey_DET AND "
+          << "n_name_DET = " << marshallBinary(encNAME) << " "
+        << "GROUP BY ps_partkey_DET"
+      << ") AS __ANON__ WHERE filter = 1";
+    cerr << s1.str() << endl;
+
+    {
+      NamedTimer t(__func__, "execute_groups");
+      conn.execute(s1.str(), dbres);
+    }
+    {
+      NamedTimer t(__func__, "unpack_groups");
+      res = dbres->unpack();
+      assert(res.ok);
+    }
+
+    typedef pair<string, vector<string> > GroupEntry;
+    vector<GroupEntry> savedKeys;
+    results.reserve(res.rows.size());
+    {
+      NamedTimer t(__func__, "decrypt_groups");
+      for (auto row : res.rows) {
+        // first, check count(*). if count(*) == 1, go ahead
+        // and do the decryption. if count(*) > 1, then save ps_partkey_DET
+        // away for later (but do NOT decrypt it)
+
+        if (valFromStr(row[2].data) == 1) {
+          // ps_partkey
+          uint64_t ps_partkey = decryptRowFromTo<uint64_t, 4>(
+                  row[0].data,
+                  12345,
+                  fieldname(partsupp::ps_partkey, "DET"),
+                  TYPE_INTEGER,
+                  SECLEVEL::DETJOIN,
+                  getMin(oDET),
+                  cm);
+
+          // ps_value
+          uint64_t ps_value_int = decryptRow<uint64_t, 7>(
+                  row[1].data,
+                  12345,
+                  fieldname(partsupp::ps_value, "DET"),
+                  TYPE_INTEGER,
+                  oDET,
+                  cm);
+          double ps_value = ((double)ps_value_int)/100.0;
+          assert(ps_value_int > threshold_int);
+
+          results.push_back(q11entry(ps_partkey, ps_value));
+        } else {
+          vector<string> suppkeys;
+          tokenize(row[3].data, ",", suppkeys);
+          assert(suppkeys.size() > 1);
+          savedKeys.push_back(GroupEntry(row[0].data, suppkeys));
+        }
+      }
+    }
+
+    // 1) map each GroupEntry into strings of
+    //  (ps_partkey_DET = X AND ps_suppkey IN (s1, s2, ..., sN))
+    // 2) join each of the strings from above with OR
+    struct gentry_mapper {
+      inline string operator()(const GroupEntry &e) const {
+        ostringstream o;
+        o << "(ps_partkey_DET = "
+          << e.first << " AND ps_suppkey_DET IN ("
+            << join(e.second, ",")
+          << "))";
+        return o.str();
+      }
+    };
+
+    vector<string> mapped;
+    mapped.resize(savedKeys.size());
+    transform(savedKeys.begin(), savedKeys.end(),
+              mapped.begin(), gentry_mapper());
+
+    if (!mapped.empty()) {
+
+        ostringstream s2;
+        s2
+          << "SELECT SQL_NO_CACHE "
+            << "ps_partkey_DET, ps_value_DET "
+          << "FROM partsupp_enc "
+          << "WHERE " << join(mapped, " OR ");
+
+        {
+          NamedTimer t(__func__, "execute_more_one_groups");
+          conn.execute(s2.str(), dbres);
+        }
+        {
+          NamedTimer t(__func__, "unpack_more_one_groups");
+          res = dbres->unpack();
+          assert(res.ok);
+        }
+
+        map<uint64_t, double> aggState;
+        {
+          NamedTimer t(__func__, "decrypt_more_one_groups");
+          for (auto row : res.rows) {
+
+            // ps_partkey
+            uint64_t ps_partkey = decryptRowFromTo<uint64_t, 4>(
+                    row[0].data,
+                    12345,
+                    fieldname(partsupp::ps_partkey, "DET"),
+                    TYPE_INTEGER,
+                    SECLEVEL::DETJOIN,
+                    getMin(oDET),
+                    cm);
+
+            // ps_value
+            uint64_t ps_value_int = decryptRow<uint64_t, 7>(
+                    row[1].data,
+                    12345,
+                    fieldname(partsupp::ps_value, "DET"),
+                    TYPE_INTEGER,
+                    oDET,
+                    cm);
+            double ps_value = ((double)ps_value_int)/100.0;
+
+            auto it = aggState.find(ps_partkey);
+            if (it == aggState.end()) {
+              aggState[ps_partkey] = ps_value;
+            } else {
+              it->second += ps_value;
+            }
+          }
+        }
+
+        results.reserve(results.size() + aggState.size());
+        for (map<uint64_t, double>::iterator it = aggState.begin();
+             it != aggState.end();
+             ++it) {
+          if (it->second > threshold) {
+            results.push_back(q11entry(it->first, it->second));
+          }
+        }
+    }
+
+    {
+      NamedTimer t(__func__, "agg");
+      // sort
+      sort(results.begin(), results.end(), q11entry_functor);
+    }
+}
+
+//static void do_query_q11_opt(Connect &conn,
+//                             CryptoManager &cm,
+//                             const string &name,
+//                             double fraction,
+//                             vector<q11entry> &results) {
+//    crypto_manager_stub cm_stub(&cm, UseOldOpe);
+//    assert(name.size() <= 25);
+//    NamedTimer fcnTimer(__func__);
+//
+//    bool isBin = false;
+//    string encNAME = cm_stub.crypt(cm.getmkey(), name, TYPE_TEXT,
+//                              fieldname(nation::n_name, "DET"),
+//                              getMin(oDET), SECLEVEL::DET, isBin, 12345);
+//    assert(isBin);
+//    assert(encNAME.size() == name.size());
+//    encNAME.resize(25);
+//
+//    string pkinfo = marshallBinary(cm.getPKInfo());
+//    ostringstream s;
+//    s << "SELECT SQL_NO_CACHE "
+//        << "ps_partkey_DET, "
+//        << "agg(ps_value_AGG, " << pkinfo << ") "
+//      << "FROM partsupp_enc, supplier_enc, nation_enc "
+//      << "WHERE "
+//        << "ps_suppkey_DET = s_suppkey_DET AND "
+//        << "s_nationkey_DET = n_nationkey_DET AND "
+//        << "n_name_DET = " << marshallBinary(encNAME) << " "
+//      << "GROUP BY ps_partkey_DET";
+//    cerr << s.str() << endl;
+//
+//    DBResult * dbres;
+//    {
+//      NamedTimer t(__func__, "execute");
+//      conn.execute(s.str(), dbres);
+//    }
+//    ResType res;
+//    {
+//      NamedTimer t(__func__, "unpack");
+//      res = dbres->unpack();
+//      assert(res.ok);
+//    }
+//
+//    double totalSum = 0.0;
+//    {
+//      NamedTimer t(__func__, "decrypt");
+//      results.reserve(res.rows.size());
+//      for (auto row : res.rows) {
+//
+//        // ps_partkey
+//        uint64_t ps_partkey = decryptRowFromTo<uint64_t>(
+//                row[0].data,
+//                12345,
+//                fieldname(partsupp::ps_partkey, "DET"),
+//                TYPE_INTEGER,
+//                SECLEVEL::DETJOIN,
+//                getMin(oDET),
+//                cm);
+//
+//        // ps_value
+//        uint64_t ps_value_int = decryptRow<uint64_t>(
+//                row[1].data,
+//                12345,
+//                fieldname(partsupp::ps_value, "AGG"),
+//                TYPE_INTEGER,
+//                oAGG,
+//                cm);
+//        double ps_value = ((double)ps_value_int)/100.0;
+//
+//        totalSum += ps_value;
+//        results.push_back(q11entry(ps_partkey, ps_value));
+//      }
+//    }
+//
+//    {
+//      NamedTimer t(__func__, "agg");
+//      double threshold = totalSum * fraction;
+//      // remove elements less than threshold, stl style
+//      results.erase(
+//          remove_if(results.begin(), results.end(), q11entry_remover(threshold)),
+//          results.end());
+//
+//      // sort
+//      sort(results.begin(), results.end(), q11entry_functor);
+//    }
+//}
+
 static void do_query_q12(Connect &conn,
                          const string& l_a,
                          const string& l_b,
@@ -4687,542 +5251,87 @@ static void do_query_q14(Connect &conn,
     }
 }
 
-static void do_query_q11_opt_proj(Connect &conn,
-                                  CryptoManager &cm,
-                                   const string &name,
-                                   double fraction,
-                                   vector<q11entry> &results) {
-    crypto_manager_stub cm_stub(&cm, UseOldOpe);
-    NamedTimer fcnTimer(__func__);
-    assert(name == "IRAQ"); // TODO: can only handle IRAQ for now
+static void do_query_q15(Connect &conn,
+                         const string& l_a,
+                         vector<q15entry> &results) {
+  NamedTimer fcnTimer(__func__);
 
-    bool isBin;
-    string encNAME = cm_stub.crypt(cm.getmkey(), name, TYPE_TEXT,
-                              fieldname(nation::n_name, "DET"),
-                              getMin(oDET), SECLEVEL::DET, isBin, 12345);
+  // query 1
+  ostringstream s;
+  s <<
+    "select "
+    "	l_suppkey, "
+    "	sum(l_extendedprice * (100 - l_discount)) as revenue "
+    "from "
+    "	LINEITEM_INT "
+    "where "
+    "	l_shipdate >= date '" << l_a << "' "
+    "	and l_shipdate < date '"<< l_a << "' + interval '3' month "
+    "group by "
+    "	l_suppkey "
+    "order by "
+    " revenue desc "
+    "limit 1";
+  cerr << s.str() << endl;
 
-    string pkinfo = marshallBinary(cm.getPKInfo());
-    ostringstream s;
-    s << "SELECT SQL_NO_CACHE "
-        << "agg(ps_value_bitpacked_AGG, " << pkinfo << ") "
-      << "FROM partsupp_enc_proj, nation_enc "
-      << "WHERE "
-        << "n_nationkey_DET = nationkey_DET AND "
-        << "n_name_DET = " << marshallBinary(encNAME);
+  DBResult * dbres;
+  {
+    NamedTimer t(__func__, "execute");
+    conn.execute(s.str(), dbres);
+  }
+  ResType res;
+  {
+    NamedTimer t(__func__, "unpack");
+    res = dbres->unpack();
+    assert(res.ok);
+  }
 
-    DBResult * dbres;
-    {
-      NamedTimer t(__func__, "execute_agg");
-      conn.execute(s.str(), dbres);
-    }
-    ResType res;
-    {
-      NamedTimer t(__func__, "unpack_agg");
-      res = dbres->unpack();
-      assert(res.ok);
-    }
-    assert(res.rows.size() == 1);
+  assert(res.rows.size() == 1);
+  double total_revenue = resultFromStr<double>(res.rows[0][1].data)/10000.0;
 
-    ZZ mask = to_ZZ((uint64_t)-1);
-    auto row = res.rows[0];
-    ZZ m;
-    cm.decrypt_Paillier(row[0].data, m);
-    static const size_t nslots =
-      CryptoManager::Paillier_len_bytes / sizeof(uint64_t);
-    uint64_t sum_int = 0L;
-    for (size_t i = 0; i < nslots; i++) {
-      sum_int += (uint64_t) to_long(m & mask);
-      m >>= sizeof(uint64_t) * 8;
-    }
-    double sum = ((double)sum_int)/100.0;
-    //cerr << "sum_int: " << sum_int << endl;
-    //cerr << "sum: " << sum << endl;
+  ostringstream s1;
+  s1 <<
+    "select "
+    "	s_suppkey, "
+    "	s_name, "
+    "	s_address, "
+    "	s_phone, "
+    "from "
+    "	SUPPLIER, "
+    "where "
+    "	s_suppkey = " << res.rows[0][0].data << " "
+    "order by "
+    "	s_suppkey; "
+    ;
 
-    double threshold = sum * fraction;
-    // encrypt threshold for ps_value_OPE
-    uint64_t threshold_int = (uint64_t) roundToLong(threshold * 100.0);
-    //cerr << "threshold_int: " << threshold_int << endl;
-    string encVALUE = cm_stub.crypt(cm.getmkey(), to_s(threshold_int), TYPE_INTEGER,
-                               fieldname(partsupp::ps_value, "OPE"),
-                               getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
+  {
+    NamedTimer t(__func__, "execute-1");
+    conn.execute(s.str(), dbres);
+  }
+  {
+    NamedTimer t(__func__, "unpack-1");
+    res = dbres->unpack();
+    assert(res.ok);
+  }
 
-    // do all the one element agg group cases first.
-    // this is a very hacky query where we try to do several things at the
-    // same time, while optimizing for minimum data sent back
-    ostringstream s1;
-    s1
-      << "SELECT SQL_NO_CACHE ps_partkey_DET, ps_value_DET, cnt, suppkeys FROM ("
-        << "SELECT SQL_NO_CACHE "
-          << "ps_partkey_DET, ps_value_DET, "
-          << "COUNT(*) AS cnt, COUNT(*) > 1 OR ps_value_OPE > "
-            << encVALUE << " AS filter, "
-          << "CASE COUNT(*) WHEN 1 THEN NULL ELSE GROUP_CONCAT(ps_suppkey_DET) END AS suppkeys "
-        << "FROM partsupp_enc, supplier_enc, nation_enc "
-        << "WHERE "
-          << "ps_suppkey_DET = s_suppkey_DET AND "
-          << "s_nationkey_DET = n_nationkey_DET AND "
-          << "n_name_DET = " << marshallBinary(encNAME) << " "
-        << "GROUP BY ps_partkey_DET"
-      << ") AS __ANON__ WHERE filter = 1";
-    //cerr << s1.str() << endl;
-
-    {
-      NamedTimer t(__func__, "execute_groups");
-      conn.execute(s1.str(), dbres);
-    }
-    {
-      NamedTimer t(__func__, "unpack_groups");
-      res = dbres->unpack();
-      assert(res.ok);
-    }
-
-    typedef pair<string, vector<string> > GroupEntry;
-    vector<GroupEntry> savedKeys;
-    {
-      NamedTimer t(__func__, "decrypt_groups");
-      for (auto row : res.rows) {
-        // first, check count(*). if count(*) == 1, go ahead
-        // and do the decryption. if count(*) > 1, then save ps_partkey_DET
-        // away for later (but do NOT decrypt it)
-
-        if (valFromStr(row[2].data) == 1) {
-          // ps_partkey
-          uint64_t ps_partkey = decryptRowFromTo<uint64_t>(
-                  row[0].data,
-                  12345,
-                  fieldname(partsupp::ps_partkey, "DET"),
-                  TYPE_INTEGER,
-                  SECLEVEL::DETJOIN,
-                  getMin(oDET),
-                  cm);
-
-          // ps_value
-          uint64_t ps_value_int = decryptRow<uint64_t>(
-                  row[1].data,
-                  12345,
-                  fieldname(partsupp::ps_value, "DET"),
-                  TYPE_INTEGER,
-                  oDET,
-                  cm);
-          double ps_value = ((double)ps_value_int)/100.0;
-          assert(ps_value_int > threshold_int);
-
-          results.push_back(q11entry(ps_partkey, ps_value));
-        } else {
-          vector<string> suppkeys;
-          tokenize(row[3].data, ",", suppkeys);
-          assert(suppkeys.size() > 1);
-          savedKeys.push_back(GroupEntry(row[0].data, suppkeys));
-        }
-      }
-    }
-
-    //cerr << "results.size (w/ 1 groups): " << results.size() << endl;
-    //sort(results.begin(), results.end(), q11entry_functor);
-    //for (auto r : results) {
-    //  cerr << r << endl;
-    //}
-
-    // 1) map each GroupEntry into strings of
-    //  (ps_partkey_DET = X AND ps_suppkey IN (s1, s2, ..., sN))
-    // 2) join each of the strings from above with OR
-
-    struct gentry_mapper {
-      inline string operator()(const GroupEntry &e) const {
-        ostringstream o;
-        o << "(ps_partkey_DET = "
-          << e.first << " AND ps_suppkey_DET IN ("
-            << join(e.second, ",")
-          << "))";
-        return o.str();
-      }
-    };
-
-    vector<string> mapped;
-    mapped.resize(savedKeys.size());
-    transform(savedKeys.begin(), savedKeys.end(),
-              mapped.begin(), gentry_mapper());
-
-    ostringstream s2;
-    s2
-      << "SELECT SQL_NO_CACHE "
-        << "ps_partkey_DET, ps_value_DET "
-      << "FROM partsupp_enc "
-      << "WHERE " << join(mapped, " OR ");
-
-    {
-      NamedTimer t(__func__, "execute_more_one_groups");
-      conn.execute(s2.str(), dbres);
-    }
-    {
-      NamedTimer t(__func__, "unpack_more_one_groups");
-      res = dbres->unpack();
-      assert(res.ok);
-    }
-
-    map<uint64_t, double> aggState;
-    {
-      NamedTimer t(__func__, "decrypt_more_one_groups");
-      for (auto row : res.rows) {
-
-        // ps_partkey
-        uint64_t ps_partkey = decryptRowFromTo<uint64_t>(
-                row[0].data,
-                12345,
-                fieldname(partsupp::ps_partkey, "DET"),
-                TYPE_INTEGER,
-                SECLEVEL::DETJOIN,
-                getMin(oDET),
-                cm);
-
-        // ps_value
-        uint64_t ps_value_int = decryptRow<uint64_t>(
-                row[1].data,
-                12345,
-                fieldname(partsupp::ps_value, "DET"),
-                TYPE_INTEGER,
-                oDET,
-                cm);
-        double ps_value = ((double)ps_value_int)/100.0;
-
-        auto it = aggState.find(ps_partkey);
-        if (it == aggState.end()) {
-          aggState[ps_partkey] = ps_value;
-        } else {
-          aggState[ps_partkey] += ps_value;
-        }
-      }
-    }
-
-    {
-      NamedTimer t(__func__, "agg");
-      for (map<uint64_t, double>::iterator it = aggState.begin();
-           it != aggState.end();
-           ++it) {
-        if (it->second > threshold) {
-          q11entry e(it->first, it->second);
-          results.push_back(e);
-        }
-      }
-      // sort
-      sort(results.begin(), results.end(), q11entry_functor);
-    }
+  for (auto row : res.rows) {
+    results.push_back(
+      q15entry(
+        resultFromStr<uint64_t>(row[0].data),
+        row[1].data,
+        row[2].data,
+        row[3].data,
+        total_revenue));
+  }
 }
 
-static void do_query_q11_opt(Connect &conn,
-                             CryptoManager &cm,
-                             const string &name,
-                             double fraction,
-                             vector<q11entry> &results) {
-    crypto_manager_stub cm_stub(&cm, UseOldOpe);
-    assert(name.size() <= 25);
-    NamedTimer fcnTimer(__func__);
+static void do_query_crypt_q15(Connect &conn,
+                               CryptoManager& cm,
+                               const string& l_a,
+                               vector<q15entry> &results,
+                               const string& db) {
 
-    bool isBin = false;
-    string encNAME = cm_stub.crypt(cm.getmkey(), name, TYPE_TEXT,
-                              fieldname(nation::n_name, "DET"),
-                              getMin(oDET), SECLEVEL::DET, isBin, 12345);
-    assert(isBin);
-    assert(encNAME.size() == name.size());
-    encNAME.resize(25);
-
-    string pkinfo = marshallBinary(cm.getPKInfo());
-    ostringstream s;
-    s << "SELECT SQL_NO_CACHE "
-        << "agg(ps_value_AGG, " << pkinfo << ") "
-      << "FROM partsupp_enc, supplier_enc, nation_enc "
-      << "WHERE "
-        << "ps_suppkey_DET = s_suppkey_DET AND "
-        << "s_nationkey_DET = n_nationkey_DET AND "
-        << "n_name_DET = " << marshallBinary(encNAME)
-        ;
-    cerr << s.str() << endl;
-
-    DBResult * dbres;
-    {
-      NamedTimer t(__func__, "execute");
-      conn.execute(s.str(), dbres);
-    }
-    ResType res;
-    {
-      NamedTimer t(__func__, "unpack");
-      res = dbres->unpack();
-      assert(res.ok);
-    }
-
-    double threshold;
-    {
-        assert(res.rows.size() == 1);
-
-        // ps_value
-        ZZ z;
-        cm.decrypt_Paillier(res.rows[0][0].data, z);
-        typedef PallierSlotManager<uint64_t, 2> PSM;
-        uint64_t ps_value_int = PSM::extract_from_slot<uint64_t>(z, 0);
-        double ps_value = ((double)ps_value_int)/100.0;
-        threshold = ps_value * fraction;
-    }
-
-    //cerr << "threshold: " << threshold << endl;
-
-    // encrypt threshold for ps_value_OPE
-    uint64_t threshold_int = (uint64_t) roundToLong(threshold * 100.0);
-
-    isBin = false;
-    string encVALUE = cm_stub.crypt<7>(cm.getmkey(), to_s(threshold_int), TYPE_INTEGER,
-                               fieldname(partsupp::ps_value, "OPE"),
-                               getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
-    assert(isBin);
-    assert(encVALUE.size() <= 14);
-    encVALUE.resize(16); // pad
-    encVALUE = str_reverse(encVALUE); // reverse
-
-    // do all the one element agg group cases first.
-    // this is a very hacky query where we try to do several things at the
-    // same time, while optimizing for minimum data sent back
-    ostringstream s1;
-    s1
-      << "SELECT SQL_NO_CACHE ps_partkey_DET, ps_value_DET, cnt, suppkeys FROM ("
-        << "SELECT "
-          << "ps_partkey_DET, ps_value_DET, "
-          << "COUNT(*) AS cnt, COUNT(*) > 1 OR ps_value_OPE > "
-            << marshallBinary(encVALUE) << " AS filter, "
-          << "CASE COUNT(*) WHEN 1 THEN NULL ELSE GROUP_CONCAT(ps_suppkey_DET) END AS suppkeys "
-        << "FROM partsupp_enc, supplier_enc, nation_enc "
-        << "WHERE "
-          << "ps_suppkey_DET = s_suppkey_DET AND "
-          << "s_nationkey_DET = n_nationkey_DET AND "
-          << "n_name_DET = " << marshallBinary(encNAME) << " "
-        << "GROUP BY ps_partkey_DET"
-      << ") AS __ANON__ WHERE filter = 1";
-    cerr << s1.str() << endl;
-
-    {
-      NamedTimer t(__func__, "execute_groups");
-      conn.execute(s1.str(), dbres);
-    }
-    {
-      NamedTimer t(__func__, "unpack_groups");
-      res = dbres->unpack();
-      assert(res.ok);
-    }
-
-    typedef pair<string, vector<string> > GroupEntry;
-    vector<GroupEntry> savedKeys;
-    results.reserve(res.rows.size());
-    {
-      NamedTimer t(__func__, "decrypt_groups");
-      for (auto row : res.rows) {
-        // first, check count(*). if count(*) == 1, go ahead
-        // and do the decryption. if count(*) > 1, then save ps_partkey_DET
-        // away for later (but do NOT decrypt it)
-
-        if (valFromStr(row[2].data) == 1) {
-          // ps_partkey
-          uint64_t ps_partkey = decryptRowFromTo<uint64_t, 4>(
-                  row[0].data,
-                  12345,
-                  fieldname(partsupp::ps_partkey, "DET"),
-                  TYPE_INTEGER,
-                  SECLEVEL::DETJOIN,
-                  getMin(oDET),
-                  cm);
-
-          // ps_value
-          uint64_t ps_value_int = decryptRow<uint64_t, 7>(
-                  row[1].data,
-                  12345,
-                  fieldname(partsupp::ps_value, "DET"),
-                  TYPE_INTEGER,
-                  oDET,
-                  cm);
-          double ps_value = ((double)ps_value_int)/100.0;
-          assert(ps_value_int > threshold_int);
-
-          results.push_back(q11entry(ps_partkey, ps_value));
-        } else {
-          vector<string> suppkeys;
-          tokenize(row[3].data, ",", suppkeys);
-          assert(suppkeys.size() > 1);
-          savedKeys.push_back(GroupEntry(row[0].data, suppkeys));
-        }
-      }
-    }
-
-    // 1) map each GroupEntry into strings of
-    //  (ps_partkey_DET = X AND ps_suppkey IN (s1, s2, ..., sN))
-    // 2) join each of the strings from above with OR
-    struct gentry_mapper {
-      inline string operator()(const GroupEntry &e) const {
-        ostringstream o;
-        o << "(ps_partkey_DET = "
-          << e.first << " AND ps_suppkey_DET IN ("
-            << join(e.second, ",")
-          << "))";
-        return o.str();
-      }
-    };
-
-    vector<string> mapped;
-    mapped.resize(savedKeys.size());
-    transform(savedKeys.begin(), savedKeys.end(),
-              mapped.begin(), gentry_mapper());
-
-    if (!mapped.empty()) {
-
-        ostringstream s2;
-        s2
-          << "SELECT SQL_NO_CACHE "
-            << "ps_partkey_DET, ps_value_DET "
-          << "FROM partsupp_enc "
-          << "WHERE " << join(mapped, " OR ");
-
-        {
-          NamedTimer t(__func__, "execute_more_one_groups");
-          conn.execute(s2.str(), dbres);
-        }
-        {
-          NamedTimer t(__func__, "unpack_more_one_groups");
-          res = dbres->unpack();
-          assert(res.ok);
-        }
-
-        map<uint64_t, double> aggState;
-        {
-          NamedTimer t(__func__, "decrypt_more_one_groups");
-          for (auto row : res.rows) {
-
-            // ps_partkey
-            uint64_t ps_partkey = decryptRowFromTo<uint64_t, 4>(
-                    row[0].data,
-                    12345,
-                    fieldname(partsupp::ps_partkey, "DET"),
-                    TYPE_INTEGER,
-                    SECLEVEL::DETJOIN,
-                    getMin(oDET),
-                    cm);
-
-            // ps_value
-            uint64_t ps_value_int = decryptRow<uint64_t, 7>(
-                    row[1].data,
-                    12345,
-                    fieldname(partsupp::ps_value, "DET"),
-                    TYPE_INTEGER,
-                    oDET,
-                    cm);
-            double ps_value = ((double)ps_value_int)/100.0;
-
-            auto it = aggState.find(ps_partkey);
-            if (it == aggState.end()) {
-              aggState[ps_partkey] = ps_value;
-            } else {
-              it->second += ps_value;
-            }
-          }
-        }
-
-        results.reserve(results.size() + aggState.size());
-        for (map<uint64_t, double>::iterator it = aggState.begin();
-             it != aggState.end();
-             ++it) {
-          if (it->second > threshold) {
-            results.push_back(q11entry(it->first, it->second));
-          }
-        }
-    }
-
-    {
-      NamedTimer t(__func__, "agg");
-      // sort
-      sort(results.begin(), results.end(), q11entry_functor);
-    }
 }
-
-//static void do_query_q11_opt(Connect &conn,
-//                             CryptoManager &cm,
-//                             const string &name,
-//                             double fraction,
-//                             vector<q11entry> &results) {
-//    crypto_manager_stub cm_stub(&cm, UseOldOpe);
-//    assert(name.size() <= 25);
-//    NamedTimer fcnTimer(__func__);
-//
-//    bool isBin = false;
-//    string encNAME = cm_stub.crypt(cm.getmkey(), name, TYPE_TEXT,
-//                              fieldname(nation::n_name, "DET"),
-//                              getMin(oDET), SECLEVEL::DET, isBin, 12345);
-//    assert(isBin);
-//    assert(encNAME.size() == name.size());
-//    encNAME.resize(25);
-//
-//    string pkinfo = marshallBinary(cm.getPKInfo());
-//    ostringstream s;
-//    s << "SELECT SQL_NO_CACHE "
-//        << "ps_partkey_DET, "
-//        << "agg(ps_value_AGG, " << pkinfo << ") "
-//      << "FROM partsupp_enc, supplier_enc, nation_enc "
-//      << "WHERE "
-//        << "ps_suppkey_DET = s_suppkey_DET AND "
-//        << "s_nationkey_DET = n_nationkey_DET AND "
-//        << "n_name_DET = " << marshallBinary(encNAME) << " "
-//      << "GROUP BY ps_partkey_DET";
-//    cerr << s.str() << endl;
-//
-//    DBResult * dbres;
-//    {
-//      NamedTimer t(__func__, "execute");
-//      conn.execute(s.str(), dbres);
-//    }
-//    ResType res;
-//    {
-//      NamedTimer t(__func__, "unpack");
-//      res = dbres->unpack();
-//      assert(res.ok);
-//    }
-//
-//    double totalSum = 0.0;
-//    {
-//      NamedTimer t(__func__, "decrypt");
-//      results.reserve(res.rows.size());
-//      for (auto row : res.rows) {
-//
-//        // ps_partkey
-//        uint64_t ps_partkey = decryptRowFromTo<uint64_t>(
-//                row[0].data,
-//                12345,
-//                fieldname(partsupp::ps_partkey, "DET"),
-//                TYPE_INTEGER,
-//                SECLEVEL::DETJOIN,
-//                getMin(oDET),
-//                cm);
-//
-//        // ps_value
-//        uint64_t ps_value_int = decryptRow<uint64_t>(
-//                row[1].data,
-//                12345,
-//                fieldname(partsupp::ps_value, "AGG"),
-//                TYPE_INTEGER,
-//                oAGG,
-//                cm);
-//        double ps_value = ((double)ps_value_int)/100.0;
-//
-//        totalSum += ps_value;
-//        results.push_back(q11entry(ps_partkey, ps_value));
-//      }
-//    }
-//
-//    {
-//      NamedTimer t(__func__, "agg");
-//      double threshold = totalSum * fraction;
-//      // remove elements less than threshold, stl style
-//      results.erase(
-//          remove_if(results.begin(), results.end(), q11entry_remover(threshold)),
-//          results.end());
-//
-//      // sort
-//      sort(results.begin(), results.end(), q11entry_functor);
-//    }
-//}
 
 static void do_query_q18(Connect &conn,
                          uint64_t threshold,
@@ -6429,6 +6538,8 @@ enum query_selection {
   query12,
 
   query14,
+  query15,
+
   query18,
   query20,
 };
@@ -6473,6 +6584,7 @@ int main(int argc, char **argv) {
     REGULAR_QUERY_IMPL(10)
 
     REGULAR_QUERY_IMPL(12)
+    REGULAR_QUERY_IMPL(15)
 
 #undef REGULAR_QUERY_IMPL
 
@@ -6521,7 +6633,7 @@ int main(int argc, char **argv) {
       CASE_IMPL(5), CASE_IMPL(6), CASE_IMPL(7), CASE_IMPL(8),
       CASE_IMPL(9), CASE_IMPL(10), CASE_IMPL(11), CASE_IMPL(12),
 
-      CASE_IMPL(14),
+      CASE_IMPL(14), CASE_IMPL(15),
       CASE_IMPL(18),
       CASE_IMPL(20),
 #undef CASE_IMPL
@@ -6568,6 +6680,7 @@ int main(int argc, char **argv) {
     CASE_IMPL(11, 2)
     CASE_IMPL(12, 3)
     CASE_IMPL(14, 1)
+    CASE_IMPL(15, 1)
     CASE_IMPL(18, 1)
     CASE_IMPL(20, 3)
 
@@ -6990,6 +7103,29 @@ int main(int argc, char **argv) {
           } else assert(false);
         }
         break;
+
+      case query15:
+        {
+          string l_a = argv[2];
+          vector<q15entry> results;
+          if (mode == "orig-query15") {
+            for (size_t i = 0; i < nruns; i++) {
+              do_query_q15(conn, l_a, results);
+              ctr += results.size();
+              PRINT_RESULTS();
+              results.clear();
+            }
+          } else if (mode == "crypt-query15") {
+            for (size_t i = 0; i < nruns; i++) {
+              do_query_crypt_q15(conn, cm, l_a, results, db_name);
+              ctr += results.size();
+              PRINT_RESULTS();
+              results.clear();
+            }
+          } else assert(false);
+        }
+        break;
+
       case query18:
         {
           int input_threshold = atoi(argv[2]);
