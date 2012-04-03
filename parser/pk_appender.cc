@@ -37,26 +37,28 @@ static void tokenize(const string &s,
     }
 }
 
+static vector<size_t> positions;
+
 static void process_input(const string& s) {
   vector<string> tokens;
   tokenize(s, "|", tokens);
 
-  bool isBin = false;
-  string ct0 = stub.crypt<4>(cm.getmkey(), tokens[0], TYPE_INTEGER,
-                             fieldname(0, "DET"), SECLEVEL::PLAIN_DET, SECLEVEL::DETJOIN,
-                             isBin, 12345);
+  for (size_t i = 0; i < positions.size(); i++) {
+    bool isBin = false;
+    string ct0 =
+      stub.crypt<4>(cm.getmkey(), tokens[positions[i]], TYPE_INTEGER,
+                    fieldname(positions[i], "DET"), SECLEVEL::PLAIN_DET, SECLEVEL::DETJOIN,
+                    isBin, 12345);
+    tokens.push_back(ct0);
+  }
 
-  string ct1 = stub.crypt<4>(cm.getmkey(), tokens[3], TYPE_INTEGER,
-                             fieldname(3, "DET"), SECLEVEL::PLAIN_DET, SECLEVEL::DETJOIN,
-                             isBin, 12345);
-
-  tokens.push_back(ct0);
-  tokens.push_back(ct1);
   cout << join(tokens, "|") << endl;
 }
 
-// this is hardcoded for lineitem...
 int main(int argc, char **argv) {
+  for (int i = 1; i < argc; i++) {
+    positions.push_back(atoi(argv[i]));
+  }
   for (;;) {
       string s;
       getline(cin, s);

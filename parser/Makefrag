@@ -1,12 +1,9 @@
 OBJDIRS	+= parser
 
 
-PARSERSRC	:= Annotation.cc embedmysql.cc mysqld-filler.cc cdb_rewrite.cc
+PARSERSRC	:= Analysis.cc Annotation.cc embedmysql.cc mysqld-filler.cc cdb_rewrite.cc
 PARSERPROGS	:= analyze load-schema print-back cdb_test cdb_enc cdb_dec cdb_exp \
-	quick_test inflate sorter lineitem_enc_pk_appender
-PARSERSRC	:= Analysis.cc Annotation.cc embedmysql.cc mysqld-filler.cc cdb_rewrite.cc 
-PARSERPROGS	:= analyze load-schema print-back cdb_test cdb_enc cdb_dec cdb_exp \
-	quick_test inflate sorter lineitem_enc_pk_appender
+	quick_test inflate sorter pk_appender
 
 PARSERPROGOBJS	:= $(patsubst %,$(OBJDIR)/parser/%,$(PARSERPROGS))
 

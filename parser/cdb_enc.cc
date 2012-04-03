@@ -523,21 +523,67 @@ static const vector<int> CustOnions = {
 
 class customer_encryptor : public table_encryptor {
 public:
-  customer_encryptor() {
+  enum opt_type {
+    normal,
+    row_packed_acctbal,
+  };
+
+  customer_encryptor(enum opt_type tpe)
+    : tpe(tpe) {
     schema = CustSchema;
     onions = CustOnions;
     usenull = false;
-    processrow = true;
+    processrow = tpe == normal;
   }
 
   virtual
   void postprocessRow(const vector<string> &tokens,
                       vector<string>       &enccols,
                       crypto_manager_stub        &cm) {
+    assert(tpe == normal);
     string phone_prefix = enccols[customer::c_phone].substr(0, 2);
     do_encrypt(customer::c_phone, DT_STRING, ONION_DET,
                phone_prefix, enccols, cm, false);
   }
+
+protected:
+  virtual
+  void encryptBatch(const vector<vector<string> > &tokens,
+                    vector<vector<string> >       &enccols,
+                    crypto_manager_stub &cm) {
+    assert(tpe != normal);
+    do_row_pack(tokens, enccols, cm);
+  }
+
+private:
+  static const size_t BitsPerAggField = 83;
+  static const size_t FieldsPerAgg = 1024 / BitsPerAggField;
+
+  void do_row_pack(const vector<vector<string> > &rows,
+                   vector<vector<string> > &enccols,
+                   crypto_manager_stub &cm) {
+    assert(tpe != normal);
+
+    _static_assert(FieldsPerAgg == 12); // this is hardcoded various places
+    size_t nAggs = rows.size() / FieldsPerAgg +
+        (rows.size() % FieldsPerAgg ? 1 : 0);
+    for (size_t i = 0; i < nAggs; i++) {
+      size_t base = i * FieldsPerAgg;
+      ZZ z0 = to_ZZ(0);
+      for (size_t j = 0; j < min(FieldsPerAgg, rows.size() - base); j++) {
+        size_t row_id = base + j;
+        const vector<string>& tokens = rows[row_id];
+        long c_acctbal_int =
+          roundToLong(fabs(resultFromStr<double>(tokens[customer::c_acctbal])) * 100.0);
+        insert_into_slot<BitsPerAggField>(z0, c_acctbal_int, j);
+      }
+      string e0 = cm.encrypt_Paillier(z0);
+      e0.resize(256);
+      cout << e0;
+    }
+  }
+
+  enum opt_type tpe;
 };
 
 //----------------------------------------------------------------------------
@@ -1528,10 +1574,9 @@ static map<string, table_encryptor *> EncryptorMap = {
 
   {"orders-none", new orders_encryptor},
 
-  {"customer-none", new table_encryptor(CustSchema, CustOnions, false, true)},
+  {"customer-none", new customer_encryptor(customer_encryptor::normal)},
+  {"customer-row-packed-acctbal", new customer_encryptor(customer_encryptor::row_packed_acctbal)},
 };
-
-
 
 static inline string process_input(const string &s, crypto_manager_stub &cm, table_encryptor *tenc) {
   vector<string> tokens;

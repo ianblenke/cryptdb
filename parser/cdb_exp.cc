@@ -6990,7 +6990,7 @@ static void do_query_q22(Connect &conn,
     "where "
     "  substring(c_phone from 1 for 2) in "
     "    ('" << c1 << "', '" << c2 << "', '" << c3 << "', '" << c4 << "', '"
-    << "', '" << c6 << "', '" << c7 << "') "
+    << c5 << "', '" << c6 << "', '" << c7 << "') "
     "  and c_acctbal > ( " << avg <<
     "  ) "
     "  and not exists ( "
