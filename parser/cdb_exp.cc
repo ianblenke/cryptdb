@@ -5567,7 +5567,7 @@ static void do_query_q17(Connect &conn,
   conn.execute("CREATE TEMPORARY TABLE inner_tmp ("
                "p integer unsigned, "
                "q bigint unsigned, "
-               "PRIMARY KEY (p_partkey)) ENGINE=MEMORY");
+               "PRIMARY KEY (p)) ENGINE=MEMORY");
 
   {
     ostringstream s;
@@ -5703,8 +5703,8 @@ static void do_query_crypt_q17(Connect &conn,
     "l_partkey_DET, group_concat(l_quantity_DET), group_concat(l_extendedprice_DET) "
     "from lineitem_enc_noagg_rowid, part_enc "
     "where p_partkey_DET = l_partkey_DET and "
-    "p_brand_DET = " << p_a_enc << " and "
-    "p_container_DET = " << p_b_enc << " "
+    "p_brand_DET = "     << marshallBinary(p_a_enc) << " and "
+    "p_container_DET = " << marshallBinary(p_b_enc) << " "
     "group by l_partkey_DET"
     ;
   cerr << s.str() << endl;
