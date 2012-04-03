@@ -83,15 +83,44 @@ static void tokenize(const string &s,
 
 struct date_t {
   // dd-mm-yyyy
+  // TODO: this implementation doesn't check for valid dates
   date_t(
     uint32_t day,
     uint32_t month,
     uint32_t year) {}
 
+  date_t(
+    const string& yyyy_mm_dd) {
+    int year, month, day;
+    int ret = sscanf(yyyy_mm_dd.c_str(), "%d-%d-%d", &year, &month, &day);
+    assert(ret == 3);
+    assert(1 <= day && day <= 31);
+    assert(1 <= month && month <= 12);
+    assert(year >= 0);
+    this->day = day;
+    this->month = month;
+    this->year = year;
+  }
+
   inline uint32_t encode() const { return EncodeDate(month, day, year); }
 
-  uint32_t day;
-  uint32_t month;
+  void add_years(uint32_t years) {
+    year += years;
+  }
+
+  // TODO: this implementation doesn't take into account
+  // truncation, ie
+  //
+  // 11-30-2009 + 3 months should go to 2-28-2010, not 2-30-2010
+  void add_months(uint32_t months) {
+    uint32_t tmp = (month - 1) + months;
+    month = (tmp % 12) + 1;
+    year += (tmp / 12);
+  }
+
+private:
+  uint32_t day;   // [1-31]
+  uint32_t month; // [1-12]
   uint32_t year;
 };
 
@@ -4695,8 +4724,8 @@ static void do_query_q12(Connect &conn,
     "    else 0 "
     "  end) as low_line_count "
     "from "
-    "  orders, "
-    "  lineitem "
+    "  ORDERS, "
+    "  LINEITEM "
     "where "
     "  o_orderkey = l_orderkey "
     "  and l_shipmode in ('" << l_a << "', '" << l_b << "') "
@@ -4745,7 +4774,7 @@ static string enc_fixed_len_str(
                             isBin, 12345);
   assert(isBin);
   assert(ct.size() == pt.size());
-  ct.resize(25);
+  ct.resize(fixed_len);
   return ct;
 }
 
@@ -4790,14 +4819,14 @@ static void do_query_crypt_q12(Connect &conn,
     "select "
     "  l_shipmode_DET, "
     "  sum(case "
-    "    when o_orderpriority_DET = " << ourgent_ct << " "
-    "      or o_orderpriority_DET = " << ohigh_ct   << " "
+    "    when o_orderpriority_DET = " << marshallBinary(ourgent_ct) << " "
+    "      or o_orderpriority_DET = " << marshallBinary(ohigh_ct)   << " "
     "      then 1 "
     "    else 0 "
     "  end) as high_line_count, "
     "  sum(case "
-    "    when o_orderpriority_DET  <> " << ourgent_ct << " "
-    "      and o_orderpriority_DET <> " << ohigh_ct   << " "
+    "    when o_orderpriority_DET  <> " << marshallBinary(ourgent_ct) << " "
+    "      and o_orderpriority_DET <> " << marshallBinary(ohigh_ct)   << " "
     "      then 1 "
     "    else 0 "
     "  end) as low_line_count "
@@ -4806,7 +4835,8 @@ static void do_query_crypt_q12(Connect &conn,
     "  lineitem_enc_noagg_rowid "
     "where "
     "  o_orderkey_DET = l_orderkey_DET "
-    "  and l_shipmode_DET in (" << l_a_enc << ", " << l_b_enc << ") "
+    "  and l_shipmode_DET in (" << marshallBinary(l_a_enc)
+    << ", " << marshallBinary(l_b_enc) << ") "
     "  and l_commitdate_OPE < l_receiptdate_OPE "
     "  and l_shipdate_OPE < l_commitdate_OPE "
     "  and l_receiptdate_OPE >= " << d0 << " "
@@ -5296,18 +5326,19 @@ static void do_query_q15(Connect &conn,
     "  s_suppkey, "
     "  s_name, "
     "  s_address, "
-    "  s_phone, "
+    "  s_phone "
     "from "
-    "  SUPPLIER, "
+    "  SUPPLIER "
     "where "
     "  s_suppkey = " << res.rows[0][0].data << " "
     "order by "
     "  s_suppkey; "
     ;
+  cerr << s1.str() << endl;
 
   {
     NamedTimer t(__func__, "execute-1");
-    conn.execute(s.str(), dbres);
+    conn.execute(s1.str(), dbres);
   }
   {
     NamedTimer t(__func__, "unpack-1");
@@ -5390,7 +5421,9 @@ static void do_query_crypt_q15(Connect &conn,
                             getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
   assert(!isBin);
 
-  string d1 = cm_stub.crypt<3>(cm.getmkey(), to_s(encode_yyyy_mm_dd(l_a) + 3 * (1 << 5) /* + 3 mo */),
+  date_t endDate(l_a);
+  endDate.add_months(3);
+  string d1 = cm_stub.crypt<3>(cm.getmkey(), to_s(endDate.encode()),
                             TYPE_INTEGER, "ope_join",
                             getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
   assert(!isBin);
@@ -5463,16 +5496,16 @@ static void do_query_crypt_q15(Connect &conn,
     "  s_suppkey_DET, "
     "  s_name_DET, "
     "  s_address_DET, "
-    "  s_phone_DET, "
+    "  s_phone_DET "
     "from "
-    "  supplier_enc, "
+    "  supplier_enc "
     "where "
     "  s_suppkey_DET = " << merged.front().l_suppkey_DET
     ;
 
   {
     NamedTimer t(__func__, "execute-1");
-    conn.execute(s.str(), dbres);
+    conn.execute(s1.str(), dbres);
   }
   {
     NamedTimer t(__func__, "unpack-1");
@@ -5508,7 +5541,7 @@ static void do_query_crypt_q15(Connect &conn,
             cm);
 
     string s_phone = decryptRow<string>(
-            row[2].data,
+            row[3].data,
             12345,
             fieldname(supplier::s_phone, "DET"),
             TYPE_TEXT,
@@ -7423,7 +7456,7 @@ int main(int argc, char **argv) {
         {
           string l_a = argv[2];
           string l_b = argv[3];
-          string l_c = argv[3];
+          string l_c = argv[4];
           vector<q12entry> results;
           if (mode == "orig-query12") {
             for (size_t i = 0; i < nruns; i++) {
