@@ -802,6 +802,24 @@ inline ostream& operator<<(ostream &o, const q20entry &q) {
     return o;
 }
 
+struct q22entry {
+  q22entry(
+    const string& cntrycode,
+    uint64_t numcust,
+    double totacctbal) :
+    cntrycode(cntrycode),
+    numcust(numcust),
+    totacctbal(totacctbal) {}
+  string cntrycode;
+  uint64_t numcust;
+  double totacctbal;
+};
+
+inline ostream& operator<<(ostream &o, const q22entry &q) {
+  o << q.cntrycode << "|" << q.numcust << "|" << q.totacctbal;
+  return o;
+}
+
 static void do_query_q1(Connect &conn,
                         uint32_t year,
                         vector<q1entry> &results) {
@@ -6924,6 +6942,294 @@ static void do_query_q20_opt(Connect &conn,
     }
 }
 
+static void do_query_q22(Connect &conn,
+                         const string& c1,
+                         const string& c2,
+                         const string& c3,
+                         const string& c4,
+                         const string& c5,
+                         const string& c6,
+                         const string& c7,
+                         vector<q22entry> &results) {
+  NamedTimer fcnTimer(__func__);
+
+  // precompute inner query
+  double avg;
+  {
+    ostringstream s;
+    s <<
+      "select "
+      "  avg(c_acctbal) "
+      "from "
+      "  CUSTOMER_INT "
+      "where "
+      //"  c_acctbal > 0 and "
+      "  substring(c_phone from 1 for 2) in "
+      "('" << c1 << "', '" << c2 << "', '" << c3 << "', '" << c4 << "', '"
+      << c5 << "', '" << c6 << "', '" << c7 << "') ";
+
+    DBResult * dbres;
+    {
+      NamedTimer t(__func__, "execute-1");
+      conn.execute(s.str(), dbres);
+    }
+    ResType res= dbres->unpack();
+    assert(res.ok);
+    assert(res.rows.size() == 1);
+    avg = resultFromStr<double>(res.rows[0][0].data);
+  }
+
+  ostringstream s;
+  s <<
+    "select "
+    "  sum_hash_agg_int("
+    "    substring(c_phone from 1 for 2) as cntrycode, "
+    "    c_acctbal) "
+    "from "
+    "  CUSTOMER_INT "
+    "where "
+    "  substring(c_phone from 1 for 2) in "
+    "    ('" << c1 << "', '" << c2 << "', '" << c3 << "', '" << c4 << "', '"
+    << "', '" << c6 << "', '" << c7 << "') "
+    "  and c_acctbal > ( " << avg <<
+    "  ) "
+    "  and not exists ( "
+    "    select "
+    "      * "
+    "    from "
+    "      ORDERS "
+    "    where "
+    "      o_custkey = c_custkey "
+    "  ) "
+  ;
+  cerr << s.str() << endl;
+
+  DBResult * dbres;
+  {
+    NamedTimer t(__func__, "execute-2");
+    conn.execute(s.str(), dbres);
+  }
+  ResType res;
+  {
+    NamedTimer t(__func__, "unpack-2");
+    res = dbres->unpack();
+    assert(res.ok);
+  }
+
+  assert(res.rows.size() == 1);
+  const string& data = res.rows[0][0].data;
+  const uint8_t *p   = (const uint8_t *) data.data();
+  const uint8_t *end = (const uint8_t *) data.data() + data.size();
+  while (p < end) {
+    string cntrycode = ReadKeyElem<string>(p);
+
+    // skip count
+    uint64_t cnt = *p;
+    p += sizeof(uint64_t);
+
+    const uint64_t *dp = (const uint64_t *) p;
+    uint64_t value = *dp;
+    p += sizeof(uint64_t);
+
+    results.push_back(
+        q22entry(
+          cntrycode,
+          cnt,
+          value/100.0));
+  }
+}
+
+static void do_query_crypt_q22(Connect &conn,
+                               CryptoManager& cm,
+                               const string& c0,
+                               const string& c1,
+                               const string& c2,
+                               const string& c3,
+                               const string& c4,
+                               const string& c5,
+                               const string& c6,
+                               vector<q22entry> &results,
+                               const string& db) {
+  crypto_manager_stub cm_stub(&cm, UseOldOpe);
+  NamedTimer fcnTimer(__func__);
+
+  // compute avg
+
+  vector<string> codes = {c0, c1, c2, c3, c4, c5, c6};
+  vector<string> codes_cts;
+  codes_cts.reserve(codes.size());
+  for (auto c : codes) {
+    codes_cts.push_back(
+      marshallBinary(
+      enc_fixed_len_str(
+          c, fieldname(customer::c_phone, "DET"), cm, 2)));
+  }
+
+  string filename =
+    "/space/stephentu/data/" + db + "/customer_enc/row_pack/acctbal";
+  string pkinfo = marshallBinary(cm.getPKInfo());
+
+  ostringstream s;
+  s <<
+    "select"
+    " agg_hash_agg_row_col_pack(0, row_id, "
+      << pkinfo << ", " << "\"" << filename << "\", "
+      << NumThreads << ", 256, 12, 1) "
+    "from"
+    "  customer_enc_rowid "
+    "where c_phone_prefix_DET IN (" << join(codes_cts, ",") << ")"
+    ;
+  cerr << s.str() << endl;
+
+  DBResult * dbres;
+  {
+    NamedTimer t(__func__, "execute-1");
+    conn.execute(s.str(), dbres);
+  }
+  ResType res;
+  {
+    NamedTimer t(__func__, "unpack-1");
+    res = dbres->unpack();
+    assert(res.ok);
+  }
+
+  static const size_t BitsPerAggField = 83;
+  ZZ mask = to_ZZ(1); mask <<= BitsPerAggField; mask -= 1;
+  assert(NumBits(mask) == (int)BitsPerAggField);
+  double sum = 0.0;
+  uint64_t cnt = 0;
+  {
+    assert(res.rows.size() == 1);
+    string data = res.rows[0][0].data;
+
+    const uint8_t *p   = (const uint8_t *) data.data();
+    const uint8_t *end = (const uint8_t *) data.data() + data.size();
+    while (p < end) {
+
+      cnt += *p;
+      p += sizeof(uint64_t);
+
+#define TAKE_FROM_SLOT(z, slot) \
+      (to_long(((z) >> (BitsPerAggField * (slot))) & mask))
+
+      const uint32_t *u32p = (const uint32_t *) p;
+      uint32_t n_aggs = *u32p;
+      p += sizeof(uint32_t);
+
+      for (size_t group_i = 0; group_i < n_aggs; group_i++) {
+        // interest mask
+        const uint32_t *u32p = (const uint32_t *) p;
+        uint32_t interest_mask = *u32p;
+        p += sizeof(uint32_t);
+
+        string ct = string((const char *) p, (size_t) 256);
+        ZZ m;
+        cm.decrypt_Paillier(ct, m);
+        p += 256;
+
+        for (size_t i = 0; i < 12; i++) {
+          if (!(interest_mask & (0x1 << i))) continue;
+          long l = TAKE_FROM_SLOT(m, i);
+          sum += ((double)l)/100.0;
+        }
+      }
+    }
+  }
+
+  double avg = sum / double(cnt);
+  // encrypt avg in OPE
+
+  bool isBin = false;
+  string avgENC = cm_stub.crypt<7>(
+      cm.getmkey(), to_s(roundToLong(avg * 100.0)),
+      TYPE_INTEGER, fieldname(customer::c_acctbal, "OPE"),
+      getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
+  assert(isBin);
+  avgENC.resize( 16 ); avgENC = str_reverse( avgENC );
+
+  {
+    ostringstream s;
+    s <<
+      "select "
+      "  agg_hash_agg_row_col_pack(1, c_phone_prefix_DET, row_id, "
+        << pkinfo << ", " << "\"" << filename << "\", "
+        << NumThreads << ", 256, 12, 1) "
+      "from "
+      "  customer_enc_rowid "
+      "where "
+      "  c_phone_prefix_DET IN (" << join(codes_cts, ",") << ") "
+      "  and c_acctbal_OPE > " << marshallBinary(avgENC) <<
+      "  and not exists ( "
+      "    select "
+      "      * "
+      "    from "
+      "      orders_enc "
+      "    where "
+      "      o_custkey_DET = c_custkey_DET "
+      "  ) "
+      ;
+    cerr << s.str() << endl;
+
+    DBResult * dbres;
+    {
+      NamedTimer t(__func__, "execute-2");
+      conn.execute(s.str(), dbres);
+    }
+    ResType res;
+    {
+      NamedTimer t(__func__, "unpack-2");
+      res = dbres->unpack();
+      assert(res.ok);
+    }
+
+    {
+      assert(res.rows.size() == 1);
+      const string& data = res.rows[0][0].data;
+      const uint8_t *p   = (const uint8_t *) data.data();
+      const uint8_t *end = (const uint8_t *) data.data() + data.size();
+      while (p < end) {
+        string c_phone_prefix_DET = ReadKeyElem<string>(p);
+
+        string c_phone_prefix = decryptRow<string>(
+                c_phone_prefix_DET,
+                12345,
+                fieldname(customer::c_phone, "DET"),
+                TYPE_TEXT,
+                oDET,
+                cm);
+
+        uint64_t cnt = *p;
+        p += sizeof(uint64_t);
+
+        const uint32_t *u32p = (const uint32_t *) p;
+        uint32_t n_aggs = *u32p;
+        p += sizeof(uint32_t);
+
+        double sum = 0.0;
+        for (size_t group_i = 0; group_i < n_aggs; group_i++) {
+          // interest mask
+          const uint32_t *u32p = (const uint32_t *) p;
+          uint32_t interest_mask = *u32p;
+          p += sizeof(uint32_t);
+
+          string ct = string((const char *) p, (size_t) 256);
+          ZZ m;
+          cm.decrypt_Paillier(ct, m);
+          p += 256;
+
+          for (size_t i = 0; i < 12; i++) {
+            if (!(interest_mask & (0x1 << i))) continue;
+            long l = TAKE_FROM_SLOT(m, i);
+            sum += ((double)l)/100.0;
+          }
+        }
+
+        results.push_back(q22entry(c_phone_prefix, cnt, sum));
+      }
+    }
+  }
+}
+
 static inline uint32_t random_year() {
     static const uint32_t gap = 1999 - 1993 + 1;
     return 1993 + (rand() % gap);
@@ -6958,14 +7264,16 @@ enum query_selection {
   query17,
   query18,
   query20,
+
+  query22,
 };
 
 int main(int argc, char **argv) {
     srand(time(NULL));
-    if (argc != 6 && argc != 7 && argc != 8 && argc != 9 && argc != 10) {
-        usage(argv);
-        return 1;
-    }
+    //if (argc != 6 && argc != 7 && argc != 8 && argc != 9 && argc != 10) {
+    //    usage(argv);
+    //    return 1;
+    //}
 
     static const char * Query1Strings[] = {
         "--orig-query1",
@@ -7002,6 +7310,7 @@ int main(int argc, char **argv) {
     REGULAR_QUERY_IMPL(12)
     REGULAR_QUERY_IMPL(15)
     REGULAR_QUERY_IMPL(17)
+    REGULAR_QUERY_IMPL(22)
 
 #undef REGULAR_QUERY_IMPL
 
@@ -7051,7 +7360,7 @@ int main(int argc, char **argv) {
       CASE_IMPL(9), CASE_IMPL(10), CASE_IMPL(11), CASE_IMPL(12),
 
       CASE_IMPL(14), CASE_IMPL(15),
-      CASE_IMPL(17), CASE_IMPL(18), CASE_IMPL(20),
+      CASE_IMPL(17), CASE_IMPL(18), CASE_IMPL(20), CASE_IMPL(22),
 #undef CASE_IMPL
     };
 
@@ -7100,6 +7409,7 @@ int main(int argc, char **argv) {
     CASE_IMPL(17, 2)
     CASE_IMPL(18, 1)
     CASE_IMPL(20, 3)
+    CASE_IMPL(22, 7)
 
 #undef CASE_IMPL
 
@@ -7638,6 +7948,35 @@ int main(int argc, char **argv) {
           } else assert(false);
         }
         break;
+
+      case query22:
+        {
+          string c0 = argv[2];
+          string c1 = argv[3];
+          string c2 = argv[4];
+          string c3 = argv[5];
+          string c4 = argv[6];
+          string c5 = argv[7];
+          string c6 = argv[8];
+          vector<q22entry> results;
+          if (mode == "orig-query22") {
+            for (size_t i = 0; i < nruns; i++) {
+              do_query_q22(conn, c0, c1, c2, c3, c4, c5, c6, results);
+              ctr += results.size();
+              PRINT_RESULTS();
+              results.clear();
+            }
+          } else if (mode == "crypt-query22") {
+            for (size_t i = 0; i < nruns; i++) {
+              do_query_crypt_q22(conn, cm, c0, c1, c2, c3, c4, c5, c6, results, db_name);
+              ctr += results.size();
+              PRINT_RESULTS();
+              results.clear();
+            }
+          } else assert(false);
+        }
+        break;
+
       default: assert(false);
     }
     cerr << ctr << endl;
