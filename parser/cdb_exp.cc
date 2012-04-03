@@ -5531,43 +5531,24 @@ static void do_query_q17(Connect &conn,
   DBResult * dbres;
   ResType res;
 
-  // get the partkeys we might care about
-  vector<string> partkeys;
-  {
-    ostringstream s;
-    s <<
-      "select l_partkey from LINEITEM_INT, PART "
-      "where p_partkey = l_partkey and "
-      "p_brand = '" << p_a << "' and "
-      "p_container = '" << p_b << "'";
-    cerr << s.str() << endl;
-    {
-      NamedTimer t(__func__, "execute-1");
-      conn.execute(s.str(), dbres);
-    }
-    {
-      NamedTimer t(__func__, "unpack-1");
-      res = dbres->unpack();
-      assert(res.ok);
-    }
-    for (auto row : res.rows) { partkeys.push_back(row[0].data); }
-  }
+  conn.execute("CREATE TEMPORARY TABLE inner_tmp ("
+               "p integer unsigned, "
+               "q bigint unsigned, "
+               "PRIMARY KEY (p_partkey)) ENGINE=MEMORY");
 
   {
-    conn.execute("CREATE TEMPORARY TABLE inner_tmp ("
-                 "p integer unsigned, "
-                 "q bigint unsigned, "
-                 "PRIMARY KEY (p_partkey)) ENGINE=MEMORY");
-
     ostringstream s;
     s <<
       "INSERT INTO inner_tmp "
-      "SELECT l_partkey, 0.2 * avg(l_quantity) FROM LINEITEM_INT WHERE l_partkey IN ("
-      << join(partkeys, ",") << ") GROUP BY l_partkey"
+      "select l_partkey, 0.2 * avg(l_quantity) from LINEITEM_INT, PART "
+      "where p_partkey = l_partkey and "
+      "p_brand = '" << p_a << "' and "
+      "p_container = '" << p_b << "' "
+      "group by l_partkey;"
       ;
-
+    cerr << s.str() << endl;
     {
-      NamedTimer t(__func__, "execute-2");
+      NamedTimer t(__func__, "execute-1");
       conn.execute(s.str(), dbres);
     }
   }
@@ -5590,11 +5571,11 @@ static void do_query_q17(Connect &conn,
   cerr << s.str() << endl;
 
   {
-    NamedTimer t(__func__, "execute-3");
+    NamedTimer t(__func__, "execute-2");
     conn.execute(s.str(), dbres);
   }
   {
-    NamedTimer t(__func__, "unpack-3");
+    NamedTimer t(__func__, "unpack-2");
     res = dbres->unpack();
     assert(res.ok);
   }
@@ -5604,13 +5585,134 @@ static void do_query_q17(Connect &conn,
   }
 }
 
+struct _q17_noopt_task_state {
+  _q17_noopt_task_state() : local_sum(0.0) {}
+  vector< vector< SqlItem > > rows;
+  double local_sum;
+};
+
+struct _q17_noopt_task {
+  void operator()() {
+    for (auto row : state->rows) {
+      vector<string> ciphers;
+      tokenize(row[1].data, ",", ciphers);
+
+      vector<double> quantities;
+      quantities.reserve(ciphers.size());
+
+      double sum = 0.0;
+      for (size_t i = 0; i < ciphers.size(); i++) {
+        uint64_t l_quantity_int = decryptRow<uint64_t, 7>(
+            ciphers[i],
+            12345,
+            fieldname(lineitem::l_quantity, "DET"),
+            TYPE_INTEGER,
+            oDET,
+            *cm);
+        double l_quantity = ((double)l_quantity_int)/100.0;
+        sum += l_quantity;
+        quantities.push_back(l_quantity);
+      }
+
+      double threshold = 0.2 * sum / double(ciphers.size());
+
+      vector<string> ext_ciphers;
+      tokenize(row[2].data, ",", ext_ciphers);
+      assert(quantities.size() == ext_ciphers.size());
+
+      for (size_t i = 0; i < quantities.size(); i++) {
+        if (quantities[i] < threshold) {
+          // decode l_extendedprice and add to local_sum
+          uint64_t l_extendedprice_int = decryptRow<uint64_t, 7>(
+              ext_ciphers[i],
+              12345,
+              fieldname(lineitem::l_extendedprice, "DET"),
+              TYPE_INTEGER,
+              oDET,
+              *cm);
+          double l_extendedprice = ((double)l_extendedprice_int)/100.0;
+          state->local_sum += l_extendedprice;
+        }
+      }
+
+    }
+  }
+  CryptoManager* cm;
+  _q17_noopt_task_state* state;
+};
+
 static void do_query_crypt_q17(Connect &conn,
                                CryptoManager& cm,
                                const string& p_a,
                                const string& p_b,
                                vector<q17entry> &results) {
-  crypto_manager_stub stub(&cm, UseOldOpe);
+  crypto_manager_stub cm_stub(&cm, UseOldOpe);
   NamedTimer fcnTimer(__func__);
+
+  DBResult * dbres;
+  ResType res;
+
+  bool isBin = false;
+  string p_a_enc = cm_stub.crypt(cm.getmkey(), p_a, TYPE_TEXT,
+                            fieldname(part::p_brand, "DET"),
+                            getMin(oDET), SECLEVEL::DET, isBin, 12345);
+  assert(isBin);
+
+  isBin = false;
+  string p_b_enc = cm_stub.crypt(cm.getmkey(), p_b, TYPE_TEXT,
+                            fieldname(part::p_container, "DET"),
+                            getMin(oDET), SECLEVEL::DET, isBin, 12345);
+  assert(isBin);
+
+  ostringstream s;
+  s <<
+    "select "
+    "l_partkey_DET, group_concat(l_quantity_DET), group_concat(l_extendedprice_DET) "
+    "from lineitem_enc_noagg_rowid, part_enc "
+    "where p_partkey_DET = l_partkey_DET and "
+    "p_brand_DET = " << p_a_enc << " and "
+    "p_container_DET = " << p_b_enc << " "
+    "group by l_partkey_DET"
+    ;
+  cerr << s.str() << endl;
+  {
+    NamedTimer t(__func__, "execute-1");
+    conn.execute(s.str(), dbres);
+  }
+  {
+    NamedTimer t(__func__, "unpack-1");
+    res = dbres->unpack();
+    assert(res.ok);
+  }
+
+  assert(DoParallel);
+
+  using namespace exec_service;
+
+  vector<_q17_noopt_task_state> states( NumThreads );
+  vector<_q17_noopt_task> tasks( NumThreads );
+  vector<SqlRowGroup> groups;
+  SplitRowsIntoGroups(groups, res.rows, NumThreads);
+
+  for (size_t i = 0; i < NumThreads; i++) {
+    tasks[i].cm        = &cm;
+    tasks[i].state     = &states[i];
+    states[i].rows     = groups[i];
+  }
+
+  Exec<_q17_noopt_task>::DefaultExecutor exec( NumThreads );
+  exec.start();
+  for (size_t i = 0; i < NumThreads; i++) {
+    exec.submit(tasks[i]);
+  }
+  exec.stop();
+
+  double sum = 0.0;
+  for (size_t i = 0; i < NumThreads; i++) {
+    sum += states[i].local_sum;
+  }
+
+  results.push_back( sum / 7.0 );
 }
 
 static void do_query_q18(Connect &conn,
