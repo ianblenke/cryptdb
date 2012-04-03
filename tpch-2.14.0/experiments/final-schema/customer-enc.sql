@@ -8,4 +8,5 @@ CREATE TABLE customer_enc (
     c_acctbal_OPE     binary(16) not null,
     c_mktsegment_DET  binary(10) not null,
     c_comment_DET     varbinary(117) not null,
+    c_phone_prefix_DET binary(2) not null,
     PRIMARY KEY (c_custkey_DET)) Engine=InnoDB;

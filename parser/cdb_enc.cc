@@ -521,6 +521,25 @@ static const vector<int> CustOnions = {
     ONION_DET,
 };
 
+class customer_encryptor : public table_encryptor {
+public:
+  customer_encryptor() {
+    schema = CustSchema;
+    onions = CustOnions;
+    usenull = false;
+    processrow = true;
+  }
+
+  virtual
+  void postprocessRow(const vector<string> &tokens,
+                      vector<string>       &enccols,
+                      crypto_manager_stub        &cm) {
+    string phone_prefix = enccols[customer::c_phone].substr(0, 2);
+    do_encrypt(customer::c_phone, DT_STRING, ONION_DET,
+               phone_prefix, enccols, cm, false);
+  }
+};
+
 //----------------------------------------------------------------------------
 // orders
 
