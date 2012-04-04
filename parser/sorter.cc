@@ -23,6 +23,8 @@ using namespace std;
 
 static vector< vector<string> > rows;
 
+static vector< string > tmp_files;
+
 static vector<size_t> sort_keys;
 
 static bool interpret_as_int = false;
@@ -30,8 +32,6 @@ static bool interpret_as_int = false;
 static const size_t MAX_INMEM_ROWS = 1000000;
 
 static bool merge_sort = false;
-
-static size_t run_ids = 0;
 
 struct sorter_functor {
     inline bool
@@ -56,14 +56,13 @@ struct sorter_functor {
     }
 };
 
-static inline string tmp_file_name(size_t id) {
-    ostringstream s;
-    s << "/tmp/sorted_run_" << id;
-    return s.str();
+static inline string uniq_tmp_file_name() {
+  return string(tempnam(NULL, "sorted_run"));
 }
 
 static inline string next_tmp_file_name() {
-    return tmp_file_name(run_ids++);
+  tmp_files.push_back(uniq_tmp_file_name());
+  return tmp_files.back();
 }
 
 static void emit_row(ostream& o, const vector<string>& row) {
@@ -149,7 +148,7 @@ size_t read_elems_from_stream(
 
 static void sort_and_output() {
     if (merge_sort) {
-        size_t n_ways = run_ids;
+        size_t n_ways = tmp_files.size();
         //cerr << n_ways << endl;
         assert(n_ways >= 1);
 
@@ -160,7 +159,7 @@ static void sort_and_output() {
         vector<ssize_t> positions(n_ways);
         vector<ifstream> streams(n_ways);
         for (size_t i = 0; i < n_ways; i++) {
-            streams[i].open(tmp_file_name(i));
+            streams[i].open(tmp_files[i]);
             assert(!streams[i].fail());
 
             appender app(buffers[i]);
@@ -199,6 +198,11 @@ static void sort_and_output() {
                     positions[idxSoFar] = 0;
                 }
             }
+        }
+
+        // cleanup
+        for (auto s : tmp_files) {
+          unlink(s.c_str());
         }
     } else {
         sort(rows.begin(), rows.end(), sorter_functor());
