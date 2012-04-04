@@ -20,5 +20,9 @@ for scale in $SCALES; do
     cp ../../tpch-2.14.0/dbgen/dists.dss .  #hack
     yes | $DBGEN -s $scale
     rm dists.dss
+    
+    # remove trailing delimiter (so psql won't complain)
+    for i in *.tbl; do sed -i 's/|$//' $i; done
+
     cd ..
 done
