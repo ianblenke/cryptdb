@@ -541,7 +541,7 @@ public:
                       vector<string>       &enccols,
                       crypto_manager_stub        &cm) {
     assert(tpe == normal);
-    string phone_prefix = enccols[customer::c_phone].substr(0, 2);
+    string phone_prefix = tokens[customer::c_phone].substr(0, 2);
     do_encrypt(customer::c_phone, DT_STRING, ONION_DET,
                phone_prefix, enccols, cm, false);
   }

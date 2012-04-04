@@ -1306,7 +1306,7 @@ static void do_query_q1_opt_row_col_pack(Connect &conn,
         << pkinfo << ", " <<
         "\"" << filename << "\", " << (DoParallel ? to_s(NumThreads) : string("0"))
         << ", " << (RowColPackCipherSize/8) << ", 3, 1"
-      ") FROM " << (UseMYISAM ? "lineitem_enc_noagg_rowid_MYISAM" : "lineitem_enc_noagg_rowid")
+      ") FROM " << (UseMYISAM ? "lineitem_enc_rowid_MYISAM" : "lineitem_enc_rowid")
       << " WHERE l_shipdate_OPE <= " << encDATE
       ;
     cerr << s.str() << endl;
@@ -1653,7 +1653,7 @@ static void do_query_q1_noopt(Connect &conn,
           << "l_discount_DET, "
           << "l_tax_DET "
 
-      << "FROM " << (UseMYISAM ? "lineitem_enc_noagg_rowid_MYISAM" : "lineitem_enc_noagg_rowid")
+      << "FROM " << (UseMYISAM ? "lineitem_enc_rowid_MYISAM" : "lineitem_enc_rowid")
       << " WHERE l_shipdate_OPE <= " << encDATE;
     cerr << s.str() << endl;
 
@@ -1804,7 +1804,10 @@ static void do_query_q2(Connect &conn,
     NamedTimer fcnTimer(__func__);
 
     ostringstream s;
-    s << "select SQL_NO_CACHE s_acctbal, s_name, n_name, p_partkey, p_mfgr, s_address, s_phone, s_comment from PART, SUPPLIER, PARTSUPP, NATION, REGION where p_partkey = ps_partkey and s_suppkey = ps_suppkey and p_size = " << size << " and p_type like '%" << type << "' and s_nationkey = n_nationkey and n_regionkey = r_regionkey and r_name = '" << name << "' and ps_supplycost = ( select min(ps_supplycost) from PARTSUPP, SUPPLIER, NATION, REGION where p_partkey = ps_partkey and s_suppkey = ps_suppkey and s_nationkey = n_nationkey and n_regionkey = r_regionkey and r_name = '" << name << "') order by s_acctbal desc, n_name, s_name, p_partkey limit 100";
+    s << "select SQL_NO_CACHE s_acctbal, s_name, n_name, p_partkey, p_mfgr, s_address, s_phone, s_comment "
+      "from PART_INT, SUPPLIER_INT, PARTSUPP_INT, NATION_INT, REGION_INT "
+      "where p_partkey = ps_partkey and s_suppkey = ps_suppkey and p_size = " << size << " and p_type like '%" << type << "' and s_nationkey = n_nationkey and n_regionkey = r_regionkey and r_name = '" << name << "' and ps_supplycost = ( select min(ps_supplycost) from "
+      "PARTSUPP_INT, SUPPLIER_INT, NATION_INT, REGION_INT where p_partkey = ps_partkey and s_suppkey = ps_suppkey and s_nationkey = n_nationkey and n_regionkey = r_regionkey and r_name = '" << name << "') order by s_acctbal desc, n_name, s_name, p_partkey limit 100";
     cerr << s.str() << endl;
 
     DBResult * dbres;
@@ -1821,7 +1824,7 @@ static void do_query_q2(Connect &conn,
 
     for (auto row : res.rows) {
       results.push_back(
-          q2entry(resultFromStr<double>(row[0].data),
+          q2entry(resultFromStr<double>(row[0].data) / 100.0,
                   row[1].data,
                   row[2].data,
                   resultFromStr<uint64_t>(row[3].data),
@@ -1868,7 +1871,7 @@ static void do_query_q2_noopt(Connect &conn,
     s << "SELECT SQL_NO_CACHE "
         << "s_acctbal_DET, s_name_DET, n_name_DET, p_partkey_DET, "
         << "p_mfgr_DET, s_address_DET, s_phone_DET, s_comment_DET, p_type_DET "
-      << "FROM part_enc, supplier_enc, partsupp_enc_noopt, nation_enc, region_enc "
+      << "FROM part_enc, supplier_enc, partsupp_enc, nation_enc, region_enc "
       << "WHERE "
         << "p_partkey_DET = ps_partkey_DET AND "
         << "s_suppkey_DET = ps_suppkey_DET AND "
@@ -1884,7 +1887,7 @@ static void do_query_q2_noopt(Connect &conn,
         << "ps_supplycost_OPE = ("
           << "SELECT "
             << "min(ps_supplycost_OPE) "
-          << "FROM partsupp_enc_noopt, supplier_enc, nation_enc, region_enc "
+          << "FROM partsupp_enc, supplier_enc, nation_enc, region_enc "
           << "WHERE "
             << "p_partkey_DET = ps_partkey_DET AND "
             << "s_suppkey_DET = ps_suppkey_DET AND "
@@ -2097,43 +2100,30 @@ struct _q3_noopt_task_state {
 struct _q3_noopt_task {
   void operator()() {
       for (auto row : state->rows) {
-          vector<string> ext_price_ciphers;
-          tokenize(row[1].data, ",", ext_price_ciphers);
-
-          vector<string> discount_ciphers;
-          tokenize(row[2].data, ",", discount_ciphers);
-          assert(!ext_price_ciphers.empty());
-          assert(ext_price_ciphers.size() == discount_ciphers.size());
+          vector<string> ciphers;
+          tokenize(row[1].data, ",", ciphers);
+          assert(!ciphers.empty());
 
           double sum = 0.0;
-          for (size_t i = 0; i < ext_price_ciphers.size(); i++) {
-            uint64_t l_extendedprice_int = decryptRow<uint64_t, 7>(
-                    ext_price_ciphers[i],
+          for (size_t i = 0; i < ciphers.size(); i++) {
+            uint64_t l_disc_price_int = decryptRow<uint64_t, 7>(
+                    ciphers[i],
                     12345,
-                    fieldname(lineitem::l_extendedprice, "DET"),
+                    fieldname(0, "DET"),
                     TYPE_INTEGER,
                     oDET,
                     *cm);
-            double l_extendedprice = ((double)l_extendedprice_int)/100.0;
+            double l_disc_price = ((double)l_disc_price_int)/100.0;
 
-            uint64_t l_discount_int = decryptRow<uint64_t, 7>(
-                    discount_ciphers[i],
-                    12345,
-                    fieldname(lineitem::l_discount, "DET"),
-                    TYPE_INTEGER,
-                    oDET,
-                    *cm);
-            double l_discount = ((double)l_discount_int)/100.0;
-
-            sum += (l_extendedprice * (1.0 - l_discount));
+            sum += l_disc_price;
           }
 
           q3entry_enc cur_group(
                   resultFromStr<uint64_t>(row[0].data),
                   sum,
+                  resultFromStr<uint64_t>(row[2].data),
                   resultFromStr<uint64_t>(row[3].data),
-                  resultFromStr<uint64_t>(row[4].data),
-                  resultFromStr<uint64_t>(row[5].data));
+                  resultFromStr<uint64_t>(row[4].data));
 
           state->bestSoFar.add_elem(cur_group);
       }
@@ -2152,8 +2142,6 @@ static void do_query_q3(Connect &conn,
     s <<
       "select l_orderkey, sum(l_extendedprice * (100 - l_discount)) as revenue, o_orderdate, o_shippriority, group_concat('a') "
       "from LINEITEM_INT straight_join ORDERS_INT on l_orderkey = o_orderkey straight_join CUSTOMER_INT on c_custkey = o_custkey "
-      //"from LINEITEM_INT_MYISAM straight_join ORDERS_INT_MYISAM on l_orderkey = o_orderkey straight_join CUSTOMER_INT_MYISAM on c_custkey = o_custkey "
-      //"from LINEITEM_INT_2 straight_join ORDERS_INT_INNODB on l_orderkey = o_orderkey straight_join CUSTOMER_INT_INNODB on c_custkey = o_custkey "
       "where c_mktsegment = '" << mktsegment << "' and o_orderdate < date '" << d << "' and l_shipdate > date '" << d << "' "
       "group by l_orderkey, o_orderdate, o_shippriority "
       "order by revenue desc, o_orderdate limit 10;"
@@ -2214,14 +2202,11 @@ static void do_query_q3_crypt(Connect &conn,
     ostringstream s;
     s << "select "
          "  l_orderkey_DET, "
-         "  group_concat(l_extendedprice_DET), "
-         "  group_concat(l_discount_DET), "
+         "  group_concat(l_disc_price_DET), "
          "  o_orderdate_OPE, "
          "  o_orderdate_DET, "
          "  o_shippriority_DET "
-         "from lineitem_enc_noagg_rowid straight_join orders_enc on l_orderkey_DET = o_orderkey_DET straight_join customer_enc on c_custkey_DET = o_custkey_DET "
-         //"from lineitem_enc_noagg_rowid_MYISAM straight_join orders_enc_MYISAM on l_orderkey_DET = o_orderkey_DET straight_join customer_enc_MYISAM on c_custkey_DET = o_custkey_DET "
-         //"from lineitem_enc_noagg_rowid straight_join orders_enc_INNODB on l_orderkey_DET = o_orderkey_DET straight_join customer_enc_INNODB on c_custkey_DET = o_custkey_DET "
+         "from lineitem_enc_rowid straight_join orders_enc on l_orderkey_DET = o_orderkey_DET straight_join customer_enc_rowid on c_custkey_DET = o_custkey_DET "
          "where "
          "  c_mktsegment_DET = " << marshallBinary(encMKT) <<
          "  and o_orderdate_OPE < " << enc_d_o_orderdate <<
@@ -2331,12 +2316,12 @@ static void do_query_q4(Connect &conn,
     ostringstream s;
     s <<
       "select o_orderpriority, count(*) as order_count "
-      "from ORDERS "
+      "from ORDERS_INT "
       "where o_orderdate >= date '" << d << "' "
       "and o_orderdate < date '" << d << "' + interval '3' month "
       "and exists ( "
       "    select * from "
-      "      LINEITEM where l_orderkey = o_orderkey and l_commitdate < l_receiptdate) "
+      "      LINEITEM_INT where l_orderkey = o_orderkey and l_commitdate < l_receiptdate) "
       "group by o_orderpriority "
       "order by o_orderpriority"
       ;
@@ -2376,8 +2361,10 @@ static void do_query_crypt_q4(Connect &conn,
                               TYPE_INTEGER, fieldname(orders::o_orderdate, "OPE"),
                               getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
 
+    date_t endDate(d);
+    endDate.add_months(3);
     string d1 =
-      cm_stub.crypt<3>(cm.getmkey(), to_s(encode_yyyy_mm_dd(d) + (3 << 5) /* + 3 months */),
+      cm_stub.crypt<3>(cm.getmkey(), to_s(endDate.encode()),
                               TYPE_INTEGER, fieldname(orders::o_orderdate, "OPE"),
                               getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
 
@@ -2389,7 +2376,7 @@ static void do_query_crypt_q4(Connect &conn,
       "and o_orderdate_OPE < " << d1 << " "
       "and exists ( "
       "    select * from "
-      "      lineitem_enc_noagg_rowid where l_orderkey_DET = o_orderkey_DET and l_commitdate_OPE < l_receiptdate_OPE) "
+      "      lineitem_enc_rowid where l_orderkey_DET = o_orderkey_DET and l_commitdate_OPE < l_receiptdate_OPE) "
       "group by o_orderpriority_DET "
       ;
     cerr << s.str() << endl;
@@ -2436,12 +2423,12 @@ static void do_query_q5(Connect &conn,
       "  n_name,"
       "  sum(l_extendedprice * (100 - l_discount)) as revenue "
       "from"
-      "  CUSTOMER,"
-      "  ORDERS,"
+      "  CUSTOMER_INT,"
+      "  ORDERS_INT,"
       "  LINEITEM_INT,"
-      "  SUPPLIER,"
-      "  NATION,"
-      "  REGION "
+      "  SUPPLIER_INT,"
+      "  NATION_INT,"
+      "  REGION_INT "
       "where"
       "  c_custkey = o_custkey"
       "  and l_orderkey = o_orderkey"
@@ -2482,7 +2469,6 @@ static void do_query_q5(Connect &conn,
 struct _q5_noopt_task_state {
   _q5_noopt_task_state() {}
   vector< string > xps;
-  vector< string > dcs;
   vector< double > revenue;
 };
 
@@ -2490,27 +2476,17 @@ struct _q5_noopt_task {
   void operator()() {
     for (size_t i = 0; i < state->xps.size(); i++) {
 
-        // l_extendedprice
-        uint64_t l_extendedprice_int = decryptRow<uint64_t, 7>(
+        // l_disc_price
+        uint64_t l_disc_price_int = decryptRow<uint64_t, 7>(
                 state->xps[i],
                 12345,
-                fieldname(lineitem::l_extendedprice, "DET"),
+                fieldname(0, "DET"),
                 TYPE_INTEGER,
                 oDET,
                 *cm);
-        double l_extendedprice = ((double)l_extendedprice_int)/100.0;
+        double l_disc_price = ((double)l_disc_price_int)/100.0;
 
-        // l_discount
-        uint64_t l_discount_int = decryptRow<uint64_t, 7>(
-                state->dcs[i],
-                12345,
-                fieldname(lineitem::l_discount, "DET"),
-                TYPE_INTEGER,
-                oDET,
-                *cm);
-        double l_discount = ((double)l_discount_int)/100.0;
-
-        state->revenue.push_back(l_extendedprice * (1.0 - l_discount));
+        state->revenue.push_back(l_disc_price);
     }
   }
   CryptoManager* cm;
@@ -2548,12 +2524,11 @@ static void do_query_crypt_q5(Connect &conn,
     s <<
       "select"
       "  n_name_DET,"
-      " group_concat(l_extendedprice_DET),"
-      " group_concat(l_discount_DET) "
+      " group_concat(l_disc_price_DET) "
       "from"
-      "  customer_enc,"
+      "  customer_enc_rowid,"
       "  orders_enc,"
-      "  lineitem_enc_noagg_rowid,"
+      "  lineitem_enc_rowid,"
       "  supplier_enc,"
       "  nation_enc,"
       "  region_enc "
@@ -2585,27 +2560,18 @@ static void do_query_crypt_q5(Connect &conn,
     }
 
     assert(DoParallel);
-    vector<string> l_extendedprice_cts;
-    vector<string> l_discount_cts;
+    vector<string> cts;
     vector< pair<size_t, size_t> > offsets;
     for (auto row : res.rows) {
-      size_t offset = l_extendedprice_cts.size();
-      tokenize(row[1].data, ",", l_extendedprice_cts);
-      tokenize(row[2].data, ",", l_discount_cts);
+      size_t offset = cts.size();
+      tokenize(row[1].data, ",", cts);
 
       offsets.push_back(
-          make_pair(offset, l_extendedprice_cts.size() - offset));
+          make_pair(offset, cts.size() - offset));
     }
 
-    assert(l_extendedprice_cts.size() ==
-           l_discount_cts.size());
-
     vector< vector<string> > xp_groups;
-    vector< vector<string> > dc_groups;
-    SplitRowsIntoGroups(xp_groups, l_extendedprice_cts, NumThreads);
-    SplitRowsIntoGroups(dc_groups, l_discount_cts, NumThreads);
-
-    assert(xp_groups.size() == dc_groups.size());
+    SplitRowsIntoGroups(xp_groups, cts, NumThreads);
 
     vector<_q5_noopt_task_state> states( NumThreads );
     vector<_q5_noopt_task> tasks( NumThreads );
@@ -2614,8 +2580,6 @@ static void do_query_crypt_q5(Connect &conn,
       tasks[i].cm    = &cm;
       tasks[i].state = &states[i];
       states[i].xps  = xp_groups[i];
-      states[i].dcs  = dc_groups[i];
-      assert(states[i].xps.size() == states[i].dcs.size());
     }
 
     using namespace exec_service;
@@ -2748,7 +2712,7 @@ static void do_query_crypt_q6(Connect &conn,
         << pkinfo << ", " << "\"" << filename << "\", "
         << NumThreads << ", 256, 12, 1) "
       "from"
-      "  lineitem_enc_noagg_rowid "
+      "  lineitem_enc_rowid "
       "where"
       "  l_shipdate_OPE >= " << d0 << " "
       "  and l_shipdate_OPE < " << d1 << " "
@@ -2831,12 +2795,12 @@ static void do_query_q7(Connect &conn,
     "   extract(year from l_shipdate) as l_year,"
     "    l_extendedprice * (100 - l_discount) as volume) "
     "from"
-    "  SUPPLIER,"
+    "  SUPPLIER_INT,"
     "  LINEITEM_INT,"
-    "  ORDERS,"
-    "  CUSTOMER,"
-    "  NATION n1,"
-    "  NATION n2 "
+    "  ORDERS_INT,"
+    "  CUSTOMER_INT,"
+    "  NATION_INT n1,"
+    "  NATION_INT n2 "
     "where"
     "  s_suppkey = l_suppkey"
     "  and o_orderkey = l_orderkey"
@@ -2933,14 +2897,14 @@ static void do_query_crypt_q7(Connect &conn,
     "   n1.n_name_DET,"
     "   n2.n_name_DET,"
     "   l_shipdate_year_DET,"
-    "   row_id," << pkinfo << ", " <<
+    "   l.row_id," << pkinfo << ", " <<
     "\"" << filename << "\", " << NumThreads << ", 256, 12, "
     "    1) "
     "from"
     "  supplier_enc,"
-    "  lineitem_enc_noagg_rowid,"
+    "  lineitem_enc_rowid l,"
     "  orders_enc,"
-    "  customer_enc,"
+    "  customer_enc_rowid c,"
     "  nation_enc n1,"
     "  nation_enc n2 "
     "where"
@@ -3062,14 +3026,14 @@ static void do_query_q8(Connect &conn,
       "      l_extendedprice * (100 - l_discount) as volume,"
       "      n2.n_name as nation"
       "    from"
-      "      PART,"
-      "      SUPPLIER,"
+      "      PART_INT,"
+      "      SUPPLIER_INT,"
       "      LINEITEM_INT,"
-      "      ORDERS,"
-      "      CUSTOMER,"
-      "      NATION n1,"
-      "      NATION n2,"
-      "      REGION"
+      "      ORDERS_INT,"
+      "      CUSTOMER_INT,"
+      "      NATION_INT n1,"
+      "      NATION_INT n2,"
+      "      REGION_INT"
       "    where"
       "      p_partkey = l_partkey"
       "      and s_suppkey = l_suppkey"
@@ -3119,27 +3083,18 @@ struct _q8_noopt_task {
       for (auto row : state->rows) {
         uint64_t offset = resultFromStr<uint64_t>(row[0].data);
 
-        uint64_t l_extendedprice_int = decryptRow<uint64_t, 7>(
+        uint64_t l_disc_price_int = decryptRow<uint64_t, 7>(
                 row[1].data,
                 12345,
-                fieldname(lineitem::l_extendedprice, "DET"),
+                fieldname(0, "DET"),
                 TYPE_INTEGER,
                 oDET,
                 *cm);
-        double l_extendedprice = ((double)l_extendedprice_int)/100.0;
+        double l_disc_price = ((double)l_disc_price_int)/100.0;
 
-        uint64_t l_discount_int = decryptRow<uint64_t, 7>(
-                row[2].data,
-                12345,
-                fieldname(lineitem::l_discount, "DET"),
-                TYPE_INTEGER,
-                oDET,
-                *cm);
-        double l_discount = ((double)l_discount_int)/100.0;
+        double value = l_disc_price;
 
-        double value = l_extendedprice * (1.0 - l_discount);
-
-        bool flag = row[3].data == "1";
+        bool flag = row[2].data == "1";
 
         uint64_t key = 1995 + offset;
         auto it = state->aggState.find(key);
@@ -3206,15 +3161,14 @@ static void do_query_crypt_q8(Connect &conn,
     s <<
       "select"
       "  IF(o_orderdate_OPE < " << boundary1 << ", 0, 1),"
-      "  l_extendedprice_DET,"
-      " l_discount_DET,"
+      "  l_disc_price_DET,"
       "  n2.n_name_DET = " << marshallBinary(n_a_enc) << " "
       "from"
       "  part_enc,"
       "  supplier_enc,"
-      "  lineitem_enc_noagg_rowid,"
+      "  lineitem_enc_rowid,"
       "  orders_enc,"
-      "  customer_enc,"
+      "  customer_enc_rowid,"
       "  nation_enc n1,"
       "  nation_enc n2,"
       "  region_enc "
@@ -3375,26 +3329,17 @@ struct _q9_noopt_task {
       pair<string, uint64_t> key =
         make_pair( row[0].data, resultFromStr<uint64_t>(row[1].data) + 1992 );
 
-      uint64_t l_extendedprice_int = decryptRow<uint64_t, 7>(
+      uint64_t l_disc_price_int = decryptRow<uint64_t, 7>(
           row[2].data,
           12345,
-          fieldname(lineitem::l_extendedprice, "DET"),
+          fieldname(0, "DET"),
           TYPE_INTEGER,
           oDET,
           *cm);
-      double l_extendedprice = ((double)l_extendedprice_int)/100.0;
-
-      uint64_t l_discount_int = decryptRow<uint64_t, 7>(
-          row[3].data,
-          12345,
-          fieldname(lineitem::l_discount, "DET"),
-          TYPE_INTEGER,
-          oDET,
-          *cm);
-      double l_discount = ((double)l_discount_int)/100.0;
+      double l_disc_price = ((double)l_disc_price_int)/100.0;
 
       uint64_t ps_supplycost_int = decryptRow<uint64_t, 7>(
-          row[4].data,
+          row[3].data,
           12345,
           fieldname(partsupp::ps_supplycost, "DET"),
           TYPE_INTEGER,
@@ -3403,7 +3348,7 @@ struct _q9_noopt_task {
       double ps_supplycost = ((double)ps_supplycost_int)/100.0;
 
       uint64_t l_quantity_int = decryptRow<uint64_t, 7>(
-          row[5].data,
+          row[4].data,
           12345,
           fieldname(lineitem::l_quantity, "DET"),
           TYPE_INTEGER,
@@ -3411,8 +3356,7 @@ struct _q9_noopt_task {
           *cm);
       double l_quantity = ((double)l_quantity_int)/100.0;
 
-      double value = l_extendedprice * (1.0 - l_discount) -
-        ps_supplycost * l_quantity;
+      double value = l_disc_price - ps_supplycost * l_quantity;
 
       auto it = state->aggState.find(key);
       if (it == state->aggState.end()) {
@@ -3456,12 +3400,12 @@ static void do_query_crypt_q9(Connect &conn,
   s <<
     "select "
     "  n_name_DET, " << make_if_predicate(0, boundaries, "o_orderdate_OPE") << ", "
-    "  l_extendedprice_DET, l_discount_DET, ps_supplycost_DET, l_quantity_DET "
+    "  l_disc_price_DET, ps_supplycost_DET, l_quantity_DET "
     "from "
     "  part_enc, "
     "  supplier_enc, "
-    "  lineitem_enc_noagg_rowid, "
-    "  partsupp_enc_noopt, "
+    "  lineitem_enc_rowid, "
+    "  partsupp_enc, "
     "  orders_enc, "
     "  nation_enc "
     "where "
@@ -3557,10 +3501,10 @@ static void do_query_q10(Connect &conn,
     "  c_phone, "
     "  c_comment "
     "from "
-    "  CUSTOMER, "
-    "  ORDERS, "
+    "  CUSTOMER_INT, "
+    "  ORDERS_INT, "
     "  LINEITEM_INT, "
-    "  NATION "
+    "  NATION_INT "
     "where "
     "  c_custkey = o_custkey "
     "  and l_orderkey = o_orderkey "
@@ -3655,34 +3599,21 @@ struct _q10_noopt_task_state {
 struct _q10_noopt_task {
   void operator()() {
     for (auto row : state->rows) {
-      vector<string> l_extendedprice_cts;
-      vector<string> l_discount_cts;
-      tokenize(row[7].data, ",", l_extendedprice_cts);
-      tokenize(row[8].data, ",", l_discount_cts);
-      assert(l_extendedprice_cts.size() ==
-             l_discount_cts.size());
+      vector<string> cts;
+      tokenize(row[7].data, ",", cts);
 
       double sum = 0.0;
-      for (size_t i = 0; i < l_extendedprice_cts.size(); i++) {
-        uint64_t l_extendedprice_int = decryptRow<uint64_t, 7>(
-                l_extendedprice_cts[i],
+      for (size_t i = 0; i < cts.size(); i++) {
+        uint64_t l_disc_price_int = decryptRow<uint64_t, 7>(
+                cts[i],
                 12345,
-                fieldname(lineitem::l_extendedprice, "DET"),
+                fieldname(0, "DET"),
                 TYPE_INTEGER,
                 oDET,
                 *cm);
-        double l_extendedprice = ((double)l_extendedprice_int)/100.0;
+        double l_disc_price = ((double)l_disc_price_int)/100.0;
 
-        uint64_t l_discount_int = decryptRow<uint64_t, 7>(
-                l_discount_cts[i],
-                12345,
-                fieldname(lineitem::l_discount, "DET"),
-                TYPE_INTEGER,
-                oDET,
-                *cm);
-        double l_discount = ((double)l_discount_int)/100.0;
-
-        sum += l_extendedprice * (1.0 - l_discount);
+        sum += l_disc_price;
       }
 
       q10entry_enc entry(
@@ -3737,12 +3668,11 @@ static void do_query_crypt_q10(Connect &conn,
     "  c_address_DET, "
     "  c_phone_DET, "
     "  c_comment_DET, "
-    " group_concat(l_extendedprice_DET), "
-    " group_concat(l_discount_DET) "
+    " group_concat(l_disc_price_DET) "
     "from "
-    "  customer_enc, "
+    "  customer_enc_rowid, "
     "  orders_enc, "
-    "  lineitem_enc_noagg_rowid, "
+    "  lineitem_enc_rowid, "
     "  nation_enc "
     "where "
     "  c_custkey_DET = o_custkey_DET "
@@ -3961,7 +3891,7 @@ static void do_query_q11_noopt(Connect &conn,
         << "ps_partkey_DET, "
         << "ps_supplycost_DET, "
         << "ps_availqty_DET "
-      << "FROM partsupp_enc_noopt, supplier_enc, nation_enc "
+      << "FROM partsupp_enc, supplier_enc, nation_enc "
       << "WHERE "
         << "ps_suppkey_DET = s_suppkey_DET AND "
         << "s_nationkey_DET = n_nationkey_DET AND "
@@ -4134,7 +4064,7 @@ static void do_query_q11_nosubquery(Connect &conn,
     {
         ostringstream s;
         s << "select sum(ps_supplycost * ps_availqty) * " << fraction << " "
-          << "from PARTSUPP, SUPPLIER, NATION "
+          << "from PARTSUPP_INT, SUPPLIER_INT, NATION_INT "
           << "where ps_suppkey = s_suppkey and s_nationkey = n_nationkey and n_name = '"
           << name << "'";
 
@@ -4151,14 +4081,14 @@ static void do_query_q11_nosubquery(Connect &conn,
         }
 
         assert(res.rows.size() == 1);
-        threshold = resultFromStr<double>(res.rows[0][0].data);
+        threshold = resultFromStr<double>(res.rows[0][0].data) / 10000.0;
     }
 
     ostringstream s;
     s << "select SQL_NO_CACHE ps_partkey, sum(ps_supplycost * ps_availqty) as value "
-      << "from PARTSUPP, SUPPLIER, NATION "
+      << "from PARTSUPP_INT, SUPPLIER_INT, NATION_INT "
       << "where ps_suppkey = s_suppkey and s_nationkey = n_nationkey and n_name = '" << name << "' "
-      << "group by ps_partkey having sum(ps_supplycost * ps_availqty) > " << threshold
+      << "group by ps_partkey having sum(ps_supplycost * ps_availqty) > " << roundToLong(threshold * 10000.0)
       //<< "order by value desc"
       ;
     cerr << s.str() << endl;
@@ -4742,8 +4672,8 @@ static void do_query_q12(Connect &conn,
     "    else 0 "
     "  end) as low_line_count "
     "from "
-    "  ORDERS, "
-    "  LINEITEM "
+    "  ORDERS_INT, "
+    "  LINEITEM_INT "
     "where "
     "  o_orderkey = l_orderkey "
     "  and l_shipmode in ('" << l_a << "', '" << l_b << "') "
@@ -4850,7 +4780,7 @@ static void do_query_crypt_q12(Connect &conn,
     "  end) as low_line_count "
     "from "
     "  orders_enc, "
-    "  lineitem_enc_noagg_rowid "
+    "  lineitem_enc_rowid "
     "where "
     "  o_orderkey_DET = l_orderkey_DET "
     "  and l_shipmode_DET in (" << marshallBinary(l_a_enc)
@@ -5006,7 +4936,7 @@ static void do_query_q14_opt2(Connect &conn,
           << ", "
           << marshallBinary(string((char *)t.wordKey.content, t.wordKey.len))
           << ", p_type_SWP) = 1, 1) "
-      << "FROM lineitem_enc_noagg_rowid, part_enc_tmp "
+      << "FROM lineitem_enc_rowid, part_enc_tmp "
       << "WHERE "
         << "l_partkey_DET = p_partkey_DET AND "
         << "l_shipdate_OPE >= " << encDateLower << " AND "
@@ -5090,26 +5020,16 @@ struct _q14_noopt_task_state {
 struct _q14_noopt_task {
   void operator()() {
     for (auto row : state->rows) {
-      // l_extendedprice * (1 - l_discount)
-      uint64_t l_extendedprice_int = decryptRow<uint64_t, 7>(
+      uint64_t l_disc_price_int = decryptRow<uint64_t, 7>(
           row[1].data,
           12345,
-          fieldname(lineitem::l_extendedprice, "DET"),
+          fieldname(0, "DET"),
           TYPE_INTEGER,
           oDET,
           *cm);
-      double l_extendedprice = ((double)l_extendedprice_int)/100.0;
+      double l_disc_price = ((double)l_disc_price_int)/100.0;
 
-      uint64_t l_discount_int = decryptRow<uint64_t, 7>(
-          row[2].data,
-          12345,
-          fieldname(lineitem::l_discount, "DET"),
-          TYPE_INTEGER,
-          oDET,
-          *cm);
-      double l_discount = ((double)l_discount_int)/100.0;
-
-      double value = l_extendedprice * (1.0 - l_discount);
+      double value = l_disc_price;
       state->running_denom += value;
 
       // decrypt p_type, to check if matches
@@ -5162,8 +5082,8 @@ static void do_query_q14_noopt(Connect &conn,
             TYPE_INTEGER, "ope_join",
             getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
     ostringstream s;
-    s << "SELECT SQL_NO_CACHE p_type_DET, l_extendedprice_DET, l_discount_DET "
-        << "FROM " << string(use_opt_table ? "lineitem_enc" : "lineitem_enc_noagg")
+    s << "SELECT SQL_NO_CACHE p_type_DET, l_disc_price_DET "
+        << "FROM " << string(use_opt_table ? "lineitem_enc" : "lineitem_enc_rowid")
           << ", part_enc_tmp "
         << "WHERE l_partkey_DET = p_partkey_DET AND "
         << "l_shipdate_OPE >= " << encDateLower << " AND "
@@ -5274,13 +5194,13 @@ static void do_query_q14(Connect &conn,
                    "p_type varchar(25), "
                    "PRIMARY KEY (p_partkey)) ENGINE=MEMORY");
 
-      conn.execute("INSERT INTO part_tmp SELECT p_partkey, p_type FROM PART");
+      conn.execute("INSERT INTO part_tmp SELECT p_partkey, p_type FROM PART_INT");
 
       conn.execute("SET GLOBAL innodb_old_blocks_time = 1000");
     }
 
     ostringstream s;
-    s << "select SQL_NO_CACHE 100.00 * sum(case when p_type like 'PROMO%' then l_extendedprice * (1 - l_discount) else 0 end) / sum(l_extendedprice * (1 - l_discount)) as promo_revenue from LINEITEM, part_tmp where l_partkey = p_partkey and l_shipdate >= date '" << year << "-07-01' and l_shipdate < date '" << year << "-07-01' + interval '1' month";
+    s << "select SQL_NO_CACHE 100.00 * sum(case when p_type like 'PROMO%' then l_extendedprice * (100 - l_discount) else 0 end) / sum(l_extendedprice * (100 - l_discount)) as promo_revenue from LINEITEM_INT, part_tmp where l_partkey = p_partkey and l_shipdate >= date '" << year << "-07-01' and l_shipdate < date '" << year << "-07-01' + interval '1' month";
     cerr << s.str() << endl;
 
     DBResult * dbres;
@@ -5346,7 +5266,7 @@ static void do_query_q15(Connect &conn,
     "  s_address, "
     "  s_phone "
     "from "
-    "  SUPPLIER "
+    "  SUPPLIER_INT "
     "where "
     "  s_suppkey = " << res.rows[0][0].data << " "
     "order by "
@@ -5452,7 +5372,7 @@ static void do_query_crypt_q15(Connect &conn,
     "  l_suppkey_DET, "
     "  group_concat(l_disc_price_DET) "
     "from "
-    "  lineitem_enc_noagg_rowid "
+    "  lineitem_enc_rowid "
     "where "
     "  l_shipdate_OPE >= " << d0 << " "
     "  and l_shipdate_OPE < "<< d1 << " "
@@ -5591,7 +5511,7 @@ static void do_query_q17(Connect &conn,
     ostringstream s;
     s <<
       "INSERT INTO inner_tmp "
-      "select l_partkey, 0.2 * avg(l_quantity) from LINEITEM_INT, PART "
+      "select l_partkey, 0.2 * avg(l_quantity) from LINEITEM_INT, PART_INT "
       "where p_partkey = l_partkey and "
       "p_brand = '" << p_a << "' and "
       "p_container = '" << p_b << "' "
@@ -5719,7 +5639,7 @@ static void do_query_crypt_q17(Connect &conn,
   s <<
     "select "
     "l_partkey_DET, group_concat(l_quantity_DET), group_concat(l_extendedprice_DET) "
-    "from lineitem_enc_noagg_rowid, part_enc "
+    "from lineitem_enc_rowid, part_enc "
     "where p_partkey_DET = l_partkey_DET and "
     "p_brand_DET = "     << marshallBinary(p_a_enc) << " and "
     "p_container_DET = " << marshallBinary(p_b_enc) << " "
@@ -5776,10 +5696,11 @@ static void do_query_q18(Connect &conn,
         "select "
         "    l_orderkey "
         "from "
-        "    LINEITEM "
+        "    LINEITEM_INT "
         "group by "
         "    l_orderkey having "
-        "        sum(l_quantity) > " << threshold;
+        "        sum(l_quantity) > " << (threshold * 100);
+    cerr << s0.str() << endl;
 
     vector<string> l_orderkeys;
     {
@@ -5799,6 +5720,7 @@ static void do_query_q18(Connect &conn,
             l_orderkeys.push_back(row[0].data);
         }
     }
+    if (l_orderkeys.empty()) return;
 
     ostringstream s;
     s <<
@@ -5806,7 +5728,7 @@ static void do_query_q18(Connect &conn,
         "    c_name, c_custkey, o_orderkey, "
         "    o_orderdate, o_totalprice, sum(l_quantity) "
         "from "
-        "    CUSTOMER, ORDERS, LINEITEM "
+        "    CUSTOMER_INT, ORDERS_INT, LINEITEM_INT "
         "where "
         "    o_orderkey in ( "
         << join(l_orderkeys, ",") <<
@@ -5844,8 +5766,8 @@ static void do_query_q18(Connect &conn,
                 resultFromStr<uint64_t>(row[1].data),
                 resultFromStr<uint64_t>(row[2].data),
                 0,
-                resultFromStr<double>(row[4].data),
-                resultFromStr<double>(row[5].data)));
+                resultFromStr<double>(row[4].data) / 100.0,
+                resultFromStr<double>(row[5].data) / 100.0));
     }
 }
 
@@ -5912,7 +5834,7 @@ static void do_query_q18_crypt(Connect &conn,
     // query 1
     s <<
         "select l_orderkey_DET, group_concat(l_quantity_DET) "
-        "from lineitem_enc_noagg "
+        "from lineitem_enc_rowid "
         "group by l_orderkey_DET "
         "having count(*) >= " << minGroupCount;
     cerr  << s.str() << endl;
@@ -5998,14 +5920,15 @@ static void do_query_q18_crypt(Connect &conn,
     ostringstream s1;
     // query 2
 
-    assert(!l_orderkeys.empty());
+    if (l_orderkeys.empty()) return;
+
     //string pkinfo = marshallBinary(cm.getPKInfo());
     s1 <<
         "select "
         "    c_name_DET, c_custkey_DET, o_orderkey_DET, "
         "    o_orderdate_DET, o_totalprice_DET, group_concat(l_quantity_DET) "
         "from "
-        "    customer_enc, orders_enc, lineitem_enc_noagg "
+        "    customer_enc_rowid, orders_enc, lineitem_enc_rowid "
         "where "
         "    o_orderkey_DET in ( "
         << join(l_orderkeys, ",") <<
@@ -6174,7 +6097,7 @@ static void do_query_q18_crypt_opt2(Connect &conn,
         "    c_name_DET, c_custkey_DET, o_orderkey_DET, "
         "    o_orderdate_DET, o_totalprice_DET, agg(l_bitpacked_AGG, " << pkinfo << ") "
         "from "
-        "    customer_enc, orders_enc, lineitem_enc "
+        "    customer_enc_rowid, orders_enc, lineitem_enc "
         "where "
         "    o_orderkey_DET in ( "
         << join(l_orderkeys, ",") <<
@@ -6337,7 +6260,7 @@ static void do_query_q18_crypt_opt(Connect &conn,
         "    c_name_DET, c_custkey_DET, o_orderkey_DET, "
         "    o_orderdate_DET, o_totalprice_DET, agg(l_bitpacked_AGG, " << pkinfo << ") "
         "from "
-        "    customer_enc, orders_enc, lineitem_enc "
+        "    customer_enc_rowid, orders_enc, lineitem_enc "
         "where "
         "    o_orderkey_DET in ( "
         << join(l_orderkeys, ",") <<
@@ -6490,7 +6413,7 @@ static void do_query_q20(Connect &conn,
         // the comparison more fair (like 'token%' is probably implemented
         // efficiently as a prefix scan)
         ostringstream s;
-        s << "select SQL_NO_CACHE p_partkey from PART where p_name like '%" << p_name << "%'";
+        s << "select SQL_NO_CACHE p_partkey from PART_INT where p_name like '%" << p_name << "%'";
 
         DBResult * dbres;
         {
@@ -6515,7 +6438,7 @@ static void do_query_q20(Connect &conn,
     {
         ostringstream s;
         s <<
-        "select SQL_NO_CACHE ps_suppkey, ps_availqty from PARTSUPP, LINEITEM "
+        "select SQL_NO_CACHE ps_suppkey, ps_availqty from PARTSUPP_INT, LINEITEM_INT "
         " where "
         "     ps_partkey = l_partkey and "
         "     ps_suppkey = l_suppkey and "
@@ -6525,7 +6448,7 @@ static void do_query_q20(Connect &conn,
         "     and l_shipdate >= date '" << year << "-01-01'"
         "     and l_shipdate < date '" << year << "-01-01' + interval '1' year"
         " group by ps_partkey, ps_suppkey "
-        " having ps_availqty > 0.5 * sum(l_quantity)";
+        " having ps_availqty * 100 > 0.5 * sum(l_quantity)";
 
         DBResult * dbres;
         {
@@ -6553,7 +6476,7 @@ static void do_query_q20(Connect &conn,
     {
         ostringstream s;
         s <<
-        "select SQL_NO_CACHE s_name, s_address from SUPPLIER, NATION where s_suppkey in ( "
+        "select SQL_NO_CACHE s_name, s_address from SUPPLIER_INT, NATION_INT where s_suppkey in ( "
         << join(suppkeys ,",") <<
         ") and s_nationkey = n_nationkey and n_name = '" << n_name << "' order by s_name";
 
@@ -6656,7 +6579,7 @@ static void do_query_q20_opt_noagg(Connect &conn,
     // this strategy seems to perform better than the one above
     s <<
         "select SQL_NO_CACHE ps_partkey_DET, ps_suppkey_DET, ps_availqty_DET, group_concat(l_quantity_DET) "
-        "from partsupp_enc_noopt, lineitem_enc_noagg "
+        "from partsupp_enc, lineitem_enc_rowid "
         "where "
         "    ps_partkey_DET = l_partkey_DET and "
         "    ps_suppkey_DET = l_suppkey_DET and "
@@ -6845,7 +6768,7 @@ static void do_query_q20_opt(Connect &conn,
     ostringstream s;
     s <<
         "select SQL_NO_CACHE ps_suppkey_DET, ps_availqty_DET, agg(l_bitpacked_AGG, " << pkinfo << ") "
-        "from partsupp_enc_noopt, lineitem_enc "
+        "from partsupp_enc, lineitem_enc_rowid "
         "where "
         "    ps_partkey_DET = l_partkey_DET and "
         "    ps_suppkey_DET = l_suppkey_DET and "
@@ -6998,7 +6921,7 @@ static void do_query_q22(Connect &conn,
     "    select "
     "      * "
     "    from "
-    "      ORDERS "
+    "      ORDERS_INT "
     "    where "
     "      o_custkey = c_custkey "
     "  ) "
