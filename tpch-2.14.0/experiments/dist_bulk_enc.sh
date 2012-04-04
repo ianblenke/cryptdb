@@ -11,7 +11,7 @@ if [ $# -ne 2 ]; then
     echo "[USAGE]: $0 [flag] [filename]"
     exit 1
 fi
-
+MULTIPLE=12
 FLAG=$1
 FNAME=$2
 if [ ! -f $FNAME ]; then
@@ -24,6 +24,7 @@ LINES_PER_FILE=$(( $NUM_ENTRIES / ($NPROCS * $NHOSTS) ))
 if [ $LINES_PER_FILE -eq 0 ]; then
     LINES_PER_FILE=1
 fi
+LINES_PER_FILE=`python $CDB_TOP/tpch-2.14.0/experiments/round.py $LINES_PER_FILE $MULTIPLE`
 
 rm -f ${FNAME}_*
 split -d -l $LINES_PER_FILE $FNAME ${FNAME}_
