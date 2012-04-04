@@ -1,6 +1,6 @@
 OBJDIRS	+= udf
 
-all:    $(OBJDIR)/udf/edb.so
+all:    $(OBJDIR)/udf/edb.so $(OBJDIR)/udf/edb_pg.so
 
 $(OBJDIR)/udf/edb.o: udf/edb.cc
 	@mkdir -p $(@D)
@@ -10,6 +10,13 @@ $(OBJDIR)/udf/edb.so: $(OBJDIR)/udf/edb.o \
 		      $(OBJDIR)/libedbcrypto.so \
 		      $(OBJDIR)/libedbutil.so 
 	$(CXX) -shared -o $@ $< $(LDFLAGS) -ledbcrypto -ledbutil -ltbb -lgmp
+
+$(OBJDIR)/udf/edb_pg.o: udf/edb_pg.cc
+	@mkdir -p $(@D)
+	$(CXX) -MD $(CXXFLAGS) -I/usr/include/postgresql -I/usr/include/postgresql/8.4/server -c $< -o $@
+
+$(OBJDIR)/udf/edb_pg.so: $(OBJDIR)/udf/edb_pg.o
+	$(CXX) -shared -o $@ $< 
 
 install: install_udf
 
