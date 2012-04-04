@@ -16,30 +16,11 @@
 
 #define DEBUG 1
 
-#include <crypto-old/CryptoManager.hh> /* various functions for EDB */
-#include <util/params.hh>
-#include <util/util.hh>
-#include <util/timer.hh>
-#include <sys/time.h>
-#include <time.h>
-
-#include <map>
-
-#include <gmp.h>
-#include <pthread.h>
-#include <tbb/concurrent_queue.h>
-#include <cassert>
+#include <udf/edb_common.hh>
 
 using namespace std;
 using namespace NTL;
 using namespace tbb;
-
-#define LIKELY(pred)   __builtin_expect(!!(pred), true)
-#define UNLIKELY(pred) __builtin_expect(!!(pred), false)
-#define ATTR_UNUSED    __attribute__ ((unused))
-
-#define TRACE()
-#define SANITY(x) assert(x)
 
 // templated code must go here, before the extern "C"
 
@@ -452,66 +433,6 @@ PG_FUNCTION_INFO_V1(func_add_final);
 PG_FUNCTION_INFO_V1(func_add_set);
 
 #endif
-}
-
-static void __attribute__((unused))
-log(string s)
-{
-    /* Writes to the server's error log */
-    fprintf(stderr, "%s\n", s.c_str());
-}
-
-static AES_KEY *
-get_key_SEM(const string &key)
-{
-    return CryptoManager::get_key_SEM(key);
-}
-/*
-static AES_KEY *
-get_key_DET(const string &key)
-{
-    return CryptoManager::get_key_DET(key);
-}
-*/
-static uint64_t
-decrypt_SEM(uint64_t value, AES_KEY * aesKey, uint64_t salt)
-{
-    return CryptoManager::decrypt_SEM(value, aesKey, salt);
-}
-/*
-static uint64_t
-decrypt_DET(uint64_t ciph, AES_KEY* aesKey)
-{
-    return CryptoManager::decrypt_DET(ciph, aesKey);
-}
-
-static uint64_t
-encrypt_DET(uint64_t plaintext, AES_KEY * aesKey)
-{
-    return CryptoManager::encrypt_DET(plaintext, aesKey);
-}
-*/
-static string
-decrypt_SEM(unsigned char *eValueBytes, uint64_t eValueLen,
-            AES_KEY * aesKey, uint64_t salt)
-{
-    string c((char *) eValueBytes, (unsigned int) eValueLen);
-    return CryptoManager::decrypt_SEM(c, aesKey, salt);
-}
-/*
-static string
-decrypt_DET(unsigned char *eValueBytes, uint64_t eValueLen, AES_KEY * key)
-{
-    string c((char *) eValueBytes, (unsigned int) eValueLen);
-    return CryptoManager::decrypt_DET(c, key);
-}
-*/
-static bool
-search(const Token & token, const Binary & overall_ciph)
-{
-
-   return CryptoManager::searchExists(token, overall_ciph);
-
 }
 
 #if MYSQL_S
