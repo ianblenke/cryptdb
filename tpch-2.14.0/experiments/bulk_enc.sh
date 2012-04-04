@@ -17,6 +17,7 @@ LINES_PER_FILE=$(( $NUM_ENTRIES / $NPROCS ))
 if [ $LINES_PER_FILE -eq 0 ]; then
     LINES_PER_FILE=1
 fi
+LINES_PER_FILE=`python $CDB_TOP/tpch-2.14.0/experiments/round.py $LINES_PER_FILE 12`
 rm -f ${FNAME}_*
 split -d -l $LINES_PER_FILE $FNAME ${FNAME}_
 PIDS=()
