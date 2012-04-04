@@ -24,25 +24,32 @@ DROP TABLE IF EXISTS SUPPLIER;
 DROP TABLE IF EXISTS CUSTOMER;
 DROP TABLE IF EXISTS ORDERS;
 
+DROP TABLE IF EXISTS LINEITEM_INT;
+DROP TABLE IF EXISTS NATION_INT;
+DROP TABLE IF EXISTS PART_INT;
+DROP TABLE IF EXISTS PARTSUPP_INT;
+DROP TABLE IF EXISTS REGION_INT;
+DROP TABLE IF EXISTS SUPPLIER_INT;
+DROP TABLE IF EXISTS CUSTOMER_INT;
+DROP TABLE IF EXISTS ORDERS_INT;
+
 DROP TABLE IF EXISTS lineitem_enc;
-DROP TABLE IF EXISTS lineitem_enc_noopt;
+DROP TABLE IF EXISTS lineitem_enc_rowid;
 DROP TABLE IF EXISTS nation_enc;
 DROP TABLE IF EXISTS part_enc;
 DROP TABLE IF EXISTS partsupp_enc;
-DROP TABLE IF EXISTS partsupp_enc_noopt;
 DROP TABLE IF EXISTS region_enc;
 DROP TABLE IF EXISTS supplier_enc;
 DROP TABLE IF EXISTS customer_enc;
+DROP TABLE IF EXISTS customer_enc_rowid;
 DROP TABLE IF EXISTS orders_enc;
 
-\. tpch-2.14.0/experiments/final-schema/lineitem-enc-noopt.sql
 \. tpch-2.14.0/experiments/final-schema/lineitem-enc.sql
 \. tpch-2.14.0/experiments/final-schema/lineitem.sql
 \. tpch-2.14.0/experiments/final-schema/nation-enc.sql
 \. tpch-2.14.0/experiments/final-schema/nation.sql
 \. tpch-2.14.0/experiments/final-schema/part-enc.sql
 \. tpch-2.14.0/experiments/final-schema/part.sql
-\. tpch-2.14.0/experiments/final-schema/partsupp-enc-noopt.sql
 \. tpch-2.14.0/experiments/final-schema/partsupp-enc.sql
 \. tpch-2.14.0/experiments/final-schema/partsupp.sql
 \. tpch-2.14.0/experiments/final-schema/region-enc.sql
@@ -56,86 +63,189 @@ DROP TABLE IF EXISTS orders_enc;
 
 -- Encrypted data
 
-LOAD DATA LOCAL INFILE 'enc-data/scale-#{scale}/lineitem.tbl.enc' INTO TABLE lineitem_enc FIELDS TERMINATED BY '|' ESCAPED BY '\\';
-OPTIMIZE TABLE lineitem_enc;
+LOAD DATA LOCAL INFILE 'enc-data/scale-#{scale}/lineitem.tbl.enc.sorted' INTO TABLE lineitem_enc FIELDS TERMINATED BY '|' ESCAPED BY '\\';
+-- OPTIMIZE TABLE lineitem_enc;
 
-INSERT INTO lineitem_enc_noopt
-SELECT
-  l_orderkey_DET,
-  l_partkey_DET,
-  l_suppkey_DET,
-  l_linenumber_DET,
-  l_quantity_DET,
-  l_extendedprice_DET,
-  l_discount_DET,
-  l_tax_DET,
-  l_returnflag_DET,
-  l_linestatus_DET,
-  l_shipdate_DET,
-  l_shipdate_OPE,
-  l_commitdate_DET,
-  l_receiptdate_DET,
-  l_shipinstruct_DET,
-  l_shipmode_DET,
-  l_comment_DET FROM lineitem_enc;
-OPTIMIZE TABLE lineitem_enc_noopt;
+CREATE TABLE lineitem_enc_rowid LIKE lineitem_enc;
+ALTER TABLE lineitem_enc_rowid ADD COLUMN row_id INTEGER UNSIGNED NOT NULL;
+SET @cnt := -1; INSERT INTO lineitem_enc_rowid SELECT *, @cnt := @cnt + 1 FROM lineitem_enc;
+OPTIMIZE TABLE lineitem_enc_rowid;
 
-LOAD DATA LOCAL INFILE 'enc-data/scale-#{scale}/nation.tbl.enc' INTO TABLE nation_enc FIELDS TERMINATED BY '|' ESCAPED BY '\\';
+LOAD DATA LOCAL INFILE 'enc-data/scale-#{scale}/nation.tbl.enc.sorted' INTO TABLE nation_enc FIELDS TERMINATED BY '|' ESCAPED BY '\\';
 OPTIMIZE TABLE nation_enc;
 
-LOAD DATA LOCAL INFILE 'enc-data/scale-#{scale}/part.tbl.enc' INTO TABLE part_enc FIELDS TERMINATED BY '|' ESCAPED BY '\\';
+LOAD DATA LOCAL INFILE 'enc-data/scale-#{scale}/part.tbl.enc.sorted' INTO TABLE part_enc FIELDS TERMINATED BY '|' ESCAPED BY '\\';
 OPTIMIZE TABLE part_enc;
 
-LOAD DATA LOCAL INFILE 'enc-data/scale-#{scale}/partsupp.tbl.enc' INTO TABLE partsupp_enc FIELDS TERMINATED BY '|' ESCAPED BY '\\';
+LOAD DATA LOCAL INFILE 'enc-data/scale-#{scale}/partsupp.tbl.enc.sorted' INTO TABLE partsupp_enc FIELDS TERMINATED BY '|' ESCAPED BY '\\';
 OPTIMIZE TABLE partsupp_enc;
 
-INSERT INTO partsupp_enc_noopt
-SELECT
-  ps_partkey_DET,
-  ps_suppkey_DET,
-  ps_availqty_DET,
-  ps_supplycost_DET,
-  ps_supplycost_OPE,
-  ps_comment_DET FROM partsupp_enc;
-OPTIMIZE TABLE partsupp_enc_noopt;
-
-LOAD DATA LOCAL INFILE 'enc-data/scale-#{scale}/region.tbl.enc' INTO TABLE region_enc FIELDS TERMINATED BY '|' ESCAPED BY '\\';
+LOAD DATA LOCAL INFILE 'enc-data/scale-#{scale}/region.tbl.enc.sorted' INTO TABLE region_enc FIELDS TERMINATED BY '|' ESCAPED BY '\\';
 OPTIMIZE TABLE region_enc;
 
-LOAD DATA LOCAL INFILE 'enc-data/scale-#{scale}/supplier.tbl.enc' INTO TABLE supplier_enc FIELDS TERMINATED BY '|' ESCAPED BY '\\';
+LOAD DATA LOCAL INFILE 'enc-data/scale-#{scale}/supplier.tbl.enc.sorted' INTO TABLE supplier_enc FIELDS TERMINATED BY '|' ESCAPED BY '\\';
 OPTIMIZE TABLE supplier_enc;
 
-LOAD DATA LOCAL INFILE 'enc-data/scale-#{scale}/customer.tbl.enc' INTO TABLE customer_enc FIELDS TERMINATED BY '|' ESCAPED BY '\\';
-OPTIMIZE TABLE customer_enc;
+LOAD DATA LOCAL INFILE 'enc-data/scale-#{scale}/customer.tbl.enc.sorted' INTO TABLE customer_enc FIELDS TERMINATED BY '|' ESCAPED BY '\\';
+-- OPTIMIZE TABLE customer_enc;
 
-LOAD DATA LOCAL INFILE 'enc-data/scale-#{scale}/orders.tbl.enc' INTO TABLE orders_enc FIELDS TERMINATED BY '|' ESCAPED BY '\\';
+CREATE TABLE customer_enc_rowid LIKE customer_enc;
+ALTER TABLE customer_enc_rowid ADD COLUMN row_id INTEGER UNSIGNED NOT NULL;
+SET @cnt := -1; INSERT INTO customer_enc_rowid SELECT *, @cnt := @cnt + 1 FROM customer_enc;
+OPTIMIZE TABLE customer_enc_rowid;
+
+LOAD DATA LOCAL INFILE 'enc-data/scale-#{scale}/orders.tbl.enc.sorted' INTO TABLE orders_enc FIELDS TERMINATED BY '|' ESCAPED BY '\\';
 OPTIMIZE TABLE orders_enc;
 
 -- Regular data
 
 LOAD DATA LOCAL INFILE 'enc-data/scale-#{scale}/lineitem.tbl' INTO TABLE LINEITEM FIELDS TERMINATED BY '|' ESCAPED BY '\\';
-OPTIMIZE TABLE LINEITEM;
+-- OPTIMIZE TABLE LINEITEM;
+
+CREATE TABLE LINEITEM_INT LIKE LINEITEM;
+ALTER TABLE LINEITEM_INT
+  MODIFY COLUMN L_QUANTITY BIGINT NOT NULL,
+  MODIFY COLUMN L_EXTENDEDPRICE BIGINT NOT NULL,
+  MODIFY COLUMN L_DISCOUNT BIGINT NOT NULL,
+  MODIFY COLUMN L_TAX BIGINT NOT NULL ;
+
+INSERT INTO LINEITEM_INT
+SELECT
+  L_ORDERKEY,
+  L_PARTKEY,
+  L_SUPPKEY,
+  L_LINENUMBER,
+  L_QUANTITY * 100.0,
+  L_EXTENDEDPRICE * 100.0,
+  L_DISCOUNT * 100.0,
+  L_TAX * 100.0,
+  L_RETURNFLAG,
+  L_LINESTATUS,
+  L_SHIPDATE,
+  L_COMMITDATE,
+  L_RECEIPTDATE,
+  L_SHIPINSTRUCT,
+  L_SHIPMODE,
+  L_COMMENT
+FROM LINEITEM;
+OPTIMIZE TABLE LINEITEM_INT;
 
 LOAD DATA LOCAL INFILE 'enc-data/scale-#{scale}/nation.tbl' INTO TABLE NATION FIELDS TERMINATED BY '|' ESCAPED BY '\\';
-OPTIMIZE TABLE NATION;
+-- OPTIMIZE TABLE NATION;
+
+CREATE TABLE NATION_INT LIKE NATION;
+INSERT INTO NATION_INT SELECT * FROM NATION;
+OPTIMIZE TABLE NATION_INT;
 
 LOAD DATA LOCAL INFILE 'enc-data/scale-#{scale}/part.tbl' INTO TABLE PART FIELDS TERMINATED BY '|' ESCAPED BY '\\';
-OPTIMIZE TABLE PART;
+-- OPTIMIZE TABLE PART;
+
+CREATE TABLE PART_INT LIKE PART;
+ALTER TABLE PART_INT
+  MODIFY COLUMN P_RETAILPRICE BIGINT NOT NULL;
+
+INSERT INTO PART_INT
+SELECT
+  P_PARTKEY,
+  P_NAME,
+  P_MFGR,
+  P_BRAND,
+  P_TYPE,
+  P_SIZE,
+  P_CONTAINER,
+  P_RETAILPRICE * 100.0,
+  P_COMMENT
+FROM PART_INT;
+OPTIMIZE TABLE PART_INT;
 
 LOAD DATA LOCAL INFILE 'enc-data/scale-#{scale}/partsupp.tbl' INTO TABLE PARTSUPP FIELDS TERMINATED BY '|' ESCAPED BY '\\';
-OPTIMIZE TABLE PARTSUPP;
+-- OPTIMIZE TABLE PARTSUPP;
+
+CREATE TABLE PARTSUPP_INT LIKE PARTSUPP;
+ALTER TABLE PARTSUPP_INT
+  MODIFY COLUMN PS_SUPPLYCOST BIGINT NOT NULL;
+
+INSERT INTO PARTSUPP_INT
+SELECT
+  PS_PARTKEY,
+  PS_SUPPKEY,
+  PS_AVAILQTY,
+  PS_SUPPLYCOST * 100.0,
+  PS_COMMENT
+FROM PARTSUPP_INT;
+OPTIMIZE TABLE PARTSUPP_INT;
 
 LOAD DATA LOCAL INFILE 'enc-data/scale-#{scale}/region.tbl' INTO TABLE REGION FIELDS TERMINATED BY '|' ESCAPED BY '\\';
-OPTIMIZE TABLE REGION;
+-- OPTIMIZE TABLE REGION;
+
+CREATE TABLE REGION_INT LIKE REGION;
+INSERT INTO REGION_INT SELECT * FROM REGION;
+OPTIMIZE TABLE REGION_INT;
 
 LOAD DATA LOCAL INFILE 'enc-data/scale-#{scale}/supplier.tbl' INTO TABLE SUPPLIER FIELDS TERMINATED BY '|' ESCAPED BY '\\';
-OPTIMIZE TABLE SUPPLIER;
+-- OPTIMIZE TABLE SUPPLIER;
+
+CREATE TABLE SUPPLIER_INT LIKE SUPPLIER;
+ALTER TABLE SUPPLIER_INT
+  MODIFY COLUMN S_ACCTBAL BIGINT NOT NULL;
+
+INSERT INTO SUPPLIER_INT
+SELECT
+  S_SUPPKEY,
+  S_NAME,
+  S_ADDRESS,
+  S_NATIONKEY,
+  S_PHONE,
+  S_ACCTBAL * 100.0,
+  S_COMMENT
+FROM SUPPLIER;
+OPTIMIZE TABLE SUPPLIER_INT;
 
 LOAD DATA LOCAL INFILE 'enc-data/scale-#{scale}/customer.tbl' INTO TABLE CUSTOMER FIELDS TERMINATED BY '|' ESCAPED BY '\\';
-OPTIMIZE TABLE CUSTOMER;
+-- OPTIMIZE TABLE CUSTOMER;
+
+CREATE TABLE CUSTOMER_INT LIKE CUSTOMER;
+ALTER TABLE CUSTOMER_INT
+  MODIFY COLUMN C_ACCTBAL BIGINT NOT NULL;
+
+INSERT INTO CUSTOMER_INT
+SELECT
+  C_CUSTKEY,
+  C_NAME,
+  C_ADDRESS,
+  C_NATIONKEY,
+  C_PHONE,
+  C_ACCTBAL * 100.0,
+  C_MKTSEGMENT,
+  C_COMMENT
+FROM CUSTOMER;
+OPTIMIZE TABLE CUSTOMER_INT;
 
 LOAD DATA LOCAL INFILE 'enc-data/scale-#{scale}/orders.tbl' INTO TABLE ORDERS FIELDS TERMINATED BY '|' ESCAPED BY '\\';
-OPTIMIZE TABLE ORDERS;
+-- OPTIMIZE TABLE ORDERS;
+
+CREATE TABLE ORDERS_INT LIKE ORDERS;
+ALTER TABLE ORDERS_INT
+  MODIFY COLUMN O_TOTALPRICE BIGINT NOT NULL;
+
+INSERT INTO ORDERS_INT
+SELECT
+  O_ORDERKEY,
+  O_CUSTKEY,
+  O_ORDERSTATUS,
+  O_TOTALPRICE * 100.0,
+  O_ORDERDATE,
+  O_ORDERPRIORITY,
+  O_CLERK,
+  O_SHIPPRIORITY,
+  O_COMMENT
+FROM ORDERS;
+OPTIMIZE TABLE ORDERS_INT;
+
+-- Indexes
+
+ALTER TABLE orders_enc ADD INDEX (o_custkey_DET);
+ALTER TABLE ORDERS_INT ADD INDEX (O_CUSTKEY);
 
 -- Display table sizes
 SELECT lower(TABLE_NAME), table_rows, data_length, index_length, avg_row_length, round(((data_length + index_length) / 1024 / 1024),2) AS Size_in_MB

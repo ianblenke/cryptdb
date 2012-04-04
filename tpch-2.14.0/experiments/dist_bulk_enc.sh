@@ -2,7 +2,7 @@
 set -x
 set -e
 
-HOSTS=("local" "vise5.csail.mit.edu" "stephentu-vm1.csail.mit.edu" "stephentu-vm2.csail.mit.edu")
+HOSTS=("local" "vise5.csail.mit.edu" "vise.csail.mit.edu")
 NHOSTS=${#HOSTS[@]}
 CDB_TOP=$HOME/cryptdb
 
