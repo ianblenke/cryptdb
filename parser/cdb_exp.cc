@@ -6967,6 +6967,7 @@ static void do_query_q22(Connect &conn,
       "  substring(c_phone from 1 for 2) in "
       "('" << c1 << "', '" << c2 << "', '" << c3 << "', '" << c4 << "', '"
       << c5 << "', '" << c6 << "', '" << c7 << "') ";
+    cerr << s.str() << endl;
 
     DBResult * dbres;
     {
@@ -7023,7 +7024,6 @@ static void do_query_q22(Connect &conn,
   while (p < end) {
     string cntrycode = ReadKeyElem<string>(p);
 
-    // skip count
     uint64_t cnt = *p;
     p += sizeof(uint64_t);
 
@@ -7106,7 +7106,7 @@ static void do_query_crypt_q22(Connect &conn,
     const uint8_t *end = (const uint8_t *) data.data() + data.size();
     while (p < end) {
 
-      cnt += *p;
+      cnt += *((uint64_t*)p);
       p += sizeof(uint64_t);
 
 #define TAKE_FROM_SLOT(z, slot) \
@@ -7138,6 +7138,7 @@ static void do_query_crypt_q22(Connect &conn,
 
   double avg = sum / double(cnt);
   // encrypt avg in OPE
+  cerr << "cnt: " << cnt << ", avg: " << avg << endl;
 
   bool isBin = false;
   string avgENC = cm_stub.crypt<7>(
@@ -7198,7 +7199,7 @@ static void do_query_crypt_q22(Connect &conn,
                 oDET,
                 cm);
 
-        uint64_t cnt = *p;
+        uint64_t cnt = *((uint64_t*)p);
         p += sizeof(uint64_t);
 
         const uint32_t *u32p = (const uint32_t *) p;
