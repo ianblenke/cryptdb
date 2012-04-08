@@ -5,8 +5,8 @@ RTT  = 1.0 / 1000.0
 SEEK = 4.167 / 1000.0
 
 # BYTES/SEC
-READ_BW  = 300.0 * (2 ** 20)
-WRITE_BW = 100.0 * (2 ** 20)
+READ_BW  = 50.0 * (2 ** 20)
+WRITE_BW = 50.0 * (2 ** 20)
 
 # BYTES/SEC
 NETWORK_BW = 10.0 * (2 ** 20)

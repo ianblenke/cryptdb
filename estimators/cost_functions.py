@@ -147,6 +147,9 @@ def get_column_size(cname):
             entries = gen_variables_from_entry(entry, False)
             for entry in entries:
                 _cachedColumnSizeLookup[entry[0]] = entry[1]
+        for entry in ORIG_COLUMNS:
+            # add orig entry
+            _cachedColumnSizeLookup[entry[0]] = entry[2]
     return _cachedColumnSizeLookup[cname]
 
 _cachedHistograms = None
@@ -463,6 +466,12 @@ def query1_cost_functions(table_sizes):
 
     return [plan1(), plan2(), plan3(), plan4()]
 
+def query1_orig_cost(table_sizes):
+    row_size = get_orig_table_row_size('l')
+    table_size = row_size * table_sizes[LINEITEM]
+    cost = RTT + SEEK + (1.0 / READ_BW) * table_size
+    return cost
+
 ### Query 2 ###
 def query2_cost_functions(table_sizes):
     '''
@@ -631,6 +640,15 @@ def query2_cost_functions(table_sizes):
 
     return [plan1(), plan2(), plan3()]
 
+def query2_orig_cost(table_sizes):
+    NMatchingRows = int(443 * TPCH_SCALE)
+    SortEntrySize = entry_size(['s_acctbal', 'n_name', 's_name', 'p_partkey'])
+    part_table_size = get_orig_table_row_size('p') * table_sizes[PART]
+
+    cost = RTT + SEEK + (1.0 / READ_BW) * part_table_size + \
+        compute_sort_cost(NMatchingRows, SortEntrySize)
+    return cost
+
 ### Query 11 ###
 def query11_cost_functions(table_sizes):
     '''
@@ -736,6 +754,14 @@ def query11_cost_functions(table_sizes):
             set(require_all_det_tbls(['ps', 's', 'n'])).intersection(set(ResultSetEntry)))
 
     return [plan1(), plan2()]
+
+def query11_orig_cost(table_sizes):
+    ResultSetNRows = int(31110 * TPCH_SCALE)
+    partsupp_table_size = get_orig_table_row_size('ps') * table_sizes[PARTSUPP]
+    SortEntrySize = get_column_size('ps_partkey') * 8.0
+    cost = RTT + 2.0 * SEEK + 2.0 * (1.0 / READ_BW) * partsupp_table_size + \
+        compute_sort_cost(ResultSetNRows, SortEntrySize)
+    return cost
 
 ### Query 14 ###
 def query14_cost_functions(table_sizes):
@@ -870,6 +896,11 @@ def query14_cost_functions(table_sizes):
             set(['p_type_swp', 'l_pack0_agg', 'l_shipdate_ope', 'p_partkey_det']))
 
     return [plan1(), plan2(), plan3()]
+
+def query14_orig_cost(table_sizes):
+    lineitem_table_size = get_orig_table_row_size('l') * table_sizes[LINEITEM]
+    cost = RTT + SEEK + (1.0 / READ_BW) * lineitem_table_size
+    return cost
 
 ### Query 18 ###
 def query18_cost_functions(table_sizes):
@@ -1071,6 +1102,17 @@ def query18_cost_functions(table_sizes):
                    'o_orderdate_det', 'o_totalprice_det', 'o_custkey_det'])))
 
     return [plan1(), plan2()]
+
+def query18_orig_cost(table_sizes):
+    # scan lineitem
+    lineitem_table_size = get_orig_table_row_size('l') * table_sizes[LINEITEM]
+    cost = RTT + SEEK + (1.0 / READ_BW) * lineitem_table_size
+
+    # customer join orders join lineitem
+    cust_table_size = get_orig_table_row_size('c') * table_sizes[CUSTOMER]
+    cost += SEEK + (1.0 / READ_BW) * cust_table_size
+
+    return cost
 
 ### Query 20 ###
 def query20_cost_functions(table_sizes):
@@ -1373,15 +1415,42 @@ def query20_cost_functions(table_sizes):
 
     return [plan1(), plan2(), plan3()]
 
+def query20_orig_cost(table_sizes):
+    # scan the PART table
+    part_table_size = get_orig_table_row_size('p') * table_sizes[PART]
+    lineitem_table_size = get_orig_table_row_size('l') * table_sizes[LINEITEM]
+    cost = RTT + SEEK + (1.0 / READ_BW) * part_table_size
+
+    # scan the LINEITEM table + sort
+    cost += RTT + SEEK + (1.0 / READ_BW) * lineitem_table_size
+    SortNEntries = int(48822 * TPCH_SCALE)
+    SortEntry = entry_size(['ps_partkey', 'ps_suppkey', 'ps_availqty', 'l_quantity'])
+    cost += compute_sort_cost(SortNEntries, SortEntry)
+
+    # suppler x nation
+    cost += RTT + (4.0 * SEEK) + (1.0 / READ_BW) * \
+        float(gen_index_scan_size_expr(table_sizes[SUPPLIER], 's'))
+
+    return cost
+
 def get_cost_functions(table_sizes):
-    return [
-             query1_cost_functions(table_sizes),
-             query2_cost_functions(table_sizes),
-             query11_cost_functions(table_sizes),
-             query14_cost_functions(table_sizes),
-             query18_cost_functions(table_sizes),
-             query20_cost_functions(table_sizes),
-           ]
+  a = [
+      query1_cost_functions(table_sizes),
+      query2_cost_functions(table_sizes),
+      query11_cost_functions(table_sizes),
+      query14_cost_functions(table_sizes),
+      query18_cost_functions(table_sizes),
+      query20_cost_functions(table_sizes),
+      ]
+  b = [
+      query1_orig_cost(table_sizes),
+      query2_orig_cost(table_sizes),
+      query11_orig_cost(table_sizes),
+      query14_orig_cost(table_sizes),
+      query18_orig_cost(table_sizes),
+      query20_orig_cost(table_sizes),
+      ]
+  return (a, b)
 
 if __name__ == '__main__':
 
@@ -1396,7 +1465,7 @@ if __name__ == '__main__':
         ORDERS   : TPCH_SCALE * 1500000,
     }
 
-    cost_fcns = get_cost_functions(table_sizes)
+    cost_fcns, orig_costs = get_cost_functions(table_sizes)
 
     S = 3.0
 
@@ -1601,6 +1670,10 @@ if __name__ == '__main__':
 
     # emit the script to run
     fp = open('opt_problem_s%d.m' % TPCH_SCALE, 'w')
+
+    # for reference, emit the original cost functions
+    for orig_cost, qid in zip(orig_costs, xrange(len(orig_costs))):
+        print >>fp, 'orig_cost_q%d_s%d = %f;' % (qid, TPCH_SCALE, orig_cost)
 
     #print >>fp, 'x0 = %s;' % matlabify(mkOneRow())
     print >>fp, 'x0 = zeros(1, %d);' % len(mkOneRow())
