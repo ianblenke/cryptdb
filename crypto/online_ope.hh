@@ -27,7 +27,7 @@ ffsl(uint64_t mask)
 	return (bit);
 }
 
-
+//this code should run in the udf on the server
 template<class EncT>
 class ope_server {
  public:
