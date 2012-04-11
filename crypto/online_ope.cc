@@ -4,7 +4,7 @@
 #include <crypto/online_ope.hh>
 #include <iostream>
 #include <cmath>
-
+ 
 #include <sstream>
 
 
