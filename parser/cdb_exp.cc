@@ -5112,7 +5112,7 @@ static void do_query_q14_noopt(ConnectNew &conn,
     crypto_manager_stub cm_stub(&cm, UseOldOpe);
     NamedTimer fcnTimer(__func__);
 
-    {
+    if (UseMySQL) {
       NamedTimer t(__func__, "execute-prefetch");
 
       conn.execute("SET GLOBAL innodb_old_blocks_time = 0"); // allow to flood buffer pool
@@ -5139,7 +5139,7 @@ static void do_query_q14_noopt(ConnectNew &conn,
     ostringstream s;
     s << "SELECT  p_type_DET, l_disc_price_DET "
         << "FROM " << string(use_opt_table ? "lineitem_enc" : "lineitem_enc_rowid")
-          << ", part_enc_tmp "
+          << ", " << (UseMySQL ? "part_enc_tmp" : "part_enc") << " "
         << "WHERE l_partkey_DET = p_partkey_DET AND "
         << "l_shipdate_OPE >= " << encDateLower << " AND "
         << "l_shipdate_OPE < " << encDateUpper;
@@ -5237,7 +5237,7 @@ static void do_query_q14(ConnectNew &conn,
                          vector<q14entry> &results) {
     NamedTimer fcnTimer(__func__);
 
-    {
+    if (UseMySQL) {
       NamedTimer t(__func__, "execute-prefetch");
 
       conn.execute("SET GLOBAL innodb_old_blocks_time = 0"); // allow to flood buffer pool
@@ -5255,7 +5255,7 @@ static void do_query_q14(ConnectNew &conn,
     }
 
     ostringstream s;
-    s << "select  100.00 * sum(case when p_type like 'PROMO%' then l_extendedprice * (100 - l_discount) else 0 end) / sum(l_extendedprice * (100 - l_discount)) as promo_revenue from LINEITEM_INT, part_tmp where l_partkey = p_partkey and l_shipdate >= date '" << year << "-07-01' and l_shipdate < date '" << year << "-07-01' + interval '1' month";
+    s << "select  100.00 * sum(case when p_type like 'PROMO%' then l_extendedprice * (100 - l_discount) else 0 end) / sum(l_extendedprice * (100 - l_discount)) as promo_revenue from LINEITEM_INT, " << (UseMySQL ? "part_tmp" : "PART_INT") << " where l_partkey = p_partkey and l_shipdate >= date '" << year << "-07-01' and l_shipdate < date '" << year << "-07-01' + interval '1' month";
     cerr << s.str() << endl;
 
     DBResultNew * dbres;
@@ -5557,10 +5557,17 @@ static void do_query_q17(ConnectNew &conn,
   DBResultNew * dbres;
   ResType res;
 
-  conn.execute("CREATE TEMPORARY TABLE inner_tmp ("
-               "p integer unsigned, "
-               "q bigint unsigned, "
-               "PRIMARY KEY (p)) ENGINE=MEMORY");
+  if (UseMySQL) {
+    conn.execute("CREATE TEMPORARY TABLE inner_tmp ("
+                 "p integer unsigned, "
+                 "q bigint unsigned, "
+                 "PRIMARY KEY (p)) ENGINE=MEMORY");
+  } else {
+    conn.execute("CREATE TEMPORARY TABLE inner_tmp ("
+                 "p bigint, "
+                 "q bigint, "
+                 "PRIMARY KEY (p))");
+  }
 
   {
     ostringstream s;
@@ -6501,8 +6508,8 @@ static void do_query_q20(ConnectNew &conn,
         << join(partkeys, ",") <<
         "     ) "
         "     and l_shipdate >= date '" << year << "-01-01'"
-        "     and l_shipdate < date '" << year << "-01-01' + interval '1' year"
-        " group by ps_partkey, ps_suppkey "
+        "     and l_shipdate < date '" << year << "-01-01' + interval '1' year" <<
+        (UseMySQL ? " group by ps_partkey, ps_suppkey " : " group by ps_partkey, ps_suppkey, ps_availqty ") <<
         " having ps_availqty * 100 > 0.5 * sum(l_quantity)";
 
         DBResultNew * dbres;
@@ -6643,7 +6650,7 @@ static void do_query_q20_opt_noagg(ConnectNew &conn,
         "    ) "
         "    and l_shipdate_OPE >= " << encDATE_START <<
         "    and l_shipdate_OPE < " << encDATE_END <<
-        "    group by ps_partkey_DET, ps_suppkey_DET";
+        (UseMySQL ? "    group by ps_partkey_DET, ps_suppkey_DET" : "    group by ps_partkey_DET, ps_suppkey_DET, ps_availqty_DET");
     //cerr << s.str() << endl;
 
     DBResultNew * dbres;
