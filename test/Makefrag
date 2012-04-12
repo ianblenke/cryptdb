@@ -11,6 +11,6 @@ $(OBJDIR)/test/test: $(TEST_OBJS) \
 		     $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbcrypto.so \
 		     $(OBJDIR)/libedbcrypto2.so $(OBJDIR)/libedbutil.so $(OBJDIR)/libedbparser.so
 	$(CXX) -o $@ $(TEST_OBJS) $(LDFLAGS) \
-	       -lcryptdb -ledbcrypto -ledbcrypto2 -ledbutil -ledbparser
+	       -lcryptdb -ledbcrypto -ledbcrypto2 -ledbutil -ledbparser -lpq
 
 # vim: set noexpandtab:

@@ -13,7 +13,7 @@ $(OBJDIR)/udf/edb.so: $(OBJDIR)/udf/edb.o \
 
 $(OBJDIR)/udf/edb_pg.o: udf/edb_pg.cc
 	@mkdir -p $(@D)
-	$(CXX) -MD $(CXXFLAGS) -I/usr/include/postgresql -I/usr/include/postgresql/8.4/server -c $< -o $@
+	$(CXX) -MD $(CXXFLAGS) -c $< -o $@
 
 $(OBJDIR)/udf/edb_pg.so: $(OBJDIR)/udf/edb_pg.o \
 		      $(OBJDIR)/libedbcrypto.so \

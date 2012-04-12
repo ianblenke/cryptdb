@@ -8,6 +8,7 @@ CXXFLAGS := -O2 -fno-strict-aliasing -fwrapv -fPIC \
 	    -Wunreachable-code -D_GNU_SOURCE -std=c++0x -I$(TOP)
 LDFLAGS	 := -lz -llua5.1 -lcrypto -lntl \
 	    -L$(TOP)/$(OBJDIR) -Wl,-rpath=$(TOP)/$(OBJDIR) -Wl,-rpath=$(TOP)
+PSQL_INCLUDE_FLAGS := -I/usr/include/postgresql -I/usr/include/postgresql/8.4/server 
 
 ## Copy conf/config.mk.sample to conf/config.mk and adjust accordingly.
 include conf/config.mk
@@ -17,6 +18,7 @@ CXXFLAGS += -I$(MYBUILD)/include \
 	    -I$(MYSRC)/sql \
 	    -I$(MYSRC)/regex \
 	    -I$(MYBUILD)/sql \
+	    $(PSQL_INCLUDE_FLAGS) \
 	    -DHAVE_CONFIG_H -DMYSQL_SERVER -DEMBEDDED_LIBRARY -DDBUG_OFF \
 	    -DMYSQL_BUILD_DIR=\"$(MYBUILD)\"
 CXXFLAGS_NORTTI := $(CXXFLAGS) -fno-rtti

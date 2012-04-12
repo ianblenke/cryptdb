@@ -12,7 +12,7 @@
 #include <list>
 #include <algorithm>
 
-#include <edb/Connect.hh>
+#include <edb/ConnectNew.hh>
 #include <parser/cdb_rewrite.hh>
 #include <parser/cdb_helpers.hh>
 #include <crypto/paillier.hh>
@@ -25,6 +25,7 @@ using namespace NTL;
 static bool UseOldOpe = false;
 static bool DoParallel = true;
 static bool UseMYISAM = false;
+static bool UseMySQL = true;
 static const size_t NumThreads = 8;
 
 template <typename T> struct ctype_to_itemres {};
@@ -820,7 +821,7 @@ inline ostream& operator<<(ostream &o, const q22entry &q) {
   return o;
 }
 
-static void do_query_q1(Connect &conn,
+static void do_query_q1(ConnectNew &conn,
                         uint32_t year,
                         vector<q1entry> &results) {
     NamedTimer fcnTimer(__func__);
@@ -834,7 +835,7 @@ static void do_query_q1(Connect &conn,
         ;
     cerr << buf.str() << endl;
 
-    DBResult * dbres;
+    DBResultNew * dbres;
     {
       NamedTimer t(__func__, "execute");
       conn.execute(buf.str(), dbres);
@@ -922,7 +923,7 @@ struct Q1NoSortImpl {
     }
   }
 
-  static void q1_impl(Connect& conn, uint32_t year, vector<q1entry>& results) {
+  static void q1_impl(ConnectNew& conn, uint32_t year, vector<q1entry>& results) {
     NamedTimer fcnTimer(__func__);
 
     const char *agg_name = Q1NoSortImplInfo<T>::agg_func_name();
@@ -934,7 +935,7 @@ struct Q1NoSortImpl {
         ;
     cerr << buf.str() << endl;
 
-    DBResult * dbres;
+    DBResultNew * dbres;
     {
       NamedTimer t(__func__, "execute");
       conn.execute(buf.str(), dbres);
@@ -985,13 +986,13 @@ struct Q1NoSortImpl {
   }
 };
 
-static void do_query_q1_nosort_int(Connect &conn,
+static void do_query_q1_nosort_int(ConnectNew &conn,
                                    uint32_t year,
                                    vector<q1entry> &results) {
   Q1NoSortImpl<uint64_t>::q1_impl(conn, year, results);
 }
 
-static void do_query_q1_nosort_double(Connect &conn,
+static void do_query_q1_nosort_double(ConnectNew &conn,
                                       uint32_t year,
                                       vector<q1entry> &results) {
   Q1NoSortImpl<double>::q1_impl(conn, year, results);
@@ -1013,7 +1014,7 @@ static long extract_from_slot(const ZZ &m, size_t slot) {
   return to_long((m >> (slotbits * slot)) & mask);
 }
 
-static void do_query_q1_packed_opt(Connect &conn,
+static void do_query_q1_packed_opt(ConnectNew &conn,
                                    CryptoManager &cm,
                                    uint32_t year,
                                    vector<q1entry> &results) {
@@ -1056,7 +1057,7 @@ static void do_query_q1_packed_opt(Connect &conn,
     s << "), NULL)) FROM lineitem_packed_enc GROUP BY l_returnflag_DET, l_linestatus_DET";
     cerr << s.str() << endl;
 
-    DBResult * dbres;
+    DBResultNew * dbres;
     {
       NamedTimer t(__func__, "execute");
       conn.execute(s.str(), dbres);
@@ -1143,7 +1144,7 @@ static void do_query_q1_packed_opt(Connect &conn,
 
 }
 
-static void do_query_q1_opt_nosort(Connect &conn,
+static void do_query_q1_opt_nosort(ConnectNew &conn,
                                    CryptoManager &cm,
                                    uint32_t year,
                                    vector<q1entry> &results) {
@@ -1156,7 +1157,7 @@ static void do_query_q1_opt_nosort(Connect &conn,
                               TYPE_INTEGER, "ope_join",
                               getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
 
-    DBResult * dbres;
+    DBResultNew * dbres;
 
     string pkinfo = marshallBinary(cm.getPKInfo());
     ostringstream s;
@@ -1267,7 +1268,7 @@ static void do_query_q1_opt_nosort(Connect &conn,
     }
 }
 
-static void do_query_q1_opt_row_col_pack(Connect &conn,
+static void do_query_q1_opt_row_col_pack(ConnectNew &conn,
                                          CryptoManager &cm,
                                          uint32_t year,
                                          vector<q1entry> &results,
@@ -1288,7 +1289,7 @@ static void do_query_q1_opt_row_col_pack(Connect &conn,
                               TYPE_INTEGER, "ope_join",
                               getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
 
-    DBResult * dbres;
+    DBResultNew * dbres;
 
     //conn.execute("set @cnt := -1", dbres);
 
@@ -1433,7 +1434,7 @@ static void do_query_q1_opt_row_col_pack(Connect &conn,
     }
 }
 
-static void do_query_q1_opt(Connect &conn,
+static void do_query_q1_opt(ConnectNew &conn,
                             CryptoManager &cm,
                             uint32_t year,
                             vector<q1entry> &results) {
@@ -1446,7 +1447,7 @@ static void do_query_q1_opt(Connect &conn,
                               TYPE_INTEGER, "ope_join",
                               getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
 
-    DBResult * dbres;
+    DBResultNew * dbres;
 
     string pkinfo = marshallBinary(cm.getPKInfo());
     ostringstream s;
@@ -1627,7 +1628,7 @@ struct _q1_noopt_task {
   _q1_noopt_task_state* state;
 };
 
-static void do_query_q1_noopt(Connect &conn,
+static void do_query_q1_noopt(ConnectNew &conn,
                               CryptoManager &cm,
                               uint32_t year,
                               vector<q1entry> &results) {
@@ -1641,7 +1642,7 @@ static void do_query_q1_noopt(Connect &conn,
                               getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
 
 
-    DBResult * dbres;
+    DBResultNew * dbres;
 
     ostringstream s;
     s << "SELECT SQL_NO_CACHE "
@@ -1796,7 +1797,7 @@ static void do_query_q1_noopt(Connect &conn,
     }
 }
 
-static void do_query_q2(Connect &conn,
+static void do_query_q2(ConnectNew &conn,
                         uint64_t size,
                         const string &type,
                         const string &name,
@@ -1810,7 +1811,7 @@ static void do_query_q2(Connect &conn,
       "PARTSUPP_INT, SUPPLIER_INT, NATION_INT, REGION_INT where p_partkey = ps_partkey and s_suppkey = ps_suppkey and s_nationkey = n_nationkey and n_regionkey = r_regionkey and r_name = '" << name << "') order by s_acctbal desc, n_name, s_name, p_partkey limit 100";
     cerr << s.str() << endl;
 
-    DBResult * dbres;
+    DBResultNew * dbres;
     {
       NamedTimer t(__func__, "execute");
       conn.execute(s.str(), dbres);
@@ -1836,7 +1837,7 @@ static void do_query_q2(Connect &conn,
 
 }
 
-static void do_query_q2_noopt(Connect &conn,
+static void do_query_q2_noopt(ConnectNew &conn,
                               CryptoManager &cm,
                               uint64_t size,
                               const string &type,
@@ -1899,7 +1900,7 @@ static void do_query_q2_noopt(Connect &conn,
       << "LIMIT 100";
     cerr << s.str() << endl;
 
-    DBResult * dbres;
+    DBResultNew * dbres;
     {
       NamedTimer t(__func__, "execute");
       conn.execute(s.str(), dbres);
@@ -2132,7 +2133,7 @@ struct _q3_noopt_task {
   _q3_noopt_task_state* state;
 };
 
-static void do_query_q3(Connect &conn,
+static void do_query_q3(ConnectNew &conn,
                         const string& mktsegment,
                         const string& d,
                         vector<q3entry> &results) {
@@ -2148,7 +2149,7 @@ static void do_query_q3(Connect &conn,
       ;
     cerr << s.str() << endl;
 
-    DBResult * dbres;
+    DBResultNew * dbres;
     {
       NamedTimer t(__func__, "execute");
       conn.execute(s.str(), dbres);
@@ -2170,7 +2171,7 @@ static void do_query_q3(Connect &conn,
     }
 }
 
-static void do_query_q3_crypt(Connect &conn,
+static void do_query_q3_crypt(ConnectNew &conn,
                               CryptoManager &cm,
                               const string& mktsegment,
                               const string& d,
@@ -2197,7 +2198,7 @@ static void do_query_q3_crypt(Connect &conn,
                               TYPE_INTEGER, "ope_join",
                               getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
 
-    DBResult * dbres;
+    DBResultNew * dbres;
 
     ostringstream s;
     s << "select "
@@ -2308,7 +2309,7 @@ static void do_query_q3_crypt(Connect &conn,
 
 }
 
-static void do_query_q4(Connect &conn,
+static void do_query_q4(ConnectNew &conn,
                         const string& d,
                         vector<q4entry> &results) {
     NamedTimer fcnTimer(__func__);
@@ -2327,7 +2328,7 @@ static void do_query_q4(Connect &conn,
       ;
     cerr << s.str() << endl;
 
-    DBResult * dbres;
+    DBResultNew * dbres;
     {
       NamedTimer t(__func__, "execute");
       conn.execute(s.str(), dbres);
@@ -2347,7 +2348,7 @@ static void do_query_q4(Connect &conn,
     }
 }
 
-static void do_query_crypt_q4(Connect &conn,
+static void do_query_crypt_q4(ConnectNew &conn,
                               CryptoManager &cm,
                               const string& d,
                               vector<q4entry> &results) {
@@ -2381,7 +2382,7 @@ static void do_query_crypt_q4(Connect &conn,
       ;
     cerr << s.str() << endl;
 
-    DBResult * dbres;
+    DBResultNew * dbres;
     {
       NamedTimer t(__func__, "execute");
       conn.execute(s.str(), dbres);
@@ -2411,7 +2412,7 @@ static void do_query_crypt_q4(Connect &conn,
     }
 }
 
-static void do_query_q5(Connect &conn,
+static void do_query_q5(ConnectNew &conn,
                         const string& name,
                         const string& d,
                         vector<q5entry> &results) {
@@ -2446,7 +2447,7 @@ static void do_query_q5(Connect &conn,
       ;
     cerr << s.str() << endl;
 
-    DBResult * dbres;
+    DBResultNew * dbres;
     {
       NamedTimer t(__func__, "execute");
       conn.execute(s.str(), dbres);
@@ -2493,7 +2494,7 @@ struct _q5_noopt_task {
   _q5_noopt_task_state* state;
 };
 
-static void do_query_crypt_q5(Connect &conn,
+static void do_query_crypt_q5(ConnectNew &conn,
                               CryptoManager &cm,
                               const string& name,
                               const string& d,
@@ -2547,7 +2548,7 @@ static void do_query_crypt_q5(Connect &conn,
       ;
     cerr << s.str() << endl;
 
-    DBResult * dbres;
+    DBResultNew * dbres;
     {
       NamedTimer t(__func__, "execute");
       conn.execute(s.str(), dbres);
@@ -2615,7 +2616,7 @@ static void do_query_crypt_q5(Connect &conn,
     }
 }
 
-static void do_query_q6(Connect &conn,
+static void do_query_q6(ConnectNew &conn,
                         const string& d,
                         double discount,
                         uint64_t quantity,
@@ -2637,7 +2638,7 @@ static void do_query_q6(Connect &conn,
       ;
     cerr << s.str() << endl;
 
-    DBResult * dbres;
+    DBResultNew * dbres;
     {
       NamedTimer t(__func__, "execute");
       conn.execute(s.str(), dbres);
@@ -2656,7 +2657,7 @@ static void do_query_q6(Connect &conn,
     }
 }
 
-static void do_query_crypt_q6(Connect &conn,
+static void do_query_crypt_q6(ConnectNew &conn,
                               CryptoManager &cm,
                               const string& d,
                               double discount,
@@ -2722,7 +2723,7 @@ static void do_query_crypt_q6(Connect &conn,
       ;
     cerr << s.str() << endl;
 
-    DBResult * dbres;
+    DBResultNew * dbres;
     {
       NamedTimer t(__func__, "execute");
       conn.execute(s.str(), dbres);
@@ -2780,7 +2781,7 @@ static void do_query_crypt_q6(Connect &conn,
     }
 }
 
-static void do_query_q7(Connect &conn,
+static void do_query_q7(ConnectNew &conn,
                         const string& n_a,
                         const string& n_b,
                         vector<q7entry> &results) {
@@ -2814,7 +2815,7 @@ static void do_query_q7(Connect &conn,
     "  and l_shipdate between date '1995-01-01' and date '1996-12-31'";
     cerr << s.str() << endl;
 
-    DBResult * dbres;
+    DBResultNew * dbres;
     {
       NamedTimer t(__func__, "execute");
       conn.execute(s.str(), dbres);
@@ -2851,7 +2852,7 @@ static void do_query_q7(Connect &conn,
     }
 }
 
-static void do_query_crypt_q7(Connect &conn,
+static void do_query_crypt_q7(ConnectNew &conn,
                               CryptoManager &cm,
                               const string& n_a,
                               const string& n_b,
@@ -2922,7 +2923,7 @@ static void do_query_crypt_q7(Connect &conn,
     "  and l_shipdate_OPE >= " << d0 << " and l_shipdate_OPE <= " << d1;
     cerr << s.str() << endl;
 
-    DBResult * dbres;
+    DBResultNew * dbres;
     {
       NamedTimer t(__func__, "execute");
       conn.execute(s.str(), dbres);
@@ -3004,7 +3005,7 @@ static void do_query_crypt_q7(Connect &conn,
     }
 }
 
-static void do_query_q8(Connect &conn,
+static void do_query_q8(ConnectNew &conn,
                         const string& n_a,
                         const string& r_a,
                         const string& p_a,
@@ -3052,7 +3053,7 @@ static void do_query_q8(Connect &conn,
       "  o_year;";
     cerr << s.str() << endl;
 
-    DBResult * dbres;
+    DBResultNew * dbres;
     {
       NamedTimer t(__func__, "execute");
       conn.execute(s.str(), dbres);
@@ -3112,7 +3113,7 @@ struct _q8_noopt_task {
   _q8_noopt_task_state* state;
 };
 
-static void do_query_crypt_q8(Connect &conn,
+static void do_query_crypt_q8(ConnectNew &conn,
                               CryptoManager &cm,
                               const string& n_a,
                               const string& r_a,
@@ -3186,7 +3187,7 @@ static void do_query_crypt_q8(Connect &conn,
       ;
     cerr << s.str() << endl;
 
-    DBResult * dbres;
+    DBResultNew * dbres;
     {
       NamedTimer t(__func__, "execute");
       conn.execute(s.str(), dbres);
@@ -3242,7 +3243,7 @@ static void do_query_crypt_q8(Connect &conn,
     }
 }
 
-static void do_query_q9(Connect &conn,
+static void do_query_q9(ConnectNew &conn,
                         const string& p_a,
                         vector<q9entry> &results) {
     NamedTimer fcnTimer(__func__);
@@ -3283,7 +3284,7 @@ static void do_query_q9(Connect &conn,
       "  o_year desc; ";
     cerr << s.str() << endl;
 
-    DBResult * dbres;
+    DBResultNew * dbres;
     {
       NamedTimer t(__func__, "execute");
       conn.execute(s.str(), dbres);
@@ -3370,7 +3371,7 @@ struct _q9_noopt_task {
   _q9_noopt_task_state* state;
 };
 
-static void do_query_crypt_q9(Connect &conn,
+static void do_query_crypt_q9(ConnectNew &conn,
                               CryptoManager& cm,
                               const string& p_a,
                               vector<q9entry> &results) {
@@ -3422,7 +3423,7 @@ static void do_query_crypt_q9(Connect &conn,
           << ", p_name_SWP) = 1";
   cerr << s.str() << endl;
 
-  DBResult * dbres;
+  DBResultNew * dbres;
   {
     NamedTimer t(__func__, "execute");
     conn.execute(s.str(), dbres);
@@ -3484,7 +3485,7 @@ static void do_query_crypt_q9(Connect &conn,
   }
 }
 
-static void do_query_q10(Connect &conn,
+static void do_query_q10(ConnectNew &conn,
                          const string& o_a,
                          vector<q10entry> &results) {
   NamedTimer fcnTimer(__func__);
@@ -3523,7 +3524,7 @@ static void do_query_q10(Connect &conn,
   ;
   cerr << s.str() << endl;
 
-  DBResult * dbres;
+  DBResultNew * dbres;
   {
     NamedTimer t(__func__, "execute");
     conn.execute(s.str(), dbres);
@@ -3629,7 +3630,7 @@ struct _q10_noopt_task {
   _q10_noopt_task_state* state;
 };
 
-static void do_query_crypt_q10(Connect &conn,
+static void do_query_crypt_q10(ConnectNew &conn,
                                CryptoManager& cm,
                                const string& o_a,
                                vector<q10entry> &results) {
@@ -3686,7 +3687,7 @@ static void do_query_crypt_q10(Connect &conn,
   ;
   cerr << s.str() << endl;
 
-  DBResult * dbres;
+  DBResultNew * dbres;
   {
     NamedTimer t(__func__, "execute");
     conn.execute(s.str(), dbres);
@@ -3863,7 +3864,7 @@ struct _q11_noopt_task {
   _q11_noopt_task_state* state;
 };
 
-static void do_query_q11_noopt(Connect &conn,
+static void do_query_q11_noopt(ConnectNew &conn,
                                CryptoManager &cm,
                                const string &name,
                                double fraction,
@@ -3892,7 +3893,7 @@ static void do_query_q11_noopt(Connect &conn,
         << "n_name_DET = " << marshallBinary(encNAME);
     cerr << s.str() << endl;
 
-    DBResult * dbres;
+    DBResultNew * dbres;
     {
       NamedTimer t(__func__, "execute");
       conn.execute(s.str(), dbres);
@@ -4011,7 +4012,7 @@ struct q11entry_remover {
   const double threshold;
 };
 
-static void do_query_q11(Connect &conn,
+static void do_query_q11(ConnectNew &conn,
                          const string &name,
                          double fraction,
                          vector<q11entry> &results) {
@@ -4028,7 +4029,7 @@ static void do_query_q11(Connect &conn,
       << "order by value desc";
     cerr << s.str() << endl;
 
-    DBResult * dbres;
+    DBResultNew * dbres;
     {
       NamedTimer t(__func__, "execute");
       conn.execute(s.str(), dbres);
@@ -4047,7 +4048,7 @@ static void do_query_q11(Connect &conn,
     }
 }
 
-static void do_query_q11_nosubquery(Connect &conn,
+static void do_query_q11_nosubquery(ConnectNew &conn,
                                     const string &name,
                                     double fraction,
                                     vector<q11entry> &results) {
@@ -4062,7 +4063,7 @@ static void do_query_q11_nosubquery(Connect &conn,
           << "where ps_suppkey = s_suppkey and s_nationkey = n_nationkey and n_name = '"
           << name << "'";
 
-        DBResult * dbres;
+        DBResultNew * dbres;
         {
           NamedTimer t(__func__, "execute");
           conn.execute(s.str(), dbres);
@@ -4087,7 +4088,7 @@ static void do_query_q11_nosubquery(Connect &conn,
       ;
     cerr << s.str() << endl;
 
-    DBResult * dbres;
+    DBResultNew * dbres;
     {
       NamedTimer t(__func__, "execute");
       conn.execute(s.str(), dbres);
@@ -4106,7 +4107,7 @@ static void do_query_q11_nosubquery(Connect &conn,
     }
 }
 
-static void do_query_q11_opt_proj(Connect &conn,
+static void do_query_q11_opt_proj(ConnectNew &conn,
                                   CryptoManager &cm,
                                    const string &name,
                                    double fraction,
@@ -4129,7 +4130,7 @@ static void do_query_q11_opt_proj(Connect &conn,
         << "n_nationkey_DET = nationkey_DET AND "
         << "n_name_DET = " << marshallBinary(encNAME);
 
-    DBResult * dbres;
+    DBResultNew * dbres;
     {
       NamedTimer t(__func__, "execute_agg");
       conn.execute(s.str(), dbres);
@@ -4328,7 +4329,7 @@ static void do_query_q11_opt_proj(Connect &conn,
     }
 }
 
-static void do_query_q11_opt(Connect &conn,
+static void do_query_q11_opt(ConnectNew &conn,
                              CryptoManager &cm,
                              const string &name,
                              double fraction,
@@ -4357,7 +4358,7 @@ static void do_query_q11_opt(Connect &conn,
         ;
     cerr << s.str() << endl;
 
-    DBResult * dbres;
+    DBResultNew * dbres;
     {
       NamedTimer t(__func__, "execute");
       conn.execute(s.str(), dbres);
@@ -4557,7 +4558,7 @@ static void do_query_q11_opt(Connect &conn,
     }
 }
 
-//static void do_query_q11_opt(Connect &conn,
+//static void do_query_q11_opt(ConnectNew &conn,
 //                             CryptoManager &cm,
 //                             const string &name,
 //                             double fraction,
@@ -4587,7 +4588,7 @@ static void do_query_q11_opt(Connect &conn,
 //      << "GROUP BY ps_partkey_DET";
 //    cerr << s.str() << endl;
 //
-//    DBResult * dbres;
+//    DBResultNew * dbres;
 //    {
 //      NamedTimer t(__func__, "execute");
 //      conn.execute(s.str(), dbres);
@@ -4643,7 +4644,7 @@ static void do_query_q11_opt(Connect &conn,
 //    }
 //}
 
-static void do_query_q12(Connect &conn,
+static void do_query_q12(ConnectNew &conn,
                          const string& l_a,
                          const string& l_b,
                          const string& l_c,
@@ -4682,7 +4683,7 @@ static void do_query_q12(Connect &conn,
     ;
   cerr << s.str() << endl;
 
-  DBResult * dbres;
+  DBResultNew * dbres;
   {
     NamedTimer t(__func__, "execute");
     conn.execute(s.str(), dbres);
@@ -4720,7 +4721,7 @@ static string enc_fixed_len_str(
   return ct;
 }
 
-static void do_query_crypt_q12(Connect &conn,
+static void do_query_crypt_q12(ConnectNew &conn,
                                CryptoManager &cm,
                                const string& l_a,
                                const string& l_b,
@@ -4788,7 +4789,7 @@ static void do_query_crypt_q12(Connect &conn,
     ;
   cerr << s.str() << endl;
 
-  DBResult * dbres;
+  DBResultNew * dbres;
   {
     NamedTimer t(__func__, "execute");
     conn.execute(s.str(), dbres);
@@ -4816,7 +4817,7 @@ static void do_query_crypt_q12(Connect &conn,
   }
 }
 
-static void do_query_q14_opt(Connect &conn,
+static void do_query_q14_opt(ConnectNew &conn,
                              CryptoManager &cm,
                              uint32_t year,
                              vector<q14entry> &results) {
@@ -4852,7 +4853,7 @@ static void do_query_q14_opt(Connect &conn,
         << "l_shipdate_OPE < " << encDateUpper;
     cerr << s.str() << endl;
 
-    DBResult * dbres;
+    DBResultNew * dbres;
     {
       NamedTimer t(__func__, "execute");
       conn.execute(s.str(), dbres);
@@ -4880,7 +4881,7 @@ static void do_query_q14_opt(Connect &conn,
     }
 }
 
-static void do_query_q14_opt2(Connect &conn,
+static void do_query_q14_opt2(ConnectNew &conn,
                               CryptoManager &cm,
                               uint32_t year,
                               vector<q14entry> &results,
@@ -4938,7 +4939,7 @@ static void do_query_q14_opt2(Connect &conn,
 
     cerr << s.str() << endl;
 
-    DBResult * dbres;
+    DBResultNew * dbres;
     {
       NamedTimer t(__func__, "execute");
       conn.execute(s.str(), dbres);
@@ -5043,7 +5044,7 @@ struct _q14_noopt_task {
   _q14_noopt_task_state* state;
 };
 
-static void do_query_q14_noopt(Connect &conn,
+static void do_query_q14_noopt(ConnectNew &conn,
                                CryptoManager &cm,
                                uint32_t year,
                                vector<q14entry> &results,
@@ -5084,7 +5085,7 @@ static void do_query_q14_noopt(Connect &conn,
         << "l_shipdate_OPE < " << encDateUpper;
     cerr << s.str() << endl;
 
-    DBResult * dbres;
+    DBResultNew * dbres;
     {
         NamedTimer t(__func__, "execute");
         conn.execute(s.str(), dbres);
@@ -5171,7 +5172,7 @@ static void do_query_q14_noopt(Connect &conn,
     }
 }
 
-static void do_query_q14(Connect &conn,
+static void do_query_q14(ConnectNew &conn,
                          uint32_t year,
                          vector<q14entry> &results) {
     NamedTimer fcnTimer(__func__);
@@ -5197,7 +5198,7 @@ static void do_query_q14(Connect &conn,
     s << "select SQL_NO_CACHE 100.00 * sum(case when p_type like 'PROMO%' then l_extendedprice * (100 - l_discount) else 0 end) / sum(l_extendedprice * (100 - l_discount)) as promo_revenue from LINEITEM_INT, part_tmp where l_partkey = p_partkey and l_shipdate >= date '" << year << "-07-01' and l_shipdate < date '" << year << "-07-01' + interval '1' month";
     cerr << s.str() << endl;
 
-    DBResult * dbres;
+    DBResultNew * dbres;
     {
       NamedTimer t(__func__, "execute");
       conn.execute(s.str(), dbres);
@@ -5214,7 +5215,7 @@ static void do_query_q14(Connect &conn,
     }
 }
 
-static void do_query_q15(Connect &conn,
+static void do_query_q15(ConnectNew &conn,
                          const string& l_a,
                          vector<q15entry> &results) {
   NamedTimer fcnTimer(__func__);
@@ -5237,7 +5238,7 @@ static void do_query_q15(Connect &conn,
     "limit 1";
   cerr << s.str() << endl;
 
-  DBResult * dbres;
+  DBResultNew * dbres;
   {
     NamedTimer t(__func__, "execute");
     conn.execute(s.str(), dbres);
@@ -5339,7 +5340,7 @@ struct _q15_noopt_task {
   _q15_noopt_task_state* state;
 };
 
-static void do_query_crypt_q15(Connect &conn,
+static void do_query_crypt_q15(ConnectNew &conn,
                                CryptoManager& cm,
                                const string& l_a,
                                vector<q15entry> &results,
@@ -5375,7 +5376,7 @@ static void do_query_crypt_q15(Connect &conn,
     ;
   cerr << s.str() << endl;
 
-  DBResult * dbres;
+  DBResultNew * dbres;
   {
     NamedTimer t(__func__, "execute");
     conn.execute(s.str(), dbres);
@@ -5487,13 +5488,13 @@ static void do_query_crypt_q15(Connect &conn,
   }
 }
 
-static void do_query_q17(Connect &conn,
+static void do_query_q17(ConnectNew &conn,
                          const string& p_a,
                          const string& p_b,
                          vector<q17entry> &results) {
   NamedTimer fcnTimer(__func__);
 
-  DBResult * dbres;
+  DBResultNew * dbres;
   ResType res;
 
   conn.execute("CREATE TEMPORARY TABLE inner_tmp ("
@@ -5606,7 +5607,7 @@ struct _q17_noopt_task {
   _q17_noopt_task_state* state;
 };
 
-static void do_query_crypt_q17(Connect &conn,
+static void do_query_crypt_q17(ConnectNew &conn,
                                CryptoManager& cm,
                                const string& p_a,
                                const string& p_b,
@@ -5614,7 +5615,7 @@ static void do_query_crypt_q17(Connect &conn,
   crypto_manager_stub cm_stub(&cm, UseOldOpe);
   NamedTimer fcnTimer(__func__);
 
-  DBResult * dbres;
+  DBResultNew * dbres;
   ResType res;
 
   bool isBin = false;
@@ -5680,7 +5681,7 @@ static void do_query_crypt_q17(Connect &conn,
   results.push_back( sum / 7.0 );
 }
 
-static void do_query_q18(Connect &conn,
+static void do_query_q18(ConnectNew &conn,
                          uint64_t threshold,
                          vector<q18entry> &results) {
     NamedTimer fcnTimer(__func__);
@@ -5698,7 +5699,7 @@ static void do_query_q18(Connect &conn,
 
     vector<string> l_orderkeys;
     {
-        DBResult * dbres;
+        DBResultNew * dbres;
         {
             NamedTimer t(__func__, "execute");
             conn.execute(s0.str(), dbres);
@@ -5740,7 +5741,7 @@ static void do_query_q18(Connect &conn,
         "    o_orderdate "
         "limit 100";
 
-    DBResult * dbres;
+    DBResultNew * dbres;
     {
         NamedTimer t(__func__, "execute");
         conn.execute(s.str(), dbres);
@@ -5812,7 +5813,7 @@ struct _q18_noopt_task {
   double threshold;
 };
 
-static void do_query_q18_crypt(Connect &conn,
+static void do_query_q18_crypt(ConnectNew &conn,
                                CryptoManager& cm,
                                uint64_t threshold,
                                vector<q18entry> &results) {
@@ -5833,7 +5834,7 @@ static void do_query_q18_crypt(Connect &conn,
         "having count(*) >= " << minGroupCount;
     cerr  << s.str() << endl;
 
-    DBResult * dbres;
+    DBResultNew * dbres;
     {
         NamedTimer t(__func__, "execute");
         conn.execute(s.str(), dbres);
@@ -5941,7 +5942,7 @@ static void do_query_q18_crypt(Connect &conn,
         "limit 100";
 
     {
-        DBResult * dbres;
+        DBResultNew * dbres;
         {
             NamedTimer t(__func__, "execute");
             conn.execute(s1.str(), dbres);
@@ -6030,7 +6031,7 @@ static void do_query_q18_crypt(Connect &conn,
     }
 }
 
-static void do_query_q18_crypt_opt2(Connect &conn,
+static void do_query_q18_crypt_opt2(ConnectNew &conn,
                                     CryptoManager& cm,
                                     uint64_t threshold,
                                     vector<q18entry> &results) {
@@ -6053,7 +6054,7 @@ static void do_query_q18_crypt_opt2(Connect &conn,
         "group by l_orderkey_DET "
         "having count(*) >= " << minGroupCount;
 
-    DBResult * dbres;
+    DBResultNew * dbres;
     {
         NamedTimer t(__func__, "execute");
         conn.execute(s.str(), dbres);
@@ -6110,7 +6111,7 @@ static void do_query_q18_crypt_opt2(Connect &conn,
         "limit 100";
 
     {
-        DBResult * dbres;
+        DBResultNew * dbres;
         {
             NamedTimer t(__func__, "execute");
             conn.execute(s1.str(), dbres);
@@ -6184,7 +6185,7 @@ static void do_query_q18_crypt_opt2(Connect &conn,
     }
 }
 
-static void do_query_q18_crypt_opt(Connect &conn,
+static void do_query_q18_crypt_opt(ConnectNew &conn,
                                    CryptoManager& cm,
                                    uint64_t threshold,
                                    vector<q18entry> &results) {
@@ -6201,7 +6202,7 @@ static void do_query_q18_crypt_opt(Connect &conn,
             "CASE count(*) WHEN 1 THEN NULL ELSE agg(l_bitpacked_AGG, " << pkinfo << ") END "
         "from lineitem_enc group by l_orderkey_DET";
 
-    DBResult * dbres;
+    DBResultNew * dbres;
     {
         NamedTimer t(__func__, "execute");
         conn.execute(s.str(), dbres);
@@ -6273,7 +6274,7 @@ static void do_query_q18_crypt_opt(Connect &conn,
         "limit 100";
 
     {
-        DBResult * dbres;
+        DBResultNew * dbres;
         {
             NamedTimer t(__func__, "execute");
             conn.execute(s1.str(), dbres);
@@ -6347,7 +6348,7 @@ static void do_query_q18_crypt_opt(Connect &conn,
     }
 }
 
-static void do_query_q20(Connect &conn,
+static void do_query_q20(ConnectNew &conn,
                          uint64_t year,
                          const string &p_name,
                          const string &n_name,
@@ -6383,7 +6384,7 @@ static void do_query_q20(Connect &conn,
     //"order by s_name";
     //cerr << s.str() << endl;
 
-    //DBResult * dbres;
+    //DBResultNew * dbres;
     //{
     //  NamedTimer t(__func__, "execute");
     //  conn.execute(s.str(), dbres);
@@ -6409,7 +6410,7 @@ static void do_query_q20(Connect &conn,
         ostringstream s;
         s << "select SQL_NO_CACHE p_partkey from PART_INT where p_name like '%" << p_name << "%'";
 
-        DBResult * dbres;
+        DBResultNew * dbres;
         {
           NamedTimer t(__func__, "execute-1");
           conn.execute(s.str(), dbres);
@@ -6444,7 +6445,7 @@ static void do_query_q20(Connect &conn,
         " group by ps_partkey, ps_suppkey "
         " having ps_availqty * 100 > 0.5 * sum(l_quantity)";
 
-        DBResult * dbres;
+        DBResultNew * dbres;
         {
           NamedTimer t(__func__, "execute-2");
           conn.execute(s.str(), dbres);
@@ -6474,7 +6475,7 @@ static void do_query_q20(Connect &conn,
         << join(suppkeys ,",") <<
         ") and s_nationkey = n_nationkey and n_name = '" << n_name << "' order by s_name";
 
-        DBResult * dbres;
+        DBResultNew * dbres;
         {
           NamedTimer t(__func__, "execute-3");
           conn.execute(s.str(), dbres);
@@ -6491,7 +6492,7 @@ static void do_query_q20(Connect &conn,
     }
 }
 
-static void do_query_q20_opt_noagg(Connect &conn,
+static void do_query_q20_opt_noagg(ConnectNew &conn,
                                    CryptoManager& cm,
                                    uint64_t year,
                                    const string &p_name,
@@ -6536,7 +6537,7 @@ static void do_query_q20_opt_noagg(Connect &conn,
           << marshallBinary(string((char *)t.wordKey.content, t.wordKey.len))
           << ", p_name_SWP) = 1";
 
-        DBResult * dbres;
+        DBResultNew * dbres;
         {
             NamedTimer t(__func__, "execute-1");
             conn.execute(s.str(), dbres);
@@ -6585,7 +6586,7 @@ static void do_query_q20_opt_noagg(Connect &conn,
         "    group by ps_partkey_DET, ps_suppkey_DET";
     //cerr << s.str() << endl;
 
-    DBResult * dbres;
+    DBResultNew * dbres;
     {
         NamedTimer t(__func__, "execute-2");
         conn.execute(s.str(), dbres);
@@ -6695,7 +6696,7 @@ static void do_query_q20_opt_noagg(Connect &conn,
     }
 }
 
-static void do_query_q20_opt(Connect &conn,
+static void do_query_q20_opt(ConnectNew &conn,
                              CryptoManager& cm,
                              uint64_t year,
                              const string &p_name,
@@ -6740,7 +6741,7 @@ static void do_query_q20_opt(Connect &conn,
           << marshallBinary(string((char *)t.wordKey.content, t.wordKey.len))
           << ", p_name_SWP) = 1";
 
-        DBResult * dbres;
+        DBResultNew * dbres;
         {
             NamedTimer t(__func__, "execute-1");
             conn.execute(s.str(), dbres);
@@ -6774,7 +6775,7 @@ static void do_query_q20_opt(Connect &conn,
         "group by ps_partkey_DET, ps_suppkey_DET";
     //cerr << s.str() << endl;
 
-    DBResult * dbres;
+    DBResultNew * dbres;
     {
         NamedTimer t(__func__, "execute");
         conn.execute(s.str(), dbres);
@@ -6859,7 +6860,7 @@ static void do_query_q20_opt(Connect &conn,
     }
 }
 
-static void do_query_q22(Connect &conn,
+static void do_query_q22(ConnectNew &conn,
                          const string& c1,
                          const string& c2,
                          const string& c3,
@@ -6886,7 +6887,7 @@ static void do_query_q22(Connect &conn,
       << c5 << "', '" << c6 << "', '" << c7 << "') ";
     cerr << s.str() << endl;
 
-    DBResult * dbres;
+    DBResultNew * dbres;
     {
       NamedTimer t(__func__, "execute-1");
       conn.execute(s.str(), dbres);
@@ -6922,7 +6923,7 @@ static void do_query_q22(Connect &conn,
   ;
   cerr << s.str() << endl;
 
-  DBResult * dbres;
+  DBResultNew * dbres;
   {
     NamedTimer t(__func__, "execute-2");
     conn.execute(s.str(), dbres);
@@ -6956,7 +6957,7 @@ static void do_query_q22(Connect &conn,
   }
 }
 
-static void do_query_crypt_q22(Connect &conn,
+static void do_query_crypt_q22(ConnectNew &conn,
                                CryptoManager& cm,
                                const string& c0,
                                const string& c1,
@@ -6998,7 +6999,7 @@ static void do_query_crypt_q22(Connect &conn,
     ;
   cerr << s.str() << endl;
 
-  DBResult * dbres;
+  DBResultNew * dbres;
   {
     NamedTimer t(__func__, "execute-1");
     conn.execute(s.str(), dbres);
@@ -7088,7 +7089,7 @@ static void do_query_crypt_q22(Connect &conn,
       ;
     cerr << s.str() << endl;
 
-    DBResult * dbres;
+    DBResultNew * dbres;
     {
       NamedTimer t(__func__, "execute-2");
       conn.execute(s.str(), dbres);
@@ -7298,6 +7299,7 @@ int main(int argc, char **argv) {
     string ope_type;
     string do_par;
     string hostname;
+    string db_type;
     switch (q) {
 
 #define CASE_IMPL(n, o) \
@@ -7307,6 +7309,7 @@ int main(int argc, char **argv) {
       ope_type    =      argv[o + 4]; \
       do_par      =      argv[o + 5]; \
       hostname    =      argv[o + 6]; \
+      db_type     =      argv[o + 7]; \
       break; \
     }
 
@@ -7340,9 +7343,16 @@ int main(int argc, char **argv) {
     assert(do_par == "no_parallel" || do_par == "parallel");
     DoParallel = do_par == "parallel";
 
+    assert(db_type == "mysql" || db_type == "postgres");
+    UseMySQL = db_type == "mysql";
+
     unsigned long ctr = 0;
 
-    Connect conn(hostname, "root", "", db_name, 3307);
+    ConnectNew* _conn =
+      (UseMySQL) ? (ConnectNew*) new MySQLConnect(hostname, "root", "", db_name, 3307) :
+                   (ConnectNew*) new PGConnect(hostname, "stephentu", "letmein", db_name, 5432);
+    ConnectNew& conn = *_conn;
+
     CryptoManager cm("12345");
 
 #define PRINT_RESULTS() \
