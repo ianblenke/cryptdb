@@ -28,6 +28,27 @@ static bool UseMYISAM = false;
 static bool UseMySQL = true;
 static const size_t NumThreads = 8;
 
+static inline string smartMarshallBinary(const string& input) {
+  if (UseMySQL) {
+    return marshallBinary(input);
+  } else {
+    return "decode('" + to_hex(input) + "', 'hex')";
+  }
+}
+
+static inline string group_concat(const string& input, const string& sep = ",") {
+  if (UseMySQL) {
+    // TODO: don't ignore separator
+    return "group_concat(" + input + ")";
+  } else {
+    return "array_to_string(array_agg(" + input + "), '" + sep + "')";
+  }
+}
+
+static inline void smartResize(string& inp, size_t len) {
+  if (UseMySQL) inp.resize(len);
+}
+
 template <typename T> struct ctype_to_itemres {};
 
 template <> struct ctype_to_itemres<int64_t> {
@@ -827,7 +848,7 @@ static void do_query_q1(ConnectNew &conn,
     NamedTimer fcnTimer(__func__);
 
     ostringstream buf;
-    buf << "select SQL_NO_CACHE l_returnflag, l_linestatus, sum(l_quantity) as sum_qty, sum(l_extendedprice) as sum_base_price, sum(l_extendedprice * (1 - l_discount)) as sum_disc_price, sum(l_extendedprice * (1 - l_discount) * (1 + l_tax)) as sum_charge, avg(l_quantity) as avg_qty, avg(l_extendedprice) as avg_price, avg(l_discount) as avg_disc, count(*) as count_order from LINEITEM "
+    buf << "select  l_returnflag, l_linestatus, sum(l_quantity) as sum_qty, sum(l_extendedprice) as sum_base_price, sum(l_extendedprice * (1 - l_discount)) as sum_disc_price, sum(l_extendedprice * (1 - l_discount) * (1 + l_tax)) as sum_charge, avg(l_quantity) as avg_qty, avg(l_extendedprice) as avg_price, avg(l_discount) as avg_disc, count(*) as count_order from LINEITEM "
 
         << "where l_shipdate <= date '" << year << "-1-1' "
         << "group by l_returnflag, l_linestatus order by l_returnflag, l_linestatus"
@@ -930,7 +951,7 @@ struct Q1NoSortImpl {
     const char *unit = Q1NoSortImplInfo<T>::unit();
 
     ostringstream buf;
-    buf << "select SQL_NO_CACHE " <<  agg_name << "(l_returnflag, l_linestatus, l_quantity) as sum_qty, " <<  agg_name << "(l_returnflag, l_linestatus, l_extendedprice) as sum_base_price, " <<  agg_name << "(l_returnflag, l_linestatus, l_extendedprice * (" << unit << " - l_discount)) as sum_disc_price, " <<  agg_name << "(l_returnflag, l_linestatus, l_extendedprice * (" << unit << " - l_discount) * (" << unit << " + l_tax)) as sum_charge, " <<  agg_name << "(l_returnflag, l_linestatus, l_discount) as sum_disc from " << Q1NoSortImplInfo<T>::table_name()
+    buf << "select  " <<  agg_name << "(l_returnflag, l_linestatus, l_quantity) as sum_qty, " <<  agg_name << "(l_returnflag, l_linestatus, l_extendedprice) as sum_base_price, " <<  agg_name << "(l_returnflag, l_linestatus, l_extendedprice * (" << unit << " - l_discount)) as sum_disc_price, " <<  agg_name << "(l_returnflag, l_linestatus, l_extendedprice * (" << unit << " - l_discount) * (" << unit << " + l_tax)) as sum_charge, " <<  agg_name << "(l_returnflag, l_linestatus, l_discount) as sum_disc from " << Q1NoSortImplInfo<T>::table_name()
         << " where l_shipdate <= date '" << year << "-1-1'"
         ;
     cerr << buf.str() << endl;
@@ -1031,9 +1052,9 @@ static void do_query_q1_packed_opt(ConnectNew &conn,
     // for intervals with start <= date < end, then we need to collect the
     // pkey entries here, and query them separately.
 
-    string pkinfo = marshallBinary(cm.getPKInfo());
+    string pkinfo = smartMarshallBinary(cm.getPKInfo());
     ostringstream s;
-    s << "SELECT SQL_NO_CACHE "
+    s << "SELECT  "
         << "l_returnflag_DET, "
         << "l_linestatus_DET, "
 
@@ -1159,10 +1180,10 @@ static void do_query_q1_opt_nosort(ConnectNew &conn,
 
     DBResultNew * dbres;
 
-    string pkinfo = marshallBinary(cm.getPKInfo());
+    string pkinfo = smartMarshallBinary(cm.getPKInfo());
     ostringstream s;
     s <<
-      "SELECT SQL_NO_CACHE agg_char2("
+      "SELECT  agg_char2("
       "l_returnflag_DET, l_linestatus_DET, l_bitpacked_AGG, "
       << pkinfo << ", " << (DoParallel ? "1" : "0") <<
       ") FROM " << (UseMYISAM ? "lineitem_enc_MYISAM" : "lineitem_enc")
@@ -1296,10 +1317,10 @@ static void do_query_q1_opt_row_col_pack(ConnectNew &conn,
     string filename =
       "/space/stephentu/data/" + db + "/lineitem_enc/row_col_pack/data";
 
-    string pkinfo = marshallBinary(StringFromZZ(pk[0] * pk[0]));
+    string pkinfo = smartMarshallBinary(StringFromZZ(pk[0] * pk[0]));
     ostringstream s;
     s <<
-      "SELECT SQL_NO_CACHE agg_hash_agg_row_col_pack("
+      "SELECT  agg_hash_agg_row_col_pack("
         "2, "
         "l_returnflag_DET, "
         "l_linestatus_DET, "
@@ -1449,9 +1470,9 @@ static void do_query_q1_opt(ConnectNew &conn,
 
     DBResultNew * dbres;
 
-    string pkinfo = marshallBinary(cm.getPKInfo());
+    string pkinfo = smartMarshallBinary(cm.getPKInfo());
     ostringstream s;
-    s << "SELECT SQL_NO_CACHE "
+    s << "SELECT  "
           << "l_returnflag_DET, "
           << "l_linestatus_DET, "
           << "agg(l_bitpacked_AGG, " << pkinfo << "), "
@@ -1465,11 +1486,11 @@ static void do_query_q1_opt(ConnectNew &conn,
 
     // attempt 1
     //
-    //s << "SELECT SQL_NO_CACHE r1.l_returnflag_DET, r1.l_linestatus_DET, agg(r2.l_bitpacked_AGG, " << pkinfo << "), count(*) FROM ( SELECT l_returnflag_DET, l_linestatus_DET, l_returnflag_OPE, l_linestatus_OPE, agg_ptr FROM lineitem_enc_2_proj WHERE l_shipdate_OPE < " << encDATE << " ) AS r1 JOIN lineitem_enc_agg_proj AS r2 ON r1.agg_ptr = r2.id GROUP BY r1.l_returnflag_OPE, r1.l_linestatus_OPE ORDER BY r1.l_returnflag_OPE, r1.l_linestatus_OPE";
+    //s << "SELECT  r1.l_returnflag_DET, r1.l_linestatus_DET, agg(r2.l_bitpacked_AGG, " << pkinfo << "), count(*) FROM ( SELECT l_returnflag_DET, l_linestatus_DET, l_returnflag_OPE, l_linestatus_OPE, agg_ptr FROM lineitem_enc_2_proj WHERE l_shipdate_OPE < " << encDATE << " ) AS r1 JOIN lineitem_enc_agg_proj AS r2 ON r1.agg_ptr = r2.id GROUP BY r1.l_returnflag_OPE, r1.l_linestatus_OPE ORDER BY r1.l_returnflag_OPE, r1.l_linestatus_OPE";
 
-    //s << "SELECT SQL_NO_CACHE r1.l_returnflag_DET, r1.l_linestatus_DET, sum(length(r2.l_bitpacked_AGG)), count(*) FROM ( SELECT l_returnflag_DET, l_linestatus_DET, l_returnflag_OPE, l_linestatus_OPE, agg_ptr FROM lineitem_enc_2_proj WHERE l_shipdate_OPE < " << encDATE << " ) AS r1 JOIN lineitem_enc_agg_proj AS r2 ON r1.agg_ptr = r2.id GROUP BY r1.l_returnflag_OPE, r1.l_linestatus_OPE ORDER BY r1.l_returnflag_OPE, r1.l_linestatus_OPE";
+    //s << "SELECT  r1.l_returnflag_DET, r1.l_linestatus_DET, sum(length(r2.l_bitpacked_AGG)), count(*) FROM ( SELECT l_returnflag_DET, l_linestatus_DET, l_returnflag_OPE, l_linestatus_OPE, agg_ptr FROM lineitem_enc_2_proj WHERE l_shipdate_OPE < " << encDATE << " ) AS r1 JOIN lineitem_enc_agg_proj AS r2 ON r1.agg_ptr = r2.id GROUP BY r1.l_returnflag_OPE, r1.l_linestatus_OPE ORDER BY r1.l_returnflag_OPE, r1.l_linestatus_OPE";
 
-    //s << "SELECT SQL_NO_CACHE r1.l_returnflag_DET, r1.l_linestatus_DET, agg(r2.l_bitpacked_AGG, " << pkinfo << "), count(*) FROM lineitem_enc_2_proj AS r1 JOIN lineitem_enc_agg_proj AS r2 ON r1.agg_ptr = r2.id WHERE r1.l_shipdate_OPE < " << encDATE << " GROUP BY r1.l_returnflag_OPE, r1.l_linestatus_OPE ORDER BY r1.l_returnflag_OPE, r1.l_linestatus_OPE";
+    //s << "SELECT  r1.l_returnflag_DET, r1.l_linestatus_DET, agg(r2.l_bitpacked_AGG, " << pkinfo << "), count(*) FROM lineitem_enc_2_proj AS r1 JOIN lineitem_enc_agg_proj AS r2 ON r1.agg_ptr = r2.id WHERE r1.l_shipdate_OPE < " << encDATE << " GROUP BY r1.l_returnflag_OPE, r1.l_linestatus_OPE ORDER BY r1.l_returnflag_OPE, r1.l_linestatus_OPE";
 
     {
       NamedTimer t(__func__, "execute");
@@ -1645,7 +1666,7 @@ static void do_query_q1_noopt(ConnectNew &conn,
     DBResultNew * dbres;
 
     ostringstream s;
-    s << "SELECT SQL_NO_CACHE "
+    s << "SELECT  "
 
           << "l_returnflag_DET, "
           << "l_linestatus_DET, "
@@ -1805,7 +1826,7 @@ static void do_query_q2(ConnectNew &conn,
     NamedTimer fcnTimer(__func__);
 
     ostringstream s;
-    s << "select SQL_NO_CACHE s_acctbal, s_name, n_name, p_partkey, p_mfgr, s_address, s_phone, s_comment "
+    s << "select  s_acctbal, s_name, n_name, p_partkey, p_mfgr, s_address, s_phone, s_comment "
       "from PART_INT, SUPPLIER_INT, PARTSUPP_INT, NATION_INT, REGION_INT "
       "where p_partkey = ps_partkey and s_suppkey = ps_suppkey and p_size = " << size << " and p_type like '%" << type << "' and s_nationkey = n_nationkey and n_regionkey = r_regionkey and r_name = '" << name << "' and ps_supplycost = ( select min(ps_supplycost) from "
       "PARTSUPP_INT, SUPPLIER_INT, NATION_INT, REGION_INT where p_partkey = ps_partkey and s_suppkey = ps_suppkey and s_nationkey = n_nationkey and n_regionkey = r_regionkey and r_name = '" << name << "') order by s_acctbal desc, n_name, s_name, p_partkey limit 100";
@@ -1863,13 +1884,13 @@ static void do_query_q2_noopt(ConnectNew &conn,
     assert(isBin);
 
     // right-pad encNAME with 0's
-    encNAME.resize(25);
+    smartResize(encNAME, 25);
 
     Binary key(cm.getKey(cm.getmkey(), fieldname(part::p_type, "SWP"), SECLEVEL::SWP));
     Token t = CryptoManager::token(key, Binary(lowertype));
 
     ostringstream s;
-    s << "SELECT SQL_NO_CACHE "
+    s << "SELECT  "
         << "s_acctbal_DET, s_name_DET, n_name_DET, p_partkey_DET, "
         << "p_mfgr_DET, s_address_DET, s_phone_DET, s_comment_DET, p_type_DET "
       << "FROM part_enc, supplier_enc, partsupp_enc, nation_enc, region_enc "
@@ -1878,13 +1899,13 @@ static void do_query_q2_noopt(ConnectNew &conn,
         << "s_suppkey_DET = ps_suppkey_DET AND "
         << "p_size_DET = " << encSIZE << " AND "
         << "searchSWP("
-          << marshallBinary(string((char *)t.ciph.content, t.ciph.len))
+          << smartMarshallBinary(string((char *)t.ciph.content, t.ciph.len))
           << ", "
-          << marshallBinary(string((char *)t.wordKey.content, t.wordKey.len))
-          << ", p_type_SWP) = 1 AND "
+          << smartMarshallBinary(string((char *)t.wordKey.content, t.wordKey.len))
+          << ", p_type_SWP) AND "
         << "s_nationkey_DET = n_nationkey_DET AND "
         << "n_regionkey_DET = r_regionkey_DET AND "
-        << "r_name_DET = " << marshallBinary(encNAME) << " AND "
+        << "r_name_DET = " << smartMarshallBinary(encNAME) << " AND "
         << "ps_supplycost_OPE = ("
           << "SELECT "
             << "min(ps_supplycost_OPE) "
@@ -1894,7 +1915,7 @@ static void do_query_q2_noopt(ConnectNew &conn,
             << "s_suppkey_DET = ps_suppkey_DET AND "
             << "s_nationkey_DET = n_nationkey_DET AND "
             << "n_regionkey_DET = r_regionkey_DET AND "
-            << "r_name_DET = " << marshallBinary(encNAME) << ") "
+            << "r_name_DET = " << smartMarshallBinary(encNAME) << ") "
       << "ORDER BY "
         << "s_acctbal_OPE DESC, n_name_OPE, s_name_OPE, p_partkey_OPE "
       << "LIMIT 100";
@@ -2119,6 +2140,8 @@ struct _q3_noopt_task {
             sum += l_disc_price;
           }
 
+          //cerr << row[0].data << "|" << row[2].data << endl;
+
           q3entry_enc cur_group(
                   resultFromStr<uint64_t>(row[0].data),
                   sum,
@@ -2140,13 +2163,23 @@ static void do_query_q3(ConnectNew &conn,
     NamedTimer fcnTimer(__func__);
 
     ostringstream s;
-    s <<
-      "select l_orderkey, sum(l_extendedprice * (100 - l_discount)) as revenue, o_orderdate, o_shippriority, group_concat('a') "
-      "from LINEITEM_INT straight_join ORDERS_INT on l_orderkey = o_orderkey straight_join CUSTOMER_INT on c_custkey = o_custkey "
-      "where c_mktsegment = '" << mktsegment << "' and o_orderdate < date '" << d << "' and l_shipdate > date '" << d << "' "
-      "group by l_orderkey, o_orderdate, o_shippriority "
-      "order by revenue desc, o_orderdate limit 10;"
-      ;
+    if (UseMySQL) {
+      s <<
+        "select l_orderkey, sum(l_extendedprice * (100 - l_discount)) as revenue, o_orderdate, o_shippriority "
+        "from LINEITEM_INT straight_join ORDERS_INT on l_orderkey = o_orderkey straight_join CUSTOMER_INT on c_custkey = o_custkey "
+        "where c_mktsegment = '" << mktsegment << "' and o_orderdate < date '" << d << "' and l_shipdate > date '" << d << "' "
+        "group by l_orderkey, o_orderdate, o_shippriority "
+        "order by revenue desc, o_orderdate limit 10;"
+        ;
+    } else {
+      s <<
+        "select l_orderkey, sum(l_extendedprice * (100 - l_discount)) as revenue, o_orderdate, o_shippriority "
+        "from LINEITEM_INT, ORDERS_INT, CUSTOMER_INT "
+        "where l_orderkey = o_orderkey and c_custkey = o_custkey and c_mktsegment = '" << mktsegment << "' and o_orderdate < date '" << d << "' and l_shipdate > date '" << d << "' "
+        "group by l_orderkey, o_orderdate, o_shippriority "
+        "order by revenue desc, o_orderdate limit 10;"
+        ;
+    }
     cerr << s.str() << endl;
 
     DBResultNew * dbres;
@@ -2186,7 +2219,7 @@ static void do_query_q3_crypt(ConnectNew &conn,
                               getMin(oDET), SECLEVEL::DET, isBin, 12345);
     assert(isBin);
     assert(encMKT.size() == mktsegment.size());
-    encMKT.resize(10);
+    smartResize(encMKT, 10);
 
     string enc_d_o_orderdate =
       cm_stub.crypt<3>(cm.getmkey(), to_s(encode_yyyy_mm_dd(d)),
@@ -2201,18 +2234,35 @@ static void do_query_q3_crypt(ConnectNew &conn,
     DBResultNew * dbres;
 
     ostringstream s;
-    s << "select "
-         "  l_orderkey_DET, "
-         "  group_concat(l_disc_price_DET), "
-         "  o_orderdate_OPE, "
-         "  o_orderdate_DET, "
-         "  o_shippriority_DET "
-         "from lineitem_enc_rowid straight_join orders_enc on l_orderkey_DET = o_orderkey_DET straight_join customer_enc_rowid on c_custkey_DET = o_custkey_DET "
-         "where "
-         "  c_mktsegment_DET = " << marshallBinary(encMKT) <<
-         "  and o_orderdate_OPE < " << enc_d_o_orderdate <<
-         "  and l_shipdate_OPE > " << enc_d_l_shipdate <<
-         " group by l_orderkey_DET, o_orderdate_DET, o_shippriority_DET";
+    if (UseMySQL) {
+      s << "select "
+           "  l_orderkey_DET, "
+           "  " << group_concat("l_disc_price_DET") << ", "
+           "  o_orderdate_OPE, "
+           "  o_orderdate_DET, "
+           "  o_shippriority_DET "
+           "from lineitem_enc_rowid straight_join orders_enc on l_orderkey_DET = o_orderkey_DET straight_join customer_enc_rowid on c_custkey_DET = o_custkey_DET "
+           "where "
+           "  c_mktsegment_DET = " << smartMarshallBinary(encMKT) <<
+           "  and o_orderdate_OPE < " << enc_d_o_orderdate <<
+           "  and l_shipdate_OPE > " << enc_d_l_shipdate <<
+           " group by l_orderkey_DET, o_orderdate_DET, o_shippriority_DET";
+    } else {
+      s << "select "
+           "  l_orderkey_DET, "
+           "  " << group_concat("l_disc_price_DET") << ", "
+           "  o_orderdate_OPE, "
+           "  o_orderdate_DET, "
+           "  o_shippriority_DET "
+           "from lineitem_enc_rowid, orders_enc, customer_enc_rowid "
+           "where "
+           "  l_orderkey_DET = o_orderkey_DET "
+           "  and c_custkey_DET = o_custkey_DET "
+           "  and c_mktsegment_DET = " << smartMarshallBinary(encMKT) <<
+           "  and o_orderdate_OPE < " << enc_d_o_orderdate <<
+           "  and l_shipdate_OPE > " << enc_d_l_shipdate <<
+           " group by l_orderkey_DET, o_orderdate_OPE, o_orderdate_DET, o_shippriority_DET";
+    }
     cerr << s.str() << endl;
 
     {
@@ -2510,7 +2560,7 @@ static void do_query_crypt_q5(ConnectNew &conn,
     assert(isBin);
 
     // right-pad encNAME with 0's
-    encNAME.resize(25);
+    smartResize(encNAME, 25);
 
     string d0 =
       cm_stub.crypt<3>(cm.getmkey(), to_s(encode_yyyy_mm_dd(d)),
@@ -2525,7 +2575,7 @@ static void do_query_crypt_q5(ConnectNew &conn,
     s <<
       "select"
       "  n_name_DET,"
-      " group_concat(l_disc_price_DET) "
+      " " << group_concat("l_disc_price_DET") << " "
       "from"
       "  customer_enc_rowid,"
       "  orders_enc,"
@@ -2540,7 +2590,7 @@ static void do_query_crypt_q5(ConnectNew &conn,
       "  and c_nationkey_DET = s_nationkey_DET"
       "  and s_nationkey_DET = n_nationkey_DET"
       "  and n_regionkey_DET = r_regionkey_DET"
-      "  and r_name_DET = " << marshallBinary(encNAME) << " "
+      "  and r_name_DET = " << smartMarshallBinary(encNAME) << " "
       "  and o_orderdate_OPE >= " << d0 << " "
       "  and o_orderdate_OPE < " << d1 << " "
       "group by"
@@ -2704,7 +2754,7 @@ static void do_query_crypt_q6(ConnectNew &conn,
     string filename =
       "/space/stephentu/data/" + db + "/lineitem_enc/row_pack/revenue";
 
-    string pkinfo = marshallBinary(cm.getPKInfo());
+    string pkinfo = smartMarshallBinary(cm.getPKInfo());
 
     ostringstream s;
     s <<
@@ -2717,9 +2767,9 @@ static void do_query_crypt_q6(ConnectNew &conn,
       "where"
       "  l_shipdate_OPE >= " << d0 << " "
       "  and l_shipdate_OPE < " << d1 << " "
-      "  and l_discount_OPE >= " << marshallBinary(dsc0) << " "
-      " and l_discount_OPE <= " << marshallBinary(dsc1) << " "
-      "  and l_quantity_OPE < " << marshallBinary(qty)
+      "  and l_discount_OPE >= " << smartMarshallBinary(dsc0) << " "
+      " and l_discount_OPE <= " << smartMarshallBinary(dsc1) << " "
+      "  and l_quantity_OPE < " << smartMarshallBinary(qty)
       ;
     cerr << s.str() << endl;
 
@@ -2876,7 +2926,7 @@ static void do_query_crypt_q7(ConnectNew &conn,
                               getMin(oDET), SECLEVEL::DET, isBin, 12345);
     assert(isBin);
     assert(n_a.size() == n_a_enc.size());
-    n_a_enc.resize(25);
+    smartResize(n_a_enc, 25);
 
     isBin = false;
     string n_b_enc = cm_stub.crypt(cm.getmkey(), n_b, TYPE_TEXT,
@@ -2884,9 +2934,9 @@ static void do_query_crypt_q7(ConnectNew &conn,
                               getMin(oDET), SECLEVEL::DET, isBin, 12345);
     assert(isBin);
     assert(n_b.size() == n_b_enc.size());
-    n_b_enc.resize(25);
+    smartResize(n_b_enc, 25);
 
-    string pkinfo = marshallBinary(cm.getPKInfo());
+    string pkinfo = smartMarshallBinary(cm.getPKInfo());
     string filename =
       "/space/stephentu/data/" + db + "/lineitem_enc/row_pack/disc_price";
 
@@ -2915,10 +2965,10 @@ static void do_query_crypt_q7(ConnectNew &conn,
     "  and s_nationkey_DET = n1.n_nationkey_DET"
     "  and c_nationkey_DET = n2.n_nationkey_DET"
     "  and ("
-    "    (n1.n_name_DET = " << marshallBinary(n_a_enc)
-    << " and n2.n_name_DET = " << marshallBinary(n_b_enc) << ")"
-    "    or (n1.n_name_DET = " << marshallBinary(n_b_enc)
-    << " and n2.n_name_DET = " << marshallBinary(n_a_enc) << ")"
+    "    (n1.n_name_DET = " << smartMarshallBinary(n_a_enc)
+    << " and n2.n_name_DET = " << smartMarshallBinary(n_b_enc) << ")"
+    "    or (n1.n_name_DET = " << smartMarshallBinary(n_b_enc)
+    << " and n2.n_name_DET = " << smartMarshallBinary(n_a_enc) << ")"
     "  )"
     "  and l_shipdate_OPE >= " << d0 << " and l_shipdate_OPE <= " << d1;
     cerr << s.str() << endl;
@@ -3141,7 +3191,7 @@ static void do_query_crypt_q8(ConnectNew &conn,
                               getMin(oDET), SECLEVEL::DET, isBin, 12345);
     assert(isBin);
     assert(n_a.size() == n_a_enc.size());
-    n_a_enc.resize(25);
+    smartResize(n_a_enc, 25);
 
     isBin = false;
     string r_a_enc = cm_stub.crypt(cm.getmkey(), r_a, TYPE_TEXT,
@@ -3149,7 +3199,7 @@ static void do_query_crypt_q8(ConnectNew &conn,
                               getMin(oDET), SECLEVEL::DET, isBin, 12345);
     assert(isBin);
     assert(r_a.size() == r_a_enc.size());
-    r_a_enc.resize(25);
+    smartResize(r_a_enc, 25);
 
     isBin = false;
     string p_a_enc = cm_stub.crypt(cm.getmkey(), p_a, TYPE_TEXT,
@@ -3163,7 +3213,7 @@ static void do_query_crypt_q8(ConnectNew &conn,
       "select"
       "  IF(o_orderdate_OPE < " << boundary1 << ", 0, 1),"
       "  l_disc_price_DET,"
-      "  n2.n_name_DET = " << marshallBinary(n_a_enc) << " "
+      "  n2.n_name_DET = " << smartMarshallBinary(n_a_enc) << " "
       "from"
       "  part_enc,"
       "  supplier_enc,"
@@ -3180,10 +3230,10 @@ static void do_query_crypt_q8(ConnectNew &conn,
       "  and o_custkey_DET = c_custkey_DET"
       "  and c_nationkey_DET = n1.n_nationkey_DET"
       "  and n1.n_regionkey_DET = r_regionkey_DET"
-      "  and r_name_DET = " << marshallBinary(r_a_enc) << " "
+      "  and r_name_DET = " << smartMarshallBinary(r_a_enc) << " "
       "  and s_nationkey_DET = n2.n_nationkey_DET"
       "  and o_orderdate_OPE >= " << d0 << " and o_orderdate_OPE <= " << d1 <<
-      "  and p_type_DET = " << marshallBinary(p_a_enc)
+      "  and p_type_DET = " << smartMarshallBinary(p_a_enc)
       ;
     cerr << s.str() << endl;
 
@@ -3417,10 +3467,10 @@ static void do_query_crypt_q9(ConnectNew &conn,
     "  and o_orderkey_DET = l_orderkey_DET "
     "  and s_nationkey_DET = n_nationkey_DET "
     "  and searchSWP("
-          << marshallBinary(string((char *)t.ciph.content, t.ciph.len))
+          << smartMarshallBinary(string((char *)t.ciph.content, t.ciph.len))
           << ", "
-          << marshallBinary(string((char *)t.wordKey.content, t.wordKey.len))
-          << ", p_name_SWP) = 1";
+          << smartMarshallBinary(string((char *)t.wordKey.content, t.wordKey.len))
+          << ", p_name_SWP)";
   cerr << s.str() << endl;
 
   DBResultNew * dbres;
@@ -3666,7 +3716,7 @@ static void do_query_crypt_q10(ConnectNew &conn,
     "  c_address_DET, "
     "  c_phone_DET, "
     "  c_comment_DET, "
-    " group_concat(l_disc_price_DET) "
+    " " << group_concat("l_disc_price_DET") << " "
     "from "
     "lineitem_enc_rowid straight_join orders_enc straight_join customer_enc_rowid straight_join nation_enc "
     "where "
@@ -3879,10 +3929,10 @@ static void do_query_q11_noopt(ConnectNew &conn,
                               getMin(oDET), SECLEVEL::DET, isBin, 12345);
     assert(isBin);
     assert(encNAME.size() == name.size());
-    encNAME.resize(25);
+    smartResize(encNAME, 25);
 
     ostringstream s;
-    s << "SELECT SQL_NO_CACHE "
+    s << "SELECT  "
         << "ps_partkey_DET, "
         << "ps_supplycost_DET, "
         << "ps_availqty_DET "
@@ -3890,7 +3940,7 @@ static void do_query_q11_noopt(ConnectNew &conn,
       << "WHERE "
         << "ps_suppkey_DET = s_suppkey_DET AND "
         << "s_nationkey_DET = n_nationkey_DET AND "
-        << "n_name_DET = " << marshallBinary(encNAME);
+        << "n_name_DET = " << smartMarshallBinary(encNAME);
     cerr << s.str() << endl;
 
     DBResultNew * dbres;
@@ -4019,7 +4069,7 @@ static void do_query_q11(ConnectNew &conn,
     NamedTimer fcnTimer(__func__);
 
     ostringstream s;
-    s << "select SQL_NO_CACHE ps_partkey, sum(ps_supplycost * ps_availqty) as value "
+    s << "select  ps_partkey, sum(ps_supplycost * ps_availqty) as value "
       << "from PARTSUPP, SUPPLIER, NATION "
       << "where ps_suppkey = s_suppkey and s_nationkey = n_nationkey and n_name = '" << name << "' "
       << "group by ps_partkey having sum(ps_supplycost * ps_availqty) > ("
@@ -4080,7 +4130,7 @@ static void do_query_q11_nosubquery(ConnectNew &conn,
     }
 
     ostringstream s;
-    s << "select SQL_NO_CACHE ps_partkey, sum(ps_supplycost * ps_availqty) as value "
+    s << "select  ps_partkey, sum(ps_supplycost * ps_availqty) as value "
       << "from PARTSUPP_INT, SUPPLIER_INT, NATION_INT "
       << "where ps_suppkey = s_suppkey and s_nationkey = n_nationkey and n_name = '" << name << "' "
       << "group by ps_partkey having sum(ps_supplycost * ps_availqty) > " << roundToLong(threshold * 10000.0)
@@ -4121,14 +4171,14 @@ static void do_query_q11_opt_proj(ConnectNew &conn,
                               fieldname(nation::n_name, "DET"),
                               getMin(oDET), SECLEVEL::DET, isBin, 12345);
 
-    string pkinfo = marshallBinary(cm.getPKInfo());
+    string pkinfo = smartMarshallBinary(cm.getPKInfo());
     ostringstream s;
-    s << "SELECT SQL_NO_CACHE "
+    s << "SELECT  "
         << "agg(ps_value_bitpacked_AGG, " << pkinfo << ") "
       << "FROM partsupp_enc_proj, nation_enc "
       << "WHERE "
         << "n_nationkey_DET = nationkey_DET AND "
-        << "n_name_DET = " << marshallBinary(encNAME);
+        << "n_name_DET = " << smartMarshallBinary(encNAME);
 
     DBResultNew * dbres;
     {
@@ -4171,17 +4221,17 @@ static void do_query_q11_opt_proj(ConnectNew &conn,
     // same time, while optimizing for minimum data sent back
     ostringstream s1;
     s1
-      << "SELECT SQL_NO_CACHE ps_partkey_DET, ps_value_DET, cnt, suppkeys FROM ("
-        << "SELECT SQL_NO_CACHE "
+      << "SELECT  ps_partkey_DET, ps_value_DET, cnt, suppkeys FROM ("
+        << "SELECT  "
           << "ps_partkey_DET, ps_value_DET, "
           << "COUNT(*) AS cnt, COUNT(*) > 1 OR ps_value_OPE > "
             << encVALUE << " AS filter, "
-          << "CASE COUNT(*) WHEN 1 THEN NULL ELSE GROUP_CONCAT(ps_suppkey_DET) END AS suppkeys "
+          << "CASE COUNT(*) WHEN 1 THEN NULL ELSE " << group_concat("ps_suppkey_DET") << " END AS suppkeys "
         << "FROM partsupp_enc, supplier_enc, nation_enc "
         << "WHERE "
           << "ps_suppkey_DET = s_suppkey_DET AND "
           << "s_nationkey_DET = n_nationkey_DET AND "
-          << "n_name_DET = " << marshallBinary(encNAME) << " "
+          << "n_name_DET = " << smartMarshallBinary(encNAME) << " "
         << "GROUP BY ps_partkey_DET"
       << ") AS __ANON__ WHERE filter = 1";
     //cerr << s1.str() << endl;
@@ -4265,7 +4315,7 @@ static void do_query_q11_opt_proj(ConnectNew &conn,
 
     ostringstream s2;
     s2
-      << "SELECT SQL_NO_CACHE "
+      << "SELECT  "
         << "ps_partkey_DET, ps_value_DET "
       << "FROM partsupp_enc "
       << "WHERE " << join(mapped, " OR ");
@@ -4344,17 +4394,17 @@ static void do_query_q11_opt(ConnectNew &conn,
                               getMin(oDET), SECLEVEL::DET, isBin, 12345);
     assert(isBin);
     assert(encNAME.size() == name.size());
-    encNAME.resize(25);
+    smartResize(encNAME, 25);
 
-    string pkinfo = marshallBinary(cm.getPKInfo());
+    string pkinfo = smartMarshallBinary(cm.getPKInfo());
     ostringstream s;
-    s << "SELECT SQL_NO_CACHE "
+    s << "SELECT  "
         << "agg(ps_value_AGG, " << pkinfo << ") "
       << "FROM partsupp_enc, supplier_enc, nation_enc "
       << "WHERE "
         << "ps_suppkey_DET = s_suppkey_DET AND "
         << "s_nationkey_DET = n_nationkey_DET AND "
-        << "n_name_DET = " << marshallBinary(encNAME)
+        << "n_name_DET = " << smartMarshallBinary(encNAME)
         ;
     cerr << s.str() << endl;
 
@@ -4402,17 +4452,17 @@ static void do_query_q11_opt(ConnectNew &conn,
     // same time, while optimizing for minimum data sent back
     ostringstream s1;
     s1
-      << "SELECT SQL_NO_CACHE ps_partkey_DET, ps_value_DET, cnt, suppkeys FROM ("
+      << "SELECT  ps_partkey_DET, ps_value_DET, cnt, suppkeys FROM ("
         << "SELECT "
           << "ps_partkey_DET, ps_value_DET, "
           << "COUNT(*) AS cnt, COUNT(*) > 1 OR ps_value_OPE > "
-            << marshallBinary(encVALUE) << " AS filter, "
-          << "CASE COUNT(*) WHEN 1 THEN NULL ELSE GROUP_CONCAT(ps_suppkey_DET) END AS suppkeys "
+            << smartMarshallBinary(encVALUE) << " AS filter, "
+          << "CASE COUNT(*) WHEN 1 THEN NULL ELSE " << group_concat("ps_suppkey_DET") << " END AS suppkeys "
         << "FROM partsupp_enc, supplier_enc, nation_enc "
         << "WHERE "
           << "ps_suppkey_DET = s_suppkey_DET AND "
           << "s_nationkey_DET = n_nationkey_DET AND "
-          << "n_name_DET = " << marshallBinary(encNAME) << " "
+          << "n_name_DET = " << smartMarshallBinary(encNAME) << " "
         << "GROUP BY ps_partkey_DET"
       << ") AS __ANON__ WHERE filter = 1";
     cerr << s1.str() << endl;
@@ -4492,7 +4542,7 @@ static void do_query_q11_opt(ConnectNew &conn,
 
         ostringstream s2;
         s2
-          << "SELECT SQL_NO_CACHE "
+          << "SELECT  "
             << "ps_partkey_DET, ps_value_DET "
           << "FROM partsupp_enc "
           << "WHERE " << join(mapped, " OR ");
@@ -4575,16 +4625,16 @@ static void do_query_q11_opt(ConnectNew &conn,
 //    assert(encNAME.size() == name.size());
 //    encNAME.resize(25);
 //
-//    string pkinfo = marshallBinary(cm.getPKInfo());
+//    string pkinfo = smartMarshallBinary(cm.getPKInfo());
 //    ostringstream s;
-//    s << "SELECT SQL_NO_CACHE "
+//    s << "SELECT  "
 //        << "ps_partkey_DET, "
 //        << "agg(ps_value_AGG, " << pkinfo << ") "
 //      << "FROM partsupp_enc, supplier_enc, nation_enc "
 //      << "WHERE "
 //        << "ps_suppkey_DET = s_suppkey_DET AND "
 //        << "s_nationkey_DET = n_nationkey_DET AND "
-//        << "n_name_DET = " << marshallBinary(encNAME) << " "
+//        << "n_name_DET = " << smartMarshallBinary(encNAME) << " "
 //      << "GROUP BY ps_partkey_DET";
 //    cerr << s.str() << endl;
 //
@@ -4762,14 +4812,14 @@ static void do_query_crypt_q12(ConnectNew &conn,
     "select "
     "  l_shipmode_DET, "
     "  sum(case "
-    "    when o_orderpriority_DET = " << marshallBinary(ourgent_ct) << " "
-    "      or o_orderpriority_DET = " << marshallBinary(ohigh_ct)   << " "
+    "    when o_orderpriority_DET = " << smartMarshallBinary(ourgent_ct) << " "
+    "      or o_orderpriority_DET = " << smartMarshallBinary(ohigh_ct)   << " "
     "      then 1 "
     "    else 0 "
     "  end) as high_line_count, "
     "  sum(case "
-    "    when o_orderpriority_DET  <> " << marshallBinary(ourgent_ct) << " "
-    "      and o_orderpriority_DET <> " << marshallBinary(ohigh_ct)   << " "
+    "    when o_orderpriority_DET  <> " << smartMarshallBinary(ourgent_ct) << " "
+    "      and o_orderpriority_DET <> " << smartMarshallBinary(ohigh_ct)   << " "
     "      then 1 "
     "    else 0 "
     "  end) as low_line_count "
@@ -4778,8 +4828,8 @@ static void do_query_crypt_q12(ConnectNew &conn,
     "  lineitem_enc_rowid "
     "where "
     "  o_orderkey_DET = l_orderkey_DET "
-    "  and l_shipmode_DET in (" << marshallBinary(l_a_enc)
-    << ", " << marshallBinary(l_b_enc) << ") "
+    "  and l_shipmode_DET in (" << smartMarshallBinary(l_a_enc)
+    << ", " << smartMarshallBinary(l_b_enc) << ") "
     "  and l_commitdate_OPE < l_receiptdate_OPE "
     "  and l_shipdate_OPE < l_commitdate_OPE "
     "  and l_receiptdate_OPE >= " << d0 << " "
@@ -4835,15 +4885,15 @@ static void do_query_q14_opt(ConnectNew &conn,
     Binary key(cm.getKey(cm.getmkey(), fieldname(part::p_type, "SWP"), SECLEVEL::SWP));
     Token t = CryptoManager::token(key, Binary("promo"));
 
-    string pkinfo = marshallBinary(cm.getPKInfo());
+    string pkinfo = smartMarshallBinary(cm.getPKInfo());
     ostringstream s;
-    s << "SELECT SQL_NO_CACHE "
+    s << "SELECT  "
         << "agg(CASE WHEN "
           << "searchSWP("
-            << marshallBinary(string((char *)t.ciph.content, t.ciph.len))
+            << smartMarshallBinary(string((char *)t.ciph.content, t.ciph.len))
             << ", "
-            << marshallBinary(string((char *)t.wordKey.content, t.wordKey.len))
-            << ", p_type_SWP) = 1 "
+            << smartMarshallBinary(string((char *)t.wordKey.content, t.wordKey.len))
+            << ", p_type_SWP) "
           << "THEN l_bitpacked_AGG ELSE NULL END, " << pkinfo << "), "
         << "agg(l_bitpacked_AGG, " << pkinfo << ") "
       << "FROM lineitem_enc, part_enc "
@@ -4917,20 +4967,20 @@ static void do_query_q14_opt2(ConnectNew &conn,
     Binary key(cm.getKey(cm.getmkey(), fieldname(part::p_type, "SWP"), SECLEVEL::SWP));
     Token t = CryptoManager::token(key, Binary("promo"));
 
-    string pkinfo = marshallBinary(cm.getPKInfo());
+    string pkinfo = smartMarshallBinary(cm.getPKInfo());
     ostringstream s;
 
     string filename =
       "/space/stephentu/data/" + db + "/lineitem_enc/row_pack/disc_price";
 
-    s << "SELECT SQL_NO_CACHE agg_hash_agg_row_col_pack(0, row_id, "
+    s << "SELECT  agg_hash_agg_row_col_pack(0, row_id, "
         << pkinfo << ", " <<
         "\"" << filename << "\", " << NumThreads << ", 256, 12, "
         << "searchSWP("
-          << marshallBinary(string((char *)t.ciph.content, t.ciph.len))
+          << smartMarshallBinary(string((char *)t.ciph.content, t.ciph.len))
           << ", "
-          << marshallBinary(string((char *)t.wordKey.content, t.wordKey.len))
-          << ", p_type_SWP) = 1, 1) "
+          << smartMarshallBinary(string((char *)t.wordKey.content, t.wordKey.len))
+          << ", p_type_SWP), 1) "
       << "FROM lineitem_enc_rowid, part_enc_tmp "
       << "WHERE "
         << "l_partkey_DET = p_partkey_DET AND "
@@ -5077,7 +5127,7 @@ static void do_query_q14_noopt(ConnectNew &conn,
             TYPE_INTEGER, "ope_join",
             getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
     ostringstream s;
-    s << "SELECT SQL_NO_CACHE p_type_DET, l_disc_price_DET "
+    s << "SELECT  p_type_DET, l_disc_price_DET "
         << "FROM " << string(use_opt_table ? "lineitem_enc" : "lineitem_enc_rowid")
           << ", part_enc_tmp "
         << "WHERE l_partkey_DET = p_partkey_DET AND "
@@ -5195,7 +5245,7 @@ static void do_query_q14(ConnectNew &conn,
     }
 
     ostringstream s;
-    s << "select SQL_NO_CACHE 100.00 * sum(case when p_type like 'PROMO%' then l_extendedprice * (100 - l_discount) else 0 end) / sum(l_extendedprice * (100 - l_discount)) as promo_revenue from LINEITEM_INT, part_tmp where l_partkey = p_partkey and l_shipdate >= date '" << year << "-07-01' and l_shipdate < date '" << year << "-07-01' + interval '1' month";
+    s << "select  100.00 * sum(case when p_type like 'PROMO%' then l_extendedprice * (100 - l_discount) else 0 end) / sum(l_extendedprice * (100 - l_discount)) as promo_revenue from LINEITEM_INT, part_tmp where l_partkey = p_partkey and l_shipdate >= date '" << year << "-07-01' and l_shipdate < date '" << year << "-07-01' + interval '1' month";
     cerr << s.str() << endl;
 
     DBResultNew * dbres;
@@ -5365,7 +5415,7 @@ static void do_query_crypt_q15(ConnectNew &conn,
   s <<
     "select "
     "  l_suppkey_DET, "
-    "  group_concat(l_disc_price_DET) "
+    "  " << group_concat("l_disc_price_DET") << " "
     "from "
     "  lineitem_enc_rowid "
     "where "
@@ -5633,11 +5683,11 @@ static void do_query_crypt_q17(ConnectNew &conn,
   ostringstream s;
   s <<
     "select "
-    "l_partkey_DET, group_concat(l_quantity_DET), group_concat(l_extendedprice_DET) "
+    "l_partkey_DET, " << group_concat("l_quantity_DET") << ", " << group_concat("l_extendedprice_DET") << " "
     "from lineitem_enc_rowid, part_enc "
     "where p_partkey_DET = l_partkey_DET and "
-    "p_brand_DET = "     << marshallBinary(p_a_enc) << " and "
-    "p_container_DET = " << marshallBinary(p_b_enc) << " "
+    "p_brand_DET = "     << smartMarshallBinary(p_a_enc) << " and "
+    "p_container_DET = " << smartMarshallBinary(p_b_enc) << " "
     "group by l_partkey_DET"
     ;
   cerr << s.str() << endl;
@@ -5828,7 +5878,7 @@ static void do_query_q18_crypt(ConnectNew &conn,
 
     // query 1
     s <<
-        "select l_orderkey_DET, group_concat(l_quantity_DET) "
+        "select l_orderkey_DET, " << group_concat("l_quantity_DET") << " "
         "from lineitem_enc_rowid "
         "group by l_orderkey_DET "
         "having count(*) >= " << minGroupCount;
@@ -5917,11 +5967,11 @@ static void do_query_q18_crypt(ConnectNew &conn,
 
     if (l_orderkeys.empty()) return;
 
-    //string pkinfo = marshallBinary(cm.getPKInfo());
+    //string pkinfo = smartMarshallBinary(cm.getPKInfo());
     s1 <<
         "select "
         "    c_name_DET, c_custkey_DET, o_orderkey_DET, "
-        "    o_orderdate_DET, o_totalprice_DET, group_concat(l_quantity_DET) "
+        "    o_orderdate_DET, o_totalprice_DET, " << group_concat("l_quantity_DET") << " "
         "from "
         "    customer_enc_rowid, orders_enc, lineitem_enc_rowid "
         "where "
@@ -6045,7 +6095,7 @@ static void do_query_q18_crypt_opt2(ConnectNew &conn,
     ostringstream s;
 
     // query 1
-    string pkinfo = marshallBinary(cm.getPKInfo());
+    string pkinfo = smartMarshallBinary(cm.getPKInfo());
     s <<
         "select "
             "l_orderkey_DET, "
@@ -6194,7 +6244,7 @@ static void do_query_q18_crypt_opt(ConnectNew &conn,
     ostringstream s;
 
     // query 1
-    string pkinfo = marshallBinary(cm.getPKInfo());
+    string pkinfo = smartMarshallBinary(cm.getPKInfo());
     s <<
         "select "
             "l_orderkey_DET, "
@@ -6360,7 +6410,7 @@ static void do_query_q20(ConnectNew &conn,
 
     //ostringstream s;
     //s <<
-    //"select SQL_NO_CACHE s_name, s_address from SUPPLIER, NATION "
+    //"select  s_name, s_address from SUPPLIER, NATION "
     //"where s_suppkey in ( "
     //    "select ps_suppkey from ( "
     //    "select ps_suppkey, ps_availqty from PARTSUPP, LINEITEM "
@@ -6408,7 +6458,7 @@ static void do_query_q20(ConnectNew &conn,
         // the comparison more fair (like 'token%' is probably implemented
         // efficiently as a prefix scan)
         ostringstream s;
-        s << "select SQL_NO_CACHE p_partkey from PART_INT where p_name like '%" << p_name << "%'";
+        s << "select  p_partkey from PART_INT where p_name like '%" << p_name << "%'";
 
         DBResultNew * dbres;
         {
@@ -6433,7 +6483,7 @@ static void do_query_q20(ConnectNew &conn,
     {
         ostringstream s;
         s <<
-        "select SQL_NO_CACHE ps_suppkey, ps_availqty from PARTSUPP_INT, LINEITEM_INT "
+        "select  ps_suppkey, ps_availqty from PARTSUPP_INT, LINEITEM_INT "
         " where "
         "     ps_partkey = l_partkey and "
         "     ps_suppkey = l_suppkey and "
@@ -6471,7 +6521,7 @@ static void do_query_q20(ConnectNew &conn,
     {
         ostringstream s;
         s <<
-        "select SQL_NO_CACHE s_name, s_address from SUPPLIER_INT, NATION_INT where s_suppkey in ( "
+        "select  s_name, s_address from SUPPLIER_INT, NATION_INT where s_suppkey in ( "
         << join(suppkeys ,",") <<
         ") and s_nationkey = n_nationkey and n_name = '" << n_name << "' order by s_name";
 
@@ -6522,7 +6572,7 @@ static void do_query_q20_opt_noagg(ConnectNew &conn,
     assert(isBin);
 
     // right-pad encNAME with 0's
-    encNAME.resize(25);
+    smartResize(encNAME, 25);
 
     Binary key(cm.getKey(cm.getmkey(), fieldname(part::p_name, "SWP"), SECLEVEL::SWP));
     Token t = CryptoManager::token(key, Binary(lowerpname));
@@ -6531,11 +6581,11 @@ static void do_query_q20_opt_noagg(ConnectNew &conn,
     {
         ostringstream s;
         s <<
-        "select SQL_NO_CACHE p_partkey_DET from part_enc where searchSWP("
-          << marshallBinary(string((char *)t.ciph.content, t.ciph.len))
+        "select  p_partkey_DET from part_enc where searchSWP("
+          << smartMarshallBinary(string((char *)t.ciph.content, t.ciph.len))
           << ", "
-          << marshallBinary(string((char *)t.wordKey.content, t.wordKey.len))
-          << ", p_name_SWP) = 1";
+          << smartMarshallBinary(string((char *)t.wordKey.content, t.wordKey.len))
+          << ", p_name_SWP)";
 
         DBResultNew * dbres;
         {
@@ -6558,7 +6608,7 @@ static void do_query_q20_opt_noagg(ConnectNew &conn,
 
     ostringstream s;
     //s <<
-    //    "select SQL_NO_CACHE ps_partkey_DET, ps_suppkey_DET, ps_availqty_DET, l_quantity_DET "
+    //    "select  ps_partkey_DET, ps_suppkey_DET, ps_availqty_DET, l_quantity_DET "
     //    //"from partsupp_enc_noopt, lineitem_enc_noagg "
     //    "from lineitem_enc_noagg STRAIGHT_JOIN partsupp_enc_noopt "
     //    "where "
@@ -6573,7 +6623,7 @@ static void do_query_q20_opt_noagg(ConnectNew &conn,
 
     // this strategy seems to perform better than the one above
     s <<
-        "select SQL_NO_CACHE ps_partkey_DET, ps_suppkey_DET, ps_availqty_DET, group_concat(l_quantity_DET) "
+        "select  ps_partkey_DET, ps_suppkey_DET, ps_availqty_DET, " << group_concat("l_quantity_DET") << " "
         "from partsupp_enc, lineitem_enc_rowid "
         "where "
         "    ps_partkey_DET = l_partkey_DET and "
@@ -6662,7 +6712,7 @@ static void do_query_q20_opt_noagg(ConnectNew &conn,
         "where "
         "  s_suppkey_DET in (" << join(s_suppkeys, ", ") << ") and "
         "  s_nationkey_DET = n_nationkey_DET and "
-        "  n_name_DET = " << marshallBinary(encNAME) << " "
+        "  n_name_DET = " << smartMarshallBinary(encNAME) << " "
         "order by s_name_OPE";
     //cerr << s1.str() << endl;
 
@@ -6726,7 +6776,7 @@ static void do_query_q20_opt(ConnectNew &conn,
     assert(isBin);
 
     // right-pad encNAME with 0's
-    encNAME.resize(25);
+    smartResize(encNAME, 25);
 
     Binary key(cm.getKey(cm.getmkey(), fieldname(part::p_name, "SWP"), SECLEVEL::SWP));
     Token t = CryptoManager::token(key, Binary(lowerpname));
@@ -6735,11 +6785,11 @@ static void do_query_q20_opt(ConnectNew &conn,
     {
         ostringstream s;
         s <<
-        "select SQL_NO_CACHE p_partkey_DET from part_enc where searchSWP("
-          << marshallBinary(string((char *)t.ciph.content, t.ciph.len))
+        "select  p_partkey_DET from part_enc where searchSWP("
+          << smartMarshallBinary(string((char *)t.ciph.content, t.ciph.len))
           << ", "
-          << marshallBinary(string((char *)t.wordKey.content, t.wordKey.len))
-          << ", p_name_SWP) = 1";
+          << smartMarshallBinary(string((char *)t.wordKey.content, t.wordKey.len))
+          << ", p_name_SWP)";
 
         DBResultNew * dbres;
         {
@@ -6759,10 +6809,10 @@ static void do_query_q20_opt(ConnectNew &conn,
         }
     }
 
-    string pkinfo = marshallBinary(cm.getPKInfo());
+    string pkinfo = smartMarshallBinary(cm.getPKInfo());
     ostringstream s;
     s <<
-        "select SQL_NO_CACHE ps_suppkey_DET, ps_availqty_DET, agg(l_bitpacked_AGG, " << pkinfo << ") "
+        "select  ps_suppkey_DET, ps_availqty_DET, agg(l_bitpacked_AGG, " << pkinfo << ") "
         "from partsupp_enc, lineitem_enc_rowid "
         "where "
         "    ps_partkey_DET = l_partkey_DET and "
@@ -6826,7 +6876,7 @@ static void do_query_q20_opt(ConnectNew &conn,
         "where "
         "  s_suppkey_DET in (" << join(s_suppkeys, ", ") << ") and "
         "  s_nationkey_DET = n_nationkey_DET and "
-        "  n_name_DET = " << marshallBinary(encNAME) << " "
+        "  n_name_DET = " << smartMarshallBinary(encNAME) << " "
         "order by s_name_OPE";
     //cerr << s1.str() << endl;
 
@@ -6978,14 +7028,14 @@ static void do_query_crypt_q22(ConnectNew &conn,
   codes_cts.reserve(codes.size());
   for (auto c : codes) {
     codes_cts.push_back(
-      marshallBinary(
+      smartMarshallBinary(
       enc_fixed_len_str(
           c, fieldname(customer::c_phone, "DET"), cm, 2)));
   }
 
   string filename =
     "/space/stephentu/data/" + db + "/customer_enc/row_pack/acctbal";
-  string pkinfo = marshallBinary(cm.getPKInfo());
+  string pkinfo = smartMarshallBinary(cm.getPKInfo());
 
   ostringstream s;
   s <<
@@ -7077,7 +7127,7 @@ static void do_query_crypt_q22(ConnectNew &conn,
       "  customer_enc_rowid "
       "where "
       "  c_phone_prefix_DET IN (" << join(codes_cts, ",") << ") "
-      "  and c_acctbal_OPE > " << marshallBinary(avgENC) <<
+      "  and c_acctbal_OPE > " << smartMarshallBinary(avgENC) <<
       "  and not exists ( "
       "    select "
       "      * "
@@ -7350,7 +7400,7 @@ int main(int argc, char **argv) {
 
     ConnectNew* _conn =
       (UseMySQL) ? (ConnectNew*) new MySQLConnect(hostname, "root", "", db_name, 3307) :
-                   (ConnectNew*) new PGConnect(hostname, "stephentu", "letmein", db_name, 5432);
+                   (ConnectNew*) new PGConnect(hostname, "stephentu", "letmein", db_name, 5433);
     ConnectNew& conn = *_conn;
 
     CryptoManager cm("12345");

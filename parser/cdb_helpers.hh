@@ -1,6 +1,7 @@
 #pragma once
 
 #include <iostream>
+#include <sstream>
 #include <map>
 
 #include <crypto/aes.hh>
@@ -15,6 +16,28 @@
 #include <NTL/ZZ.h>
 
 #define NELEMS(array) (sizeof(array) / sizeof(array[0]))
+
+template <typename T>
+inline string to_hex(const T& t) {
+    std::ostringstream s;
+    s << std::hex << t;
+    return s.str();
+}
+
+template <>
+inline string to_hex(const string& input) {
+    size_t len = input.length();
+    const char* const lut = "0123456789ABCDEF";
+
+    std::string output;
+    output.reserve(2 * len);
+    for (size_t i = 0; i < len; ++i) {
+        const unsigned char c = (unsigned char) input[i];
+        output.push_back(lut[c >> 4]);
+        output.push_back(lut[c & 15]);
+    }
+    return output;
+}
 
 inline long roundToLong(double x) {
     return ((x)>=0?(long)((x)+0.5):(long)((x)-0.5));

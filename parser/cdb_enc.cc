@@ -49,29 +49,6 @@ typedef enum datatypes {
 } datatypes;
 
 template <typename T>
-inline string to_hex(const T& t) {
-    ostringstream s;
-    s << hex << t;
-    return s.str();
-}
-
-static const char* const lut = "0123456789ABCDEF";
-
-template <>
-inline string to_hex(const string& input) {
-    size_t len = input.length();
-
-    std::string output;
-    output.reserve(2 * len);
-    for (size_t i = 0; i < len; ++i) {
-        const unsigned char c = (unsigned char) input[i];
-        output.push_back(lut[c >> 4]);
-        output.push_back(lut[c & 15]);
-    }
-    return output;
-}
-
-template <typename T>
 static inline string to_mysql_hex(T t) {
     ostringstream buf;
     buf << "X'" << to_hex(t) << "'";

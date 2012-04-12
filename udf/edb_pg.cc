@@ -16,6 +16,14 @@ getba(PG_FUNCTION_ARGS, int i, unsigned int & len)
     return eValueBytes;
 }
 
+static inline unsigned char *
+getba_rdonly(PG_FUNCTION_ARGS, int i, unsigned int & len)
+{
+    bytea * eValue = PG_GETARG_BYTEA_P(i);
+    len = VARSIZE(eValue) - VARHDRSZ;
+    return (unsigned char *) VARDATA(eValue);
+}
+
 #define PG_PASS_FARGS fcinfo
 
 extern "C" {
@@ -26,15 +34,35 @@ extern "C" {
 
 PG_MODULE_MAGIC;
 
+// create function bytea_cmp_less(bytea, bytea) returns bytea language C as '/home/stephentu/cryptdb/obj/udf/edb_pg.so' strict;
+// create aggregate min ( sfunc=bytea_cmp_less, basetype=bytea, stype=bytea );
+Datum bytea_cmp_less(PG_FUNCTION_ARGS);
+
 Datum searchswp(PG_FUNCTION_ARGS);
 
 Datum test_sum_add(PG_FUNCTION_ARGS);
 Datum test_sum_final(PG_FUNCTION_ARGS);
 
+PG_FUNCTION_INFO_V1(bytea_cmp_less);
 PG_FUNCTION_INFO_V1(searchswp);
 
 PG_FUNCTION_INFO_V1(test_sum_add);
 PG_FUNCTION_INFO_V1(test_sum_final);
+
+Datum bytea_cmp_less(PG_FUNCTION_ARGS) {
+  unsigned int l1, l2;
+  unsigned char* b1 = getba_rdonly(PG_PASS_FARGS, 0, l1);
+  unsigned char* b2 = getba_rdonly(PG_PASS_FARGS, 1, l2);
+
+  int res = memcmp(b1, b2, l1 < l2 ? l1 : l2);
+  unsigned char *p = (res < 0) ? b1 : b2;
+  unsigned int l = (res < 0) ? l1 : l2;
+
+  unsigned char* ret = (unsigned char *) palloc( l + VARHDRSZ );
+  SET_VARSIZE(ret, l + VARHDRSZ);
+  memcpy(VARDATA(ret), p, l);
+  PG_RETURN_BYTEA_P(ret);
+}
 
 // create function searchSWP(bytea, bytea, bytea) returns bool language C as '/home/stephentu/cryptdb/obj/udf/edb_pg.so';
 Datum searchswp(PG_FUNCTION_ARGS) {
