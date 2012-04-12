@@ -79,6 +79,31 @@ class PGDBRes : public DBResultNew {
         for (unsigned int col = 0; col < cols; col++) {
           SqlItem item;
           item.data = string(PQgetvalue(native, row, col), PQgetlength(native, row, col));
+          if (PQftype(native, col) == 17 /*BYTEAOID*/) {
+            // need to escape (binary string)
+            ostringstream o;
+            for (size_t i = 0; i < item.data.size(); ) {
+              switch (item.data[i]) {
+                case '\\':
+                  if (item.data[i + 1] == '\\') {
+                    o << '\\';
+                    i += 2;
+                  } else {
+                    char buf[3];
+                    buf[0] = item.data[i + 1];
+                    buf[1] = item.data[i + 2];
+                    buf[2] = item.data[i + 3];
+                    o << (unsigned char) strtoul(buf, NULL, 8);
+                    i += 4;
+                  }
+                  break;
+                default:
+                  o << item.data[i];
+                  i++;
+              }
+            }
+            item.data = o.str();
+          }
           resrow.push_back(item);
         }
         res.rows.push_back(resrow);

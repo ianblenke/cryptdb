@@ -3211,7 +3211,7 @@ static void do_query_crypt_q8(ConnectNew &conn,
     ostringstream s;
     s <<
       "select"
-      "  IF(o_orderdate_OPE < " << boundary1 << ", 0, 1),"
+      "  CASE WHEN o_orderdate_OPE < " << boundary1 << " THEN 0 ELSE 1 END,"
       "  l_disc_price_DET,"
       "  n2.n_name_DET = " << smartMarshallBinary(n_a_enc) << " "
       "from"
@@ -3285,10 +3285,12 @@ static void do_query_crypt_q8(ConnectNew &conn,
       }
 
       for (auto it = merged.begin(); it != merged.end(); ++it) {
-        results.push_back(
-            q8entry(
-              it->first,
-              it->second.first / it->second.second));
+        if (it->second.first > 0.0) {
+          results.push_back(
+              q8entry(
+                it->first,
+                it->second.first / it->second.second));
+        }
       }
     }
 }
@@ -3355,15 +3357,15 @@ static void do_query_q9(ConnectNew &conn,
     }
 }
 
-static string make_if_predicate(
+static string make_cases(
     size_t cur, const vector<string>& boundaries, const string& ope_field) {
   assert(cur <= boundaries.size());
   ostringstream buf;
   if (cur == boundaries.size()) {
-    buf << cur;
+    buf << "ELSE " << cur;
   } else {
-    buf << "IF(" << ope_field << " < " << boundaries[cur] << ", " << cur << ", "
-        << make_if_predicate(cur + 1, boundaries, ope_field) << ")";
+    buf << "WHEN " << ope_field << " < " << boundaries[cur] << " THEN " << cur << " "
+        << make_cases(cur + 1, boundaries, ope_field);
   }
   return buf.str();
 }
@@ -3450,7 +3452,7 @@ static void do_query_crypt_q9(ConnectNew &conn,
   ostringstream s;
   s <<
     "select "
-    "  n_name_DET, " << make_if_predicate(0, boundaries, "o_orderdate_OPE") << ", "
+    "  n_name_DET, " << "CASE " << make_cases(0, boundaries, "o_orderdate_OPE") << " END, "
     "  l_disc_price_DET, ps_supplycost_DET, l_quantity_DET "
     "from "
     "  part_enc, "
@@ -3552,7 +3554,11 @@ static void do_query_q10(ConnectNew &conn,
     "  c_phone, "
     "  c_comment "
     "from "
-    "LINEITEM_INT straight_join ORDERS_INT straight_join CUSTOMER_INT straight_join NATION_INT "
+    <<
+    ((UseMySQL) ?
+      "LINEITEM_INT straight_join ORDERS_INT straight_join CUSTOMER_INT straight_join NATION_INT " :
+      "LINEITEM_INT, ORDERS_INT, CUSTOMER_INT, NATION_INT ")
+    <<
     "where "
     "  c_custkey = o_custkey "
     "  and l_orderkey = o_orderkey "
@@ -3718,7 +3724,11 @@ static void do_query_crypt_q10(ConnectNew &conn,
     "  c_comment_DET, "
     " " << group_concat("l_disc_price_DET") << " "
     "from "
-    "lineitem_enc_rowid straight_join orders_enc straight_join customer_enc_rowid straight_join nation_enc "
+    <<
+    ((UseMySQL) ?
+    "lineitem_enc_rowid straight_join orders_enc straight_join customer_enc_rowid straight_join nation_enc " :
+    "lineitem_enc_rowid, orders_enc, customer_enc_rowid, nation_enc ")
+    <<
     "where "
     "  c_custkey_DET = o_custkey_DET "
     "  and l_orderkey_DET = o_orderkey_DET "
@@ -4767,7 +4777,7 @@ static string enc_fixed_len_str(
                             isBin, 12345);
   assert(isBin);
   assert(ct.size() == pt.size());
-  ct.resize(fixed_len);
+  smartResize(ct, fixed_len);
   return ct;
 }
 
