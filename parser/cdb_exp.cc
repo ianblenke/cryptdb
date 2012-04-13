@@ -1825,11 +1825,31 @@ static void do_query_q2(ConnectNew &conn,
                         vector<q2entry> &results) {
     NamedTimer fcnTimer(__func__);
 
+    string min_ps_supplycost;
+    {
+      ostringstream s;
+      s <<
+      "select min(ps_supplycost) from "
+      "PARTSUPP_INT, SUPPLIER_INT, NATION_INT, REGION_INT where p_partkey = ps_partkey and s_suppkey = ps_suppkey and s_nationkey = n_nationkey and n_regionkey = r_regionkey and r_name = '" << name << "'";
+      DBResultNew * dbres;
+      {
+        NamedTimer t(__func__, "execute");
+        conn.execute(s.str(), dbres);
+      }
+      ResType res;
+      {
+        NamedTimer t(__func__, "unpack");
+        res = dbres->unpack();
+        assert(res.ok);
+      }
+      assert(res.rows.size() == 1);
+      min_ps_supplycost = res.rows[0][0].data;
+    }
+
     ostringstream s;
     s << "select  s_acctbal, s_name, n_name, p_partkey, p_mfgr, s_address, s_phone, s_comment "
       "from PART_INT, SUPPLIER_INT, PARTSUPP_INT, NATION_INT, REGION_INT "
-      "where p_partkey = ps_partkey and s_suppkey = ps_suppkey and p_size = " << size << " and p_type like '%" << type << "' and s_nationkey = n_nationkey and n_regionkey = r_regionkey and r_name = '" << name << "' and ps_supplycost = ( select min(ps_supplycost) from "
-      "PARTSUPP_INT, SUPPLIER_INT, NATION_INT, REGION_INT where p_partkey = ps_partkey and s_suppkey = ps_suppkey and s_nationkey = n_nationkey and n_regionkey = r_regionkey and r_name = '" << name << "') order by s_acctbal desc, n_name, s_name, p_partkey limit 100";
+      "where p_partkey = ps_partkey and s_suppkey = ps_suppkey and p_size = " << size << " and p_type like '%" << type << "' and s_nationkey = n_nationkey and n_regionkey = r_regionkey and r_name = '" << name << "' and ps_supplycost = (" << min_ps_supplycost << " ) order by s_acctbal desc, n_name, s_name, p_partkey limit 100";
     cerr << s.str() << endl;
 
     DBResultNew * dbres;
@@ -3382,34 +3402,45 @@ struct _q9_noopt_task {
       pair<string, uint64_t> key =
         make_pair( row[0].data, resultFromStr<uint64_t>(row[1].data) + 1992 );
 
-      uint64_t l_disc_price_int = decryptRow<uint64_t, 7>(
-          row[2].data,
-          12345,
-          fieldname(0, "DET"),
-          TYPE_INTEGER,
-          oDET,
-          *cm);
-      double l_disc_price = ((double)l_disc_price_int)/100.0;
+      vector<string> ct0, ct1, ct2;
+      tokenize(row[2].data, ",", ct0);
+      tokenize(row[3].data, ",", ct1);
+      tokenize(row[4].data, ",", ct2);
 
-      uint64_t ps_supplycost_int = decryptRow<uint64_t, 7>(
-          row[3].data,
-          12345,
-          fieldname(partsupp::ps_supplycost, "DET"),
-          TYPE_INTEGER,
-          oDET,
-          *cm);
-      double ps_supplycost = ((double)ps_supplycost_int)/100.0;
+      assert(ct0.size() == ct1.size());
+      assert(ct1.size() == ct2.size());
 
-      uint64_t l_quantity_int = decryptRow<uint64_t, 7>(
-          row[4].data,
-          12345,
-          fieldname(lineitem::l_quantity, "DET"),
-          TYPE_INTEGER,
-          oDET,
-          *cm);
-      double l_quantity = ((double)l_quantity_int)/100.0;
+      double value = 0.0;
+      for (size_t i = 0; i < ct0.size(); i++) {
+        uint64_t l_disc_price_int = decryptRow<uint64_t, 7>(
+            ct0[i],
+            12345,
+            fieldname(0, "DET"),
+            TYPE_INTEGER,
+            oDET,
+            *cm);
+        double l_disc_price = ((double)l_disc_price_int)/100.0;
 
-      double value = l_disc_price - ps_supplycost * l_quantity;
+        uint64_t ps_supplycost_int = decryptRow<uint64_t, 7>(
+            ct1[i],
+            12345,
+            fieldname(partsupp::ps_supplycost, "DET"),
+            TYPE_INTEGER,
+            oDET,
+            *cm);
+        double ps_supplycost = ((double)ps_supplycost_int)/100.0;
+
+        uint64_t l_quantity_int = decryptRow<uint64_t, 7>(
+            ct2[i],
+            12345,
+            fieldname(lineitem::l_quantity, "DET"),
+            TYPE_INTEGER,
+            oDET,
+            *cm);
+        double l_quantity = ((double)l_quantity_int)/100.0;
+
+        value = l_disc_price - ps_supplycost * l_quantity;
+      }
 
       auto it = state->aggState.find(key);
       if (it == state->aggState.end()) {
@@ -3451,8 +3482,13 @@ static void do_query_crypt_q9(ConnectNew &conn,
 
   ostringstream s;
   s <<
+    "select n_name_DET, grp, "
+      << group_concat("l_disc_price_DET") << ", "
+      << group_concat("ps_supplycost_DET") << ", "
+      << group_concat("l_quantity_DET") << " "
+    "from ("
     "select "
-    "  n_name_DET, " << "CASE " << make_cases(0, boundaries, "o_orderdate_OPE") << " END, "
+    "  n_name_DET, " << "CASE " << make_cases(0, boundaries, "o_orderdate_OPE") << " END AS grp, "
     "  l_disc_price_DET, ps_supplycost_DET, l_quantity_DET "
     "from "
     "  part_enc, "
@@ -3472,7 +3508,10 @@ static void do_query_crypt_q9(ConnectNew &conn,
           << smartMarshallBinary(string((char *)t.ciph.content, t.ciph.len))
           << ", "
           << smartMarshallBinary(string((char *)t.wordKey.content, t.wordKey.len))
-          << ", p_name_SWP)";
+          << ", p_name_SWP)"
+    ") AS anon1 "
+    "group by n_name_DET, grp"
+    ;
   cerr << s.str() << endl;
 
   DBResultNew * dbres;
