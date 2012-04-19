@@ -1825,31 +1825,11 @@ static void do_query_q2(ConnectNew &conn,
                         vector<q2entry> &results) {
     NamedTimer fcnTimer(__func__);
 
-    string min_ps_supplycost;
-    {
-      ostringstream s;
-      s <<
-      "select min(ps_supplycost) from "
-      "PARTSUPP_INT, SUPPLIER_INT, NATION_INT, REGION_INT where p_partkey = ps_partkey and s_suppkey = ps_suppkey and s_nationkey = n_nationkey and n_regionkey = r_regionkey and r_name = '" << name << "'";
-      DBResultNew * dbres;
-      {
-        NamedTimer t(__func__, "execute");
-        conn.execute(s.str(), dbres);
-      }
-      ResType res;
-      {
-        NamedTimer t(__func__, "unpack");
-        res = dbres->unpack();
-        assert(res.ok);
-      }
-      assert(res.rows.size() == 1);
-      min_ps_supplycost = res.rows[0][0].data;
-    }
-
     ostringstream s;
-    s << "select  s_acctbal, s_name, n_name, p_partkey, p_mfgr, s_address, s_phone, s_comment "
+    s <<
+      "select  s_acctbal, s_name, n_name, p_partkey, p_mfgr, s_address, s_phone, s_comment "
       "from PART_INT, SUPPLIER_INT, PARTSUPP_INT, NATION_INT, REGION_INT "
-      "where p_partkey = ps_partkey and s_suppkey = ps_suppkey and p_size = " << size << " and p_type like '%" << type << "' and s_nationkey = n_nationkey and n_regionkey = r_regionkey and r_name = '" << name << "' and ps_supplycost = (" << min_ps_supplycost << " ) order by s_acctbal desc, n_name, s_name, p_partkey limit 100";
+      "where p_partkey = ps_partkey and s_suppkey = ps_suppkey and p_size = " << size << " and p_type like '%" << type << "' and s_nationkey = n_nationkey and n_regionkey = r_regionkey and r_name = '" << name << "' and ps_supplycost = ( select min(ps_supplycost) from PARTSUPP_INT, SUPPLIER_INT, NATION_INT, REGION_INT where p_partkey = ps_partkey and s_suppkey = ps_suppkey and s_nationkey = n_nationkey and n_regionkey = r_regionkey and r_name = '" << name << "') order by s_acctbal desc, n_name, s_name, p_partkey limit 100";
     cerr << s.str() << endl;
 
     DBResultNew * dbres;
@@ -3320,6 +3300,9 @@ static void do_query_q9(ConnectNew &conn,
                         vector<q9entry> &results) {
     NamedTimer fcnTimer(__func__);
 
+    conn.execute("SET enable_indexscan TO FALSE");
+    conn.execute("SET enable_nestloop TO FALSE");
+
     ostringstream s;
     s <<
       "select "
@@ -3375,6 +3358,9 @@ static void do_query_q9(ConnectNew &conn,
             resultFromStr<uint64_t>(row[1].data),
             resultFromStr<double>(row[2].data)/10000.0));
     }
+
+    conn.execute("SET enable_indexscan TO TRUE");
+    conn.execute("SET enable_nestloop TO TRUE");
 }
 
 static string make_cases(
@@ -3460,6 +3446,9 @@ static void do_query_crypt_q9(ConnectNew &conn,
                               vector<q9entry> &results) {
   crypto_manager_stub cm_stub(&cm, UseOldOpe);
   NamedTimer fcnTimer(__func__);
+
+  conn.execute("SET enable_indexscan TO FALSE");
+  conn.execute("SET enable_nestloop TO FALSE");
 
   // min order year (inclusive)
   static const size_t MinOrderYear = 1992;
@@ -3574,6 +3563,9 @@ static void do_query_crypt_q9(ConnectNew &conn,
           it->first.second,
           it->second));
   }
+
+  conn.execute("SET enable_indexscan TO TRUE");
+  conn.execute("SET enable_nestloop TO TRUE");
 }
 
 static void do_query_q10(ConnectNew &conn,
