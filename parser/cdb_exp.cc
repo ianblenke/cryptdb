@@ -5588,65 +5588,44 @@ static void do_query_q17(ConnectNew &conn,
   DBResultNew * dbres;
   ResType res;
 
-  if (UseMySQL) {
-    conn.execute("CREATE TEMPORARY TABLE inner_tmp ("
-                 "p integer unsigned, "
-                 "q bigint unsigned, "
-                 "PRIMARY KEY (p)) ENGINE=MEMORY");
-  } else {
-    conn.execute("CREATE TEMPORARY TABLE inner_tmp ("
-                 "p bigint, "
-                 "q bigint, "
-                 "PRIMARY KEY (p))");
-  }
-
-  {
-    ostringstream s;
-    s <<
-      "INSERT INTO inner_tmp "
-      "select l_partkey, 0.2 * avg(l_quantity) from LINEITEM_INT, PART_INT "
-      "where p_partkey = l_partkey and "
-      "p_brand = '" << p_a << "' and "
-      "p_container = '" << p_b << "' "
-      "group by l_partkey;"
-      ;
-    cerr << s.str() << endl;
-    {
-      NamedTimer t(__func__, "execute-1");
-      conn.execute(s.str(), dbres);
-    }
-  }
-
   ostringstream s;
   s <<
     "select "
-    "  sum(l_extendedprice) / 700.0 as avg_yearly "
-    "from "
-    "  LINEITEM_INT, "
-    "  PART_INT, "
-    "  inner_tmp "
+    " l_partkey, 0.2 * avg(l_quantity), "
+      << group_concat("l_quantity") << ", " << group_concat("l_extendedprice") << " "
+    "from LINEITEM_INT, PART_INT "
     "where "
     "  p_partkey = l_partkey "
-    "  and p_partkey = p "
-    "  and p_brand = '" << p_a << "' "
-    "  and p_container = '"<< p_b << "' "
-    "  and l_quantity < q; "
+    "  and p_brand = '" << p_a << "'"
+    "  and p_container = '" << p_b << "' "
+    "group by l_partkey"
     ;
   cerr << s.str() << endl;
-
   {
-    NamedTimer t(__func__, "execute-2");
+    NamedTimer t(__func__, "execute-1");
     conn.execute(s.str(), dbres);
   }
+
   {
-    NamedTimer t(__func__, "unpack-2");
+    NamedTimer t(__func__, "unpack-1");
     res = dbres->unpack();
     assert(res.ok);
   }
 
+  double sum = 0.0;
   for (auto row : res.rows) {
-    results.push_back(resultFromStr<double>(row[0].data));
+    vector<string> qs, es;
+    tokenize(row[2].data, ",", qs);
+    tokenize(row[3].data, ",", es);
+    assert(qs.size() == es.size());
+    double q = resultFromStr<double>(row[1].data);
+    for (size_t i = 0; i < qs.size(); i++) {
+      if (resultFromStr<double>(qs[i]) < q) {
+        sum += resultFromStr<double>(es[i]);
+      }
+    }
   }
+  results.push_back( sum / 700.0 );
 }
 
 struct _q17_noopt_task_state {
