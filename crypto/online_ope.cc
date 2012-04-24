@@ -1,7 +1,7 @@
 #include <assert.h>
 #include <string.h>
 #include <string>
-#include <crypto/online_ope.hh>
+#include "online_ope.hh"
 #include <iostream>
 #include <cmath>
  
@@ -159,9 +159,10 @@ ope_server<EncT>::tree_insert(tree_node<EncT> **np, uint64_t v,
 	    bool isLeft;
 	    uint64_t subtree_size;
 	    tree_node<EncT> * parent = node_to_balance(v, pathlen, isLeft, subtree_size);
+	    cout<<"Rebalancing: "<<n->enc_val<<" : "<<parent->enc_val<<endl;
      	    relabel(parent, isLeft, subtree_size);
 	} else {
-
+		cout<<"No rebalance"<<endl;
 	}
 
     } else {
@@ -278,7 +279,8 @@ template<class EncT>
 EncT
 ope_server<EncT>::lookup(uint64_t v, uint64_t nbits) const
 {
-    auto n = tree_lookup(root, v, nbits);
+    auto tree_node<EncT> *
+ n = tree_lookup(root, v, nbits);
     if (!n) {
         throw ope_lookup_failure();
     }
@@ -317,4 +319,18 @@ template class ope_server<uint64_t>;
 template class ope_server<uint32_t>;
 template class ope_server<uint16_t>;
 
+int main(){
+	cout<<"Starting scapegoat tree test"<<endl;
 
+	not_a_cipher nac = not_a_cipher();
+	ope_server<uint64_t> server = ope_server<uint64_t>();
+	ope_client<uint64_t,not_a_cipher> client = ope_client<uint64_t, not_a_cipher>(&nac, &server);
+	uint64_t insert_array[] = {2,1,6,5,4,3,15,12,7,9,11,10,13,14,16,17,18};
+	for(uint64_t i=0; i<17; i++){
+		cout<<"Ciphertext="<<client.encrypt(insert_array[i])<<endl;
+//		cout<<"Ciphertext="<<client.encrypt((uint64_t) i)<<endl;
+
+		print_tree(server.root);
+	}
+	
+}

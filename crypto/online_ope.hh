@@ -1,8 +1,8 @@
 #pragma once
 
 #include <string>
-#include <crypto/blowfish.hh>
-#include <util/static_assert.hh>
+#include "blowfish.hh"
+#include "../util/static_assert.hh"
 #include <iostream>
 
 using namespace std;
@@ -36,10 +36,10 @@ class ope_server {
 
     ope_server();
     ~ope_server();
-  
+ tree_node<EncT> *root; 
+ 
  private:
-    tree_node<EncT> *root; 
-
+    
     tree_node<EncT> * tree_lookup(tree_node<EncT> *root, uint64_t v, uint64_t nbits) const;
     void tree_insert(tree_node<EncT> **np, uint64_t v, const EncT &encval,
 		     uint64_t nbits, uint64_t pathlen);
@@ -65,7 +65,7 @@ template<class V, class BlockCipher>
 class ope_client {
  public:
     ope_client(BlockCipher *bc, ope_server<V> *server) : b(bc), s(server) {
-        _static_assert(BlockCipher::blocksize == sizeof(V));
+//        _static_assert(BlockCipher::blocksize == sizeof(V));
     }
 
     V decrypt(uint64_t ct) const {
@@ -95,6 +95,8 @@ class ope_client {
                 nbits++;
             }
         } catch (ope_lookup_failure&) {
+	    cout<<pt<<"  not in tree. "<<nbits<<": " <<block_encrypt(pt)<<endl;
+
             s->insert(v, nbits, block_encrypt(pt));
 	    //relabeling may have been triggered so we need to lookup value again
 	    //todo: optimize by avoiding extra tree lookup
@@ -102,22 +104,40 @@ class ope_client {
         }
 
         assert(nbits <= 63);
-        return (v<<(64-nbits)) | (1ULL<<(63-nbits));
+	return v;
+//        return (v<<(64-nbits)) | (1ULL<<(63-nbits));
     }
 
  private:
     V block_decrypt(V ct) const {
         V pt;
-        b->block_decrypt((const uint8_t *) &ct, (uint8_t *) &pt);
+	pt=ct;
+//        b->block_decrypt((const uint8_t *) &ct, (uint8_t *) &pt);
         return pt;
     }
 
     V block_encrypt(V pt) const {
         V ct;
-        b->block_encrypt((const uint8_t *) &pt, (uint8_t *) &ct);
+	ct=pt;
+//        b->block_encrypt((const uint8_t *) &pt, (uint8_t *) &ct);
         return ct;
     }
 
     BlockCipher *b;
     ope_server<V> *s;
+};
+
+class not_a_cipher{
+
+	public:
+	not_a_cipher(){}
+	~not_a_cipher(){}
+
+	void block_decrypt(const uint8_t* ct, uint8_t * pt){
+		*pt=*ct;
+	}
+
+	void block_encrypt(const uint8_t* pt, uint8_t * ct){
+		*ct=*pt;
+	}
 };
