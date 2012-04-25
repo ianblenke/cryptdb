@@ -147,8 +147,8 @@ ope_server<EncT>::update_ope_table(tree_node<EncT> *n){
     tree_node<EncT> *ptr = n;
     uint64_t tmp_v=0;
     while(ptr!= NULL){
-	tmp_v=(ope_table[ptr->enc_val]).first;
-	ope_table[ptr->enc_val]=make_pair(tmp_v, false);
+	pair<uint64_t, uint64_t> tmp_pair=(ope_table[ptr->enc_val]).first;
+	ope_table[ptr->enc_val]=make_pair(tmp_pair, false);
 	ptr=ptr->right;
     }
 }
@@ -165,7 +165,7 @@ ope_server<EncT>::tree_insert(tree_node<EncT> **np, uint64_t v,
 
         tree_node<EncT> *n = new tree_node<EncT>(encval);
         *np = n;
-	ope_table[encval]=make_pair(v,true);
+	ope_table[encval]=make_pair(make_pair(v, pathlen),true);
 	update_tree_stats(pathlen);
 	if (trigger(pathlen)) {
 	    bool isLeft;
@@ -173,7 +173,7 @@ ope_server<EncT>::tree_insert(tree_node<EncT> **np, uint64_t v,
 	    tree_node<EncT> * parent = node_to_balance(v, pathlen, isLeft, subtree_size);
 	    cout<<"Rebalancing: "<<n->enc_val<<" : "<<parent->enc_val<<endl;
      	    relabel(parent, isLeft, subtree_size);
-	    cout<<encval<<": "<<ope_table[encval].first<<", "<<ope_table[encval].second<<endl;
+	    cout<<encval<<": "<<ope_table[encval].first.first<<", "<<ope_table[encval].second<<endl;
 	} else {
 		cout<<"No rebalance"<<endl;
 	}
@@ -301,20 +301,20 @@ ope_server<EncT>::lookup(uint64_t v, uint64_t nbits) const
 }
 
 template<class EncT>
-uint64_t
+pair<uint64_t, uint64_t>
 ope_server<EncT>::lookup(EncT xct){
     if(ope_table.find(xct)!=ope_table.end() && (ope_table[xct]).second==true){
-	cout <<"Found "<<xct<<" in table with v="<<ope_table[xct].first<<endl;
+	cout <<"Found "<<xct<<" in table with v="<<ope_table[xct].first.first<<endl;
 	return ope_table[xct].first;
     }
-    return -1;
+    return make_pair(-1,-1);
 }
 
 template<class EncT>
 void
 ope_server<EncT>::update_table(EncT xct, uint64_t v, uint64_t nbits){
 	if(lookup(v,nbits)==xct){
-		ope_table[xct]=make_pair(v,true);
+		ope_table[xct]=make_pair(make_pair(v,nbits),true);
 	}
 }
 
@@ -365,14 +365,17 @@ int main(){
 	uint64_t insert_array[] = {2,1,6,5,4,3,15,12,7,9,11,10,13,14,16,17,18};
 	for(uint64_t i=0; i<17; i++){
 		cout<<"Ciphertext="<<client.encrypt(insert_array[i])<<endl;
-	//	print_tree(server.root);
 	}
 	for(uint64_t i=0; i<17; i++){
 		client.encrypt(insert_array[i]);
 	}
 	print_tree(server.root);
 	for(uint64_t i=0; i<17;i++){
-		cout<<insert_array[i]<<": "<<server.ope_table[insert_array[i]].first<<", "<<server.ope_table[insert_array[i]].second<<endl;
+		cout<<insert_array[i]<<": "<<server.ope_table[insert_array[i]].first.first<<", "<<server.ope_table[insert_array[i]].second<<endl;
 	}
+	for(uint64_t i=0; i<17; i++){
+		cout<<"Ciphertext="<<client.encrypt(insert_array[i])<<endl;
+	}
+
 //	server.print_table();	
 }

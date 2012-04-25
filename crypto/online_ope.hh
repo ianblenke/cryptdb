@@ -35,7 +35,7 @@ template<class EncT>
 class ope_server {
  public:
     EncT lookup(uint64_t v, uint64_t nbits) const;
-    uint64_t lookup(EncT xct);
+    pair<uint64_t, uint64_t> lookup(EncT xct);
     void update_table(EncT xct, uint64_t v, uint64_t nbits);
     void insert(uint64_t v, uint64_t nbits, const EncT &encval);
     void print_table();
@@ -43,7 +43,7 @@ class ope_server {
     ope_server();
     ~ope_server();
  tree_node<EncT> *root; 
-     boost::unordered_map<EncT, pair<uint64_t, bool> > ope_table;
+     boost::unordered_map<EncT, pair<pair<uint64_t,uint64_t>, bool> > ope_table;
 
  private:
     tree_node<EncT> * tree_lookup(tree_node<EncT> *root, uint64_t v, uint64_t nbits) const;
@@ -84,9 +84,10 @@ class ope_client {
     }
 
     uint64_t encrypt(V pt) const {
-	uint64_t early_rtn_val = s->lookup(block_encrypt(pt));
-	if(early_rtn_val!=-1) {
-		return early_rtn_val;
+	pair<uint64_t, uint64_t> early_rtn_val = s->lookup(block_encrypt(pt));
+	if(early_rtn_val.first!=-1 && early_rtn_val.second!=-1) {
+		return (early_rtn_val.first<<(64-early_rtn_val.second)) |
+			(1ULL<<(63-early_rtn_val.second));
 	}
         uint64_t v = 0;
         uint64_t nbits = 0;
@@ -116,8 +117,8 @@ class ope_client {
         }
         assert(nbits <= 63);
 	s->update_table(block_encrypt(pt),v,nbits);
-	return v;
-//        return (v<<(64-nbits)) | (1ULL<<(63-nbits));
+//	return v;
+        return (v<<(64-nbits)) | (1ULL<<(63-nbits));
     }
 
  private:
