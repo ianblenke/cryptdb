@@ -123,7 +123,7 @@ ope_server<EncT>::relabel(tree_node<EncT> * parent, bool isLeft, uint64_t size) 
     
     tree_node<EncT> * w = new tree_node<EncT>(0);
     tree_node<EncT> * z = flatten(scapegoat, w);
-
+    update_ope_table(z);
     build_tree(size, z);
 
     if (parent) {
@@ -141,6 +141,17 @@ ope_server<EncT>::relabel(tree_node<EncT> * parent, bool isLeft, uint64_t size) 
     delete w;
 }
 
+template<class EncT>
+void
+ope_server<EncT>::update_ope_table(tree_node<EncT> *n){
+    tree_node<EncT> *ptr = n;
+    uint64_t tmp_v=0;
+    while(ptr!= NULL){
+	tmp_v=(ope_table[ptr->enc_val]).first;
+	ope_table[ptr->enc_val]=make_pair(tmp_v, false);
+	ptr=ptr->right;
+    }
+}
 ////////////////////////////////////////////////////
 
     
@@ -154,6 +165,7 @@ ope_server<EncT>::tree_insert(tree_node<EncT> **np, uint64_t v,
 
         tree_node<EncT> *n = new tree_node<EncT>(encval);
         *np = n;
+	ope_table[encval]=make_pair(v,true);
 	update_tree_stats(pathlen);
 	if (trigger(pathlen)) {
 	    bool isLeft;
@@ -161,6 +173,7 @@ ope_server<EncT>::tree_insert(tree_node<EncT> **np, uint64_t v,
 	    tree_node<EncT> * parent = node_to_balance(v, pathlen, isLeft, subtree_size);
 	    cout<<"Rebalancing: "<<n->enc_val<<" : "<<parent->enc_val<<endl;
      	    relabel(parent, isLeft, subtree_size);
+	    cout<<encval<<": "<<ope_table[encval].first<<", "<<ope_table[encval].second<<endl;
 	} else {
 		cout<<"No rebalance"<<endl;
 	}
@@ -279,14 +292,38 @@ template<class EncT>
 EncT
 ope_server<EncT>::lookup(uint64_t v, uint64_t nbits) const
 {
-    auto tree_node<EncT> *
- n = tree_lookup(root, v, nbits);
+    auto tree_node<EncT> *n = tree_lookup(root, v, nbits);
     if (!n) {
         throw ope_lookup_failure();
     }
-    
     return n->enc_val;
 
+}
+
+template<class EncT>
+uint64_t
+ope_server<EncT>::lookup(EncT xct){
+    if(ope_table.find(xct)!=ope_table.end() && (ope_table[xct]).second==true){
+	cout <<"Found "<<xct<<" in table with v="<<ope_table[xct].first<<endl;
+	return ope_table[xct].first;
+    }
+    return -1;
+}
+
+template<class EncT>
+void
+ope_server<EncT>::update_table(EncT xct, uint64_t v, uint64_t nbits){
+	if(lookup(v,nbits)==xct){
+		ope_table[xct]=make_pair(v,true);
+	}
+}
+
+template<class EncT>
+void
+ope_server<EncT>::print_table(){
+//	for(boost::unordered_map<EncT, pair<uint64_t, bool> >::iterator table_it = ope_table.begin(); table_it!=ope_table.end(); table_it++){
+//		cout<<table_it->first<<" : ("<<(table_it->second)->first<<", "<<(table_it->second)->second<<")"<<endl;
+//	}
 }
 
 template<class EncT>
@@ -328,9 +365,14 @@ int main(){
 	uint64_t insert_array[] = {2,1,6,5,4,3,15,12,7,9,11,10,13,14,16,17,18};
 	for(uint64_t i=0; i<17; i++){
 		cout<<"Ciphertext="<<client.encrypt(insert_array[i])<<endl;
-//		cout<<"Ciphertext="<<client.encrypt((uint64_t) i)<<endl;
-
-		print_tree(server.root);
+	//	print_tree(server.root);
 	}
-	
+	for(uint64_t i=0; i<17; i++){
+		client.encrypt(insert_array[i]);
+	}
+	print_tree(server.root);
+	for(uint64_t i=0; i<17;i++){
+		cout<<insert_array[i]<<": "<<server.ope_table[insert_array[i]].first<<", "<<server.ope_table[insert_array[i]].second<<endl;
+	}
+//	server.print_table();	
 }

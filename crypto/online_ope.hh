@@ -4,6 +4,9 @@
 #include "blowfish.hh"
 #include "../util/static_assert.hh"
 #include <iostream>
+#include <map>
+#include <boost/unordered_map.hpp>
+#include <utility>
 
 using namespace std;
 
@@ -32,14 +35,17 @@ template<class EncT>
 class ope_server {
  public:
     EncT lookup(uint64_t v, uint64_t nbits) const;
+    uint64_t lookup(EncT xct);
+    void update_table(EncT xct, uint64_t v, uint64_t nbits);
     void insert(uint64_t v, uint64_t nbits, const EncT &encval);
+    void print_table();
 
     ope_server();
     ~ope_server();
  tree_node<EncT> *root; 
- 
+     boost::unordered_map<EncT, pair<uint64_t, bool> > ope_table;
+
  private:
-    
     tree_node<EncT> * tree_lookup(tree_node<EncT> *root, uint64_t v, uint64_t nbits) const;
     void tree_insert(tree_node<EncT> **np, uint64_t v, const EncT &encval,
 		     uint64_t nbits, uint64_t pathlen);
@@ -47,6 +53,8 @@ class ope_server {
     //relabels the tree rooted at the node whose parent is "parent"
     // size indicates the size of the subtree of the node rooted at parent
     void relabel(tree_node<EncT> * parent, bool isLeft, uint64_t size);
+
+    void update_ope_table(tree_node<EncT>*n);
     //decides whether we trigger a relabel or not
     //receives the path length of a recently added node
     bool trigger(uint64_t path_len) const;
@@ -76,6 +84,10 @@ class ope_client {
     }
 
     uint64_t encrypt(V pt) const {
+	uint64_t early_rtn_val = s->lookup(block_encrypt(pt));
+	if(early_rtn_val!=-1) {
+		return early_rtn_val;
+	}
         uint64_t v = 0;
         uint64_t nbits = 0;
         try {
@@ -95,15 +107,15 @@ class ope_client {
                 nbits++;
             }
         } catch (ope_lookup_failure&) {
-	    cout<<pt<<"  not in tree. "<<nbits<<": " <<block_encrypt(pt)<<endl;
+	    cout<<pt<<"  not in tree. "<<nbits<<": " <<block_encrypt(pt)<<" v: "<<v<<endl;
 
             s->insert(v, nbits, block_encrypt(pt));
 	    //relabeling may have been triggered so we need to lookup value again
 	    //todo: optimize by avoiding extra tree lookup
 	    return encrypt(pt);
         }
-
         assert(nbits <= 63);
+	s->update_table(block_encrypt(pt),v,nbits);
 	return v;
 //        return (v<<(64-nbits)) | (1ULL<<(63-nbits));
     }
