@@ -304,7 +304,7 @@ template<class EncT>
 pair<uint64_t, uint64_t>
 ope_server<EncT>::lookup(EncT xct){
     if(ope_table.find(xct)!=ope_table.end() && (ope_table[xct]).second==true){
-	cout <<"Found "<<xct<<" in table with v="<<ope_table[xct].first.first<<endl;
+	cout <<"Found "<<xct<<" in table with v="<<ope_table[xct].first.first<<" nbits="<<ope_table[xct].first.second<<endl;
 	return ope_table[xct].first;
     }
     return make_pair(-1,-1);
@@ -362,6 +362,19 @@ int main(){
 	not_a_cipher nac = not_a_cipher();
 	ope_server<uint64_t> server = ope_server<uint64_t>();
 	ope_client<uint64_t,not_a_cipher> client = ope_client<uint64_t, not_a_cipher>(&nac, &server);
+
+	int i;
+	while(true){
+		cout<<"Enter a value: ";
+		cin>>i;
+		if(i==-1){
+			print_tree(server.root);
+		}else{
+			cout<<"Encrypting "<<i<<" to "<<client.encrypt(i)<<endl;
+		}
+
+	}
+/*
 	uint64_t insert_array[] = {2,1,6,5,4,3,15,12,7,9,11,10,13,14,16,17,18};
 	for(uint64_t i=0; i<17; i++){
 		cout<<"Ciphertext="<<client.encrypt(insert_array[i])<<endl;
@@ -376,6 +389,6 @@ int main(){
 	for(uint64_t i=0; i<17; i++){
 		cout<<"Ciphertext="<<client.encrypt(insert_array[i])<<endl;
 	}
-
+*/
 //	server.print_table();	
 }

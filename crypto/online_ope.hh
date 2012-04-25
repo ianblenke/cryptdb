@@ -117,7 +117,7 @@ class ope_client {
         }
         assert(nbits <= 63);
 	s->update_table(block_encrypt(pt),v,nbits);
-//	return v;
+	cout<<"Ecryption of "<<pt<<" has v="<< v<<endl;;
         return (v<<(64-nbits)) | (1ULL<<(63-nbits));
     }
 
