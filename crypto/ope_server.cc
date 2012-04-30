@@ -7,6 +7,12 @@
  
 #include <sstream>
 
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <resolv.h>
+
 template<class EncT>
 struct tree_node {
     EncT enc_val;
@@ -123,7 +129,6 @@ ope_server<EncT>::relabel(tree_node<EncT> * parent, bool isLeft, uint64_t size) 
     
     tree_node<EncT> * w = new tree_node<EncT>(0);
     tree_node<EncT> * z = flatten(scapegoat, w);
-    update_ope_table(z);
     build_tree(size, z);
 
     if (parent) {
@@ -136,21 +141,27 @@ ope_server<EncT>::relabel(tree_node<EncT> * parent, bool isLeft, uint64_t size) 
 	//root has changed
 	root = w->left;
     }
-
+    
     w->left = 0;    /* Something seems fishy here */
     delete w;
+
+    update_ope_table(parent);
 }
 
 template<class EncT>
 void
 ope_server<EncT>::update_ope_table(tree_node<EncT> *n){
-    tree_node<EncT> *ptr = n;
-    uint64_t tmp_v=0;
-    while(ptr!= NULL){
-	pair<uint64_t, uint64_t> tmp_pair=(ope_table[ptr->enc_val]).first;
-	ope_table[ptr->enc_val]=make_pair(tmp_pair, false);
-	ptr=ptr->right;
+    uint64_t v=(ope_table[n->enc_val]).first;
+    uint64_t nbits = (ope_table[n->enc_val]).second;
+    if(n->left!=NULL) {
+	ope_table[n->left->enc_val]=make_pair(((v<<1)|0), nbits+1);
+	update_ope_table(n->left);
     }
+    if(n->right!=NULL){
+	ope_table[n->right->enc_val]=make_pair( ((v<<1)|1), nbits+1);
+	update_ope_table(n->right);
+    }
+
 }
 ////////////////////////////////////////////////////
 
@@ -165,7 +176,7 @@ ope_server<EncT>::tree_insert(tree_node<EncT> **np, uint64_t v,
 
         tree_node<EncT> *n = new tree_node<EncT>(encval);
         *np = n;
-	ope_table[encval]=make_pair(make_pair(v, pathlen),true);
+	ope_table[encval]=make_pair(v, pathlen);
 	update_tree_stats(pathlen);
 	if (trigger(pathlen)) {
 	    bool isLeft;
@@ -173,7 +184,7 @@ ope_server<EncT>::tree_insert(tree_node<EncT> **np, uint64_t v,
 	    tree_node<EncT> * parent = node_to_balance(v, pathlen, isLeft, subtree_size);
 	    cout<<"Rebalancing: "<<n->enc_val<<" : "<<parent->enc_val<<endl;
      	    relabel(parent, isLeft, subtree_size);
-	    cout<<encval<<": "<<ope_table[encval].first.first<<", "<<ope_table[encval].second<<endl;
+	    cout<<encval<<": "<<ope_table[encval].first<<", "<<ope_table[encval].second<<endl;
 	} else {
 		cout<<"No rebalance"<<endl;
 	}
@@ -303,19 +314,12 @@ ope_server<EncT>::lookup(uint64_t v, uint64_t nbits) const
 template<class EncT>
 pair<uint64_t, uint64_t>
 ope_server<EncT>::lookup(EncT xct){
-    if(ope_table.find(xct)!=ope_table.end() && (ope_table[xct]).second==true){
-	cout <<"Found "<<xct<<" in table with v="<<ope_table[xct].first.first<<" nbits="<<ope_table[xct].first.second<<endl;
-	return ope_table[xct].first;
+    if(ope_table.find(xct)!=ope_table.end()){
+	cout <<"Found "<<xct<<" in table with v="<<ope_table[xct].first<<" nbits="<<ope_table[xct].second<<endl;
+	return ope_table[xct];
     }
+    cout<<"Didn't find "<<xct<<" in table"<<endl;
     return make_pair(-1,-1);
-}
-
-template<class EncT>
-void
-ope_server<EncT>::update_table(EncT xct, uint64_t v, uint64_t nbits){
-	if(lookup(v,nbits)==xct){
-		ope_table[xct]=make_pair(make_pair(v,nbits),true);
-	}
 }
 
 template<class EncT>
@@ -361,5 +365,111 @@ ope_server<EncT>::~ope_server()
 template class ope_server<uint64_t>;
 template class ope_server<uint32_t>;
 template class ope_server<uint16_t>;
+
+template<class EncT>
+void function(void* lp, ope_server<EncT>* s){
+	int *csock = (int*) lp;
+
+	cout<<"Call to function!"<<endl;
+	while(true){
+		char buffer[1024];
+		memset(buffer, 0, 1024);
+		recv(*csock, buffer, 1024, 0);
+		int func_d;
+		istringstream iss(buffer);
+		iss>>func_d;
+		cout<<"See value func_d: "<<func_d<<endl;
+		ostringstream o;
+		string rtn_str;
+		if(func_d==0){
+			 break;
+		}else if(func_d==1) {
+			uint64_t blk_encrypt_pt;
+			iss>>blk_encrypt_pt;
+			cout<<"Blk_encrypt_pt: "<<blk_encrypt_pt<<endl;
+			pair<uint64_t,uint64_t> table_rslt = s->lookup((uint64_t) blk_encrypt_pt);
+			cout<<"Rtn b/f ostringstream: "<<table_rslt.first<<" : "<<table_rslt.second<<endl;
+			o<<table_rslt.first<<" "<<table_rslt.second<<endl;
+			rtn_str=o.str();
+			cout<<"Rtn_str: "<<rtn_str<<endl;
+			send(*csock, rtn_str.c_str(), rtn_str.size(),0);
+//			if(table_rslt.first!=((uint64_t)-1) && table_rslt.second!=((uint64_t)-1)) break;
+		}else if(func_d==2){
+			uint64_t v, nbits;
+			iss>>v;
+			iss>>nbits;
+			cout<<"Trying lookup("<<v<<", "<<nbits<<")"<<endl;
+			EncT xct;
+			try{
+				xct = s->lookup(v, nbits);
+			}catch(ope_lookup_failure&){
+				cout<<"Lookup fail, need to insert!"<<endl;
+				char* ope_fail = "ope_fail";
+				send(*csock, ope_fail, strlen(ope_fail),0);
+				continue;
+			}
+			o<<xct;
+			rtn_str=o.str();
+			cout<<"Rtn_str: "<<rtn_str<<endl;
+			send(*csock, rtn_str.c_str(), rtn_str.size(),0);
+		}else if(func_d==3){
+			uint64_t v, nbits, blk_encrypt_pt;
+			iss>>v;
+			iss>>nbits;
+			iss>>blk_encrypt_pt;
+			cout<<"Trying insert("<<v<<", "<<nbits<<", "<<blk_encrypt_pt<<")"<<endl;
+			s->insert(v, nbits, blk_encrypt_pt);
+			s->print_tree();
+		}else{
+			cout<<"Something's wrong!: "<<buffer<<endl;
+			break;
+		}
+	}
+	free(csock);
+}
+
+
+int main(){
+
+
+	ope_server<uint64_t>* server = new ope_server<uint64_t>();
+
+	int host_port = 1110;
+	int hsock = socket(AF_INET, SOCK_STREAM, 0);
+	if(hsock ==-1){
+		cout<<"Error initializing socket"<<endl;
+	}
+	
+	struct sockaddr_in my_addr;
+	my_addr.sin_family = AF_INET;
+	my_addr.sin_port = htons(host_port);
+	memset(&(my_addr.sin_zero), 0, 8);
+	my_addr.sin_addr.s_addr = INADDR_ANY;
+
+	if(bind(hsock, (struct sockaddr*) &my_addr, sizeof(my_addr))==-1){
+		cout<<"Error binding to socket!"<<endl;
+	}
+	if(listen(hsock, 10)==-1){
+		cout<<"Error listening to socket!"<<endl;
+	}
+
+	socklen_t addr_size=sizeof(sockaddr_in);
+	int* csock;
+	struct sockaddr_in sadr;
+	int i=5;
+	while(i>0){
+		csock = (int*) malloc(sizeof(int));
+		if((*csock = accept(hsock, (struct sockaddr*) &sadr, &addr_size))!=-1){
+			function((void*)csock,server);
+		}
+		else{
+			cout<<"Error accepting!"<<endl;
+		}
+		i--;
+	}
+	close(hsock);
+	cout<<"Done"<<endl;
+
+}
 
 

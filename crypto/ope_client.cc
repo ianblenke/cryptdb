@@ -1,20 +1,21 @@
 #include <iostream>
 #include "ope_client.hh"
-#include "ope_server.hh"
 
 int main(){
 	cout<<"Starting scapegoat tree test"<<endl;
 
 	not_a_cipher nac = not_a_cipher();
-	ope_server<uint64_t> server = ope_server<uint64_t>();
-	ope_client<uint64_t,not_a_cipher> client = ope_client<uint64_t, not_a_cipher>(&nac, &server);
+//	ope_server<uint64_t> server = ope_server<uint64_t>();
+	ope_client<uint64_t,not_a_cipher> client = ope_client<uint64_t, not_a_cipher>(&nac/*, &server*/);
 
 	int i;
 	while(true){
 		cout<<"Enter a value: ";
 		cin>>i;
 		if(i==-1){
-			server.print_tree();
+			send(client.hsock, "0",1,0);
+			close(client.hsock);
+			break;
 		}else{
 			cout<<"Encrypting "<<i<<" to "<<client.encrypt(i)<<endl;
 		}
