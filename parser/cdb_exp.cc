@@ -6480,49 +6480,21 @@ static void do_query_q20(ConnectNew &conn,
     //  results.push_back(q20entry(row[0].data, row[1].data));
     //}
 
-
-    vector<string> partkeys;
-    {
-        // TODO: this is slight deviation from TPC-H query, but it makes
-        // the comparison more fair (like 'token%' is probably implemented
-        // efficiently as a prefix scan)
-        ostringstream s;
-        s << "select  p_partkey from PART_INT where p_name like '%" << p_name << "%'";
-
-        DBResultNew * dbres;
-        {
-          NamedTimer t(__func__, "execute-1");
-          conn.execute(s.str(), dbres);
-        }
-        ResType res;
-        {
-          NamedTimer t(__func__, "unpack-1");
-          res = dbres->unpack();
-          assert(res.ok);
-        }
-
-        partkeys.reserve(res.rows.size());
-        for (auto row : res.rows) {
-            partkeys.push_back(row[0].data);
-        }
-    }
-    assert(!partkeys.empty());
-
     vector<string> suppkeys;
     {
         ostringstream s;
         s <<
-        "select  ps_suppkey, ps_availqty from PARTSUPP_INT, LINEITEM_INT "
+        "select  ps_suppkey, ps_availqty from PARTSUPP_INT, LINEITEM_INT, PART_INT "
         " where "
         "     ps_partkey = l_partkey and "
         "     ps_suppkey = l_suppkey and "
-        "     ps_partkey in ( "
-        << join(partkeys, ",") <<
-        "     ) "
+        "     ps_partkey = p_partkey and "
+        "     p_name like '%" << p_name << "%'"
         "     and l_shipdate >= date '" << year << "-01-01'"
         "     and l_shipdate < date '" << year << "-01-01' + interval '1' year" <<
         (UseMySQL ? " group by ps_partkey, ps_suppkey " : " group by ps_partkey, ps_suppkey, ps_availqty ") <<
         " having ps_availqty * 100 > 0.5 * sum(l_quantity)";
+        cerr << s.str() << endl;
 
         DBResultNew * dbres;
         {
@@ -6606,35 +6578,6 @@ static void do_query_q20_opt_noagg(ConnectNew &conn,
     Binary key(cm.getKey(cm.getmkey(), fieldname(part::p_name, "SWP"), SECLEVEL::SWP));
     Token t = CryptoManager::token(key, Binary(lowerpname));
 
-    vector<string> partkeyDETs;
-    {
-        ostringstream s;
-        s <<
-        "select  p_partkey_DET from part_enc where searchSWP("
-          << smartMarshallBinary(string((char *)t.ciph.content, t.ciph.len))
-          << ", "
-          << smartMarshallBinary(string((char *)t.wordKey.content, t.wordKey.len))
-          << ", p_name_SWP)";
-
-        DBResultNew * dbres;
-        {
-            NamedTimer t(__func__, "execute-1");
-            conn.execute(s.str(), dbres);
-        }
-        ResType res;
-        {
-            NamedTimer t(__func__, "unpack-1");
-            res = dbres->unpack();
-            assert(res.ok);
-        }
-
-        partkeyDETs.reserve(res.rows.size());
-        for (auto row : res.rows) {
-            partkeyDETs.push_back(row[0].data);
-        }
-    }
-    assert(!partkeyDETs.empty());
-
     ostringstream s;
     //s <<
     //    "select  ps_partkey_DET, ps_suppkey_DET, ps_availqty_DET, l_quantity_DET "
@@ -6653,13 +6596,16 @@ static void do_query_q20_opt_noagg(ConnectNew &conn,
     // this strategy seems to perform better than the one above
     s <<
         "select  ps_partkey_DET, ps_suppkey_DET, ps_availqty_DET, " << group_concat("l_quantity_DET") << " "
-        "from partsupp_enc, lineitem_enc_rowid "
+        "from partsupp_enc, lineitem_enc_rowid, part_enc "
         "where "
         "    ps_partkey_DET = l_partkey_DET and "
         "    ps_suppkey_DET = l_suppkey_DET and "
-        "    ps_partkey_DET in ( "
-        << join(partkeyDETs, ",") <<
-        "    ) "
+        "    ps_partkey_DET = p_partkey_DET "
+        "    and searchSWP("
+          << smartMarshallBinary(string((char *)t.ciph.content, t.ciph.len))
+          << ", "
+          << smartMarshallBinary(string((char *)t.wordKey.content, t.wordKey.len))
+          << ", p_name_SWP)"
         "    and l_shipdate_OPE >= " << encDATE_START <<
         "    and l_shipdate_OPE < " << encDATE_END <<
         (UseMySQL ? "    group by ps_partkey_DET, ps_suppkey_DET" : "    group by ps_partkey_DET, ps_suppkey_DET, ps_availqty_DET");
