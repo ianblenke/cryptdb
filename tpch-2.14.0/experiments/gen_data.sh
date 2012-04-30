@@ -22,7 +22,7 @@ for scale in $SCALES; do
     rm dists.dss
     
     # remove trailing delimiter (so psql won't complain)
-    for i in *.tbl; do sed -i 's/|$//' $i; done
+    for i in *.tbl; do sed -i -e 's/|$//' $i; done
 
     cd ..
 done
