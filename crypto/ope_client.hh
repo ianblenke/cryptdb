@@ -22,7 +22,7 @@ class ope_client {
  public:
     int hsock;
 
-    ope_client(BlockCipher *bc/*, ope_server<V> *server*/) : b(bc)/*, s(server)*/ {
+    ope_client(BlockCipher *bc) : b(bc){
 //        _static_assert(BlockCipher::blocksize == sizeof(V));
 	int host_port = 1110;
 	char * host_name = "127.0.0.1";
@@ -39,10 +39,6 @@ class ope_client {
 		cout<<"Connect Failed!"<<endl;
 	}
 	
-/*	char* hello = "Hello!";
-	send(hsock, hello, strlen(hello),0);*/
-//	close(hsock);
-
 
     }
 
