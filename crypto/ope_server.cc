@@ -394,7 +394,7 @@ ope_server<EncT>::ope_server()
     root = NULL;
     max_height = 0;
     num_nodes = 0;
-    dbconnect =new Connect( "localhost", "frank", "alwm5u","cryptdb", 3306);
+    dbconnect =new Connect( "localhost", "username", "passwd","databasename", 3306);
 
 }
 

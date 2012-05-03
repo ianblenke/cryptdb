@@ -6,7 +6,7 @@ using namespace std;
 
 int main(){
 
-        Connect* dbconnect =new Connect( "localhost", "frank", "alwm5u","cryptdb", 3306);
+        Connect* dbconnect =new Connect( "localhost", "username", "passwd","databasename", 3306);
         /*DBResult * result;
         dbconnect->execute("select * from test", result);
         ResType rt = result->unpack();
