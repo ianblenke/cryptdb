@@ -2,7 +2,7 @@
 
 #include <string>
 #include "blowfish.hh"
-#include "../util/static_assert.hh"
+#include <util/static_assert.hh>
 #include <iostream>
 #include <map>
 #include <boost/unordered_map.hpp>
@@ -85,7 +85,7 @@ class ope_client {
 
     uint64_t encrypt(V pt) const {
 	pair<uint64_t, uint64_t> early_rtn_val = s->lookup(block_encrypt(pt));
-	if(early_rtn_val.first!=-1 && early_rtn_val.second!=-1) {
+	if(early_rtn_val.first!=(uint64_t) -1 && early_rtn_val.second!= (uint64_t)-1) {
 		return (early_rtn_val.first<<(64-early_rtn_val.second)) |
 			(1ULL<<(63-early_rtn_val.second));
 	}

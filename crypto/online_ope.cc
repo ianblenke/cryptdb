@@ -145,7 +145,6 @@ template<class EncT>
 void
 ope_server<EncT>::update_ope_table(tree_node<EncT> *n){
     tree_node<EncT> *ptr = n;
-    uint64_t tmp_v=0;
     while(ptr!= NULL){
 	pair<uint64_t, uint64_t> tmp_pair=(ope_table[ptr->enc_val]).first;
 	ope_table[ptr->enc_val]=make_pair(tmp_pair, false);
@@ -292,7 +291,8 @@ template<class EncT>
 EncT
 ope_server<EncT>::lookup(uint64_t v, uint64_t nbits) const
 {
-    auto tree_node<EncT> *n = tree_lookup(root, v, nbits);
+    auto 
+    n = tree_lookup(root, v, nbits);
     if (!n) {
         throw ope_lookup_failure();
     }
@@ -355,7 +355,7 @@ ope_server<EncT>::~ope_server()
 template class ope_server<uint64_t>;
 template class ope_server<uint32_t>;
 template class ope_server<uint16_t>;
-
+/*
 int main(){
 	cout<<"Starting scapegoat tree test"<<endl;
 
@@ -374,7 +374,7 @@ int main(){
 		}
 
 	}
-/*
+
 	uint64_t insert_array[] = {2,1,6,5,4,3,15,12,7,9,11,10,13,14,16,17,18};
 	for(uint64_t i=0; i<17; i++){
 		cout<<"Ciphertext="<<client.encrypt(insert_array[i])<<endl;
@@ -389,6 +389,6 @@ int main(){
 	for(uint64_t i=0; i<17; i++){
 		cout<<"Ciphertext="<<client.encrypt(insert_array[i])<<endl;
 	}
-*/
+
 //	server.print_table();	
-}
+}*/

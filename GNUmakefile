@@ -51,9 +51,9 @@ include crypto/Makefrag
 include crypto-old/Makefrag
 include edb/Makefrag
 include parser/Makefrag
-include test/Makefrag
+#include test/Makefrag
 include util/Makefrag
-include udf/Makefrag
+#include udf/Makefrag
 #include mysqlproxy/Makefrag
 
 $(OBJDIR)/.deps: $(foreach dir, $(OBJDIRS), $(wildcard $(OBJDIR)/$(dir)/*.d))

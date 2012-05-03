@@ -1,12 +1,11 @@
 #pragma once
 
 #include <string>
-#include "../util/static_assert.hh"
+#include <util/static_assert.hh>
 #include <iostream>
 #include <boost/unordered_map.hpp>
 #include <utility>
-
-using namespace std;
+#include <edb/Connect.hh>
 
 //parameters
 const double scapegoat_alpha = 0.5;
@@ -33,7 +32,7 @@ template<class EncT>
 class ope_server {
  public:
     EncT lookup(uint64_t v, uint64_t nbits) const;
-    pair<uint64_t, uint64_t> lookup(EncT xct);
+    std::pair<uint64_t, uint64_t> lookup(EncT xct);
     void insert(uint64_t v, uint64_t nbits, const EncT &encval);
     void print_table();
     void print_tree();
@@ -42,10 +41,10 @@ class ope_server {
     ~ope_server();
 
  private:
-
+    Connect * dbconnect;
     tree_node<EncT> *root; 
-    boost::unordered_map<EncT, pair<uint64_t,uint64_t> > ope_table;
-
+    boost::unordered_map<EncT, std::pair<uint64_t,uint64_t> > ope_table;
+    boost::unordered_map<EncT, int> version_table;
 
     void print_tree(tree_node<EncT> * n);
 
