@@ -1,13 +1,14 @@
 OBJDIRS	+= edb
 
-CRYPTDB_SRCS := sql_utils.cc Translator.cc Connect.cc MultiPrinc.cc AccessManager.cc mysqld-filler.cc
+CRYPTDB_SRCS := sql_utils.cc Translator.cc Connect.cc MultiPrinc.cc AccessManager.cc mysqld-filler.cc Annotation.cc schema.cc
 
 all:	$(OBJDIR)/libcryptdb.so
 
 CRYPTDB_OBJS := $(patsubst %.cc,$(OBJDIR)/edb/%.o,$(CRYPTDB_SRCS))
 $(OBJDIR)/libcryptdb.so: $(CRYPTDB_OBJS) \
-			 $(OBJDIR)/libedbcrypto.so 
-	$(CXX) -shared -o $@ $(CRYPTDB_OBJS) $(LDFLAGS) -ledbcrypto \
+			 $(OBJDIR)/libedbcrypto.so \
+			 $(OBJDIR)/libedbutil.so
+	$(CXX) -shared -o $@ $(CRYPTDB_OBJS) $(LDFLAGS) -ledbcrypto -ledbutil \
 	      -Wl,--whole-archive -L$(MYBUILD)/libmysqld -lmysqld \
 	      -Wl,--no-whole-archive $(LDFLAGS)
 

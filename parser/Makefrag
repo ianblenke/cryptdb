@@ -1,6 +1,6 @@
 OBJDIRS	+= parser
 
-PARSERSRC	:= Analysis.cc Annotation.cc schema.cc embedmysql.cc \
+PARSERSRC	:= Analysis.cc embedmysql.cc \
 		   CryptoHandlers.cc cdb_rewrite.cc 
 PARSERPROGS	:= cdb_test analyze load-schema print-back
 

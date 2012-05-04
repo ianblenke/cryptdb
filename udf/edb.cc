@@ -19,6 +19,7 @@
 #include <crypto-old/CryptoManager.hh> /* various functions for EDB */
 #include <crypto/blowfish.hh>
 #include <util/params.hh>
+#include <string.h>
 #include <util/util.hh>
 
 using namespace std;
@@ -76,6 +77,14 @@ char *   agg(UDF_INIT *initid, UDF_ARGS *args, char *result,
 void     func_add_set_deinit(UDF_INIT *initid);
 char *   func_add_set(UDF_INIT *initid, UDF_ARGS *args, char *result,
                       unsigned long *length, char *is_null, char *error);
+
+my_bool  get_ope_server_init(UDF_INIT *initid, UDF_ARGS *args,
+                               char *message);
+void     get_ope_server_deinit(UDF_INIT *initid);
+char *   get_ope_server(UDF_INIT *initid, UDF_ARGS *args, char *result,
+                          unsigned long *length, char *is_null, char *error);
+
+
 }
 
 static void __attribute__((unused))
@@ -218,7 +227,37 @@ decrypt_int_det(PG_FUNCTION_ARGS)
 
 }
 
+my_bool
+get_ope_server_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
+{
+    return 0;
+}
 
+void
+get_ope_server_deinit(UDF_INIT *initid)
+{
+    /*
+     * in mysql-server/sql/item_func.cc, udf_handler::fix_fields
+     * initializes initid.ptr=0 for us.
+     */
+    if (initid->ptr)
+        delete[] initid->ptr;
+}
+
+char *
+get_ope_server(UDF_INIT *initid, UDF_ARGS *args,
+                 char *result, unsigned long *length,
+                 char *is_null, char *error) {
+   
+    string addr = "127.0.0.1:1111";
+    char * res = (char*) addr.c_str();
+    initid->ptr = res;
+    memcpy(res, "127.0.0.1:1111", strlen(res));
+    *length = strlen(res);
+  
+    return (char*) initid->ptr;
+}
+ 
 
 my_bool
 decrypt_text_sem_init(UDF_INIT *initid, UDF_ARGS *args, char *message)

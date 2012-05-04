@@ -1,0 +1,14 @@
+OBJDIRS     += new_ope
+CRYPTO2SRC  :=
+
+
+all:	$(OBJDIR)/new_ope/ope_client
+$(OBJDIR)/new_ope/ope_client: $(OBJDIR)/new_ope/ope_client.o $(OBJDIR)/libedbcrypto2.so $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbutil.so
+	$(CXX) $< -o $@ $(LDFLAGS) -ledbcrypto2 -lcryptdb -ledbutil
+
+all:	$(OBJDIR)/new_ope/ope_server
+$(OBJDIR)/new_ope/ope_server: $(OBJDIR)/new_ope/ope_server.o $(OBJDIR)/libedbcrypto2.so $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbutil.so
+	$(CXX) $< -o $@ $(LDFLAGS) -ledbcrypto2 -lcryptdb -ledbutil
+
+
+# vim: set noexpandtab:

@@ -4,7 +4,7 @@
 #include <string>
 #include <stdexcept>
 
-#include <parser/Annotation.hh>
+#include <edb/Annotation.hh>
 
 #include <mysql.h>
 #include <sql_base.h>

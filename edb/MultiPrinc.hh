@@ -9,8 +9,8 @@
 
 #include <edb/AccessManager.hh>
 #include <edb/Translator.hh>
-#include <parser/schema.hh>
-#include <parser/Annotation.hh>
+#include <edb/schema.hh>
+#include <edb/Annotation.hh>
 
 class MultiPrinc {
  public:

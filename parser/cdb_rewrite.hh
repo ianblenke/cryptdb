@@ -17,7 +17,7 @@
 #include <sql_update.h>
 
 #include <parser/Analysis.hh>
-#include <parser/Annotation.hh>
+#include <edb/Annotation.hh>
 #include <parser/stringify.hh>
 
 #include <util/errstream.hh>

@@ -1,24 +1,15 @@
 OBJDIRS     += crypto
 CRYPTO2SRC  := paillier.cc urandom.cc arc4.cc hgd.cc pbkdf2.cc \
 	       ecjoin.cc search.cc skip32.cc ffx.cc online_ope.cc mont.cc \
-	       prng.cc ope.cc ope_client.cc#ope_server.cc
+	       prng.cc ope.cc 
 
 all:    $(OBJDIR)/libedbcrypto2.so
 $(OBJDIR)/libedbcrypto2.so: $(patsubst %.cc,$(OBJDIR)/crypto/%.o,$(CRYPTO2SRC))
 	$(CXX) -shared -o $@ $^ $(LDFLAGS)
 
-#all:	$(OBJDIR)/crypto/x
-#$(OBJDIR)/crypto/x: $(OBJDIR)/crypto/x.o $(OBJDIR)/libedbcrypto2.so
-#	$(CXX) $< -o $@ $(LDFLAGS) -ledbcrypto2
-
-all:    $(OBJDIR)/crypto/ope_client
-$(OBJDIR)/crypto/ope_client: $(OBJDIR)/crypto/ope_client.o $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbcrypto.so $(OBJDIR)/libedbcrypto2.so $(OBJDIR)/libedbcrypto.so $(OBJDIR)/libedbutil.so
-	$(CXX) $< -o  $@ $(LDFLAGS) -lcryptdb -ledbcrypto -ledbcrypto2 -ledbutil -ledbparser
-
-
-#all:    $(OBJDIR)/crypto/ope_server
-#$(OBJDIR)/crypto/ope_server: $(OBJDIR)/crypto/ope_server.o $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbcrypto.so $(OBJDIR)/libedbcrypto2.so $(OBJDIR)/libedbcrypto.so $(OBJDIR)/libedbutil.so
-#	$(CXX) $< -o  $@ $(LDFLAGS) -lcryptdb -ledbcrypto -ledbcrypto2 -ledbutil -ledbparser
+all:	$(OBJDIR)/crypto/x
+$(OBJDIR)/crypto/x: $(OBJDIR)/crypto/x.o $(OBJDIR)/libedbcrypto2.so
+	$(CXX) $< -o $@ $(LDFLAGS) -ledbcrypto2
 
 
 
