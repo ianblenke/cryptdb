@@ -7,7 +7,7 @@ all:	$(OBJDIR)/libedbcrypto.so
 
 CRYPTO_OBJS := $(patsubst %.cc,$(OBJDIR)/crypto-old/%.o,$(CRYPTO_SRCS))
 $(OBJDIR)/libedbcrypto.so: $(CRYPTO_OBJS)
-	$(CXX) -shared -o $@ $(CRYPTO_OBJS) $(LDFLAGS)
+	$(CXX) -shared -o $@ $(CRYPTO_OBJS) $(LDFLAGS) -ledbcrypto2
 
 install: install_crypto_old
 
