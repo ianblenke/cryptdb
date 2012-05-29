@@ -88,21 +88,6 @@ static inline uint32_t EncodeDate(uint32_t month, uint32_t day, uint32_t year) {
   return day | (month << 5) | (year << 9);
 }
 
-static void tokenize(const string &s,
-                     const string &delim,
-                     vector<string> &tokens) {
-
-    size_t i = 0;
-    while (true) {
-        size_t p = s.find(delim, i);
-        tokens.push_back(
-                s.substr(
-                    i, (p == string::npos ? s.size() : p) - i));
-        if (p == string::npos) break;
-        i = p + delim.size();
-    }
-}
-
 struct date_t {
   // dd-mm-yyyy
   // TODO: this implementation doesn't check for valid dates

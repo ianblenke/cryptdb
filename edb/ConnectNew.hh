@@ -9,6 +9,11 @@ class DBResultNew {
   public:
     virtual ~DBResultNew() {}
     virtual ResType unpack() = 0;
+
+    virtual bool has_more() = 0;
+    virtual void next(ResType& results) = 0;
+
+    static const unsigned int BatchSize = 8192 * 4; // hinted batch size
 };
 
 class ConnectNew {

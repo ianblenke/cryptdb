@@ -23,20 +23,6 @@ using namespace std;
 static CryptoManager cm("12345");
 static crypto_manager_stub stub(&cm, false);
 
-static void tokenize(const string &s,
-                     const string &delim,
-                     vector<string> &tokens) {
-    size_t i = 0;
-    while (true) {
-        size_t p = s.find(delim, i);
-        tokens.push_back(
-                s.substr(
-                    i, (p == string::npos ? s.size() : p) - i));
-        if (p == string::npos) break;
-        i = p + delim.size();
-    }
-}
-
 static vector<size_t> positions;
 
 static void process_input(const string& s) {

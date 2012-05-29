@@ -8,24 +8,27 @@
 #include <crypto/arc4.hh>
 #include <crypto/ffx.hh>
 #include <crypto/prng.hh>
-
 #include <crypto/ope.hh>
 
+#include <crypto-old/CryptoManager.hh>
+
 #include <util/static_assert.hh>
+#include <util/onions.hh>
+#include <util/util.hh>
 
 #include <NTL/ZZ.h>
 
 #define NELEMS(array) (sizeof(array) / sizeof(array[0]))
 
 template <typename T>
-inline string to_hex(const T& t) {
+inline std::string to_hex(const T& t) {
     std::ostringstream s;
     s << std::hex << t;
     return s.str();
 }
 
 template <>
-inline string to_hex(const string& input) {
+inline std::string to_hex(const std::string& input) {
     size_t len = input.length();
     const char* const lut = "0123456789ABCDEF";
 
@@ -44,26 +47,44 @@ inline long roundToLong(double x) {
 }
 
 template <typename R>
-R resultFromStr(const string &r) {
-    stringstream ss(r);
+R resultFromStr(const std::string &r) {
+    std::stringstream ss(r);
     R val;
     ss >> val;
     return val;
 }
 
 template <>
-string resultFromStr(const string &r) { return r; }
+std::string resultFromStr(const std::string &r) { return r; }
 
 template <typename T>
-inline string to_s(const T& t) {
-    ostringstream s;
+inline std::string to_s(const T& t) {
+    std::ostringstream s;
     s << t;
     return s.str();
 }
 
-int encode_yyyy_mm_dd(const string &datestr);
+void tokenize(const std::string &s,
+              const std::string &delim,
+              std::vector<std::string> &tokens);
 
-int encode_yyyy_mm_dd(const string &datestr) {
+void tokenize(const std::string &s,
+              const std::string &delim,
+              std::vector<std::string> &tokens) {
+    size_t i = 0;
+    while (true) {
+        size_t p = s.find(delim, i);
+        tokens.push_back(
+                s.substr(
+                    i, (p == std::string::npos ? s.size() : p) - i));
+        if (p == std::string::npos) break;
+        i = p + delim.size();
+    }
+}
+
+int encode_yyyy_mm_dd(const std::string &datestr);
+
+int encode_yyyy_mm_dd(const std::string &datestr) {
   int year, month, day;
   int ret = sscanf(datestr.c_str(), "%d-%d-%d", &year, &month, &day);
   assert(ret == 3);
@@ -102,10 +123,10 @@ std::string stringify_date_from_encoding(uint32_t encoding) {
   return oss.str();
 }
 
-string join(const vector<string> &tokens, const string &sep);
+std::string join(const std::vector<std::string> &tokens, const std::string &sep);
 
-string join(const vector<string> &tokens, const string &sep) {
-    ostringstream s;
+std::string join(const std::vector<std::string> &tokens, const std::string &sep) {
+    std::ostringstream s;
     for (size_t i = 0; i < tokens.size(); i++) {
         s << tokens[i];
         if (i != tokens.size() - 1) s << sep;
@@ -113,20 +134,20 @@ string join(const vector<string> &tokens, const string &sep) {
     return s.str();
 }
 
-string fieldname(size_t fieldnum, const string &suffix);
+std::string fieldname(size_t fieldnum, const std::string &suffix);
 
-string fieldname(size_t fieldnum, const string &suffix) {
-    ostringstream s;
+std::string fieldname(size_t fieldnum, const std::string &suffix) {
+    std::ostringstream s;
     s << "field" << fieldnum << suffix;
     return s.str();
 }
 
-string to_mysql_escape_varbin(
-        const string &buf, char escape = '\\', char fieldTerm = '|', char newlineTerm = '\n');
+std::string to_mysql_escape_varbin(
+        const std::string &buf, char escape = '\\', char fieldTerm = '|', char newlineTerm = '\n');
 
-string to_mysql_escape_varbin(
-        const string &buf, char escape, char fieldTerm, char newlineTerm) {
-    ostringstream s;
+std::string to_mysql_escape_varbin(
+        const std::string &buf, char escape, char fieldTerm, char newlineTerm) {
+    std::ostringstream s;
     for (size_t i = 0; i < buf.size(); i++) {
         char cur = buf[i];
         if (cur == escape || cur == fieldTerm || cur == newlineTerm) {
@@ -138,9 +159,9 @@ string to_mysql_escape_varbin(
 }
 
 namespace {
-    inline string str_reverse(const string& orig) {
-        ostringstream buf;
-        for (string::const_reverse_iterator it = orig.rbegin();
+    inline std::string str_reverse(const std::string& orig) {
+        std::ostringstream buf;
+        for (std::string::const_reverse_iterator it = orig.rbegin();
              it != orig.rend(); ++it) buf << *it;
         return buf.str();
     }
@@ -196,8 +217,8 @@ public:
   }
 
   template <size_t n_bytes = 4>
-  string crypt(AES_KEY * mkey, string data, fieldType ft,
-               string fullfieldname,
+  std::string crypt(AES_KEY * mkey, std::string data, fieldType ft,
+               std::string fullfieldname,
                SECLEVEL fromlevel, SECLEVEL tolevel, bool & isBin,
                uint64_t salt) {
     assert(fromlevel != tolevel);
@@ -268,11 +289,11 @@ private:
     };
 
     typedef ope::OPE new_ope;
-    typedef std::pair<string, size_t> ope_cache_key;
+    typedef std::pair<std::string, size_t> ope_cache_key;
     typedef std::map<ope_cache_key, new_ope*> ope_cache_map;
     ope_cache_map ope_cache;
 
-    new_ope* get_ope_object(const string& key, size_t nbytesp) {
+    new_ope* get_ope_object(const std::string& key, size_t nbytesp) {
         ope_cache_key ckey(key, nbytesp);
         auto i = ope_cache.find(ckey);
         if (i == ope_cache.end()) {
@@ -297,10 +318,10 @@ private:
     }
   };
 
-  string encrypt_string(const string& pt, const string& key) {
+  std::string encrypt_string(const std::string& pt, const std::string& key) {
     streamrng<arc4> r(key);
-    vector<uint8_t> pad = r.rand_vec<uint8_t>(pt.size());
-    string ct;
+    std::vector<uint8_t> pad = r.rand_vec<uint8_t>(pt.size());
+    std::string ct;
     ct.resize(pad.size());
     for (size_t i = 0; i < pt.size(); i++) {
         ct[i] = pad[i] ^ pt[i];
@@ -308,10 +329,10 @@ private:
     return ct;
   }
 
-  string decrypt_string(const string& ct, const string& key) {
+  std::string decrypt_string(const std::string& ct, const std::string& key) {
     streamrng<arc4> r(key);
-    vector<uint8_t> pad = r.rand_vec<uint8_t>(ct.size());
-    string pt;
+    std::vector<uint8_t> pad = r.rand_vec<uint8_t>(ct.size());
+    std::string pt;
     pt.resize(pad.size());
     for (size_t i = 0; i < pt.size(); i++) {
         pt[i] = pad[i] ^ ct[i];
@@ -320,8 +341,8 @@ private:
   }
 
   template <size_t n_bytes>
-  string encrypt_stub(AES_KEY * mkey, string data, fieldType ft,
-                      string fullfieldname,
+  std::string encrypt_stub(AES_KEY * mkey, std::string data, fieldType ft,
+                      std::string fullfieldname,
                       SECLEVEL fromlevel, SECLEVEL tolevel, bool & isBin,
                       uint64_t salt) {
     _static_assert(n_bytes <= sizeof(uint64_t));
@@ -343,7 +364,7 @@ private:
 
           fromlevel = increaseLevel(fromlevel, ft, oDET);
 
-          string _keydata = cm->getKey(mkey, "join", fromlevel);
+          std::string _keydata = cm->getKey(mkey, "join", fromlevel);
           AES key((const uint8_t*)_keydata.data(), _keydata.size());
           ffx2<AES> f(&key, n_bytes * 8, {});
 
@@ -369,7 +390,7 @@ private:
         if (fromlevel == SECLEVEL::DETJOIN) {
           fromlevel = increaseLevel(fromlevel, ft, oDET);
 
-          string _keydata = cm->getKey(mkey, fullfieldname, fromlevel);
+          std::string _keydata = cm->getKey(mkey, fullfieldname, fromlevel);
           AES key((const uint8_t*)_keydata.data(), _keydata.size());
           ffx2<AES> f(&key, n_bytes * 8, {});
 
@@ -422,7 +443,7 @@ private:
                     } else {
                         NTL::ZZ plaintext;
                         plaintext = val;
-                        string ciphertext = ope.encrypt(plaintext);
+                        std::string ciphertext = ope.encrypt(plaintext);
                         if (fromlevel == tolevel) {
                             isBin = true;
                             return ciphertext;
@@ -501,8 +522,8 @@ private:
   }
 
   template <size_t n_bytes>
-  string decrypt_stub(AES_KEY * mkey, string data, fieldType ft,
-                      string fullfieldname,
+  std::string decrypt_stub(AES_KEY * mkey, std::string data, fieldType ft,
+                      std::string fullfieldname,
                       SECLEVEL fromlevel, SECLEVEL tolevel, bool & isBin,
                       uint64_t salt) {
     assert(fromlevel > tolevel);
@@ -520,7 +541,7 @@ private:
         assert(max_size<n_bytes * 8>::is_valid);
         assert(val <= max_size<n_bytes * 8>::value);
         if (fromlevel == SECLEVEL::DET) {
-            string _keydata = cm->getKey(mkey, fullfieldname, fromlevel);
+            std::string _keydata = cm->getKey(mkey, fullfieldname, fromlevel);
             AES key((const uint8_t*)_keydata.data(), _keydata.size());
             ffx2<AES> f(&key, n_bytes * 8, {});
 
@@ -540,7 +561,7 @@ private:
         }
 
         if (fromlevel == SECLEVEL::DETJOIN) {
-            string _keydata = cm->getKey(mkey, "join", fromlevel);
+            std::string _keydata = cm->getKey(mkey, "join", fromlevel);
             AES key((const uint8_t*)_keydata.data(), _keydata.size());
             ffx2<AES> f(&key, n_bytes * 8, {});
 

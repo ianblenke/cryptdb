@@ -60,26 +60,52 @@ class MySQLDBRes : public DBResultNew {
       return res;
     }
 
+    virtual bool has_more() {
+      throw runtime_error("UNIMPL");
+    }
+
+    virtual void next(ResType& results) {
+      throw runtime_error("UNIMPL");
+    }
+
   private:
     MYSQL_RES* native;
 };
 
 class PGDBRes : public DBResultNew {
   public:
-    PGDBRes(PGresult* native) : native(native) {}
+    PGDBRes(PGresult* native)
+      : native(native), _i(0), _n(0), _c(0) {
+      assert(native);
+      _n = PQntuples(native);
+      _c = PQnfields(native);
+    }
+
     virtual ~PGDBRes() {
       PQclear(native);
     }
+
     virtual ResType unpack() {
       ResType res;
-      unsigned int cols = PQnfields(native);
-      unsigned int rows = PQntuples(native);
-      for (unsigned int row = 0; row < rows; row++) {
+      fill(res, _n);
+      return res;
+    }
+
+    virtual bool has_more() { return _i < _n; }
+
+    virtual void next(ResType& results) { fill(results, _i + BatchSize); }
+
+  private:
+
+    void fill(ResType& res, unsigned int to) {
+      unsigned int end = to > _n ? _n : to;
+      for (; _i < end; _i++) {
         vector<SqlItem> resrow;
-        for (unsigned int col = 0; col < cols; col++) {
+        for (unsigned int col = 0; col < _c; col++) {
           SqlItem item;
-          item.data = string(PQgetvalue(native, row, col), PQgetlength(native, row, col));
-          if (PQftype(native, col) == 17 /*BYTEAOID*/) {
+          item.data = string(PQgetvalue(native, _i, col), PQgetlength(native, _i, col));
+          item.type = PQftype(native, col);
+          if (item.type == 17 /*BYTEAOID*/) {
             // need to escape (binary string)
             ostringstream o;
             for (size_t i = 0; i < item.data.size(); ) {
@@ -108,10 +134,16 @@ class PGDBRes : public DBResultNew {
         }
         res.rows.push_back(resrow);
       }
-      return res;
+
+      for (unsigned int col = 0; col < _c; col++) {
+        res.types.push_back(PQftype(native, col));
+      }
     }
-  private:
+
     PGresult* native;
+    size_t _i;
+    size_t _n;
+    size_t _c;
 };
 
 bool

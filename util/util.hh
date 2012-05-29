@@ -113,7 +113,7 @@ class ResType {
 
     bool ok;  // query executed successfully
     std::vector<std::string> names;
-    std::vector<enum_field_types> types;
+    std::vector<unsigned int> types; // opaque type- caller must interpret
     std::vector<std::vector<SqlItem> > rows;
     AutoInc ai;
 };
@@ -608,13 +608,13 @@ class SqlItem {
     SqlItem() : null(true) {}
 
     bool null;
-    enum_field_types type;
+    unsigned int type; // opaque type identifier
     std::string data;
 
     std::string to_string() const {
         if (null)
             return "NULL";
-        if (type == MYSQL_TYPE_BLOB)
+        if (type == (unsigned int)MYSQL_TYPE_BLOB)
             return marshallBinary(data);
         return data;
     }
