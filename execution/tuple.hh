@@ -163,6 +163,7 @@ public:
     } \
     switch (_t) { \
       case TYPE_STRING: return db_elem(_s op rhs._s); \
+      case TYPE_DATE:   return db_elem(_d.i64 op rhs._d.i64); \
       default: break; \
     } \
     throw std::runtime_error("unimpl"); \

@@ -32,6 +32,34 @@ public:
   virtual db_elem eval(eval_context& ctx) { return db_elem(db_elem::null_tag); }
 };
 
+class date_literal_node : public expr_node {
+public:
+  date_literal_node(
+      unsigned int year,
+      unsigned int month,
+      unsigned int day)
+    : _year(year), _month(month), _day(day) {}
+
+  date_literal_node(
+      const std::string& fmt) {
+    int ret = sscanf(fmt.c_str(), "%d-%d-%d", &_year, &_month, &_day);
+    assert(ret == 3);
+    assert(1 <= _day && _day <= 31);
+    assert(1 <= _month && _month <= 12);
+    assert(_year >= 0);
+    // TODO: validate for actual date
+  }
+
+  virtual db_elem eval(eval_context& ctx) {
+    return db_elem(_year, _month, _day);
+  }
+
+private:
+  unsigned int _year;
+  unsigned int _month;
+  unsigned int _day;
+};
+
 class unop_node : public expr_node {
 public:
   unop_node(expr_node* child) : expr_node({child}) {}
