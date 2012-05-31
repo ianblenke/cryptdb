@@ -8,6 +8,7 @@
 #include <execution/eval.hh>
 
 #include <util/either.hh>
+#include <util/stl.hh>
 
 #define DECL_PHY_OP_NEXT \
   virtual void next(exec_context& ctx, db_tuple_vec& tuple);
@@ -62,24 +63,13 @@ protected:
   pos_vec _pos;
 };
 
-namespace _util {
-  template <typename T>
-  inline std::vector<T> prepend(const T& elem, const std::vector<T>& v) {
-    std::vector<T> r;
-    r.reserve(v.size() + 1);
-    r.push_back(elem);
-    r.insert(r.end(), v.begin(), v.end());
-    return r;
-  }
-}
-
 class local_filter_op : public physical_operator {
 public:
   local_filter_op(
       expr_node* filter,
       physical_operator* child,
       const op_vec& subqueries)
-    : physical_operator(_util::prepend(child, subqueries)), _filter(filter) {
+    : physical_operator(util::prepend(child, subqueries)), _filter(filter) {
     assert(filter);
     assert(child);
   }
@@ -94,7 +84,9 @@ protected:
 
 class local_transform_op : public physical_operator {
 public:
-  typedef std::vector< either< size_t, std::pair<db_column_desc, expr_node*> > > trfm_desc_vec;
+  typedef either< size_t, std::pair<db_column_desc, expr_node*> > trfm_desc;
+
+  typedef std::vector<trfm_desc> trfm_desc_vec;
 
   local_transform_op(
       const trfm_desc_vec& trfm_vec,

@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <stdexcept>
 
 #include <execution/tuple.hh>
@@ -44,9 +45,94 @@ db_elem::TypeFromPGOid(unsigned int oid) {
   }
 }
 
+// find all occurances of char c in haystack
+static void find_all_occur_of(
+    const string& haystack,
+    char c,
+    vector<size_t>& pos)
+{
+  for (size_t i = 0; i < haystack.size(); i++) {
+    if (haystack[i] == c) pos.push_back(i);
+  }
+}
+
+static inline string lower_case(const string& target)
+{
+  string r;
+  r.resize(target.size());
+  transform(target.begin(), target.end(), r.begin(), ::tolower);
+  return r;
+}
+
+db_elem
+db_elem::like(const db_elem& qstr, bool case_sensitive) const
+{
+  requireType(TYPE_STRING);
+  qstr.requireType(TYPE_STRING);
+
+  string target = _s;
+  string pattern = qstr._s;
+
+  if (!case_sensitive) {
+    target = lower_case(target);
+    pattern = lower_case(pattern);
+  }
+
+  // check for special cases
+  // qstr = "%..." or qstr = "...%" or qstr = "%...%"
+
+  vector<size_t> pos;
+  find_all_occur_of(pattern, '%', pos);
+
+  if (pos.empty()) {
+    return db_elem(target == pattern);
+  }
+
+  assert(!pattern.empty());
+
+  if (pos.size() == 1 && pos.front() == 0) {
+    // pattern = "%..."
+    size_t p = target.rfind(pattern.substr(1));
+    return (p < target.size() && (target.size() - p) == (pattern.size() - 1));
+  }
+
+  if (pos.size() == 1 && pos.front() == (pattern.size() - 1)) {
+    // pattern = "...%"
+    return target.find(pattern.substr(0, pattern.size())) == 0;
+  }
+
+  if (pos.size() == 2 && pos.front() == 0 && pos.back() == (pattern.size() - 1)) {
+    // pattern = "%...%"
+    return target.find(pattern.substr(1, pattern.size())) != string::npos;
+  }
+
+  // otherwise, punt for now
+  throw runtime_error("pattern unimplemented for now");
+}
+
+db_elem
+db_elem::count(bool distinct) const
+{
+  if (distinct) throw runtime_error("UNIMPL");
+  requireType(TYPE_VECTOR);
+  return int64_t(_elems.size());
+}
+
+db_elem
+db_elem::sum(bool distinct) const
+{
+  if (distinct) throw runtime_error("UNIMPL");
+  requireType(TYPE_VECTOR);
+  if (_elems.empty()) throw runtime_error("sum on empty vector");
+  db_elem accum(0L);
+  for (auto &e : _elems) accum = accum + e;
+  return accum;
+}
+
 std::ostream& operator<<(std::ostream& o, const db_elem& e) {
   switch (e._t) {
-    case db_elem::TYPE_UNINIT: o << "NULL"; break;
+    case db_elem::TYPE_UNINIT: o << "UNINIT"; break;
+    case db_elem::TYPE_NULL: o << "NULL"; break;
     case db_elem::TYPE_INT: o << e._d.i64; break;
     case db_elem::TYPE_BOOL: o << e._d.b; break;
     case db_elem::TYPE_DOUBLE: o << e._d.dbl; break;

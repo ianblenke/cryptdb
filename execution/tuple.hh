@@ -16,7 +16,12 @@ public:
 
   friend std::ostream& operator<<(std::ostream&, const db_elem&);
 
+  enum null_type {
+    null_tag,
+  };
+
   db_elem() : _t(TYPE_UNINIT) {}
+  db_elem(null_type t) : _t(TYPE_NULL) {}
 
   db_elem(int64_t i) : _t(TYPE_INT) { _d.i64 = i; }
   db_elem(bool b) : _t(TYPE_BOOL) { _d.b = b; }
@@ -33,6 +38,8 @@ public:
   enum type {
     TYPE_UNINIT,
 
+    TYPE_NULL, // null has to be explicitly initialized as null
+
     TYPE_BOOL,
     TYPE_INT,
     TYPE_DOUBLE,
@@ -43,6 +50,8 @@ public:
   };
 
   inline type get_type() const { return _t; }
+  inline bool is_inited() const { return _t != TYPE_UNINIT; }
+  inline bool is_uninit() const { return _t == TYPE_UNINIT; }
 
   inline std::string stringify() const {
     std::ostringstream oss;
@@ -61,7 +70,14 @@ private:
     }
   }
 
+  void requireType(type t) const {
+    if (_t != t) {
+      throw std::runtime_error("not required type");
+    }
+  }
+
   // this must be a numeric type and promotable
+  // for now, we don't handle nulls correctly
   db_elem promote(type t) const {
     assert(IsNumericType(t));
     assert(IsNumericType(_t));
@@ -152,6 +168,15 @@ public:
     throw std::runtime_error("unimpl"); \
   }
 
+#define DECL_IMPL_LOGICAL_BINOP(op) \
+  inline db_elem operator op(const db_elem& rhs) const { \
+    VECTOR_OPS_IMPL(op); \
+    if (_t != TYPE_BOOL || rhs._t != TYPE_BOOL) { \
+      throw std::runtime_error("need bool types"); \
+    } \
+    return db_elem(_d.b op rhs._d.b); \
+  }
+
   DECL_IMPL_BINOP(<);
   DECL_IMPL_BINOP(<=);
   DECL_IMPL_BINOP(>);
@@ -159,12 +184,13 @@ public:
   DECL_IMPL_BINOP(==);
   DECL_IMPL_BINOP(!=);
 
+  DECL_IMPL_LOGICAL_BINOP(||);
+  DECL_IMPL_LOGICAL_BINOP(&&);
+
   // unsafe casts assume not vectors
 
   inline bool unsafe_cast_bool() const {
-    if (_t != TYPE_BOOL) {
-      throw std::runtime_error("not bool");
-    }
+    requireType(TYPE_BOOL);
     return _d.b;
   }
 
@@ -176,6 +202,12 @@ public:
 #undef VECTOR_OPS_IMPL
 #undef DECL_IMPL_NUMERIC_BINOP
 #undef DECL_IMPL_BINOP
+
+  db_elem like(const db_elem& qstr, bool case_sensitive = true) const;
+
+  // assumes vector
+  db_elem count(bool distinct) const;
+  db_elem sum(bool distinct) const;
 
 private:
   type _t;
