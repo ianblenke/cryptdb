@@ -2,6 +2,7 @@
 #include <stdexcept>
 
 #include <execution/tuple.hh>
+#include <parser/cdb_helpers.hh>
 
 // values come from looking at: src/include/catalog/pg_type.h
 
@@ -129,7 +130,39 @@ db_elem::sum(bool distinct) const
   return accum;
 }
 
-std::ostream& operator<<(std::ostream& o, const db_elem& e) {
+string
+db_elem::sqlify(bool force_unsigned) const
+{
+  ostringstream o;
+  switch (_t) {
+    case db_elem::TYPE_NULL: o << "NULL"; break;
+    case db_elem::TYPE_INT:
+      if (force_unsigned) o << (uint64_t) _d.i64;
+      else                o << _d.i64;
+      break;
+    case db_elem::TYPE_BOOL: o << (_d.b ? "t" : "f"); break;
+    case db_elem::TYPE_DOUBLE: o << _d.dbl; break;
+    case db_elem::TYPE_STRING:
+      {
+        // This gets around the escaping issues for now
+        string hex = to_hex(_s);
+        o << "decode('" << hex << "', 'hex')";
+      }
+      break;
+    case db_elem::TYPE_DATE:
+      {
+        uint32_t day, month, year;
+        extract_date_from_encoding((uint32_t) _d.i64, month, day, year);
+        o << "'" << year << "-" << month << "-" << day << "'";
+      }
+      break;
+    default: assert(false);
+  }
+  return o.str();
+}
+
+ostream& operator<<(ostream& o, const db_elem& e)
+{
   switch (e._t) {
     case db_elem::TYPE_UNINIT: o << "UNINIT"; break;
     case db_elem::TYPE_NULL: o << "NULL"; break;
@@ -139,19 +172,8 @@ std::ostream& operator<<(std::ostream& o, const db_elem& e) {
     case db_elem::TYPE_STRING: o << e._s; break;
     case db_elem::TYPE_DATE:
       {
-        // TODO: this is copied from parser/cdb_helpers.hh, b/c we don't want
-        // to create a dependency on parser if not really necessary
-
-        static const uint32_t DayMask = 0x1F;
-        static const uint32_t MonthMask = 0x1E0;
-        static const uint32_t YearMask = ((uint32_t)-1) << 9;
-
-        uint32_t encoding = (uint32_t) e._d.i64;
-
-        uint32_t day = encoding & DayMask;
-        uint32_t month = (encoding & MonthMask) >> 5;
-        uint32_t year = (encoding & YearMask) >> 9;
-
+        uint32_t day, month, year;
+        extract_date_from_encoding((uint32_t) e._d.i64, month, day, year);
         // TODO: format yyyy-mm-dd
         o << year << "-" << month << "-" << day;
       }

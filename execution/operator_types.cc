@@ -14,8 +14,44 @@ remote_sql_op::open(exec_context& ctx)
   // execute all the children as a one-shot
   for (auto c : _children) c->execute(ctx);
 
+  // generate params
+  string sql = _sql;
+  if (_param_generator) {
+    sql_param_generator::param_map param_map = _param_generator->get_param_map(ctx);
+
+    // this code is not smart now- we should ignore substitution sequences
+    // which are contained within any string literals (but there shouldn't be any
+    // actually, which is why we don't care for now)
+
+    ostringstream buf;
+    for (size_t i = 0; i < sql.size();) {
+      char ch = sql[i];
+      switch (ch) {
+        case ':': {
+          i++;
+          ostringstream p;
+          while (i < sql.size() && isdigit(sql[i])) {
+            p << sql[i];
+            i++;
+          }
+          string p0 = p.str();
+          assert(!p0.empty());
+          size_t idx = resultFromStr<size_t>(p0);
+          assert(param_map.find(idx) != param_map.end());
+          buf << param_map[idx].sqlify(true);
+          break;
+        }
+        default:
+          buf << ch;
+          i++;
+          break;
+      }
+    }
+    sql = buf.str();
+  }
+
   // open and execute the sql statement
-  if (!ctx.connection->execute(_sql, _res)) {
+  if (!ctx.connection->execute(sql, _res)) {
     throw runtime_error("Could not execute sql");
   }
   assert(_res);

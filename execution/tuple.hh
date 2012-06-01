@@ -59,6 +59,9 @@ public:
     return oss.str();
   }
 
+  // just a hack for now
+  std::string sqlify(bool force_unsigned) const;
+
 private:
   inline static bool IsNumericType(type t) {
     return t >= TYPE_BOOL && t <= TYPE_DOUBLE;

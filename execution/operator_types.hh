@@ -1,5 +1,6 @@
 #pragma once
 
+#include <map>
 #include <string>
 #include <vector>
 #include <utility>
@@ -17,14 +18,26 @@
   virtual bool has_more(exec_context& ctx); \
   DECL_PHY_OP_NEXT
 
+class sql_param_generator {
+public:
+  typedef std::map< size_t, db_elem > param_map;
+  virtual ~sql_param_generator() {}
+  virtual param_map get_param_map(exec_context& ctx) = 0;
+};
+
 class remote_sql_op : public physical_operator {
 public:
   remote_sql_op(
+      sql_param_generator* param_generator,
       const std::string& sql,
       const desc_vec& desc_vec,
       const std::vector< physical_operator* >& children) :
     physical_operator(children),
-    _sql(sql), _desc_vec(desc_vec), _res(NULL) {}
+    _param_generator(param_generator), _sql(sql), _desc_vec(desc_vec), _res(NULL) {}
+
+  ~remote_sql_op() {
+    if (_param_generator) delete _param_generator;
+  }
 
   virtual desc_vec tuple_desc() { return _desc_vec; }
 
@@ -34,6 +47,8 @@ public:
   DECL_PHY_OP_ITER_IFACE;
 
 protected:
+  sql_param_generator* _param_generator;
+
   std::string _sql;
   desc_vec _desc_vec;
 

@@ -20,6 +20,8 @@
 
 #define NELEMS(array) (sizeof(array) / sizeof(array[0]))
 
+namespace {
+
 template <typename T>
 inline std::string to_hex(const T& t) {
     std::ostringstream s;
@@ -66,10 +68,6 @@ inline std::string to_s(const T& t) {
 
 void tokenize(const std::string &s,
               const std::string &delim,
-              std::vector<std::string> &tokens);
-
-void tokenize(const std::string &s,
-              const std::string &delim,
               std::vector<std::string> &tokens) {
     size_t i = 0;
     while (true) {
@@ -81,8 +79,6 @@ void tokenize(const std::string &s,
         i = p + delim.size();
     }
 }
-
-int encode_yyyy_mm_dd(const std::string &datestr);
 
 int encode_yyyy_mm_dd(const std::string &datestr) {
   int year, month, day;
@@ -98,11 +94,6 @@ int encode_yyyy_mm_dd(const std::string &datestr) {
 void extract_date_from_encoding(uint32_t encoding,
                                 uint32_t &month,
                                 uint32_t &day,
-                                uint32_t &year);
-
-void extract_date_from_encoding(uint32_t encoding,
-                                uint32_t &month,
-                                uint32_t &day,
                                 uint32_t &year) {
   static const uint32_t DayMask = 0x1F;
   static const uint32_t MonthMask = 0x1E0;
@@ -113,8 +104,6 @@ void extract_date_from_encoding(uint32_t encoding,
   year = (encoding & YearMask) >> 9;
 }
 
-std::string stringify_date_from_encoding(uint32_t encoding);
-
 std::string stringify_date_from_encoding(uint32_t encoding) {
   uint32_t month, day, year;
   extract_date_from_encoding(encoding, month, day, year);
@@ -122,8 +111,6 @@ std::string stringify_date_from_encoding(uint32_t encoding) {
   oss << year << "-" << month << "-" << day;
   return oss.str();
 }
-
-std::string join(const std::vector<std::string> &tokens, const std::string &sep);
 
 std::string join(const std::vector<std::string> &tokens, const std::string &sep) {
     std::ostringstream s;
@@ -134,8 +121,6 @@ std::string join(const std::vector<std::string> &tokens, const std::string &sep)
     return s.str();
 }
 
-std::string fieldname(size_t fieldnum, const std::string &suffix);
-
 std::string fieldname(size_t fieldnum, const std::string &suffix) {
     std::ostringstream s;
     s << "field" << fieldnum << suffix;
@@ -143,10 +128,7 @@ std::string fieldname(size_t fieldnum, const std::string &suffix) {
 }
 
 std::string to_mysql_escape_varbin(
-        const std::string &buf, char escape = '\\', char fieldTerm = '|', char newlineTerm = '\n');
-
-std::string to_mysql_escape_varbin(
-        const std::string &buf, char escape, char fieldTerm, char newlineTerm) {
+        const std::string &buf, char escape = '\\', char fieldTerm = '|', char newlineTerm = '\n') {
     std::ostringstream s;
     for (size_t i = 0; i < buf.size(); i++) {
         char cur = buf[i];
@@ -158,27 +140,26 @@ std::string to_mysql_escape_varbin(
     return s.str();
 }
 
-namespace {
-    inline std::string str_reverse(const std::string& orig) {
-        std::ostringstream buf;
-        for (std::string::const_reverse_iterator it = orig.rbegin();
-             it != orig.rend(); ++it) buf << *it;
-        return buf.str();
-    }
-
-    uint64_t ZZToU64(NTL::ZZ val)
-    {
-        uint64_t res = 0;
-        uint64_t mul = 1;
-        while (val > 0) {
-            res = res + mul*(NTL::to_int(val % 10));
-            mul = mul * 10;
-            val = val / 10;
-        }
-        return res;
-    }
-
+inline std::string str_reverse(const std::string& orig) {
+    std::ostringstream buf;
+    for (std::string::const_reverse_iterator it = orig.rbegin();
+         it != orig.rend(); ++it) buf << *it;
+    return buf.str();
 }
+
+uint64_t ZZToU64(NTL::ZZ val)
+{
+    uint64_t res = 0;
+    uint64_t mul = 1;
+    while (val > 0) {
+        res = res + mul*(NTL::to_int(val % 10));
+        mul = mul * 10;
+        val = val / 10;
+    }
+    return res;
+}
+
+} // empty namespace
 
 template <size_t n_bits>
 struct max_size {
@@ -830,5 +811,3 @@ private:
   const bool OldOpe;
   const bool Profile;
 };
-
-
