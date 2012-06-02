@@ -237,25 +237,33 @@ public:
 class db_column_desc {
 public:
 
+  db_column_desc() {}
+
   db_column_desc(
     db_elem::type type,
+    size_t size,
     onion onion_type,
     SECLEVEL level,
-    const std::string& fieldname,
+    size_t pos,
     bool is_vector)
 
-    : type(type), onion_type(onion_type), level(level), fieldname(fieldname), is_vector(is_vector) {}
+    : type(type), size(size), onion_type(onion_type), level(level),
+      pos(pos), is_vector(is_vector) {}
 
   // creates a descriptor after decryption
   db_column_desc decrypt_desc() const {
-    db_column_desc d(
-        type, oNONE, SECLEVEL::PLAIN, fieldname, is_vector);
-    return d;
+    return db_column_desc(type, size, oNONE, SECLEVEL::PLAIN, pos, is_vector);
   }
 
-  db_elem::type type;
+  // TODO: these really should all be const
+
+  db_elem::type type; // the original type
+  size_t size; // the original type size (in bytes)
+
   onion onion_type;
   SECLEVEL level;
-  std::string fieldname; // generates a key
+
+  size_t pos; // the column position (used for key generation)
+
   bool is_vector;
 };

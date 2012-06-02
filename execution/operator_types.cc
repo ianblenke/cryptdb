@@ -3,6 +3,8 @@
 #include <stdexcept>
 
 #include <parser/cdb_helpers.hh>
+
+#include <execution/encryption.hh>
 #include <execution/operator_types.hh>
 
 using namespace std;
@@ -159,31 +161,61 @@ local_decrypt_op::next(exec_context& ctx, db_tuple_vec& tuples)
   for (size_t i = 0; i < tuples.size(); i++) {
     db_tuple& tuple = tuples[i];
     for (auto p : _pos) {
-      switch (desc[p].type) {
+      db_column_desc& d = desc[p];
+      string s = tuple.columns[p].stringify();
+      switch (d.type) {
         case db_elem::TYPE_INT: {
-          bool isBin = false;
-          tuple.columns[p] =
-            db_elem(
-              resultFromStr<int64_t>(
-                cm_stub.crypt<4>(
-                  ctx.crypto->getmkey(),
-                  tuple.columns[p].stringify(),
-                  TYPE_INTEGER,
-                  desc[p].fieldname,
-                  desc[p].level, getMin(desc[p].onion_type), isBin, 12345)));
+
+          assert(d.size == 1 ||
+                 d.size == 4 ||
+                 d.size == 8);
+
+          assert(d.onion_type == oDET ||
+                 d.onion_type == oOPE);
+
+          bool isDet = d.onion_type == oDET;
+
+          switch (d.size) {
+            case 1:
+              tuple.columns[p] = db_elem((int64_t)
+                (isDet ? decrypt_u8_det(ctx.crypto, s, d.pos, d.level) :
+                         decrypt_u8_ope(ctx.crypto, s, d.pos, d.level)));
+            case 4:
+              tuple.columns[p] = db_elem((int64_t)
+                (isDet ? decrypt_u32_det(ctx.crypto, s, d.pos, d.level) :
+                         decrypt_u32_ope(ctx.crypto, s, d.pos, d.level)));
+            case 8:
+              tuple.columns[p] = db_elem((int64_t)
+                (isDet ? decrypt_u64_det(ctx.crypto, s, d.pos, d.level) :
+                         decrypt_u64_ope(ctx.crypto, s, d.pos, d.level)));
+          }
+
           break;
         }
 
         case db_elem::TYPE_STRING: {
-          bool isBin = false;
-          tuple.columns[p] =
-            db_elem(
-              cm_stub.crypt(
-                ctx.crypto->getmkey(),
-                tuple.columns[p].stringify(),
-                TYPE_TEXT,
-                desc[p].fieldname,
-                desc[p].level, getMin(desc[p].onion_type), isBin, 12345));
+
+          assert(d.onion_type == oDET);
+          // NO decryption of OPE onions
+
+          tuple.columns[p] = db_elem(decrypt_string_det(ctx.crypto, s, d.pos, d.level));
+
+          break;
+        }
+
+        case db_elem::TYPE_DATE: {
+
+          assert(d.size == 3);
+
+          assert(d.onion_type == oDET ||
+                 d.onion_type == oOPE);
+
+          if (d.onion_type == oDET) {
+            tuple.columns[p] = db_elem((int64_t)decrypt_date_det(ctx.crypto, s, d.pos, d.level));
+          } else {
+            tuple.columns[p] = db_elem((int64_t)decrypt_date_ope(ctx.crypto, s, d.pos, d.level));
+          }
+
           break;
         }
 

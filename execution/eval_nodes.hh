@@ -6,7 +6,7 @@
 #include <execution/eval.hh>
 #include <util/stl.hh>
 
-template <typename T>.
+template <typename T>
 class literal_node : public expr_node {
 public:
   literal_node(const T& t) : _t(t) {}
@@ -46,7 +46,6 @@ public:
     assert(ret == 3);
     assert(1 <= _day && _day <= 31);
     assert(1 <= _month && _month <= 12);
-    assert(_year >= 0);
     // TODO: validate for actual date
   }
 
@@ -69,7 +68,7 @@ class not_node : public unop_node {
 public:
   not_node(expr_node* child) : unop_node(child) {}
   virtual db_elem eval(eval_context& ctx) { return !first_child()->eval(ctx); }
-}
+};
 
 class binop_node : public expr_node {
 public:
@@ -114,7 +113,7 @@ public:
     : binop_node(left, right), _negate(negate) {}
   virtual db_elem eval(eval_context& ctx) {
     db_elem res = first_child()->eval(ctx).like(second_child()->eval(ctx));
-    return negate ? !res : res;
+    return _negate ? !res : res;
   }
 private:
   bool _negate;
@@ -127,6 +126,17 @@ public:
   virtual db_elem eval(eval_context& ctx) {
     return first_child()->eval(ctx).is_inited();
   }
+};
+
+class sum_node : public expr_node {
+public:
+  sum_node(expr_node* child, bool distinct)
+    : expr_node({child}), _distinct(distinct) {}
+  virtual db_elem eval(eval_context& ctx) {
+    return first_child()->eval(ctx).sum(_distinct);
+  }
+private:
+  bool _distinct;
 };
 
 class tuple_pos_node : public expr_node {

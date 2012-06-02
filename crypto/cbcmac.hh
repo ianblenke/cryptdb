@@ -22,7 +22,9 @@ class cbcmac {
         const uint8_t *d = static_cast<const uint8_t *> (data);
 
         if (mbytes) {
-            size_t ncopy = min(len, BlockCipher::blocksize - mbytes);
+            size_t b = BlockCipher::blocksize - mbytes;
+            //size_t ncopy = min(len, b);
+            size_t ncopy = len < b ? len : b;
             memcpy(&m[mbytes], d, ncopy);
             d += ncopy;
             len -= ncopy;
