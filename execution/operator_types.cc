@@ -219,6 +219,22 @@ local_decrypt_op::next(exec_context& ctx, db_tuple_vec& tuples)
           break;
         }
 
+        // TODO: fix hack...
+        case db_elem::TYPE_DECIMAL_15_2: {
+
+          assert(d.onion_type == oDET ||
+                 d.onion_type == oOPE);
+
+          uint64_t x =
+            (d.onion_type == oDET) ?
+              decrypt_u64_det(ctx.crypto, s, d.pos, d.level) :
+              decrypt_u64_ope(ctx.crypto, s, d.pos, d.level) ;
+
+          tuple.columns[p] = db_elem(double(x)/100.0);
+
+          break;
+        }
+
         default:
           throw runtime_error("UNIMPL");
       }

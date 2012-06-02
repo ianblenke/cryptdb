@@ -47,6 +47,10 @@ public:
     TYPE_STRING,
     TYPE_DATE,
     TYPE_VECTOR,
+
+    TYPE_DECIMAL_15_2, // XXX: hack! this is used to represent DECIMAL(15, 2) from TPC-H.
+                       // we don't handle it internally- it is simply a tag so that our
+                       // encrypt/decrypt functions do the right thing
   };
 
   inline type get_type() const { return _t; }

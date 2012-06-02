@@ -182,6 +182,7 @@ ostream& operator<<(ostream& o, const db_elem& e)
       // TODO: impl
       o << "<vector>";
       break;
+    default: assert(false);
   }
   return o;
 }
