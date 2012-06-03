@@ -68,6 +68,10 @@ class MySQLDBRes : public DBResultNew {
       throw runtime_error("UNIMPL");
     }
 
+    virtual size_t size() const {
+      throw runtime_error("UNIMPL");
+    }
+
   private:
     MYSQL_RES* native;
 };
@@ -94,6 +98,8 @@ class PGDBRes : public DBResultNew {
     virtual bool has_more() { return _i < _n; }
 
     virtual void next(ResType& results) { fill(results, _i + BatchSize); }
+
+    virtual size_t size() const { return _n; }
 
   private:
 

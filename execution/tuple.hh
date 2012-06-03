@@ -142,8 +142,11 @@ public:
       default:          assert(false); \
     } \
   } else { \
-    type t = _t > rhs._t ? _t : rhs._t; \
-    return promote(t) op rhs.promote(_t); \
+    if (_t > rhs._t) { \
+      return (*this) op rhs.promote(_t); \
+    } else { \
+      return promote(rhs._t) op rhs; \
+    } \
   } \
   throw std::runtime_error("unreachable"); \
 
@@ -156,8 +159,11 @@ public:
       default:          assert(false); \
     } \
   } else { \
-    type t = _t > rhs._t ? _t : rhs._t; \
-    return promote(t) op rhs.promote(_t); \
+    if (_t > rhs._t) { \
+      return (*this) op rhs.promote(_t); \
+    } else { \
+      return promote(rhs._t) op rhs; \
+    } \
   } \
   throw std::runtime_error("unreachable"); \
 
@@ -219,6 +225,32 @@ public:
 
   inline explicit operator bool() const { return unsafe_cast_bool(); }
 
+  inline bool is_vector() const { return _t == TYPE_VECTOR; }
+
+  inline size_t size() const {
+    requireType(TYPE_VECTOR);
+    return _elems.size();
+  }
+
+  inline db_elem& operator[](size_t i) {
+    requireType(TYPE_VECTOR);
+    return _elems[i];
+  }
+
+  inline const db_elem& operator[](size_t i) const {
+    requireType(TYPE_VECTOR);
+    return _elems[i];
+  }
+
+  typedef std::vector< db_elem >::iterator       iterator;
+  typedef std::vector< db_elem >::const_iterator const_iterator;
+
+  // unchecked
+  inline iterator begin() { return _elems.begin(); }
+  inline const_iterator begin() const { return _elems.begin(); }
+  inline iterator end() { return _elems.end(); }
+  inline const_iterator end() const { return _elems.end(); }
+
   // postgres helpers
   static type TypeFromPGOid(unsigned int oid);
 
@@ -231,6 +263,10 @@ public:
   // assumes vector
   db_elem count(bool distinct) const;
   db_elem sum(bool distinct) const;
+
+  db_elem filter(const db_elem& mask) const;
+
+  bool empty_mask() const;
 
 private:
   type _t;

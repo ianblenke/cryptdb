@@ -131,6 +131,31 @@ db_elem::sum(bool distinct) const
   return accum;
 }
 
+db_elem
+db_elem::filter(const db_elem& mask) const
+{
+  requireType(TYPE_VECTOR);
+  mask.requireType(TYPE_VECTOR);
+  if (_elems.size() != mask._elems.size()) {
+    throw runtime_error("num mask elements does not match this elem");
+  }
+  vector< db_elem > elems;
+  for (size_t i = 0; i < _elems.size(); i++) {
+    if (mask[i]) elems.push_back(_elems[i]);
+  }
+  return db_elem(elems);
+}
+
+bool
+db_elem::empty_mask() const
+{
+  requireType(TYPE_VECTOR);
+  for (size_t i = 0; i < _elems.size(); i++) {
+    if (_elems[i]) return false;
+  }
+  return true;
+}
+
 string
 db_elem::sqlify(bool force_unsigned) const
 {

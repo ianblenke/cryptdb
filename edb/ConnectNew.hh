@@ -13,6 +13,8 @@ class DBResultNew {
     virtual bool has_more() = 0;
     virtual void next(ResType& results) = 0;
 
+    virtual size_t size() const = 0;
+
     static const unsigned int BatchSize = 8192 * 4; // hinted batch size
 };
 
