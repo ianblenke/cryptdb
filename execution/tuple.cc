@@ -168,7 +168,7 @@ ostream& operator<<(ostream& o, const db_elem& e)
     case db_elem::TYPE_UNINIT: o << "UNINIT"; break;
     case db_elem::TYPE_NULL: o << "NULL"; break;
     case db_elem::TYPE_INT: o << e._d.i64; break;
-    case db_elem::TYPE_BOOL: o << e._d.b; break;
+    case db_elem::TYPE_BOOL: o << (e._d.b ? "true" : "false"); break;
     case db_elem::TYPE_DOUBLE: o << e._d.dbl; break;
     case db_elem::TYPE_STRING: o << e._s; break;
     case db_elem::TYPE_DATE:
@@ -192,7 +192,7 @@ ostream& operator<<(ostream& o, const db_tuple& tuple)
 {
   for (size_t i = 0; i < tuple.columns.size(); i++) {
     o << tuple.columns[i];
-    if ((i + 1) != tuple.columns.size()) o << ", ";
+    if ((i + 1) != tuple.columns.size()) o << "|";
   }
   return o;
 }

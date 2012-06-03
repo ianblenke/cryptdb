@@ -150,9 +150,9 @@ public:
 #define NUMERIC_BINOP_BODY_BOOL(op) \
   if (_t == rhs._t) { \
     switch (_t) { \
-      case TYPE_BOOL:   return db_elem(bool(_d.b op rhs._d.b)); \
-      case TYPE_INT:    return db_elem(bool(_d.i64 op rhs._d.i64)); \
-      case TYPE_DOUBLE: return db_elem(bool(_d.dbl op rhs._d.dbl)); \
+      case TYPE_BOOL:   return db_elem((_d.b op rhs._d.b)); \
+      case TYPE_INT:    return db_elem((_d.i64 op rhs._d.i64)); \
+      case TYPE_DOUBLE: return db_elem((_d.dbl op rhs._d.dbl)); \
       default:          assert(false); \
     } \
   } else { \
@@ -178,7 +178,7 @@ public:
   inline db_elem operator op(const db_elem& rhs) const { \
     VECTOR_OPS_IMPL(op); \
     if (IsNumericType(_t) || IsNumericType(rhs._t)) { \
-      NUMERIC_BINOP_BODY_BOOL(<); \
+      NUMERIC_BINOP_BODY_BOOL(op); \
     } \
     if (_t != rhs._t) { \
       throw std::runtime_error("in-compatible types"); \
