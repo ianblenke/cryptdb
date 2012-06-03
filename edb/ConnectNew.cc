@@ -105,6 +105,7 @@ class PGDBRes : public DBResultNew {
           SqlItem item;
           item.data = string(PQgetvalue(native, _i, col), PQgetlength(native, _i, col));
           item.type = PQftype(native, col);
+          assert(item.type >= 17); // look at: select oid, typname from pg_type
           if (item.type == 17 /*BYTEAOID*/) {
             // need to escape (binary string)
             ostringstream o;

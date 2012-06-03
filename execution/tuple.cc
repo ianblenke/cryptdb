@@ -42,6 +42,7 @@ db_elem::TypeFromPGOid(unsigned int oid) {
     case DATEOID: return TYPE_DATE;
 
     default:
+      cerr << "bad oid: " << oid << endl;
       throw runtime_error("could not handle oid");
   }
 }
@@ -183,6 +184,15 @@ ostream& operator<<(ostream& o, const db_elem& e)
       o << "<vector>";
       break;
     default: assert(false);
+  }
+  return o;
+}
+
+ostream& operator<<(ostream& o, const db_tuple& tuple)
+{
+  for (size_t i = 0; i < tuple.columns.size(); i++) {
+    o << tuple.columns[i];
+    if ((i + 1) != tuple.columns.size()) o << ", ";
   }
   return o;
 }

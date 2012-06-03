@@ -79,6 +79,7 @@ private:
 
   void requireType(type t) const {
     if (_t != t) {
+      std::cerr << "expected (" << t << "), got (" << _t << ")" << std::endl;
       throw std::runtime_error("not required type");
     }
   }
@@ -146,6 +147,20 @@ public:
   } \
   throw std::runtime_error("unreachable"); \
 
+#define NUMERIC_BINOP_BODY_BOOL(op) \
+  if (_t == rhs._t) { \
+    switch (_t) { \
+      case TYPE_BOOL:   return db_elem(bool(_d.b op rhs._d.b)); \
+      case TYPE_INT:    return db_elem(bool(_d.i64 op rhs._d.i64)); \
+      case TYPE_DOUBLE: return db_elem(bool(_d.dbl op rhs._d.dbl)); \
+      default:          assert(false); \
+    } \
+  } else { \
+    type t = _t > rhs._t ? _t : rhs._t; \
+    return promote(t) op rhs.promote(_t); \
+  } \
+  throw std::runtime_error("unreachable"); \
+
 #define DECL_IMPL_NUMERIC_BINOP(op) \
   inline db_elem operator op(const db_elem& rhs) const { \
     VECTOR_OPS_IMPL(op); \
@@ -163,7 +178,7 @@ public:
   inline db_elem operator op(const db_elem& rhs) const { \
     VECTOR_OPS_IMPL(op); \
     if (IsNumericType(_t) || IsNumericType(rhs._t)) { \
-      NUMERIC_BINOP_BODY(<); \
+      NUMERIC_BINOP_BODY_BOOL(<); \
     } \
     if (_t != rhs._t) { \
       throw std::runtime_error("in-compatible types"); \
@@ -237,6 +252,8 @@ class db_tuple {
 public:
   std::vector< db_elem > columns;
 };
+
+std::ostream& operator<<(std::ostream& o, const db_tuple& tuple);
 
 class db_column_desc {
 public:

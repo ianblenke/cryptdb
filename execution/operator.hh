@@ -1,5 +1,6 @@
 #pragma once
 
+#include <iostream>
 #include <vector>
 
 #include <execution/context.hh>
@@ -18,6 +19,10 @@ public:
   typedef std::vector< size_t > pos_vec;
   typedef std::vector< physical_operator* > op_vec;
   typedef std::vector< db_column_desc > desc_vec;
+
+  inline static void print_tuples(const db_tuple_vec& tuples) {
+    for (auto &t : tuples) std::cout << t << std::endl;
+  }
 
   static const unsigned int BatchSize = 8192 * 4; // hinted batch size for operators
 

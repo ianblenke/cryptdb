@@ -52,6 +52,8 @@ remote_sql_op::open(exec_context& ctx)
     sql = buf.str();
   }
 
+  cerr << "executing sql: " << sql << endl;
+
   // open and execute the sql statement
   if (!ctx.connection->execute(sql, _res)) {
     throw runtime_error("Could not execute sql");
@@ -89,6 +91,8 @@ remote_sql_op::next(exec_context& ctx, db_tuple_vec& tuples)
     tuple.columns.reserve(c);
     for (size_t j = 0; j < c; j++) {
       SqlItem& col = row[j];
+      //cerr << "col.data: " << col.data << endl;
+      //cerr << "col.type: " << col.type << endl;
       if (_desc_vec[j].is_vector) {
         // TODO: this is broken in general, but we might
         // be able to get away with it for TPC-H
@@ -116,7 +120,7 @@ db_elem
 remote_sql_op::CreateFromString(
     const string& data,
     db_elem::type type) {
-  switch (db_elem::TypeFromPGOid(type)) {
+  switch (type) {
     case db_elem::TYPE_INT:
       return (db_elem(resultFromStr<int64_t>(data)));
 
@@ -156,8 +160,6 @@ local_decrypt_op::next(exec_context& ctx, db_tuple_vec& tuples)
   // 1) each column can be decrypted in parallel
   // 2) within a column, vector contexts can be decrypted in parallel
 
-  crypto_manager_stub cm_stub(ctx.crypto, false);
-
   for (size_t i = 0; i < tuples.size(); i++) {
     db_tuple& tuple = tuples[i];
     for (auto p : _pos) {
@@ -180,14 +182,17 @@ local_decrypt_op::next(exec_context& ctx, db_tuple_vec& tuples)
               tuple.columns[p] = db_elem((int64_t)
                 (isDet ? decrypt_u8_det(ctx.crypto, s, d.pos, d.level) :
                          decrypt_u8_ope(ctx.crypto, s, d.pos, d.level)));
+              break;
             case 4:
               tuple.columns[p] = db_elem((int64_t)
                 (isDet ? decrypt_u32_det(ctx.crypto, s, d.pos, d.level) :
                          decrypt_u32_ope(ctx.crypto, s, d.pos, d.level)));
+              break;
             case 8:
               tuple.columns[p] = db_elem((int64_t)
                 (isDet ? decrypt_u64_det(ctx.crypto, s, d.pos, d.level) :
                          decrypt_u64_ope(ctx.crypto, s, d.pos, d.level)));
+              break;
           }
 
           break;
@@ -227,7 +232,7 @@ local_decrypt_op::next(exec_context& ctx, db_tuple_vec& tuples)
 
           uint64_t x =
             (d.onion_type == oDET) ?
-              decrypt_u64_det(ctx.crypto, s, d.pos, d.level) :
+              decrypt_decimal_det(ctx.crypto, s, d.pos, d.level) :
               decrypt_u64_ope(ctx.crypto, s, d.pos, d.level) ;
 
           tuple.columns[p] = db_elem(double(x)/100.0);

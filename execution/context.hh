@@ -1,14 +1,14 @@
 #pragma once
 
 #include <edb/ConnectNew.hh>
-#include <crypto-old/CryptoManager.hh>
+#include <parser/cdb_helpers.hh>
 
 class exec_context {
 public:
   exec_context(
       ConnectNew* connection,
-      CryptoManager* crypto) : connection(connection), crypto(crypto) {}
+      crypto_manager_stub* crypto) : connection(connection), crypto(crypto) {}
 
   ConnectNew* const connection;
-  CryptoManager* const crypto;
+  crypto_manager_stub* const crypto;
 };
