@@ -139,10 +139,47 @@ private:
   bool _distinct;
 };
 
+class case_expr_case_node : public expr_node {
+public:
+  typedef std::vector< case_expr_case_node* > node_vec;
+
+  case_expr_case_node(
+      expr_node* cond,
+      expr_node* expr)
+    : expr_node({cond, expr}) {}
+
+  inline expr_node* condition() { return first_child(); }
+
+  virtual db_elem eval(eval_context& ctx);
+};
+
+class case_when_node : public expr_node {
+public:
+  case_when_node(
+      const case_expr_case_node::node_vec& cases,
+      expr_node* dft)
+    : expr_node(util::change_ptr_vec_type<expr_node>(cases)), _dft(dft) {}
+
+  ~case_when_node() { if (_dft) delete _dft; }
+
+  virtual db_elem eval(eval_context& ctx);
+
+private:
+  expr_node* _dft;
+};
+
 class tuple_pos_node : public expr_node {
 public:
   tuple_pos_node(size_t pos) : _pos(pos) {}
-  virtual db_elem eval(eval_context& ctx) { return ctx.tuple->columns[_pos]; }
+  virtual db_elem eval(eval_context& ctx) {
+    db_elem& c = ctx.tuple->columns[_pos];
+    if (ctx.idx != -1 && c.is_vector()) {
+      assert(ctx.idx >= 0);
+      return c[ctx.idx];
+    } else {
+      return c;
+    }
+  }
 private:
   size_t _pos;
 };

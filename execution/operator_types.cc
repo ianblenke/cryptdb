@@ -8,16 +8,11 @@
 
 #include <util/stl.hh>
 
+#include <execution/common.hh>
 #include <execution/encryption.hh>
 #include <execution/operator_types.hh>
 
 using namespace std;
-
-#define dprintf(args...) \
-  do { \
-    fprintf(stderr, "%s: ", __PRETTY_FUNCTION__); \
-    fprintf(stderr, args); \
-  } while (0)
 
 #define TO_C(s) (to_s(s).c_str())
 
@@ -27,14 +22,6 @@ using namespace std;
     _n++; \
     dprintf("called %s times\n", TO_C(_n)); \
   } while (0)
-
-#define EXTRA_SANITY_CHECKS 1
-
-#ifdef EXTRA_SANITY_CHECKS
-  #define SANITY(x) assert(x)
-#else
-  #define SANITY(x)
-#endif /* EXTRA_SANITY_CHECKS */
 
 void
 remote_sql_op::open(exec_context& ctx)
@@ -128,8 +115,9 @@ remote_sql_op::next(exec_context& ctx, db_tuple_vec& tuples)
 
     for (size_t j = 0; j < c; j++) {
       SqlItem& col = row[j];
-      //cerr << "col.data: " << col.data << endl;
-      //cerr << "col.type: " << col.type << endl;
+      //cerr << "col #: " << j << endl;
+      //cerr << "  col.data: " << col.data << endl;
+      //cerr << "  col.type: " << col.type << endl;
       if (_desc_vec[j].is_vector) {
 
         // TODO: this is broken in general, but we might
@@ -137,16 +125,30 @@ remote_sql_op::next(exec_context& ctx, db_tuple_vec& tuples)
         // pretty big set of assumptions here that allows this to work
         // properly. we'll fix if we need more flexibility
 
+        // if the underlying type is string (binary), then we encode
+        // it in hex. otherwise, if the underlying type is numeric, then
+        // we use the ascii repr of the number.
+        //
+        // gross? very much so! we *really* should be using the binary
+        // interface to postgres, but its too much work to change it now
+        // (unless this becomes a potential source of inefficiency)
+
+        // array_to_string(...) always produces a string (from postgres's point
+        // of view)
         SANITY(db_elem::TypeFromPGOid(col.type) == db_elem::TYPE_STRING);
+
+        // whitelist the cases we are ready to handle (add more if needed)
         SANITY(_desc_vec[j].type == db_elem::TYPE_INT ||
                _desc_vec[j].type == db_elem::TYPE_DATE ||
+               _desc_vec[j].type == db_elem::TYPE_STRING ||
                _desc_vec[j].type == db_elem::TYPE_DECIMAL_15_2);
+
+        // simplifying assumption for now (relax if needed)
         SANITY(_desc_vec[j].onion_type == oDET);
 
         vector<string> tokens;
-        tokenize(col.data, ",", tokens);
-
-        //cerr << "col " << j << ": tokens.size(): " << tokens.size() << endl;
+        tokenize(col.data, ",", tokens); // this is always safe, because ',' is
+                                         // not ever going to be part of the data
 
 #ifdef EXTRA_SANITY_CHECKS
         // check that every vector group we pull out has the same size
@@ -157,11 +159,16 @@ remote_sql_op::next(exec_context& ctx, db_tuple_vec& tuples)
         }
 #endif
 
+        bool needUnhex = (_desc_vec[j].type == db_elem::TYPE_STRING);
+
         vector<db_elem> elems;
         elems.reserve(tokens.size());
         for (auto t : tokens) {
-          // TYPE_INT is OK here because of our assumptions above
-          elems.push_back(CreateFromString(t, db_elem::TYPE_INT));
+          if (needUnhex) {
+            elems.push_back(CreateFromString(from_hex(t), db_elem::TYPE_STRING));
+          } else {
+            elems.push_back(CreateFromString(t, db_elem::TYPE_INT));
+          }
         }
         tuple.columns.push_back(db_elem(elems));
       } else {
@@ -225,6 +232,7 @@ do_decrypt_op(
     case db_elem::TYPE_INT: {
 
       assert(d.size == 1 ||
+             d.size == 2 ||
              d.size == 4 ||
              d.size == 8);
 
@@ -238,6 +246,10 @@ do_decrypt_op(
           return db_elem((int64_t)
             (isDet ? decrypt_u8_det(ctx.crypto, s, d.pos, d.level) :
                      decrypt_u8_ope(ctx.crypto, s, d.pos, d.level)));
+        case 2:
+          return db_elem((int64_t)
+            (isDet ? decrypt_u16_det(ctx.crypto, s, d.pos, d.level) :
+                     decrypt_u16_ope(ctx.crypto, s, d.pos, d.level)));
         case 4:
           return db_elem((int64_t)
             (isDet ? decrypt_u32_det(ctx.crypto, s, d.pos, d.level) :

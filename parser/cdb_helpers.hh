@@ -44,6 +44,37 @@ inline std::string to_hex(const std::string& input) {
     return output;
 }
 
+#define IS_HEX_ALPHA(c) ((c) >= 'a' && (c) <= 'f')
+
+inline std::string from_hex(const std::string& s)
+{
+  size_t len = s.length();
+  assert((len % 2) == 0);
+  std::string output;
+  output.reserve(len / 2);
+  for (size_t i = 0; i < len; i += 2) {
+    unsigned char c0 = tolower(s[i]);
+    unsigned char c1 = tolower(s[i + 1]);
+    unsigned char res = 0;
+    if (isdigit(c0)) {
+      res |= ((c0 - '0') << 4);
+    } else {
+      assert(IS_HEX_ALPHA(c0));
+      res |= (((c0 - 'a') + 10) << 4);
+    }
+    if (isdigit(c1)) {
+      res |= ((c1 - '0'));
+    } else {
+      assert(IS_HEX_ALPHA(c1));
+      res |= (((c1 - 'a') + 10));
+    }
+    output.push_back(res);
+  }
+  return output;
+}
+
+#undef IS_HEX_ALPHA
+
 inline long roundToLong(double x) {
     return ((x)>=0?(long)((x)+0.5):(long)((x)-0.5));
 }

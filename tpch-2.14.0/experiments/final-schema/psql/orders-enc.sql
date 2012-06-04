@@ -10,5 +10,5 @@ CREATE TABLE orders_enc  (
     o_clerk_DET          bytea not null, 
     o_shippriority_DET   bigint  not null,
     o_comment_DET        bytea not null,
-    o_orderdate_YEAR_DET smallint  not null, 
+    o_orderdate_YEAR_DET integer  not null, 
     PRIMARY KEY (o_orderkey_DET)) ;

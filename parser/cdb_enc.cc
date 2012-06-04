@@ -614,7 +614,7 @@ protected:
 
     bool isBin = false;
     string encDET = cm.crypt<2>(cm.cm->getmkey(), to_s(year), TYPE_INTEGER,
-                             fieldname(orders::o_orderdate, "DET"),
+                             fieldname(0, "DET"),
                              getMin(oDET), SECLEVEL::DET, isBin, 12345);
     assert(!isBin);
     enccols.push_back(encDET);

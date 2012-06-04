@@ -1,6 +1,6 @@
 OBJDIRS	+= execution
 
-EXECSRC := operator_types.cc tuple.cc
+EXECSRC := eval_nodes.cc operator_types.cc tuple.cc
 
 EXECPARSER_OBJS	:= $(patsubst %.cc,$(OBJDIR)/execution/%.o,$(EXECSRC))
 $(OBJDIR)/libexecution.so: $(EXECPARSER_OBJS) $(OBJDIR)/libedbutil.so $(OBJDIR)/libedbcrypto.so \

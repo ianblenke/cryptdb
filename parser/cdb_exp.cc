@@ -7360,7 +7360,7 @@ int main(int argc, char **argv) {
 
     ConnectNew* _conn =
       (UseMySQL) ? (ConnectNew*) new MySQLConnect(hostname, "root", "", db_name, 3307) :
-                   (ConnectNew*) new PGConnect(hostname, "stephentu", "letmein", db_name, 5433);
+                   (ConnectNew*) new PGConnect(hostname, "stephentu", "letmein", db_name, 5432);
     ConnectNew& conn = *_conn;
 
     CryptoManager cm("12345");

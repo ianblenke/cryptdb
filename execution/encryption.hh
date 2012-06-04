@@ -58,6 +58,18 @@ inline uint64_t decrypt_u8_det(
   return decrypt_at_most_u64_det<uint8_t>(cm, value, field_pos, level);
 }
 
+inline uint64_t encrypt_u16_det(
+    crypto_manager_stub* cm, uint16_t value, size_t field_pos, bool join)
+{
+  return encrypt_at_most_u64_det(cm, value, field_pos, join);
+}
+
+inline uint64_t decrypt_u16_det(
+    crypto_manager_stub* cm, const std::string& value, size_t field_pos, SECLEVEL level)
+{
+  return decrypt_at_most_u64_det<uint16_t>(cm, value, field_pos, level);
+}
+
 inline uint64_t encrypt_u32_det(
     crypto_manager_stub* cm, uint32_t value, size_t field_pos, bool join)
 {
@@ -170,6 +182,18 @@ inline uint64_t decrypt_u8_ope(
     crypto_manager_stub* cm, const std::string& value, size_t field_pos, SECLEVEL level)
 {
   return decrypt_at_most_u64_det<uint8_t>(cm, value, field_pos, level);
+}
+
+inline uint64_t encrypt_u16_ope(
+    crypto_manager_stub* cm, uint16_t value, size_t field_pos, bool join)
+{
+  return encrypt_at_most_u32_ope(cm, value, field_pos, join);
+}
+
+inline uint64_t decrypt_u16_ope(
+    crypto_manager_stub* cm, const std::string& value, size_t field_pos, SECLEVEL level)
+{
+  return decrypt_at_most_u64_det<uint16_t>(cm, value, field_pos, level);
 }
 
 inline uint64_t encrypt_u32_ope(

@@ -8,6 +8,7 @@
 #include <string>
 #include <stdexcept>
 
+#include <execution/common.hh>
 #include <util/onions.hh>
 
 /** represents an element from the database. currently not very efficient */
@@ -287,6 +288,25 @@ std::ostream& operator<<(std::ostream& o, const db_elem& e);
 class db_tuple {
 public:
   std::vector< db_elem > columns;
+
+  // return the position of columns which are vectors
+  std::vector<size_t> get_vector_columns() const {
+#ifdef EXTRA_SANITY_CHECKS
+    ssize_t p = -1;
+#endif
+    std::vector<size_t> r;
+    for (size_t i = 0; i < columns.size(); i++) {
+      const db_elem& e = columns[i];
+      if (e.is_vector()) {
+#ifdef EXTRA_SANITY_CHECKS
+        if (p == -1) p = e.size();
+        else SANITY(size_t(p) == e.size());
+#endif
+        r.push_back(i);
+      }
+    }
+    return r;
+  }
 };
 
 std::ostream& operator<<(std::ostream& o, const db_tuple& tuple);
