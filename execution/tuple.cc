@@ -208,6 +208,7 @@ db_elem::sqlify(bool force_unsigned) const
       break;
     case db_elem::TYPE_BOOL: o << (_d.b ? "t" : "f"); break;
     case db_elem::TYPE_DOUBLE: o << _d.dbl; break;
+    case db_elem::TYPE_CHAR  :
     case db_elem::TYPE_STRING:
       {
         // This gets around the escaping issues for now
@@ -235,6 +236,7 @@ ostream& operator<<(ostream& o, const db_elem& e)
     case db_elem::TYPE_INT: o << e._d.i64; break;
     case db_elem::TYPE_BOOL: o << (e._d.b ? "true" : "false"); break;
     case db_elem::TYPE_DOUBLE: o << e._d.dbl; break;
+    case db_elem::TYPE_CHAR  :
     case db_elem::TYPE_STRING: o << e._s; break;
     case db_elem::TYPE_DATE:
       {

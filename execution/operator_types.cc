@@ -2,6 +2,7 @@
 #include <cassert>
 #include <algorithm>
 #include <stdexcept>
+#include <limits>
 #include <unordered_map>
 #include <set>
 
@@ -262,6 +263,22 @@ do_decrypt_op(
       }
 
       assert(false);
+    }
+
+    case db_elem::TYPE_CHAR: {
+
+      assert(d.size == 1);
+      assert(d.onion_type == oDET ||
+             d.onion_type == oOPE);
+
+      uint64_t x =
+        (d.onion_type == oDET) ?
+          decrypt_u8_det(ctx.crypto, s, d.pos, d.level) :
+          decrypt_u8_ope(ctx.crypto, s, d.pos, d.level) ;
+
+      assert( x <= numeric_limits<unsigned char>::max() );
+
+      return db_elem(char(x));
     }
 
     case db_elem::TYPE_STRING: {

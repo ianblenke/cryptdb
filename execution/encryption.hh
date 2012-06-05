@@ -49,7 +49,9 @@ inline uint64_t decrypt_at_most_u64_det(
 inline uint64_t encrypt_u8_det(
     crypto_manager_stub* cm, uint8_t value, size_t field_pos, bool join)
 {
-  return encrypt_at_most_u64_det(cm, value, field_pos, join);
+  // must specify uint32_t directly, since to_s(unsigned char) prints the
+  // (equivalent) char, not the numeric value
+  return encrypt_at_most_u64_det<uint32_t, 1>(cm, uint32_t(value), field_pos, join);
 }
 
 inline uint64_t decrypt_u8_det(

@@ -29,6 +29,9 @@ public:
   db_elem(int64_t i) : _t(TYPE_INT), _hash(-1) { _d.i64 = i; }
   db_elem(bool b) : _t(TYPE_BOOL), _hash(-1) { _d.b = b; }
   db_elem(double d) : _t(TYPE_DOUBLE), _hash(-1) { _d.dbl = d; }
+
+  db_elem(char c) : _t(TYPE_CHAR), _s(1, c), _hash(-1) {}
+
   db_elem(const std::string& s) : _t(TYPE_STRING), _s(s), _hash(-1) {}
   db_elem(const char *s, size_t n) : _t(TYPE_STRING), _s(s, n), _hash(-1) {}
 
@@ -47,6 +50,7 @@ public:
     TYPE_INT,
     TYPE_DOUBLE,
 
+    TYPE_CHAR, // one-character string
     TYPE_STRING,
     TYPE_DATE,
     TYPE_VECTOR,
@@ -131,6 +135,7 @@ public:
           _hash = std::hash<double>()(_d.dbl) & mask;
           break;
 
+        case TYPE_CHAR   :
         case TYPE_STRING :
           _hash = std::hash<std::string>()(_s) & mask;
           break;
@@ -224,6 +229,7 @@ public:
       throw std::runtime_error("in-compatible types"); \
     } \
     switch (_t) { \
+      case TYPE_CHAR  : \
       case TYPE_STRING: return db_elem(_s op rhs._s); \
       case TYPE_DATE:   return db_elem(_d.i64 op rhs._d.i64); \
       default: break; \
