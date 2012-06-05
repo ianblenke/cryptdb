@@ -4,13 +4,13 @@ using namespace std;
 using namespace util;
 
 db_elem
-case_expr_case_node::eval(eval_context& ctx)
+case_expr_case_node::eval(exec_context& ctx)
 {
   return second_child()->eval(ctx);
 }
 
 db_elem
-case_when_node::eval(eval_context& ctx)
+case_when_node::eval(exec_context& ctx)
 {
   vector<case_expr_case_node*> cases =
     change_ptr_vec_type<case_expr_case_node>(_children);
@@ -22,7 +22,7 @@ case_when_node::eval(eval_context& ctx)
     vector< db_elem > elems;
     elems.reserve(s);
     for (size_t i = 0; i < s; i++) {
-      eval_context ctx0 = ctx.bind_row(i);
+      exec_context ctx0 = ctx.bind_row(i);
       bool done = false;
       for (auto c : cases) {
         if (c->condition()->eval(ctx0)) {

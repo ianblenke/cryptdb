@@ -4,13 +4,14 @@
 #include <string>
 
 #include <execution/eval.hh>
+#include <execution/operator.hh>
 #include <util/stl.hh>
 
 template <typename T>
 class literal_node : public expr_node {
 public:
   literal_node(const T& t) : _t(t) {}
-  virtual db_elem eval(eval_context& ctx) { return db_elem(_t); }
+  virtual db_elem eval(exec_context& ctx) { return db_elem(_t); }
 protected:
   T _t;
 };
@@ -19,7 +20,7 @@ protected:
   class name : public literal_node<type> { \
   public: \
     name(const type& t) : literal_node<type>(t) {} \
-    virtual db_elem eval(eval_context& ctx) { return db_elem(_t); } \
+    virtual db_elem eval(exec_context& ctx) { return db_elem(_t); } \
   };
 
 DECL_LITERAL_NODE(int_literal_node, int64_t);
@@ -29,7 +30,7 @@ DECL_LITERAL_NODE(double_literal_node, double);
 
 class null_literal_node : public expr_node {
 public:
-  virtual db_elem eval(eval_context& ctx) { return db_elem(db_elem::null_tag); }
+  virtual db_elem eval(exec_context& ctx) { return db_elem(db_elem::null_tag); }
 };
 
 class date_literal_node : public expr_node {
@@ -49,7 +50,7 @@ public:
     // TODO: validate for actual date
   }
 
-  virtual db_elem eval(eval_context& ctx) {
+  virtual db_elem eval(exec_context& ctx) {
     return db_elem(_year, _month, _day);
   }
 
@@ -67,7 +68,7 @@ public:
 class not_node : public unop_node {
 public:
   not_node(expr_node* child) : unop_node(child) {}
-  virtual db_elem eval(eval_context& ctx) { return !first_child()->eval(ctx); }
+  virtual db_elem eval(exec_context& ctx) { return !first_child()->eval(ctx); }
 };
 
 class binop_node : public expr_node {
@@ -81,7 +82,7 @@ public:
   public: \
     name(expr_node* left, expr_node* right) \
       : binop_node(left, right) {} \
-    virtual db_elem eval(eval_context& ctx) { \
+    virtual db_elem eval(exec_context& ctx) { \
       return first_child()->eval(ctx) op second_child()->eval(ctx); \
     } \
   };
@@ -104,14 +105,14 @@ public:
   in_node(expr_node* needle,
           const child_vec& haystack)
     : expr_node(util::prepend(needle, haystack)) {}
-  virtual db_elem eval(eval_context& ctx);
+  virtual db_elem eval(exec_context& ctx);
 };
 
 class like_node : public binop_node {
 public:
   like_node(expr_node* left, expr_node* right, bool negate)
     : binop_node(left, right), _negate(negate) {}
-  virtual db_elem eval(eval_context& ctx) {
+  virtual db_elem eval(exec_context& ctx) {
     db_elem res = first_child()->eval(ctx).like(second_child()->eval(ctx));
     return _negate ? !res : res;
   }
@@ -123,7 +124,7 @@ class exists_node : public expr_node {
 public:
   exists_node(expr_node* child)
     : expr_node({child}) {}
-  virtual db_elem eval(eval_context& ctx) {
+  virtual db_elem eval(exec_context& ctx) {
     return first_child()->eval(ctx).is_inited();
   }
 };
@@ -132,7 +133,7 @@ class sum_node : public expr_node {
 public:
   sum_node(expr_node* child, bool distinct)
     : expr_node({child}), _distinct(distinct) {}
-  virtual db_elem eval(eval_context& ctx) {
+  virtual db_elem eval(exec_context& ctx) {
     return first_child()->eval(ctx).sum(_distinct);
   }
 private:
@@ -150,7 +151,7 @@ public:
 
   inline expr_node* condition() { return first_child(); }
 
-  virtual db_elem eval(eval_context& ctx);
+  virtual db_elem eval(exec_context& ctx);
 };
 
 class case_when_node : public expr_node {
@@ -162,7 +163,7 @@ public:
 
   ~case_when_node() { if (_dft) delete _dft; }
 
-  virtual db_elem eval(eval_context& ctx);
+  virtual db_elem eval(exec_context& ctx);
 
 private:
   expr_node* _dft;
@@ -181,7 +182,7 @@ public:
       extract_type type)
     : expr_node({child}), _type(type) {}
 
-  virtual db_elem eval(eval_context& ctx) {
+  virtual db_elem eval(exec_context& ctx) {
     db_elem d = first_child()->eval(ctx);
     switch (_type) {
       case TYPE_DAY:   return d.get_day();
@@ -198,7 +199,7 @@ private:
 class tuple_pos_node : public expr_node {
 public:
   tuple_pos_node(size_t pos) : _pos(pos) {}
-  virtual db_elem eval(eval_context& ctx) {
+  virtual db_elem eval(exec_context& ctx) {
     db_elem& c = ctx.tuple->columns[_pos];
     if (ctx.idx != -1 && c.is_vector()) {
       assert(ctx.idx >= 0);
@@ -215,7 +216,29 @@ class subselect_node : public expr_node {
 public:
   subselect_node(size_t n, const child_vec& args)
     : expr_node(args), _n(n) {}
-  virtual db_elem eval(eval_context& ctx);
+  virtual db_elem eval(exec_context& ctx) {
+    assert(_n < ctx.subqueries.size());
+    physical_operator* op = ctx.subqueries[_n];
+
+    // TODO: process the args (and place in the context)
+
+    op->open(ctx);
+    physical_operator::db_tuple_vec v;
+    while (op->has_more(ctx)) op->next(ctx, v);
+    op->close(ctx);
+
+    // we expect this query to return a single scalar result (or empty)
+    assert(v.size() == 0 || v.size() == 1);
+
+    if (v.size() == 0) {
+      // exists query, return false
+      return db_elem(false);
+    } else {
+      // scalar result
+      assert(v[0].columns.size() == 1);
+      return v[0].columns.front();
+    }
+  }
 private:
   size_t _n;
 };

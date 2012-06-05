@@ -31,9 +31,10 @@ public:
       sql_param_generator* param_generator,
       const std::string& sql,
       const desc_vec& desc_vec,
-      const std::vector< physical_operator* >& children) :
-    physical_operator(children),
-    _param_generator(param_generator), _sql(sql), _desc_vec(desc_vec), _res(NULL) {}
+      const op_vec& subqueries) :
+    physical_operator(subqueries),
+    _param_generator(param_generator), _sql(sql), _desc_vec(desc_vec),
+    _res(NULL), _read_cursor(0), _do_cache_write(false) {}
 
   ~remote_sql_op() {
     if (_param_generator) delete _param_generator;
@@ -46,7 +47,7 @@ public:
 
   DECL_PHY_OP_ITER_IFACE;
 
-protected:
+private:
   sql_param_generator* _param_generator;
 
   std::string _sql;
@@ -54,7 +55,11 @@ protected:
 
   DBResultNew* _res;
 
-private:
+  size_t _read_cursor; // the next row idx to return on a read
+  db_tuple_vec _cached_results; // res == NULL => we are reading these values from this cache,
+  bool _do_cache_write;
+  std::string _do_cache_write_sql;
+
   static db_elem CreateFromString(
       const std::string& data,
       db_elem::type type);
@@ -74,7 +79,7 @@ public:
 
   DECL_PHY_OP_NEXT;
 
-protected:
+private:
   pos_vec _pos;
 };
 
@@ -84,17 +89,21 @@ public:
       expr_node* filter,
       physical_operator* child,
       const op_vec& subqueries)
-    : physical_operator(util::prepend(child, subqueries)), _filter(filter) {
+    : physical_operator({child}), _filter(filter) {
     assert(filter);
     assert(child);
   }
 
-  ~local_filter_op() { delete _filter; }
+  ~local_filter_op() {
+    delete _filter;
+    for (auto op : _subqueries) delete op;
+  }
 
   DECL_PHY_OP_NEXT;
 
 protected:
   expr_node* _filter; // ownership
+  op_vec _subqueries; // ownership
 };
 
 class local_transform_op : public physical_operator {
@@ -124,7 +133,6 @@ protected:
 
 class local_group_by : public physical_operator {
 public:
-
   local_group_by(
       const pos_vec& pos,
       physical_operator* child)
@@ -136,6 +144,26 @@ public:
 
 private:
   pos_vec _pos;
+};
+
+class local_group_filter : public physical_operator {
+public:
+  local_group_filter(
+      expr_node* filter,
+      physical_operator* child,
+      const op_vec& subqueries)
+    : physical_operator({child}), _filter(filter), _subqueries(subqueries) {}
+
+  ~local_group_filter() {
+    delete _filter;
+    for (auto op : _subqueries) delete op;
+  }
+
+  DECL_PHY_OP_NEXT;
+
+private:
+  expr_node* _filter; // ownership
+  op_vec _subqueries; // ownership
 };
 
 class local_order_by : public physical_operator {

@@ -13,6 +13,7 @@
 #include <execution/common.hh>
 #include <execution/encryption.hh>
 #include <execution/operator_types.hh>
+#include <execution/query_cache.hh>
 
 using namespace std;
 
@@ -33,7 +34,7 @@ remote_sql_op::open(exec_context& ctx)
   for (auto c : _children) c->execute(ctx);
 
   // generate params
-  string sql = _sql;
+  _do_cache_write_sql = _sql;
   if (_param_generator) {
     sql_param_generator::param_map param_map = _param_generator->get_param_map(ctx);
 
@@ -42,14 +43,15 @@ remote_sql_op::open(exec_context& ctx)
     // actually, which is why we don't care for now)
 
     ostringstream buf;
-    for (size_t i = 0; i < sql.size();) {
-      char ch = sql[i];
+    for (size_t i = 0; i < _do_cache_write_sql.size();) {
+      char ch = _do_cache_write_sql[i];
       switch (ch) {
         case ':': {
           i++;
           ostringstream p;
-          while (i < sql.size() && isdigit(sql[i])) {
-            p << sql[i];
+          while (i < _do_cache_write_sql.size() &&
+                isdigit(_do_cache_write_sql[i])) {
+            p << _do_cache_write_sql[i];
             i++;
           }
           string p0 = p.str();
@@ -65,13 +67,24 @@ remote_sql_op::open(exec_context& ctx)
           break;
       }
     }
-    sql = buf.str();
+    _do_cache_write_sql = buf.str();
   }
 
-  cerr << "executing sql: " << sql << endl;
+  cerr << "executing sql: " << _do_cache_write_sql << endl;
+
+  // look in query cache first
+  if (ctx.cache) {
+    auto it = ctx.cache->cache.find(_do_cache_write_sql);
+    if (it != ctx.cache->cache.end()) {
+      _cached_results = it->second;
+      assert(_res == NULL); // sets read
+      dprintf("cache hit! %s rows\n", TO_C(_cached_results.size()));
+      return;
+    }
+  }
 
   // open and execute the sql statement
-  if (!ctx.connection->execute(sql, _res)) {
+  if (!ctx.connection->execute(_do_cache_write_sql, _res)) {
     throw runtime_error("Could not execute sql");
   }
   assert(_res);
@@ -84,14 +97,27 @@ remote_sql_op::close(exec_context& ctx)
 {
   physical_operator::close(ctx);
 
+  // place result in cache if qualifies
+  if (_do_cache_write) {
+    assert(!_do_cache_write_sql.empty());
+    if (ctx.cache) {
+      ctx.cache->cache[_do_cache_write_sql] = _cached_results;
+    }
+    _do_cache_write_sql.clear();
+    _do_cache_write = false;
+  }
+
   // close the sql statement
-  if (_res) delete _res;
+  if (_res) {
+    delete _res;
+    _res = NULL;
+  }
 }
 
 bool
 remote_sql_op::has_more(exec_context& ctx)
 {
-  return _res->has_more();
+  return _res ? _res->has_more() : _read_cursor < _cached_results.size();
 }
 
 void
@@ -99,85 +125,100 @@ remote_sql_op::next(exec_context& ctx, db_tuple_vec& tuples)
 {
   TRACE_OPERATOR();
 
-  assert(_res->has_more());
+  assert(has_more(ctx));
 
-  ResType res;
-  _res->next(res);
-  tuples.resize(res.rows.size());
-  for (size_t i = 0; i < res.rows.size(); i++) {
-
-#ifdef EXTRA_SANITY_CHECKS
-    ssize_t vsize = -1;
-#endif
-
-    vector<SqlItem>& row = res.rows[i];
-    db_tuple& tuple = tuples[i];
-    size_t c = row.size();
-    tuple.columns.reserve(c);
-
-    for (size_t j = 0; j < c; j++) {
-      SqlItem& col = row[j];
-      //cerr << "col #: " << j << endl;
-      //cerr << "  col.data: " << col.data << endl;
-      //cerr << "  col.type: " << col.type << endl;
-      if (_desc_vec[j].is_vector) {
-
-        // TODO: this is broken in general, but we might
-        // be able to get away with it for TPC-H. there are a
-        // pretty big set of assumptions here that allows this to work
-        // properly. we'll fix if we need more flexibility
-
-        // if the underlying type is string (binary), then we encode
-        // it in hex. otherwise, if the underlying type is numeric, then
-        // we use the ascii repr of the number.
-        //
-        // gross? very much so! we *really* should be using the binary
-        // interface to postgres, but its too much work to change it now
-        // (unless this becomes a potential source of inefficiency)
-
-        // array_to_string(...) always produces a string (from postgres's point
-        // of view)
-        SANITY(db_elem::TypeFromPGOid(col.type) == db_elem::TYPE_STRING);
-
-        // whitelist the cases we are ready to handle (add more if needed)
-        SANITY(_desc_vec[j].type == db_elem::TYPE_INT ||
-               _desc_vec[j].type == db_elem::TYPE_DATE ||
-               _desc_vec[j].type == db_elem::TYPE_STRING ||
-               _desc_vec[j].type == db_elem::TYPE_DECIMAL_15_2);
-
-        // simplifying assumption for now (relax if needed)
-        SANITY(_desc_vec[j].onion_type == oDET);
-
-        vector<string> tokens;
-        tokenize(col.data, ",", tokens); // this is always safe, because ',' is
-                                         // not ever going to be part of the data
+  if (_res) {
+    // read from DB
+    ResType res;
+    _res->next(res);
+    tuples.resize(res.rows.size());
+    for (size_t i = 0; i < res.rows.size(); i++) {
 
 #ifdef EXTRA_SANITY_CHECKS
-        // check that every vector group we pull out has the same size
-        if (vsize == -1) {
-          vsize = tokens.size();
-        } else {
-          SANITY((size_t)vsize == tokens.size());
-        }
+      ssize_t vsize = -1;
 #endif
 
-        bool needUnhex = (_desc_vec[j].type == db_elem::TYPE_STRING);
+      vector<SqlItem>& row = res.rows[i];
+      db_tuple& tuple = tuples[i];
+      size_t c = row.size();
+      tuple.columns.reserve(c);
 
-        vector<db_elem> elems;
-        elems.reserve(tokens.size());
-        for (auto t : tokens) {
-          if (needUnhex) {
-            elems.push_back(CreateFromString(from_hex(t), db_elem::TYPE_STRING));
+      for (size_t j = 0; j < c; j++) {
+        SqlItem& col = row[j];
+        //cerr << "col #: " << j << endl;
+        //cerr << "  col.data: " << col.data << endl;
+        //cerr << "  col.type: " << col.type << endl;
+        if (_desc_vec[j].is_vector) {
+
+          // TODO: this is broken in general, but we might
+          // be able to get away with it for TPC-H. there are a
+          // pretty big set of assumptions here that allows this to work
+          // properly. we'll fix if we need more flexibility
+
+          // if the underlying type is string (binary), then we encode
+          // it in hex. otherwise, if the underlying type is numeric, then
+          // we use the ascii repr of the number.
+          //
+          // gross? very much so! we *really* should be using the binary
+          // interface to postgres, but its too much work to change it now
+          // (unless this becomes a potential source of inefficiency)
+
+          // array_to_string(...) always produces a string (from postgres's point
+          // of view)
+          SANITY(db_elem::TypeFromPGOid(col.type) == db_elem::TYPE_STRING);
+
+          // whitelist the cases we are ready to handle (add more if needed)
+          SANITY(_desc_vec[j].type == db_elem::TYPE_INT ||
+                 _desc_vec[j].type == db_elem::TYPE_DATE ||
+                 _desc_vec[j].type == db_elem::TYPE_STRING ||
+                 _desc_vec[j].type == db_elem::TYPE_DECIMAL_15_2);
+
+          // simplifying assumption for now (relax if needed)
+          SANITY(_desc_vec[j].onion_type == oDET);
+
+          vector<string> tokens;
+          tokenize(col.data, ",", tokens); // this is always safe, because ',' is
+                                           // not ever going to be part of the data
+
+#ifdef EXTRA_SANITY_CHECKS
+          // check that every vector group we pull out has the same size
+          if (vsize == -1) {
+            vsize = tokens.size();
           } else {
-            elems.push_back(CreateFromString(t, db_elem::TYPE_INT));
+            SANITY((size_t)vsize == tokens.size());
           }
+#endif
+
+          bool needUnhex = (_desc_vec[j].type == db_elem::TYPE_STRING);
+
+          vector<db_elem> elems;
+          elems.reserve(tokens.size());
+          for (auto t : tokens) {
+            if (needUnhex) {
+              elems.push_back(CreateFromString(from_hex(t), db_elem::TYPE_STRING));
+            } else {
+              elems.push_back(CreateFromString(t, db_elem::TYPE_INT));
+            }
+          }
+          tuple.columns.push_back(db_elem(elems));
+        } else {
+          tuple.columns.push_back(
+              CreateFromString(col.data, db_elem::TypeFromPGOid(col.type)));
         }
-        tuple.columns.push_back(db_elem(elems));
-      } else {
-        tuple.columns.push_back(
-            CreateFromString(col.data, db_elem::TypeFromPGOid(col.type)));
       }
     }
+
+    // for now, only write to query cache if 0/1 result
+    if (_res->size() <= 1) {
+      assert(tuples.size() == _res->size());
+      _cached_results = tuples;
+      _do_cache_write = true;
+    }
+  } else {
+    // read from cache
+    assert(_read_cursor == 0);
+    tuples = _cached_results;
+    _read_cursor = _cached_results.size();
   }
 }
 
@@ -387,7 +428,7 @@ local_filter_op::next(exec_context& ctx, db_tuple_vec& tuples)
   db_tuple_vec v;
   first_child()->next(ctx, v);
   for (auto &tuple : v) {
-    eval_context eval_ctx(&tuple);
+    exec_context eval_ctx = ctx.bind(&tuple, _subqueries);
     db_elem test = _filter->eval(eval_ctx);
     assert(test.get_type() == db_elem::TYPE_BOOL ||
            test.get_type() == db_elem::TYPE_VECTOR);
@@ -448,7 +489,7 @@ local_transform_op::next(exec_context& ctx, db_tuple_vec& tuples)
       if (e.isLeft()) {
         tt.columns.push_back(t.columns[e.left()]);
       } else {
-        eval_context eval_ctx(&t);
+        exec_context eval_ctx = ctx.bind(&t);
         tt.columns.push_back(e.right().second->eval(eval_ctx));
       }
     }
@@ -546,6 +587,23 @@ local_group_by::next(exec_context& ctx, db_tuple_vec& tuples)
       }
     }
     tuples.push_back(t);
+  }
+}
+
+void
+local_group_filter::next(exec_context& ctx, db_tuple_vec& tuples)
+{
+  TRACE_OPERATOR();
+
+  assert(first_child()->has_more(ctx));
+
+  db_tuple_vec v;
+  first_child()->next(ctx, v);
+
+  tuples.reserve(v.size());
+  for (auto &t : v) {
+    exec_context eval_ctx = ctx.bind(&t, _subqueries);
+    if (_filter->eval(eval_ctx)) tuples.push_back(t);
   }
 }
 

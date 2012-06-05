@@ -3,8 +3,8 @@
 #include <iostream>
 #include <vector>
 
-#include <execution/context.hh>
 #include <execution/tuple.hh>
+#include <execution/context.hh>
 
 /**
  * Base class for execution operators

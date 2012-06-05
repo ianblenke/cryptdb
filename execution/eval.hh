@@ -1,23 +1,9 @@
 #pragma once
 
-#include <execution/tuple.hh>
 #include <vector>
 
-class eval_context {
-public:
-  eval_context(db_tuple* tuple, ssize_t idx = -1) : tuple(tuple), idx(idx) {}
-
-  inline eval_context bind_row(size_t idx) {
-    return eval_context(tuple, ssize_t(idx));
-  }
-
-  // no ownership
-  db_tuple* const tuple; // current tuple being evaluated
-
-  const ssize_t idx; // if idx != -1, then we are evaluating specifially the
-                     // idx-th row of this tuple (this only applies to the vector
-                     // columns, non-vector columns are unaffected)
-};
+#include <execution/tuple.hh>
+#include <execution/context.hh>
 
 class expr_node {
 public:
@@ -32,7 +18,7 @@ public:
     for (auto e : _children) delete e;
   }
 
-  virtual db_elem eval(eval_context& ctx) = 0;
+  virtual db_elem eval(exec_context& ctx) = 0;
 
 protected:
 
