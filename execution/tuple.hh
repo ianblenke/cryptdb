@@ -3,10 +3,12 @@
 #include <cstdint>
 
 #include <iostream>
+#include <limits>
 #include <sstream>
 #include <vector>
 #include <string>
 #include <stdexcept>
+#include <functional>
 
 #include <execution/common.hh>
 #include <util/onions.hh>
@@ -21,20 +23,20 @@ public:
     null_tag,
   };
 
-  db_elem() : _t(TYPE_UNINIT) {}
-  db_elem(null_type t) : _t(TYPE_NULL) {}
+  db_elem() : _t(TYPE_UNINIT), _hash(-1) {}
+  db_elem(null_type t) : _t(TYPE_NULL), _hash(-1) {}
 
-  db_elem(int64_t i) : _t(TYPE_INT) { _d.i64 = i; }
-  db_elem(bool b) : _t(TYPE_BOOL) { _d.b = b; }
-  db_elem(double d) : _t(TYPE_DOUBLE) { _d.dbl = d; }
-  db_elem(const std::string& s) : _t(TYPE_STRING), _s(s) {}
-  db_elem(const char *s, size_t n) : _t(TYPE_STRING), _s(s, n) {}
+  db_elem(int64_t i) : _t(TYPE_INT), _hash(-1) { _d.i64 = i; }
+  db_elem(bool b) : _t(TYPE_BOOL), _hash(-1) { _d.b = b; }
+  db_elem(double d) : _t(TYPE_DOUBLE), _hash(-1) { _d.dbl = d; }
+  db_elem(const std::string& s) : _t(TYPE_STRING), _s(s), _hash(-1) {}
+  db_elem(const char *s, size_t n) : _t(TYPE_STRING), _s(s, n), _hash(-1) {}
 
   db_elem(unsigned int y, unsigned int m, unsigned int d)
-    : _t(TYPE_DATE) { _d.i64 = (d | (m << 5) | (y << 9)); }
+    : _t(TYPE_DATE), _hash(-1) { _d.i64 = (d | (m << 5) | (y << 9)); }
 
   db_elem(const std::vector< db_elem >& elems)
-    : _t(TYPE_VECTOR), _elems(elems) {}
+    : _t(TYPE_VECTOR), _elems(elems), _hash(-1) {}
 
   enum type {
     TYPE_UNINIT,
@@ -107,6 +109,37 @@ private:
   }
 
 public:
+
+  /** WARNING: currently not thread-safe */
+  /* hash not supported for vector type */
+  int64_t hash() const {
+    assert(!is_vector());
+    if (_hash == -1) {
+      // must compute
+
+      static int64_t mask = std::numeric_limits<int64_t>::max();
+      switch (_t) {
+        case TYPE_NULL   : _hash = 0; break;
+        case TYPE_BOOL   : _hash = _d.b ? 1 : 0; break;
+
+        case TYPE_INT    :
+        case TYPE_DATE   :
+          _hash = std::hash<int64_t>()(_d.i64) & mask;
+          break;
+
+        case TYPE_DOUBLE :
+          _hash = std::hash<double>()(_d.dbl) & mask;
+          break;
+
+        case TYPE_STRING :
+          _hash = std::hash<std::string>()(_s) & mask;
+          break;
+
+        default : assert(false);
+      }
+    }
+    return _hash;
+  }
 
   // C++ operators
 
@@ -217,6 +250,12 @@ public:
   DECL_IMPL_LOGICAL_BINOP(||);
   DECL_IMPL_LOGICAL_BINOP(&&);
 
+  // date ops - work either on date or vec of dates
+
+  db_elem get_day() const;
+  db_elem get_month() const;
+  db_elem get_year() const;
+
   // unsafe casts assume not vectors
 
   inline bool unsafe_cast_bool() const {
@@ -278,9 +317,28 @@ private:
   } _d;
   std::string _s;
   std::vector< db_elem > _elems;
+
+  mutable int64_t _hash;
 };
 
 std::ostream& operator<<(std::ostream& o, const db_elem& e);
+
+// STL specializations
+namespace std {
+  template <>
+  struct hash<db_elem> {
+    inline size_t operator()(const db_elem& e) const {
+      return e.hash();
+    }
+  };
+
+  template <>
+  struct equal_to<db_elem> {
+    inline bool operator()(const db_elem& a, const db_elem& b) const {
+      return (a == b) ? true : false;
+    }
+  };
+}
 
 /** represents a tuple from the database.
  * is really a thin wrapper around a vector of db_elems
@@ -288,6 +346,22 @@ std::ostream& operator<<(std::ostream& o, const db_elem& e);
 class db_tuple {
 public:
   std::vector< db_elem > columns;
+
+  bool operator==(const db_tuple& that) const {
+    size_t s = columns.size();
+    if (s != that.columns.size()) return false;
+    for (size_t i = 0; i < s; i++) {
+      if (columns[i] != that.columns[i]) return false;
+    }
+    return true;
+  }
+
+  int64_t hash() const {
+    // XOR all the column hashes together
+    int64_t h = 0;
+    for (auto &e : columns) h ^= e.hash();
+    return h;
+  }
 
   // return the position of columns which are vectors
   std::vector<size_t> get_vector_columns() const {
@@ -308,6 +382,22 @@ public:
     return r;
   }
 };
+
+namespace std {
+  template <>
+  struct hash<db_tuple> {
+    inline bool operator()(const db_tuple& t) const {
+      return t.hash();
+    }
+  };
+
+  template <>
+  struct equal_to<db_tuple> {
+    inline bool operator()(const db_tuple& a, const db_tuple& b) const {
+      return a == b;
+    }
+  };
+}
 
 std::ostream& operator<<(std::ostream& o, const db_tuple& tuple);
 
@@ -330,6 +420,10 @@ public:
   // creates a descriptor after decryption
   db_column_desc decrypt_desc() const {
     return db_column_desc(type, size, oNONE, SECLEVEL::PLAIN, pos, is_vector);
+  }
+
+  db_column_desc vectorize() const {
+    return db_column_desc(type, size, onion_type, level, pos, true);
   }
 
   // TODO: these really should all be const

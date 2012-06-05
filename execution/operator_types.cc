@@ -2,6 +2,7 @@
 #include <cassert>
 #include <algorithm>
 #include <stdexcept>
+#include <unordered_map>
 #include <set>
 
 #include <parser/cdb_helpers.hh>
@@ -435,6 +436,99 @@ local_transform_op::next(exec_context& ctx, db_tuple_vec& tuples)
       }
     }
     tuples.push_back(tt);
+  }
+}
+
+local_group_by::desc_vec
+local_group_by::tuple_desc()
+{
+  desc_vec v = first_child()->tuple_desc();
+  set<size_t> s = util::vec_to_set(_pos);
+  for (size_t i = 0; i < v.size(); i++) {
+    if (s.count(i) == 1) {
+      v[i] = v[i].vectorize();
+    }
+  }
+  return v;
+}
+
+void
+local_group_by::next(exec_context& ctx, db_tuple_vec& tuples)
+{
+  TRACE_OPERATOR();
+
+  assert(first_child()->has_more(ctx));
+
+  while (first_child()->has_more(ctx)) {
+    db_tuple_vec v;
+    first_child()->next(ctx, v);
+    tuples.insert(tuples.end(), v.begin(), v.end());
+  }
+
+  // only strategy is in-memory hash aggregate
+  unordered_map< db_tuple, vector< vector<db_elem> > > m;
+
+  map< size_t /* pos */, size_t /* position in group key */ > sm;
+  for (size_t i = 0; i < _pos.size(); i++) sm[_pos[i]] = i;
+
+  desc_vec dv = first_child()->tuple_desc();
+
+  // do the hash aggregation
+  for (auto &e : tuples) {
+
+    SANITY( dv.size() == e.columns.size() );
+
+    // extract the grouping key
+    db_tuple group_key;
+    group_key.columns.reserve( _pos.size() );
+    for (auto p : _pos) group_key.columns.push_back( e.columns[p] );
+
+    // locate grouping key in map
+    auto it = m.find( group_key );
+    if (it == m.end()) {
+      // new group- initialize it
+
+      vector< vector<db_elem> >& group = m[group_key];
+      assert( e.columns.size() > _pos.size() );
+      group.resize( e.columns.size() - _pos.size() );
+
+      size_t i = 0, j = 0;
+      for (; i < e.columns.size(); i++) {
+        if (sm.find(i) == sm.end()) {
+          group[j].push_back( e.columns[i] );
+          j++;
+        }
+      }
+
+    } else {
+      // append each non group key element from this tuple
+      vector< vector<db_elem> >& group = it->second;
+      size_t i = 0, j = 0;
+      for (; i < e.columns.size(); i++) {
+        if (sm.find(i) == sm.end()) {
+          group[j].push_back( e.columns[i] );
+          j++;
+        }
+      }
+    }
+  }
+
+  // now emit the results
+  tuples.clear();
+  for (auto it = m.begin(); it != m.end(); ++it) {
+    db_tuple t;
+    t.columns.reserve(dv.size());
+    size_t i = 0, j = 0;
+    for (; i < dv.size(); i++) {
+      auto sit = sm.find(i);
+      if (sit == sm.end()) {
+        t.columns.push_back(db_elem(it->second[j]));
+        j++;
+      } else {
+        t.columns.push_back(it->first.columns[sit->second]);
+      }
+    }
+    tuples.push_back(t);
   }
 }
 

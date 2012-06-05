@@ -122,6 +122,22 @@ protected:
   trfm_desc_vec _trfm_vec;
 };
 
+class local_group_by : public physical_operator {
+public:
+
+  local_group_by(
+      const pos_vec& pos,
+      physical_operator* child)
+    : physical_operator({child}), _pos(pos) {}
+
+  virtual desc_vec tuple_desc();
+
+  DECL_PHY_OP_NEXT;
+
+private:
+  pos_vec _pos;
+};
+
 class local_order_by : public physical_operator {
 public:
   typedef std::vector< std::pair< size_t, bool > > sort_keys_vec;

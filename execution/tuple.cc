@@ -66,6 +66,46 @@ static inline string lower_case(const string& target)
   return r;
 }
 
+#define IMPL_VEC_ARG0_OPS(fcn) \
+  do { \
+    if (is_vector()) { \
+      vector< db_elem > v; \
+      v.reserve( _elems.size() ); \
+      for (auto &e : _elems) v.push_back(e.fcn()); \
+      return db_elem(v); \
+    } \
+  } while (0)
+
+db_elem
+db_elem::get_day() const
+{
+  IMPL_VEC_ARG0_OPS(get_day);
+  requireType(TYPE_DATE);
+  uint32_t m, d, y;
+  extract_date_from_encoding(_d.i64, m, d, y);
+  return db_elem(int64_t(d));
+}
+
+db_elem
+db_elem::get_month() const
+{
+  IMPL_VEC_ARG0_OPS(get_month);
+  requireType(TYPE_DATE);
+  uint32_t m, d, y;
+  extract_date_from_encoding(_d.i64, m, d, y);
+  return db_elem(int64_t(m));
+}
+
+db_elem
+db_elem::get_year() const
+{
+  IMPL_VEC_ARG0_OPS(get_year);
+  requireType(TYPE_DATE);
+  uint32_t m, d, y;
+  extract_date_from_encoding(_d.i64, m, d, y);
+  return db_elem(int64_t(y));
+}
+
 db_elem
 db_elem::like(const db_elem& qstr, bool case_sensitive) const
 {

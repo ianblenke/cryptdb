@@ -168,6 +168,33 @@ private:
   expr_node* _dft;
 };
 
+class extract_node : public expr_node {
+public:
+  enum extract_type {
+    TYPE_DAY,
+    TYPE_MONTH,
+    TYPE_YEAR,
+  };
+
+  extract_node(
+      expr_node* child,
+      extract_type type)
+    : expr_node({child}), _type(type) {}
+
+  virtual db_elem eval(eval_context& ctx) {
+    db_elem d = first_child()->eval(ctx);
+    switch (_type) {
+      case TYPE_DAY:   return d.get_day();
+      case TYPE_MONTH: return d.get_month();
+      case TYPE_YEAR:  return d.get_year();
+    }
+    throw new std::runtime_error("unreachable");
+  }
+
+private:
+  extract_type _type;
+};
+
 class tuple_pos_node : public expr_node {
 public:
   tuple_pos_node(size_t pos) : _pos(pos) {}
