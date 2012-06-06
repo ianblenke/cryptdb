@@ -172,6 +172,12 @@ db_elem::sum(bool distinct) const
 }
 
 db_elem
+db_elem::avg(bool distinct) const
+{
+  return sum(distinct) / db_elem(int64_t(size()));
+}
+
+db_elem
 db_elem::filter(const db_elem& mask) const
 {
   requireType(TYPE_VECTOR);

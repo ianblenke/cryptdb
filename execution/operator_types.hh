@@ -89,7 +89,7 @@ public:
       expr_node* filter,
       physical_operator* child,
       const op_vec& subqueries)
-    : physical_operator({child}), _filter(filter) {
+    : physical_operator({child}), _filter(filter), _subqueries(subqueries) {
     assert(filter);
     assert(child);
   }

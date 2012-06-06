@@ -309,6 +309,7 @@ public:
   // assumes vector
   db_elem count(bool distinct) const;
   db_elem sum(bool distinct) const;
+  db_elem avg(bool distinct) const;
 
   db_elem filter(const db_elem& mask) const;
 

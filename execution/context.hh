@@ -23,11 +23,12 @@ public:
       ssize_t idx = -1, /* only meaningful if tuple != NULL */
 
       const std::vector< physical_operator* >& subqueries =
-        std::vector< physical_operator* >()
+        std::vector< physical_operator* >(),
+
+      db_tuple* args = NULL
 
   ) : connection(connection), crypto(crypto), cache(cache),
-      tuple(tuple), idx(idx),
-      subqueries(subqueries) {}
+      tuple(tuple), idx(idx), subqueries(subqueries), args(args) {}
 
   // if previous tuple bound, the information is discarded
   inline exec_context bind(
@@ -41,7 +42,8 @@ public:
         cache,
         tuple,
         -1,
-        subqueries);
+        subqueries,
+        args);
   }
 
   // assumes a tuple has already been bound, but the row is not bound
@@ -54,7 +56,20 @@ public:
         cache,
         tuple,
         ssize_t(idx),
-        subqueries);
+        subqueries,
+        args);
+  }
+
+  inline exec_context bind_args(db_tuple* args) {
+    assert(args);
+    return exec_context(
+        connection,
+        crypto,
+        cache,
+        tuple,
+        ssize_t(idx),
+        subqueries,
+        args);
   }
 
   // no ownership for any of the pointers
@@ -70,4 +85,6 @@ public:
   // idx-th row of this tuple (this only applies to the vector
   // columns, non-vector columns are unaffected)
   const std::vector< physical_operator* > subqueries;
+
+  db_tuple* const args;
 };
