@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <string>
 
+#include <execution/common.hh>
 #include <execution/eval.hh>
 #include <execution/operator.hh>
 #include <util/stl.hh>
@@ -232,10 +233,12 @@ public:
 
     if (v.size() == 0) {
       // exists query, return false
+      dprintf("subquery(%s): returning false\n", TO_C(_n));
       return db_elem(false);
     } else {
       // scalar result
       assert(v[0].columns.size() == 1);
+      dprintf("subquery(%s): %s\n", TO_C(_n), TO_C(v[0].columns.front()));
       return v[0].columns.front();
     }
   }

@@ -90,6 +90,8 @@ R resultFromStr(const std::string &r) {
 template <>
 std::string resultFromStr(const std::string &r) { return r; }
 
+#define TO_C(s) (to_s(s).c_str())
+
 template <typename T>
 inline std::string to_s(const T& t) {
     std::ostringstream s;

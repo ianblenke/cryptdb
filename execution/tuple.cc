@@ -247,8 +247,16 @@ ostream& operator<<(ostream& o, const db_elem& e)
       }
       break;
     case db_elem::TYPE_VECTOR:
-      // TODO: impl
-      o << "<vector>";
+      {
+        size_t n = e._elems.size() > 10 ? 10 : e._elems.size();
+        o << "{";
+        for (size_t i = 0; i < n; i++) {
+          o << e._elems[i];
+          if ((i+1) != n) o << ",";
+          else if (n < e._elems.size()) o << ",...";
+        }
+        o << "}";
+      }
       break;
     default: assert(false);
   }

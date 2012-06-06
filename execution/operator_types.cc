@@ -17,8 +17,6 @@
 
 using namespace std;
 
-#define TO_C(s) (to_s(s).c_str())
-
 #define TRACE_OPERATOR() \
   do { \
     static size_t _n = 0; \
@@ -76,9 +74,13 @@ remote_sql_op::open(exec_context& ctx)
   if (ctx.cache) {
     auto it = ctx.cache->cache.find(_do_cache_write_sql);
     if (it != ctx.cache->cache.end()) {
+      _read_cursor = 0;
       _cached_results = it->second;
       assert(_res == NULL); // sets read
       dprintf("cache hit! %s rows\n", TO_C(_cached_results.size()));
+      if (!_cached_results.empty()) {
+        dprintf("  answer[0]: %s\n", TO_C(_cached_results[0]));
+      }
       return;
     }
   }
@@ -103,9 +105,11 @@ remote_sql_op::close(exec_context& ctx)
     if (ctx.cache) {
       ctx.cache->cache[_do_cache_write_sql] = _cached_results;
     }
-    _do_cache_write_sql.clear();
     _do_cache_write = false;
   }
+
+  _cached_results.clear();
+  _do_cache_write_sql.clear();
 
   // close the sql statement
   if (_res) {
