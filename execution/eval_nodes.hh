@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <string>
+#include <stdexcept>
 
 #include <execution/common.hh>
 #include <execution/eval.hh>
@@ -216,12 +217,19 @@ private:
 class subselect_node : public expr_node {
 public:
   subselect_node(size_t n, const child_vec& args)
-    : expr_node(args), _n(n) {}
+    : expr_node(args), _n(n), _cache_set(false) {}
   virtual db_elem eval(exec_context& ctx) {
     assert(_n < ctx.subqueries.size());
     physical_operator* op = ctx.subqueries[_n];
 
     // TODO: process the args (and place in the context)
+    if (!_children.empty()) {
+      throw std::runtime_error("unimplemented");
+    }
+
+    // assume that subselects are deterministic (so we can cache based
+    // on just the argument values)
+    if (_cache_set) return _cached_result;
 
     op->open(ctx);
     physical_operator::db_tuple_vec v;
@@ -234,14 +242,18 @@ public:
     if (v.size() == 0) {
       // exists query, return false
       dprintf("subquery(%s): returning false\n", TO_C(_n));
-      return db_elem(false);
+      _cache_set = true;
+      return _cached_result = db_elem(false);
     } else {
       // scalar result
       assert(v[0].columns.size() == 1);
       dprintf("subquery(%s): %s\n", TO_C(_n), TO_C(v[0].columns.front()));
-      return v[0].columns.front();
+      _cache_set = true;
+      return _cached_result = v[0].columns.front();
     }
   }
 private:
   size_t _n;
+  bool _cache_set;
+  db_elem _cached_result;
 };
