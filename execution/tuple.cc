@@ -140,12 +140,12 @@ db_elem::like(const db_elem& qstr, bool case_sensitive) const
 
   if (pos.size() == 1 && pos.front() == (pattern.size() - 1)) {
     // pattern = "...%"
-    return target.find(pattern.substr(0, pattern.size())) == 0;
+    return target.find(pattern.substr(0, pattern.size() - 1)) == 0;
   }
 
   if (pos.size() == 2 && pos.front() == 0 && pos.back() == (pattern.size() - 1)) {
     // pattern = "%...%"
-    return target.find(pattern.substr(1, pattern.size())) != string::npos;
+    return target.find(pattern.substr(1, pattern.size() - 2)) != string::npos;
   }
 
   // otherwise, punt for now
