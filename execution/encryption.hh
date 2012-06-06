@@ -152,9 +152,8 @@ inline uint64_t encrypt_at_most_u32_ope(
   std::string enc_value =
     cm->crypt<n_bytes>(
         cm->cm->getmkey(), to_s(value), TYPE_INTEGER,
-        fieldname(field_pos, "OPE"), SECLEVEL::PLAIN_OPE,
-        join ? SECLEVEL::OPEJOIN : SECLEVEL::OPE,
-        isBin, 12345);
+        (join ? "ope_join" : fieldname(field_pos, "OPE")), SECLEVEL::PLAIN_OPE,
+        SECLEVEL::OPE, isBin, 12345);
   assert(!isBin);
   return resultFromStr<uint64_t>(enc_value);
 }
@@ -169,8 +168,8 @@ inline uint64_t decrypt_at_most_u64_ope(
   std::string dec_value =
     cm->crypt<n_bytes>(
         cm->cm->getmkey(), value, TYPE_INTEGER,
-        fieldname(field_pos, "OPE"), level,
-        SECLEVEL::PLAIN_OPE, isBin, 12345);
+        (level == SECLEVEL::OPEJOIN ? "ope_join" : fieldname(field_pos, "OPE")),
+        SECLEVEL::OPE, SECLEVEL::PLAIN_OPE, isBin, 12345);
   return resultFromStr<uint64_t>(dec_value);
 }
 
