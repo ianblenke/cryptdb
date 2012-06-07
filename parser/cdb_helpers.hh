@@ -192,6 +192,36 @@ uint64_t ZZToU64(NTL::ZZ val)
     return res;
 }
 
+template <typename T>
+void SplitRowsIntoGroups(
+    std::vector< std::vector<T> >& groups,
+    const std::vector< T >& allRows,
+    size_t numGroups) {
+  assert(numGroups > 0);
+  groups.resize(numGroups);
+  size_t blockSize = allRows.size() / numGroups;
+  if (blockSize == 0) {
+    groups[0] = allRows;
+    return;
+  }
+  for (size_t i = 0; i < numGroups; i++) {
+    size_t start = i * blockSize;
+    if (i == numGroups - 1) {
+      // last group
+      groups[i].insert(
+          groups[i].begin(),
+          allRows.begin() + start,
+          allRows.end());
+    } else {
+      groups[i].insert(
+          groups[i].begin(),
+          allRows.begin() + start,
+          allRows.begin() + start + blockSize);
+    }
+  }
+}
+
+
 } // empty namespace
 
 template <size_t n_bits>

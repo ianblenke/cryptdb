@@ -288,6 +288,14 @@ public:
     return _elems[i];
   }
 
+  inline std::vector< db_elem >& elements() {
+    requireType(TYPE_VECTOR); return _elems;
+  }
+
+  inline const std::vector< db_elem >& elements() const {
+    requireType(TYPE_VECTOR); return _elems;
+  }
+
   typedef std::vector< db_elem >::iterator       iterator;
   typedef std::vector< db_elem >::const_iterator const_iterator;
 

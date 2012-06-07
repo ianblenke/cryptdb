@@ -260,35 +260,6 @@ typedef vector<SqlRow>  SqlRowGroup;
 // empty groups are created if there are not enough rows to go
 // around
 
-template <typename T>
-static void SplitRowsIntoGroups(
-    vector< vector<T> >& groups,
-    const vector< T >& allRows,
-    size_t numGroups) {
-  assert(numGroups > 0);
-  groups.resize(numGroups);
-  size_t blockSize = allRows.size() / numGroups;
-  if (blockSize == 0) {
-    groups[0] = allRows;
-    return;
-  }
-  for (size_t i = 0; i < numGroups; i++) {
-    size_t start = i * blockSize;
-    if (i == numGroups - 1) {
-      // last group
-      groups[i].insert(
-          groups[i].begin(),
-          allRows.begin() + start,
-          allRows.end());
-    } else {
-      groups[i].insert(
-          groups[i].begin(),
-          allRows.begin() + start,
-          allRows.begin() + start + blockSize);
-    }
-  }
-}
-
 struct lineitem_group {
     lineitem_group() :
       l_quantity(0.0),
@@ -3721,6 +3692,10 @@ static void do_query_crypt_q10(ConnectNew &conn,
                             TYPE_INTEGER, fieldname(orders::o_orderdate, "OPE"),
                             getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
   assert(!isBin);
+
+  cout << "l0 details: " << endl;
+  cout << "  plaintext: " << to_s((unsigned int)'R') << endl;
+  cout << "  fieldname: " << fieldname(lineitem::l_returnflag, "DET") << endl;
 
   string l0 =
     cm_stub.crypt<1>(cm.getmkey(), to_s((unsigned int)'R'),

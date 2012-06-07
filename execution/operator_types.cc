@@ -5,10 +5,12 @@
 #include <limits>
 #include <unordered_map>
 #include <set>
+#include <pthread.h>
 
 #include <parser/cdb_helpers.hh>
 
 #include <util/stl.hh>
+#include <util/timer.hh>
 
 #include <execution/common.hh>
 #include <execution/encryption.hh>
@@ -376,6 +378,24 @@ do_decrypt_op(
   }
 }
 
+struct decrypt_args {
+  exec_context* ctx;
+  const vector< db_elem >* elems;
+  const db_column_desc* desc;
+  vector< db_elem >* results;
+};
+
+static void* do_decrypt_op_wrapper(void* p) {
+  decrypt_args* args = (decrypt_args *) p;
+  size_t n = args->elems->size();
+  args->results->reserve(n);
+  for (size_t i = 0; i < n; i++) {
+    args->results->push_back(
+        do_decrypt_op(*args->ctx, args->elems->operator[](i), *args->desc));
+  }
+  return NULL;
+}
+
 void
 local_decrypt_op::next(exec_context& ctx, db_tuple_vec& tuples)
 {
@@ -391,7 +411,8 @@ local_decrypt_op::next(exec_context& ctx, db_tuple_vec& tuples)
   // 1) each column can be decrypted in parallel
   // 2) within a column, vector contexts can be decrypted in parallel
   //
-  // for now, (2) is the only one really worth exploiting
+  // for now, (2) is the only one really worth exploiting (maybe (1) if time
+  // permitting)
 
 #ifdef EXTRA_SANITY_CHECKS
   for (auto p : _pos) {
@@ -412,9 +433,61 @@ local_decrypt_op::next(exec_context& ctx, db_tuple_vec& tuples)
       if (e.is_vector()) {
         vector< db_elem > elems;
         elems.reserve(e.size());
-        for (auto &e0 : e) { // parallelism (2)
-          elems.push_back(do_decrypt_op(ctx, e0, d));
+
+        // on vise4, it takes about 0.377 ms to spawn and join 8 threads
+        // (which do nothing). it also takes about 0.0173 ms to do one DET
+        // decryption. doing the math, this means we should switch over to
+        // parallel (8 threads) at n = 25 elems
+
+        static const size_t ParThreshold = 25;
+        static const size_t NThreads = 8;
+
+        if (e.size() >= ParThreshold) {
+
+          dprintf("using parallel impl to decrypt %s elems\n", TO_C(e.size()));
+          timer t;
+
+          vector< vector< db_elem > > groups;
+          SplitRowsIntoGroups(groups, e.elements(), NThreads);
+          assert(groups.size() == NThreads);
+
+          // TODO: all threads write into shared array
+          vector< vector< db_elem > > group_results;
+          group_results.resize(NThreads);
+
+          // TODO: should really use a thread-pool of workers. However:
+          // A) the exec implementation is not quite there yet
+          // B) this is easier though- no need for managing a global shared thread-pool
+          //    (and measured to be not that slow)
+
+          pthread_t thds[NThreads];
+          decrypt_args args[NThreads];
+
+          for (size_t i = 0; i < NThreads; i++) {
+            args[i].ctx     = &ctx;
+            args[i].elems   = &groups[i];
+            args[i].desc    = &d;
+            args[i].results = &group_results[i];
+            int r = pthread_create(&thds[i], NULL, do_decrypt_op_wrapper, &args[i]);
+            if (r) assert(false);
+          }
+
+          for (size_t i = 0; i < NThreads; i++) {
+            int r = pthread_join(thds[i], NULL);
+            if (r) assert(false);
+            // TODO: this copy is un-necessary
+            elems.insert(elems.end(), group_results[i].begin(), group_results[i].end());
+          }
+
+          assert(elems.size() == e.size());
+          dprintf("decryption took %s ms\n", TO_C( double(t.lap()) / 1000.0 ));
+
+        } else {
+          for (auto &e0 : e) { // parallelism (2)
+            elems.push_back(do_decrypt_op(ctx, e0, d));
+          }
         }
+
         tuple.columns[p] = db_elem(elems);
       } else {
         tuple.columns[p] = do_decrypt_op(ctx, e, d);
