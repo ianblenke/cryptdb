@@ -15,3 +15,7 @@
 #else
   #define SANITY(x)
 #endif /* EXTRA_SANITY_CHECKS */
+
+namespace hom_agg_constants {
+  static const size_t BitsPerDecimalSlot = 83; // hardcoded for now
+}

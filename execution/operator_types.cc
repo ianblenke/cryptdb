@@ -8,7 +8,9 @@
 #include <pthread.h>
 
 #include <parser/cdb_helpers.hh>
+#include <crypto/paillier.hh>
 
+#include <util/serializer.hh>
 #include <util/stl.hh>
 #include <util/timer.hh>
 
@@ -271,10 +273,98 @@ local_decrypt_op::tuple_desc()
 }
 
 static db_elem
+do_decrypt_hom_agg(crypto_manager_stub* cm, const string& data)
+{
+  const uint8_t* p = (const uint8_t *) data.data();
+  dprintf("got %s bytes data\n", TO_C(data.size()));
+
+  using namespace hom_agg_constants;
+  static const NTL::ZZ Mask = ((NTL::to_ZZ(1) << BitsPerDecimalSlot) - 1);
+  SANITY(NumBits(Mask) == (int)BitsPerDecimalSlot);
+
+  // read header
+  uint32_t ct_agg_size_bytes /* *CIPHERTEXT* size in *BYTES* */, rows_per_agg;
+  deserializer<uint32_t>::read(p, ct_agg_size_bytes);
+  deserializer<uint32_t>::read(p, rows_per_agg);
+  SANITY(ct_agg_size_bytes > 0);
+  SANITY(rows_per_agg > 0);
+  SANITY((ct_agg_size_bytes % 2) == 0); // ct agg size must be even
+
+  cerr << "ct_agg_size_bytes = " << ct_agg_size_bytes << ", rows_per_agg = " << rows_per_agg << endl;
+
+  uint32_t dec_slots_per_row = (ct_agg_size_bytes * 8 / 2) / (BitsPerDecimalSlot * rows_per_agg);
+  SANITY(dec_slots_per_row > 0);
+
+  cerr << "dec_slots_per_row = " << dec_slots_per_row << endl;
+
+  NTL::ZZ row_mask = (NTL::to_ZZ(1) << (BitsPerDecimalSlot * dec_slots_per_row)) - 1;
+
+  // create a row mask
+
+  // setup crypto keys
+  auto sk = Paillier_priv::keygen(ct_agg_size_bytes * 8 / 2, ct_agg_size_bytes);
+  cerr << "keygen arg0: " << (ct_agg_size_bytes * 8 / 2) << endl;
+  cerr << "keygen arg1: " << (ct_agg_size_bytes) << endl;
+  Paillier_priv pp(sk);
+
+  // read group count
+  uint64_t group_count;
+  deserializer<uint64_t>::read(p, group_count);
+
+  // read number of aggs
+  uint32_t n_aggs;
+  deserializer<uint32_t>::read(p, n_aggs);
+
+  // TODO: if n_aggs is large enough consider parallel decryption
+  NTL::ZZ accum = NTL::to_ZZ(0);
+  for (uint32_t i = 0; i < n_aggs; i++) {
+    // read interest mask
+    uint32_t interest_mask;
+    deserializer<uint32_t>::read(p, interest_mask);
+    SANITY(interest_mask != 0);
+
+    // read ciphertext + decrypt
+    NTL::ZZ ct = NTL::ZZFromBytes((const uint8_t *) p, ct_agg_size_bytes);
+    p += ct_agg_size_bytes;
+    NTL::ZZ pt = pp.decrypt(ct);
+
+    // fill this agg into accum
+    for (uint32_t i = 0; i < rows_per_agg; i++) {
+      if (!(interest_mask & (0x1 << i))) continue;
+
+      // mask out the dec slots from the row, and add it to accum
+      accum += (pt & (row_mask << (i * BitsPerDecimalSlot * dec_slots_per_row)));
+    }
+  }
+
+  // assert we consumed all the data
+  SANITY(p == (const uint8_t *)(data.data() + data.size()));
+
+  // now collaspe each row into one agg (adding the slots to each other)
+  NTL::ZZ accum_final = NTL::to_ZZ(0);
+  for (uint32_t i = 0; i < rows_per_agg; i++) {
+    accum_final += ((accum >> (i * BitsPerDecimalSlot * dec_slots_per_row)) & row_mask);
+  }
+
+  // now we write this data into a string db_elem, where the data in the string
+  // is [count, ZZ]
+
+  ostringstream buf;
+  serializer<uint64_t>::write(buf, group_count);
+  string x = StringFromZZ(accum_final);
+  buf << x;
+
+  cerr << "x.size() = " << x.size() << endl;
+
+  return db_elem(buf.str());
+}
+
+static db_elem
 do_decrypt_op(
     exec_context& ctx,
     const db_elem& elem,
-    const db_column_desc& d) {
+    const db_column_desc& d)
+{
   assert(elem.get_type() != db_elem::TYPE_VECTOR);
   string s = elem.stringify();
   switch (d.type) {
@@ -330,8 +420,13 @@ do_decrypt_op(
 
     case db_elem::TYPE_STRING: {
 
-      assert(d.onion_type == oDET);
+      assert(d.onion_type == oDET ||
+             d.onion_type == oAGG);
       // NO decryption of OPE onions
+
+      if (d.onion_type == oAGG) {
+        return db_elem(do_decrypt_hom_agg(ctx.crypto, s));
+      }
 
       return db_elem(decrypt_string_det(ctx.crypto, s, d.pos, d.level));
 

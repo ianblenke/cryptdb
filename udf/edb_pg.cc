@@ -1,5 +1,6 @@
 #include <udf/edb_common.hh>
 #include <unordered_map>
+#include <util/serializer.hh>
 
 extern "C" {
 #include "postgres.h"
@@ -197,38 +198,9 @@ namespace std {
   };
 }
 
-template <typename Key>
-struct serializer {
-  //static void write(std::ostream& o, const Key& k) {}
-};
-
-template <typename POD>
-struct PODSerializer {
-  static void write(std::ostream& o, const POD& k) {
-    char buf[sizeof(POD)];
-    POD* p = (POD*) buf;
-    *p = k;
-    o << std::string(buf, sizeof(POD));
-  }
-};
-
 template <>
 struct serializer<nokey> {
   static void write(std::ostream&, const nokey&) {}
-};
-
-template <>
-struct serializer<uint32_t> : public PODSerializer<uint32_t> {};
-
-template <>
-struct serializer<uint64_t> : public PODSerializer<uint64_t> {};
-
-template <>
-struct serializer<std::string> {
-  static void write(std::ostream& o, const std::string& k) {
-    PODSerializer<uint32_t>::write(o, k.size());
-    o << k;
-  }
 };
 
 template <typename K0, typename K1>

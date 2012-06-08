@@ -256,6 +256,16 @@ public:
   DECL_IMPL_LOGICAL_BINOP(||);
   DECL_IMPL_LOGICAL_BINOP(&&);
 
+  inline int64_t unsafe_cast_i64() const {
+    requireType(TYPE_INT);
+    return _d.i64;
+  }
+
+  inline const std::string& unsafe_cast_string() const {
+    requireType(TYPE_STRING);
+    return _s;
+  }
+
   // date ops - work either on date or vec of dates
 
   db_elem get_day() const;

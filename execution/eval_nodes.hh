@@ -237,3 +237,18 @@ private:
   size_t _n;
   std::unordered_map< db_tuple, db_elem > _cached_values;
 };
+
+class function_call_node : public expr_node {
+public:
+  function_call_node(
+      const std::string& name,
+      const child_vec& args)
+    : expr_node(args), _name(name) {}
+  virtual db_elem eval(exec_context& ctx);
+private:
+
+  // implementations of each function
+  db_elem eval_hom_get_pos(exec_context& ctx, db_tuple& args);
+
+  std::string _name;
+};

@@ -1,4 +1,6 @@
 #include <execution/eval_nodes.hh>
+#include <util/serializer.hh>
+#include <NTL/ZZ.h>
 
 using namespace std;
 using namespace util;
@@ -114,4 +116,52 @@ subselect_node::eval_scalar(exec_context& ctx, db_tuple& scalar_args)
     dprintf("subquery(%s): %s\n", TO_C(_n), TO_C(v[0].columns.front()));
     return _cached_values[scalar_args] = v[0].columns.front();
   }
+}
+
+db_elem
+function_call_node::eval(exec_context& ctx) {
+  // eval the args
+  db_tuple t;
+  t.columns.reserve(_children.size());
+  for (auto c : _children) t.columns.push_back(c->eval(ctx));
+  if (_name == "hom_get_pos") return eval_hom_get_pos(ctx, t);
+  throw runtime_error("no handler for function: " + _name);
+}
+
+db_elem
+function_call_node::eval_hom_get_pos(exec_context& ctx, db_tuple& args)
+{
+  if (args.columns.size() != 2) {
+    throw runtime_error("hom_get_pos() requires 2 arguments");
+  }
+  if (args.columns[0].get_type() != db_elem::TYPE_STRING) {
+    throw runtime_error("hom_get_pos() requires arg0 as string");
+  }
+  if (args.columns[1].get_type() != db_elem::TYPE_INT) {
+    throw runtime_error("hom_get_pos() requires arg1 as int");
+  }
+
+  const string& data = args.columns[0].unsafe_cast_string();
+  int64_t pos = args.columns[1].unsafe_cast_i64();
+
+  // TODO: this is somewhat inefficient
+  const uint8_t* p = (const uint8_t *) data.data();
+  uint64_t group_count;
+  deserializer<uint64_t>::read(p, group_count);
+
+  cerr << "ZZFromBytes on " << (data.size() - sizeof(uint64_t)) << " bytes" << endl;
+
+  NTL::ZZ z;
+  NTL::ZZFromBytes(z, p, data.size() - sizeof(uint64_t));
+
+  using namespace hom_agg_constants;
+  static const NTL::ZZ Mask = ((NTL::to_ZZ(1) << BitsPerDecimalSlot) - 1);
+  SANITY(NumBits(Mask) == (int)BitsPerDecimalSlot);
+
+  // take the slot
+  // TODO: check bounds
+  long l = NTL::to_long(((z) >> (BitsPerDecimalSlot * (pos))) & Mask);
+
+  // TODO: assumption right now (for TPC-H) is that all hom aggs are DECIMAL(15, 2)
+  return db_elem( double(uint64_t(l))/100.0 );
 }
