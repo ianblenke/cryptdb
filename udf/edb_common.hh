@@ -19,8 +19,12 @@
 #define TRACE()
 #define SANITY(x) assert(x)
 
-static inline void ATTR_UNUSED
-log(std::string s)
+struct mpz_wrapper { mpz_t mp; };
+
+namespace {
+
+inline void
+log(const std::string& s)
 {
     /* Writes to the server's error log */
     fprintf(stderr, "%s\n", s.c_str());
@@ -75,4 +79,22 @@ inline bool
 search(const Token & token, const Binary & overall_ciph)
 {
    return CryptoManager::searchExists(token, overall_ciph);
+}
+
+inline void
+BytesFromMPZ(uint8_t* p, mpz_t rop, size_t n) {
+    size_t count;
+    mpz_export(p, &count, -1, n, -1, 0, rop);
+    assert(count == 1);
+}
+
+inline void
+InitMPZRunningSums(size_t rows_per_agg, std::vector<mpz_wrapper>& v) {
+    assert( rows_per_agg > 0 );
+    v.resize( (0x1u << rows_per_agg) - 1 );
+    for (size_t i = 0; i < (0x1u << rows_per_agg) - 1; i++) {
+      mpz_init_set_ui(v[i].mp, 1);
+    }
+}
+
 }

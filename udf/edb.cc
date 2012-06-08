@@ -45,8 +45,6 @@ struct mysql_item_result_type<double> {
   }
 };
 
-struct mpz_wrapper { mpz_t mp; };
-
 struct AggRowColPack {
   //static const size_t AggSize = 1256 * 2 / 8;
   //static const size_t RowsPerBlock = 3;
@@ -57,22 +55,6 @@ struct AggRowColPack {
   static const size_t NumBlocksInternalBuffer = 524288;
   //static const size_t NumBlocksInternalBuffer = 4194304;
 };
-
-static inline void
-BytesFromMPZ(uint8_t* p, mpz_t rop, size_t n) {
-    size_t count;
-    mpz_export(p, &count, -1, n, -1, 0, rop);
-    assert(count == 1);
-}
-
-static inline void
-InitMPZRunningSums(size_t rows_per_agg, vector<mpz_wrapper>& v) {
-    assert( rows_per_agg > 0 );
-    v.resize( (0x1u << rows_per_agg) - 1 );
-    for (size_t i = 0; i < (0x1u << rows_per_agg) - 1; i++) {
-      mpz_init_set_ui(v[i].mp, 1);
-    }
-}
 
 struct agg_group_key {
   struct elem {

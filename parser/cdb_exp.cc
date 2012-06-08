@@ -63,9 +63,11 @@ template <> struct ctype_to_itemres<string> {
 
 template <typename T>
 T ReadKeyElem(const uint8_t*& buf) {
-  uint8_t type = *buf++;
-  cerr << "type: " << (int)type << endl;
-  assert(type == ctype_to_itemres<T>::type);
+  if (UseMySQL) {
+    uint8_t type = *buf++;
+    cerr << "type: " << (int)type << endl;
+    assert(type == ctype_to_itemres<T>::type);
+  }
   const T* p = (const T *) buf;
   T r = *p;
   buf += sizeof(T);
@@ -74,8 +76,10 @@ T ReadKeyElem(const uint8_t*& buf) {
 
 template <>
 string ReadKeyElem<string>(const uint8_t*& buf) {
-  uint8_t type = *buf++;
-  assert(type == ctype_to_itemres<string>::type);
+  if (UseMySQL) {
+    uint8_t type = *buf++;
+    assert(type == ctype_to_itemres<string>::type);
+  }
   const uint32_t* p = (const uint32_t *) buf;
   uint32_t s = *p;
   buf += sizeof(uint32_t);
@@ -1275,18 +1279,41 @@ static void do_query_q1_opt_row_col_pack(ConnectNew &conn,
 
     string pkinfo = smartMarshallBinary(StringFromZZ(pk[0] * pk[0]));
     ostringstream s;
-    s <<
-      "SELECT  agg_hash_agg_row_col_pack("
-        "2, "
-        "l_returnflag_DET, "
-        "l_linestatus_DET, "
-        "row_id, "
-        << pkinfo << ", " <<
-        "\"" << filename << "\", " << (DoParallel ? to_s(NumThreads) : string("0"))
-        << ", " << (RowColPackCipherSize/8) << ", 3, 1"
-      ") FROM " << (UseMYISAM ? "lineitem_enc_rowid_MYISAM" : "lineitem_enc_rowid")
-      << " WHERE l_shipdate_OPE <= " << encDATE
-      ;
+
+    if (UseMySQL) {
+      s <<
+        "SELECT  agg_hash_agg_row_col_pack("
+          "2, "
+          "l_returnflag_DET, "
+          "l_linestatus_DET, "
+          "row_id, "
+          << pkinfo << ", " <<
+          "\"" << filename << "\", " << (DoParallel ? to_s(NumThreads) : string("0"))
+          << ", " << (RowColPackCipherSize/8) << ", 3, 1"
+        ") FROM " << (UseMYISAM ? "lineitem_enc_rowid_MYISAM" : "lineitem_enc_rowid")
+        << " WHERE l_shipdate_OPE <= " << encDATE
+        ;
+    } else {
+      // agg_hash(bytea, varchar, bigint, bigint, bigint, bigint, bigint) :
+      //
+      // public_key (bytea),
+      // filename (varchar),
+      // agg_size (int64),
+      // rows_per_agg (int64),
+      // row_id (int64),
+      // key0,
+      // ...,
+      // keyN-1
+
+      s <<
+        "SELECT  agg_hash("
+          << pkinfo << ", " <<
+          "'" << filename << "', "
+          << (RowColPackCipherSize/8) << ", "
+          << "3, row_id, l_returnflag_DET, l_linestatus_DET"
+        ") FROM lineitem_enc WHERE l_shipdate_OPE <= " << encDATE
+        ;
+    }
     cerr << s.str() << endl;
 
     {
@@ -1306,6 +1333,7 @@ static void do_query_q1_opt_row_col_pack(ConnectNew &conn,
     {
       assert(res.rows.size() == 1);
       string data = res.rows[0][0].data;
+      cerr << "data is " << data.size() << " bytes" << endl;
 
       // format of data is
       // [ l_returnflag_DET (1 byte) | l_linestatus_DET (1 byte) |
@@ -1338,9 +1366,14 @@ static void do_query_q1_opt_row_col_pack(ConnectNew &conn,
                 oDET,
                 cm);
 
+        cerr << "l_returnflag: " << l_returnflag_ch << endl;
+        cerr << "l_linestatus: " << l_linestatus_ch << endl;
+
         // warning: endianness on DB machine must be same as this machine
         const uint64_t *u64p = (const uint64_t *) p;
         uint64_t count_order = *u64p;
+
+        cerr << "count(*): " << count_order << endl;
 
         p += sizeof(uint64_t);
 
@@ -1356,6 +1389,8 @@ static void do_query_q1_opt_row_col_pack(ConnectNew &conn,
         const uint32_t *u32p = (const uint32_t *) p;
         uint32_t n_aggs = *u32p;
         p += sizeof(uint32_t);
+
+        cerr << "n_naggs: " << n_aggs << endl;
 
         for (size_t group_i = 0; group_i < n_aggs; group_i++) {
           // interest mask
