@@ -214,7 +214,7 @@ struct PODSerializer {
 
 template <>
 struct serializer<nokey> {
-	static void write(std::ostream&, const nokey&) {}
+  static void write(std::ostream&, const nokey&) {}
 };
 
 template <>
@@ -234,9 +234,9 @@ struct serializer<std::string> {
 template <typename K0, typename K1>
 struct serializer< tuple2<K0, K1> > {
   static void write(std::ostream& o, const tuple2<K0, K1>& t) {
-		serializer<K0>::write(o, t.k0);
-		serializer<K1>::write(o, t.k1);
-	}
+    serializer<K0>::write(o, t.k0);
+    serializer<K1>::write(o, t.k1);
+  }
 };
 
 // this class keeps the state of the aggregate which is independent of the
@@ -556,6 +556,10 @@ public:
 
     std::ostringstream buf;
 
+    // write headers, to make client side decryption easier
+    serializer<uint32_t>::write(buf, _static_state->agg_size);
+    serializer<uint32_t>::write(buf, _static_state->rows_per_agg);
+
     for (auto it = _aggs.begin(); it != _aggs.end(); ++it) {
       serializer<Key>::write(buf, it->first);
       serializer<uint64_t>::write(buf, it->second.count);
@@ -790,7 +794,7 @@ static Datum agg_hash_finalizer(PG_FUNCTION_ARGS) {
   assert(state);
   std::string buf;
   state->compute_final_answer_and_serialize(buf);
-	std::cout << "return buf is " << buf.size() << " bytes" << std::endl;
+  std::cout << "return buf is " << buf.size() << " bytes" << std::endl;
   delete state;
   // TODO: eliminate redundant buffer copy
   PG_RETURN_BYTEA_P(copy_to_pg_return_buffer(buf));

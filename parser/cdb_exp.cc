@@ -1343,6 +1343,12 @@ static void do_query_q1_opt_row_col_pack(ConnectNew &conn,
 
       const uint8_t *p   = (const uint8_t *) data.data();
       const uint8_t *end = (const uint8_t *) data.data() + data.size();
+
+      if (!UseMySQL) {
+        // consume headers
+        p += 8;
+      }
+
       while (p < end) {
 
         unsigned char l_returnflag_DET = ReadKeyElem<int64_t>(p);
