@@ -2754,20 +2754,37 @@ static void do_query_crypt_q6(ConnectNew &conn,
     string pkinfo = smartMarshallBinary(cm.getPKInfo());
 
     ostringstream s;
-    s <<
-      "select"
-      " agg_hash_agg_row_col_pack(0, row_id, "
-        << pkinfo << ", " << "\"" << filename << "\", "
-        << NumThreads << ", 256, 12, 1) "
-      "from"
-      "  lineitem_enc_rowid "
-      "where"
-      "  l_shipdate_OPE >= " << d0 << " "
-      "  and l_shipdate_OPE < " << d1 << " "
-      "  and l_discount_OPE >= " << smartMarshallBinary(dsc0) << " "
-      " and l_discount_OPE <= " << smartMarshallBinary(dsc1) << " "
-      "  and l_quantity_OPE < " << smartMarshallBinary(qty)
-      ;
+    if (UseMySQL) {
+      s <<
+        "select"
+        " agg_hash_agg_row_col_pack(0, row_id, "
+          << pkinfo << ", " << "\"" << filename << "\", "
+          << NumThreads << ", 256, 12, 1) "
+        "from"
+        "  lineitem_enc_rowid "
+        "where"
+        "  l_shipdate_OPE >= " << d0 << " "
+        "  and l_shipdate_OPE < " << d1 << " "
+        "  and l_discount_OPE >= " << smartMarshallBinary(dsc0) << " "
+        " and l_discount_OPE <= " << smartMarshallBinary(dsc1) << " "
+        "  and l_quantity_OPE < " << smartMarshallBinary(qty)
+        ;
+    } else {
+      s <<
+        "select agg_hash("
+          << pkinfo << ", " <<
+          "'" << filename << "', "
+          << "256, 12, row_id) "
+        "from"
+        "  lineitem_enc "
+        "where"
+        "  l_shipdate_OPE >= " << d0 << " "
+        "  and l_shipdate_OPE < " << d1 << " "
+        "  and l_discount_OPE >= " << smartMarshallBinary(dsc0) << " "
+        " and l_discount_OPE <= " << smartMarshallBinary(dsc1) << " "
+        "  and l_quantity_OPE < " << smartMarshallBinary(qty)
+        ;
+    }
     cerr << s.str() << endl;
 
     DBResultNew * dbres;
@@ -2793,9 +2810,19 @@ static void do_query_crypt_q6(ConnectNew &conn,
 
       const uint8_t *p   = (const uint8_t *) data.data();
       const uint8_t *end = (const uint8_t *) data.data() + data.size();
+
+      if (!UseMySQL) {
+        // consume headers
+        p += 8;
+      }
+
       while (p < end) {
 
-        // skip over count
+        const uint64_t *u64p = (const uint64_t *) p;
+        uint64_t count_order = *u64p;
+
+        cerr << "count(*): " << count_order << endl;
+
         p += sizeof(uint64_t);
 
 #define TAKE_FROM_SLOT(z, slot) \

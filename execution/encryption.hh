@@ -96,7 +96,15 @@ inline uint64_t decrypt_date_det(
   return decrypt_at_most_u64_det<uint32_t, 3>(cm, value, field_pos, level);
 }
 
-inline uint64_t decrypt_decimal_det(
+// XXX: hack for TPC-H
+inline uint64_t encrypt_decimal_15_2_det(
+    crypto_manager_stub* cm, uint64_t value, size_t field_pos, bool join)
+{
+  return encrypt_at_most_u64_det<uint64_t, 7>(cm, value, field_pos, join);
+}
+
+// XXX: hack for TPC-H
+inline uint64_t decrypt_decimal_15_2_det(
     crypto_manager_stub* cm, const std::string& value, size_t field_pos, SECLEVEL level)
 {
   return decrypt_at_most_u64_det<uint64_t, 7>(cm, value, field_pos, level);
@@ -182,7 +190,7 @@ inline uint64_t encrypt_u8_ope(
 inline uint64_t decrypt_u8_ope(
     crypto_manager_stub* cm, const std::string& value, size_t field_pos, SECLEVEL level)
 {
-  return decrypt_at_most_u64_det<uint8_t>(cm, value, field_pos, level);
+  return decrypt_at_most_u64_ope<uint8_t>(cm, value, field_pos, level);
 }
 
 inline uint64_t encrypt_u16_ope(
@@ -194,7 +202,7 @@ inline uint64_t encrypt_u16_ope(
 inline uint64_t decrypt_u16_ope(
     crypto_manager_stub* cm, const std::string& value, size_t field_pos, SECLEVEL level)
 {
-  return decrypt_at_most_u64_det<uint16_t>(cm, value, field_pos, level);
+  return decrypt_at_most_u64_ope<uint16_t>(cm, value, field_pos, level);
 }
 
 inline uint64_t encrypt_u32_ope(
@@ -221,12 +229,14 @@ inline uint64_t decrypt_date_ope(
   return decrypt_at_most_u64_ope<uint32_t, 3>(cm, value, field_pos, level);
 }
 
-inline std::string encrypt_u64_ope(
-    crypto_manager_stub* cm, uint64_t value, size_t field_pos, bool join)
+template <typename T, size_t n_bytes = sizeof(T)>
+inline std::string encrypt_at_most_u64_ope(
+    crypto_manager_stub* cm, T value, size_t field_pos, bool join)
 {
+	_static_assert(n_bytes > 4); // otherwise won't work for now
   bool isBin = false;
   std::string enc_value =
-    cm->crypt<8>(
+    cm->crypt<n_bytes>(
         cm->cm->getmkey(), to_s(value), TYPE_INTEGER,
         fieldname(field_pos, "OPE"), SECLEVEL::PLAIN_OPE,
         join ? SECLEVEL::OPEJOIN : SECLEVEL::OPE,
@@ -235,10 +245,30 @@ inline std::string encrypt_u64_ope(
   return enc_value;
 }
 
+inline std::string encrypt_u64_ope(
+    crypto_manager_stub* cm, uint64_t value, size_t field_pos, bool join)
+{
+	return encrypt_at_most_u64_ope(cm, value, field_pos, join);
+}
+
 inline uint64_t decrypt_u64_ope(
     crypto_manager_stub* cm, const std::string& value, size_t field_pos, SECLEVEL level)
 {
   return decrypt_at_most_u64_ope<uint64_t>(cm, value, field_pos, level);
+}
+
+// XXX: hack for TPC-H
+inline std::string encrypt_decimal_15_2_ope(
+		crypto_manager_stub* cm, uint64_t value, size_t field_pos, bool join)
+{
+	return encrypt_at_most_u64_ope<uint64_t, 7>(cm, value, field_pos, join);
+}
+
+// XXX: hack for TPC-H
+inline uint64_t decrypt_decimal_15_2_ope(
+    crypto_manager_stub* cm, const std::string& value, size_t field_pos, SECLEVEL level)
+{
+  return decrypt_at_most_u64_ope<uint64_t, 7>(cm, value, field_pos, level);
 }
 
 inline uint64_t encrypt_string_ope(

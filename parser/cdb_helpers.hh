@@ -180,6 +180,12 @@ inline std::string str_reverse(const std::string& orig) {
     return buf.str();
 }
 
+inline std::string str_resize(const std::string& orig, size_t v) {
+  std::string r = orig;
+  r.resize(v);
+  return r;
+}
+
 uint64_t ZZToU64(NTL::ZZ val)
 {
     uint64_t res = 0;

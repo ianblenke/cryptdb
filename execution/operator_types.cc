@@ -308,6 +308,7 @@ do_decrypt_hom_agg(exec_context& ctx, const string& data)
   // read group count
   uint64_t group_count;
   deserializer<uint64_t>::read(p, group_count);
+  dprintf("group count(*): %s\n", TO_C(group_count));
 
   // read number of aggs
   uint32_t n_aggs;
@@ -472,8 +473,8 @@ do_decrypt_op(
 
       uint64_t x =
         (d.onion_type == oDET) ?
-          decrypt_decimal_det(ctx.crypto, s, d.pos, d.level) :
-          decrypt_u64_ope(ctx.crypto, s, d.pos, d.level) ;
+          decrypt_decimal_15_2_det(ctx.crypto, s, d.pos, d.level) :
+          decrypt_decimal_15_2_ope(ctx.crypto, s, d.pos, d.level) ;
 
       return db_elem(double(x)/100.0);
     }
@@ -596,6 +597,13 @@ local_decrypt_op::next(exec_context& ctx, db_tuple_vec& tuples)
 
         tuple.columns[p] = db_elem(elems);
       } else {
+        if (d.type == db_elem::TYPE_INT) {
+          dprintf("decrypt pos %s with d.type=(%s), d.size=(%s), unsigned_value=(%s)\n",
+                  TO_C(p), TO_C(d.type), TO_C(d.size), TO_C(e));
+        } else {
+          dprintf("decrypt pos %s with d.type=(%s), d.size=(%s)\n",
+                  TO_C(p), TO_C(d.type), TO_C(d.size));
+        }
         tuple.columns[p] = do_decrypt_op(ctx, e, d);
       }
     }

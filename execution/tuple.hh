@@ -72,6 +72,7 @@ public:
 
   // just a hack for now
   std::string sqlify(bool force_unsigned) const;
+  std::string print(bool force_unsigned) const;
 
 private:
   inline static bool IsNumericType(type t) {

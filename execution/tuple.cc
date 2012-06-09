@@ -234,38 +234,49 @@ db_elem::sqlify(bool force_unsigned) const
   return o.str();
 }
 
-ostream& operator<<(ostream& o, const db_elem& e)
+string
+db_elem::print(bool force_unsigned) const
 {
-  switch (e._t) {
+  ostringstream o;
+  switch (_t) {
     case db_elem::TYPE_UNINIT: o << "UNINIT"; break;
     case db_elem::TYPE_NULL: o << "NULL"; break;
-    case db_elem::TYPE_INT: o << e._d.i64; break;
-    case db_elem::TYPE_BOOL: o << (e._d.b ? "true" : "false"); break;
-    case db_elem::TYPE_DOUBLE: o << e._d.dbl; break;
+    case db_elem::TYPE_INT:
+      if (force_unsigned) o << (uint64_t) _d.i64;
+      else                o << _d.i64;
+      break;
+    case db_elem::TYPE_BOOL: o << (_d.b ? "true" : "false"); break;
+    case db_elem::TYPE_DOUBLE: o << _d.dbl; break;
     case db_elem::TYPE_CHAR  :
-    case db_elem::TYPE_STRING: o << e._s; break;
+    case db_elem::TYPE_STRING: o << _s; break;
     case db_elem::TYPE_DATE:
       {
         uint32_t day, month, year;
-        extract_date_from_encoding((uint32_t) e._d.i64, month, day, year);
+        extract_date_from_encoding((uint32_t) _d.i64, month, day, year);
         // TODO: format yyyy-mm-dd
         o << year << "-" << month << "-" << day;
       }
       break;
     case db_elem::TYPE_VECTOR:
       {
-        size_t n = e._elems.size() > 10 ? 10 : e._elems.size();
+        size_t n = _elems.size() > 10 ? 10 : _elems.size();
         o << "{";
         for (size_t i = 0; i < n; i++) {
-          o << e._elems[i];
+          o << _elems[i];
           if ((i+1) != n) o << ",";
-          else if (n < e._elems.size()) o << ",...";
+          else if (n < _elems.size()) o << ",...";
         }
         o << "}";
       }
       break;
     default: assert(false);
   }
+  return o.str();
+}
+
+ostream& operator<<(ostream& o, const db_elem& e)
+{
+  o << e.print(false);
   return o;
 }
 
