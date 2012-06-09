@@ -273,14 +273,12 @@ local_decrypt_op::tuple_desc()
 }
 
 static db_elem
-do_decrypt_hom_agg(crypto_manager_stub* cm, const string& data)
+do_decrypt_hom_agg(exec_context& ctx, const string& data)
 {
   const uint8_t* p = (const uint8_t *) data.data();
   dprintf("got %s bytes data\n", TO_C(data.size()));
 
   using namespace hom_agg_constants;
-  static const NTL::ZZ Mask = ((NTL::to_ZZ(1) << BitsPerDecimalSlot) - 1);
-  SANITY(NumBits(Mask) == (int)BitsPerDecimalSlot);
 
   // read header
   uint32_t ct_agg_size_bytes /* *CIPHERTEXT* size in *BYTES* */, rows_per_agg;
@@ -290,22 +288,22 @@ do_decrypt_hom_agg(crypto_manager_stub* cm, const string& data)
   SANITY(rows_per_agg > 0);
   SANITY((ct_agg_size_bytes % 2) == 0); // ct agg size must be even
 
-  cerr << "ct_agg_size_bytes = " << ct_agg_size_bytes << ", rows_per_agg = " << rows_per_agg << endl;
+  //cerr << "ct_agg_size_bytes = " << ct_agg_size_bytes << ", rows_per_agg = " << rows_per_agg << endl;
 
   uint32_t dec_slots_per_row = (ct_agg_size_bytes * 8 / 2) / (BitsPerDecimalSlot * rows_per_agg);
   SANITY(dec_slots_per_row > 0);
 
-  cerr << "dec_slots_per_row = " << dec_slots_per_row << endl;
+  //cerr << "dec_slots_per_row = " << dec_slots_per_row << endl;
 
   NTL::ZZ row_mask = (NTL::to_ZZ(1) << (BitsPerDecimalSlot * dec_slots_per_row)) - 1;
+  SANITY(NTL::NumBits(row_mask) == (int)(BitsPerDecimalSlot * dec_slots_per_row));
 
   // create a row mask
 
   // setup crypto keys
-  auto sk = Paillier_priv::keygen(ct_agg_size_bytes * 8 / 2, ct_agg_size_bytes);
-  cerr << "keygen arg0: " << (ct_agg_size_bytes * 8 / 2) << endl;
-  cerr << "keygen arg1: " << (ct_agg_size_bytes) << endl;
-  Paillier_priv pp(sk);
+  //cerr << "keygen arg0: " << (ct_agg_size_bytes * 8 / 2) << endl;
+  //cerr << "keygen arg1: " << (ct_agg_size_bytes) << endl;
+  auto pp = ctx.pp_cache->get_paillier_priv(ct_agg_size_bytes * 8 / 2, ct_agg_size_bytes);
 
   // read group count
   uint64_t group_count;
@@ -315,6 +313,11 @@ do_decrypt_hom_agg(crypto_manager_stub* cm, const string& data)
   uint32_t n_aggs;
   deserializer<uint32_t>::read(p, n_aggs);
 
+  //cerr << "n_aggs: " << n_aggs << endl;
+
+  //NTL::ZZ mask = NTL::to_ZZ(1); mask <<= BitsPerDecimalSlot; mask -= 1;
+  //assert(NTL::NumBits(mask) == (int)BitsPerDecimalSlot);
+
   // TODO: if n_aggs is large enough consider parallel decryption
   NTL::ZZ accum = NTL::to_ZZ(0);
   for (uint32_t i = 0; i < n_aggs; i++) {
@@ -322,15 +325,22 @@ do_decrypt_hom_agg(crypto_manager_stub* cm, const string& data)
     uint32_t interest_mask;
     deserializer<uint32_t>::read(p, interest_mask);
     SANITY(interest_mask != 0);
+    //cerr << "imask: " << interest_mask << endl;
 
     // read ciphertext + decrypt
     NTL::ZZ ct = NTL::ZZFromBytes((const uint8_t *) p, ct_agg_size_bytes);
+    //cerr << "ct: " << marshallBinary(StringFromZZ(ct)) << endl;
     p += ct_agg_size_bytes;
     NTL::ZZ pt = pp.decrypt(ct);
+    //cerr << "pt: " << marshallBinary(StringFromZZ(pt)) << endl;
 
     // fill this agg into accum
     for (uint32_t i = 0; i < rows_per_agg; i++) {
       if (!(interest_mask & (0x1 << i))) continue;
+
+      //cerr << "sum_qty_int = "
+      //  << NTL::to_long(
+      //      (pt >> (BitsPerDecimalSlot * i * dec_slots_per_row)) & mask ) << endl;
 
       // mask out the dec slots from the row, and add it to accum
       accum += (pt & (row_mask << (i * BitsPerDecimalSlot * dec_slots_per_row)));
@@ -354,7 +364,8 @@ do_decrypt_hom_agg(crypto_manager_stub* cm, const string& data)
   string x = StringFromZZ(accum_final);
   buf << x;
 
-  cerr << "x.size() = " << x.size() << endl;
+  //cerr << "x.size() = " << x.size() << endl;
+  //cerr << "accum_final(slot0) = " << NTL::to_long( (accum_final & mask) ) << endl;
 
   return db_elem(buf.str());
 }
@@ -425,7 +436,7 @@ do_decrypt_op(
       // NO decryption of OPE onions
 
       if (d.onion_type == oAGG) {
-        return db_elem(do_decrypt_hom_agg(ctx.crypto, s));
+        return db_elem(do_decrypt_hom_agg(ctx, s));
       }
 
       return db_elem(decrypt_string_det(ctx.crypto, s, d.pos, d.level));

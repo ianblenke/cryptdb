@@ -2,8 +2,11 @@
 
 #include <cassert>
 #include <vector>
+#include <map>
+#include <utility>
 
 #include <edb/ConnectNew.hh>
+#include <crypto/paillier.hh>
 #include <parser/cdb_helpers.hh>
 
 // forward decls (avoid circular references)
@@ -11,12 +14,32 @@ class db_tuple;
 class physical_operator;
 class query_cache;
 
+class paillier_cache {
+public:
+  ~paillier_cache() {
+    for (auto p : _pp_cache) delete p.second;
+  }
+
+  Paillier_priv& get_paillier_priv(size_t nbits, size_t abits) {
+    auto mkey = std::make_pair(nbits, abits);
+    auto it = _pp_cache.find(mkey);
+    if (it != _pp_cache.end()) return *it->second;
+    auto sk = Paillier_priv::keygen(nbits, abits);
+    return *(_pp_cache[mkey] = new Paillier_priv(sk));
+  }
+
+private:
+  std::map< std::pair< size_t, size_t >, Paillier_priv* > _pp_cache;
+};
+
 class exec_context {
 public:
   exec_context(
 
       ConnectNew* connection,
       crypto_manager_stub* crypto,
+      paillier_cache* pp_cache,
+
       query_cache* cache = NULL,
 
       db_tuple* tuple = NULL /* current tuple context */,
@@ -27,7 +50,7 @@ public:
 
       db_tuple* args = NULL
 
-  ) : connection(connection), crypto(crypto), cache(cache),
+  ) : connection(connection), crypto(crypto), pp_cache(pp_cache), cache(cache),
       tuple(tuple), idx(idx), subqueries(subqueries), args(args) {}
 
   // if previous tuple bound, the information is discarded
@@ -39,6 +62,7 @@ public:
     return exec_context(
         connection,
         crypto,
+        pp_cache,
         cache,
         tuple,
         -1,
@@ -53,6 +77,7 @@ public:
     return exec_context(
         connection,
         crypto,
+        pp_cache,
         cache,
         tuple,
         ssize_t(idx),
@@ -65,6 +90,7 @@ public:
     return exec_context(
         connection,
         crypto,
+        pp_cache,
         cache,
         tuple,
         ssize_t(idx),
@@ -76,6 +102,7 @@ public:
 
   ConnectNew* const connection;
   crypto_manager_stub* const crypto;
+  paillier_cache* const pp_cache;
   query_cache* const cache;
 
   db_tuple* const tuple;
@@ -87,4 +114,5 @@ public:
   const std::vector< physical_operator* > subqueries;
 
   db_tuple* const args;
+
 };

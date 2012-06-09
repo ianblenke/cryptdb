@@ -149,8 +149,6 @@ function_call_node::eval_hom_get_pos(exec_context& ctx, db_tuple& args)
   uint64_t group_count;
   deserializer<uint64_t>::read(p, group_count);
 
-  cerr << "ZZFromBytes on " << (data.size() - sizeof(uint64_t)) << " bytes" << endl;
-
   NTL::ZZ z;
   NTL::ZZFromBytes(z, p, data.size() - sizeof(uint64_t));
 
