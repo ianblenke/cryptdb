@@ -161,5 +161,7 @@ function_call_node::eval_hom_get_pos(exec_context& ctx, db_tuple& args)
   long l = NTL::to_long(((z) >> (BitsPerDecimalSlot * (pos))) & Mask);
 
   // TODO: assumption right now (for TPC-H) is that all hom aggs are DECIMAL(15, 2)
-  return db_elem( double(uint64_t(l))/100.0 );
+  db_elem res = db_elem( double(uint64_t(l))/100.0 );
+  dprintf("pos=(%s), res=(%s)\n", TO_C(pos), TO_C(res));
+  return res;
 }

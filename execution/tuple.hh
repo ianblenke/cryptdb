@@ -262,6 +262,11 @@ public:
     return _d.i64;
   }
 
+  inline double unsafe_cast_double() const {
+    requireType(TYPE_DOUBLE);
+    return _d.dbl;
+  }
+
   inline const std::string& unsafe_cast_string() const {
     requireType(TYPE_STRING);
     return _s;

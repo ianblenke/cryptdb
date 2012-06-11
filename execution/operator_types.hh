@@ -87,6 +87,22 @@ private:
   pos_vec _pos;
 };
 
+class local_encrypt_op : public physical_operator {
+public:
+  typedef std::vector< std::pair< size_t, db_column_desc > > enc_desc_vec;
+  local_encrypt_op(
+      const enc_desc_vec& enc_desc_vec,
+      physical_operator* child)
+    : physical_operator({child}), _enc_desc_vec(enc_desc_vec) {}
+
+  virtual desc_vec tuple_desc();
+
+  DECL_PHY_OP_NEXT;
+
+private:
+  enc_desc_vec _enc_desc_vec;
+};
+
 class local_filter_op : public physical_operator {
 public:
   local_filter_op(

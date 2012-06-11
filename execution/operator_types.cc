@@ -656,6 +656,110 @@ local_decrypt_op::next(exec_context& ctx, db_tuple_vec& tuples)
   }
 }
 
+local_encrypt_op::desc_vec
+local_encrypt_op::tuple_desc()
+{
+  desc_vec v = first_child()->tuple_desc();
+  desc_vec ret;
+  ret.reserve(v.size());
+  map<size_t, db_column_desc> m = util::map_from_pair_vec(_enc_desc_vec);
+  for (size_t i = 0; i < v.size(); i++) {
+    auto it = m.find(i);
+    if (it == m.end()) {
+      ret.push_back(v[i]);
+    } else {
+      ret.push_back(it->second);
+    }
+  }
+  return ret;
+}
+
+static db_elem
+do_encrypt_op(exec_context& ctx, const db_elem& elem, const db_column_desc& d)
+{
+  assert(elem.get_type() != db_elem::TYPE_VECTOR);
+  switch (d.type) {
+    case db_elem::TYPE_INT: {
+
+      assert(d.size == 1 ||
+             d.size == 2 ||
+             d.size == 4 ||
+             d.size == 8);
+
+      assert(d.onion_type == oDET ||
+             d.onion_type == oOPE);
+
+      bool isDet = d.onion_type == oDET;
+      bool isJoin = (d.level == SECLEVEL::DETJOIN) ||
+                    (d.level == SECLEVEL::OPEJOIN);
+
+      // TODO: allow float w/ conversion
+      assert(elem.get_type() == db_elem::TYPE_INT);
+      int64_t val = elem.unsafe_cast_i64();
+
+      switch (d.size) {
+        case 1:
+          return db_elem((int64_t)
+            (isDet ? encrypt_u8_det(ctx.crypto, val, d.pos, isJoin) :
+                     encrypt_u8_ope(ctx.crypto, val, d.pos, isJoin)));
+        case 2:
+          return db_elem((int64_t)
+            (isDet ? encrypt_u16_det(ctx.crypto, val, d.pos, isJoin) :
+                     encrypt_u16_ope(ctx.crypto, val, d.pos, isJoin)));
+        case 4:
+          return db_elem((int64_t)
+            (isDet ? encrypt_u32_det(ctx.crypto, val, d.pos, isJoin) :
+                     encrypt_u32_ope(ctx.crypto, val, d.pos, isJoin)));
+        case 8:
+          return (isDet ?
+              db_elem((int64_t)encrypt_u64_det(ctx.crypto, val, d.pos, isJoin)) :
+              db_elem(encrypt_u64_ope(ctx.crypto, val, d.pos, isJoin)));
+      }
+
+      assert(false);
+    }
+
+    case db_elem::TYPE_DECIMAL_15_2: {
+
+      assert(d.onion_type == oDET ||
+             d.onion_type == oOPE);
+
+      bool isJoin = (d.level == SECLEVEL::DETJOIN) ||
+                    (d.level == SECLEVEL::OPEJOIN);
+
+      // TODO: allow int w/ conversion
+      assert(elem.get_type() == db_elem::TYPE_DOUBLE);
+      double val = elem.unsafe_cast_double();
+
+      return (d.onion_type == oDET) ?
+          db_elem((int64_t)encrypt_decimal_15_2_det(ctx.crypto, val, d.pos, isJoin)) :
+          db_elem(encrypt_decimal_15_2_ope(ctx.crypto, val, d.pos, isJoin)) ;
+
+    }
+
+    default: // TODO: implement more cases
+      cerr << "got unhandled type(" << d.type << ")" << endl;
+      throw runtime_error("UNIMPL");
+  }
+}
+
+void
+local_encrypt_op::next(exec_context& ctx, db_tuple_vec& tuples)
+{
+  TRACE_OPERATOR();
+  map<size_t, db_column_desc> m = util::map_from_pair_vec(_enc_desc_vec);
+  assert(first_child()->has_more(ctx));
+  first_child()->next(ctx, tuples);
+  for (auto &tuple : tuples) {
+    for (size_t i = 0; i < tuple.columns.size(); i++) {
+      auto it = m.find(i);
+      if (it != m.end()) {
+        tuple.columns[i] = do_encrypt_op(ctx, tuple.columns[i], it->second);
+      }
+    }
+  }
+}
+
 void
 local_filter_op::next(exec_context& ctx, db_tuple_vec& tuples)
 {
