@@ -1,7 +1,9 @@
 #pragma once
 
+#include <map>
 #include <set>
 #include <vector>
+#include <utility>
 
 namespace util {
 
@@ -38,6 +40,12 @@ template <typename T>
 inline std::set<T> vec_to_set(const std::vector<T>& v)
 {
   return std::set<T>(v.begin(), v.end());
+}
+
+template <typename K, typename V>
+std::map<K, V> map_from_pair_vec(const std::vector< std::pair<K, V> >& v)
+{
+	return std::map<K, V>(v.begin(), v.end());
 }
 
 }

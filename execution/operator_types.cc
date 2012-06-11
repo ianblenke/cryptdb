@@ -32,12 +32,13 @@ void
 remote_sql_op::open(exec_context& ctx)
 {
   physical_operator::open(ctx);
-  // execute all the children as a one-shot
-  for (auto c : _children) c->execute(ctx);
+
+  // execute all the children for side-effects first
+  for (auto c : _children) c->execute_and_discard(ctx);
 
   // generate params
   _do_cache_write_sql = _sql;
-  if (_param_generator) {
+  if (_param_generator || !_named_subselects.empty()) {
     sql_param_generator::param_map param_map = _param_generator->get_param_map(ctx);
 
     // this code is not smart now- we should ignore substitution sequences
@@ -52,15 +53,52 @@ remote_sql_op::open(exec_context& ctx)
           i++;
           ostringstream p;
           while (i < _do_cache_write_sql.size() &&
-                isdigit(_do_cache_write_sql[i])) {
+                !isspace(_do_cache_write_sql[i])) {
             p << _do_cache_write_sql[i];
             i++;
           }
           string p0 = p.str();
           assert(!p0.empty());
-          size_t idx = resultFromStr<size_t>(p0);
-          assert(param_map.find(idx) != param_map.end());
-          buf << param_map[idx].sqlify(true);
+
+          // if first char numeric, then look in pos map
+          // otherwise, named subselect
+          // TODO: hacky
+          if (isdigit(p0[0])) {
+#ifdef EXTRA_SANITY_CHECKS
+            for (size_t i = 1; i < p0.size(); i++) SANITY(isdigit(p0[i]));
+#endif
+            size_t idx = resultFromStr<size_t>(p0);
+            assert(param_map.find(idx) != param_map.end());
+            buf << param_map[idx].sqlify(true);
+          } else {
+            SANITY(_named_subselects.find(p0) != _named_subselects.end());
+
+            // find + exec named subselect
+            physical_operator* op = _named_subselects[p0];
+            assert(op);
+            dprintf("executing named subselect %s\n", TO_C(p0));
+
+            db_tuple_vec tuples;
+            op->open(ctx);
+            op->slurp(ctx, tuples);
+            op->close(ctx);
+
+            if (tuples.empty()) {
+              // UGLY hack to select an empty relation
+              buf << "select 1 where 1=2";
+            } else {
+              // write the results as a comma separated list
+              for (size_t i = 0; i < tuples.size(); i++) {
+                db_tuple& tuple = tuples[i];
+                assert(tuple.columns.size() == 1);
+                buf << tuple.columns.front().sqlify(false);
+                if ((i + 1) != tuples.size()) buf << ",";
+              }
+            }
+
+            // TODO: cache the results
+          }
+
           break;
         }
         default:

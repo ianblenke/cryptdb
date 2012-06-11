@@ -31,9 +31,11 @@ public:
       sql_param_generator* param_generator,
       const std::string& sql,
       const desc_vec& desc_vec,
-      const op_vec& subqueries) :
+      const op_vec& subqueries,
+      const str_map& named_subselects) :
     physical_operator(subqueries),
     _param_generator(param_generator), _sql(sql), _desc_vec(desc_vec),
+    _named_subselects(named_subselects),
     _res(NULL), _read_cursor(0), _do_cache_write(false) {}
 
   ~remote_sql_op() {
@@ -52,6 +54,8 @@ private:
 
   std::string _sql;
   desc_vec _desc_vec;
+
+  str_map _named_subselects;
 
   DBResultNew* _res;
 

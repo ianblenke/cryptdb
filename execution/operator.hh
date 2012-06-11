@@ -1,7 +1,9 @@
 #pragma once
 
 #include <iostream>
+#include <map>
 #include <vector>
+#include <string>
 
 #include <execution/tuple.hh>
 #include <execution/context.hh>
@@ -19,6 +21,7 @@ public:
   typedef std::vector< size_t > pos_vec;
   typedef std::vector< physical_operator* > op_vec;
   typedef std::vector< db_column_desc > desc_vec;
+  typedef std::map< std::string, physical_operator* > str_map;
 
   inline static void print_tuples(const db_tuple_vec& tuples) {
     for (auto &t : tuples) std::cout << t << std::endl;
@@ -58,9 +61,18 @@ public:
   virtual void next(exec_context& ctx, db_tuple_vec& tuple) = 0;
 
   // second interface type - one shot execution
-  virtual void execute(exec_context& ctx) {
-    db_tuple_vec v;
-    while (has_more(ctx)) next(ctx, v);
+  void slurp(exec_context& ctx, db_tuple_vec& tuples) {
+    while (has_more(ctx)) {
+      db_tuple_vec v;
+      next(ctx, v);
+      tuples.reserve( tuples.size() + v.size() );
+      tuples.insert( tuples.end(), v.begin(), v.end() );
+    }
+  }
+
+  inline void execute_and_discard(exec_context& ctx) {
+    db_tuple_vec tuples;
+    slurp(ctx, tuples);
   }
 
 protected:
