@@ -6913,6 +6913,96 @@ static void do_query_q20_opt(ConnectNew &conn,
     }
 }
 
+static void do_query_q22_normal(ConnectNew &conn,
+                         const string& c1,
+                         const string& c2,
+                         const string& c3,
+                         const string& c4,
+                         const string& c5,
+                         const string& c6,
+                         const string& c7,
+                         vector<q22entry> &results) {
+  NamedTimer fcnTimer(__func__);
+
+  // precompute inner query
+  double avg;
+  size_t n_elems;
+  {
+    ostringstream s;
+    s <<
+      "select "
+      "  avg(c_acctbal), count(*) "
+      "from "
+      "  CUSTOMER_INT "
+      "where "
+      //"  c_acctbal > 0 and "
+      "  substring(c_phone from 1 for 2) in "
+      "('" << c1 << "', '" << c2 << "', '" << c3 << "', '" << c4 << "', '"
+      << c5 << "', '" << c6 << "', '" << c7 << "') ";
+    cerr << s.str() << endl;
+
+    DBResultNew * dbres;
+    {
+      NamedTimer t(__func__, "execute-1");
+      conn.execute(s.str(), dbres);
+    }
+    ResType res= dbres->unpack();
+    assert(res.ok);
+    assert(res.rows.size() == 1);
+    avg = resultFromStr<double>(res.rows[0][0].data);
+    n_elems = resultFromStr<uint64_t>(res.rows[0][1].data);
+  }
+
+  cerr << "cnt: " << n_elems << ", avg is " << (avg/100.0) << endl;
+
+  ostringstream s;
+  s <<
+    "select "
+    "  cntrycode, count(*) as numcust, sum(c_acctbal) as totacctbal "
+    "from ( "
+    "  select substring(c_phone from 1 for 2) as cntrycode, c_acctbal "
+    "  from "
+    "    CUSTOMER_INT "
+      "where "
+      "  substring(c_phone from 1 for 2) in "
+      "    ('" << c1 << "', '" << c2 << "', '" << c3 << "', '" << c4 << "', '"
+      << c5 << "', '" << c6 << "', '" << c7 << "') "
+      "  and c_acctbal > ( " << avg <<
+      "  ) "
+      "  and not exists ( "
+      "    select "
+      "      * "
+      "    from "
+      "      ORDERS_INT "
+      "    where "
+      "      o_custkey = c_custkey "
+      "  ) "
+    " ) as custsale group by cntrycode order by cntrycode"
+  ;
+  cerr << s.str() << endl;
+
+  DBResultNew * dbres;
+  {
+    NamedTimer t(__func__, "execute-2");
+    conn.execute(s.str(), dbres);
+  }
+  ResType res;
+  {
+    NamedTimer t(__func__, "unpack-2");
+    res = dbres->unpack();
+    assert(res.ok);
+  }
+
+  for (auto row : res.rows) {
+    results.push_back(
+          q22entry(
+            row[0].data,
+            resultFromStr<uint64_t>(row[1].data),
+            resultFromStr<double>(row[2].data)/100.0));
+  }
+}
+
+/*
 static void do_query_q22(ConnectNew &conn,
                          const string& c1,
                          const string& c2,
@@ -7009,6 +7099,7 @@ static void do_query_q22(ConnectNew &conn,
           value/100.0));
   }
 }
+*/
 
 static void do_query_crypt_q22(ConnectNew &conn,
                                CryptoManager& cm,
@@ -7041,15 +7132,25 @@ static void do_query_crypt_q22(ConnectNew &conn,
   string pkinfo = smartMarshallBinary(cm.getPKInfo());
 
   ostringstream s;
-  s <<
-    "select"
-    " agg_hash_agg_row_col_pack(0, row_id, "
-      << pkinfo << ", " << "\"" << filename << "\", "
-      << NumThreads << ", 256, 12, 1) "
-    "from"
-    "  customer_enc_rowid "
-    "where c_phone_prefix_DET IN (" << join(codes_cts, ",") << ")"
-    ;
+  if (UseMySQL) {
+    s <<
+      "select"
+      " agg_hash_agg_row_col_pack(0, row_id, "
+        << pkinfo << ", " << "\"" << filename << "\", "
+        << NumThreads << ", 256, 12, 1) "
+      "from"
+      "  customer_enc_rowid "
+      "where c_phone_prefix_DET IN (" << join(codes_cts, ",") << ")"
+      ;
+  } else {
+    s <<
+      "SELECT agg_hash("
+        << pkinfo << ", " <<
+        "'" << filename << "', 256, 12, row_id"
+      ") FROM customer_enc "
+      "where c_phone_prefix_DET IN (" << join(codes_cts, ",") << ")"
+        ;
+  }
   cerr << s.str() << endl;
 
   DBResultNew * dbres;
@@ -7075,6 +7176,10 @@ static void do_query_crypt_q22(ConnectNew &conn,
 
     const uint8_t *p   = (const uint8_t *) data.data();
     const uint8_t *end = (const uint8_t *) data.data() + data.size();
+    if (!UseMySQL) {
+      // consume headers
+      p += 8;
+    }
     while (p < end) {
 
       cnt += *((uint64_t*)p);
@@ -7121,25 +7226,46 @@ static void do_query_crypt_q22(ConnectNew &conn,
 
   {
     ostringstream s;
-    s <<
-      "select "
-      "  agg_hash_agg_row_col_pack(1, c_phone_prefix_DET, row_id, "
-        << pkinfo << ", " << "\"" << filename << "\", "
-        << NumThreads << ", 256, 12, 1) "
-      "from "
-      "  customer_enc_rowid "
-      "where "
-      "  c_phone_prefix_DET IN (" << join(codes_cts, ",") << ") "
-      "  and c_acctbal_OPE > " << smartMarshallBinary(avgENC) <<
-      "  and not exists ( "
-      "    select "
-      "      * "
-      "    from "
-      "      orders_enc "
-      "    where "
-      "      o_custkey_DET = c_custkey_DET "
-      "  ) "
-      ;
+    if (UseMySQL) {
+      s <<
+        "select "
+        "  agg_hash_agg_row_col_pack(1, c_phone_prefix_DET, row_id, "
+          << pkinfo << ", " << "\"" << filename << "\", "
+          << NumThreads << ", 256, 12, 1) "
+        "from "
+        "  customer_enc_rowid "
+        "where "
+        "  c_phone_prefix_DET IN (" << join(codes_cts, ",") << ") "
+        "  and c_acctbal_OPE > " << smartMarshallBinary(avgENC) <<
+        "  and not exists ( "
+        "    select "
+        "      * "
+        "    from "
+        "      orders_enc "
+        "    where "
+        "      o_custkey_DET = c_custkey_DET "
+        "  ) "
+        ;
+    } else {
+      s <<
+        "select agg_hash("
+          << pkinfo << ", " <<
+          "'" << filename << "', 256, 12, row_id, c_phone_prefix_DET) "
+        "from "
+        "  customer_enc "
+        "where "
+        "  c_phone_prefix_DET IN (" << join(codes_cts, ",") << ") "
+        "  and c_acctbal_OPE > " << smartMarshallBinary(avgENC) <<
+        "  and not exists ( "
+        "    select "
+        "      * "
+        "    from "
+        "      orders_enc "
+        "    where "
+        "      o_custkey_DET = c_custkey_DET "
+        "  ) "
+        ;
+    }
     cerr << s.str() << endl;
 
     DBResultNew * dbres;
@@ -7159,6 +7285,10 @@ static void do_query_crypt_q22(ConnectNew &conn,
       const string& data = res.rows[0][0].data;
       const uint8_t *p   = (const uint8_t *) data.data();
       const uint8_t *end = (const uint8_t *) data.data() + data.size();
+      if (!UseMySQL) {
+        // consume headers
+        p += 8;
+      }
       while (p < end) {
         string c_phone_prefix_DET = ReadKeyElem<string>(p);
 
@@ -7942,7 +8072,7 @@ int main(int argc, char **argv) {
           vector<q22entry> results;
           if (mode == "orig-query22") {
             for (size_t i = 0; i < nruns; i++) {
-              do_query_q22(conn, c0, c1, c2, c3, c4, c5, c6, results);
+              do_query_q22_normal(conn, c0, c1, c2, c3, c4, c5, c6, results);
               ctr += results.size();
               PRINT_RESULTS();
               results.clear();
