@@ -375,11 +375,14 @@ do_decrypt_hom_agg(exec_context& ctx, const string& data)
     //cerr << "imask: " << interest_mask << endl;
 
     // read ciphertext + decrypt
-    NTL::ZZ ct = NTL::ZZFromBytes((const uint8_t *) p, ct_agg_size_bytes);
-    //cerr << "ct: " << marshallBinary(StringFromZZ(ct)) << endl;
+    NTL::ZZ pt;
+    if (ct_agg_size_bytes == 256) {
+      ctx.crypto->cm->decrypt_Paillier(string((const char *)p, ct_agg_size_bytes), pt);
+    } else {
+      NTL::ZZ ct = NTL::ZZFromBytes((const uint8_t *) p, ct_agg_size_bytes);
+      pt = pp.decrypt(ct);
+    }
     p += ct_agg_size_bytes;
-    NTL::ZZ pt = pp.decrypt(ct);
-    //cerr << "pt: " << marshallBinary(StringFromZZ(pt)) << endl;
 
     // fill this agg into accum
     for (uint32_t i = 0; i < rows_per_agg; i++) {
@@ -729,11 +732,14 @@ do_encrypt_op(exec_context& ctx, const db_elem& elem, const db_column_desc& d)
 
       // TODO: allow int w/ conversion
       assert(elem.get_type() == db_elem::TYPE_DOUBLE);
-      double val = elem.unsafe_cast_double();
+      double val = elem.unsafe_cast_double() * 100.0;
 
       return (d.onion_type == oDET) ?
           db_elem((int64_t)encrypt_decimal_15_2_det(ctx.crypto, val, d.pos, isJoin)) :
-          db_elem(encrypt_decimal_15_2_ope(ctx.crypto, val, d.pos, isJoin)) ;
+          db_elem(
+            str_reverse(
+              str_resize(
+                encrypt_decimal_15_2_ope(ctx.crypto, val, d.pos, isJoin), 16))) ;
 
     }
 
