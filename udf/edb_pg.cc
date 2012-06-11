@@ -758,8 +758,6 @@ private:
 
 };
 
-
-
 template <typename Key>
 static Datum agg_hash_finalizer(PG_FUNCTION_ARGS) {
   agg_typed_state<Key>* state = (agg_typed_state<Key>*) PG_GETARG_INT64(0);
@@ -817,6 +815,20 @@ extern "C" {
 //    initcond='0'
 //  );
 //
+// create function agg_hash_bytea_state_transition
+//  (bigint, bytea, varchar, bigint, bigint, bigint, bytea)
+//    returns bigint language C as '/home/stephentu/cryptdb/obj/udf/edb_pg.so';
+// create function agg_hash_bytea_finalizer(bigint)
+//    returns bytea language C as '/home/stephentu/cryptdb/obj/udf/edb_pg.so';
+// create aggregate agg_hash
+//  (bytea, varchar, bigint, bigint, bigint, bytea)
+//  (
+//    sfunc=agg_hash_bytea_state_transition,
+//    stype=bigint,
+//    finalfunc=agg_hash_bytea_finalizer,
+//    initcond='0'
+//  );
+//
 // create function agg_hash_u64_u64_state_transition
 //  (bigint, bytea, varchar, bigint, bigint, bigint, bigint, bigint)
 //    returns bigint language C as '/home/stephentu/cryptdb/obj/udf/edb_pg.so';
@@ -840,6 +852,15 @@ extern "C" {
     return agg_hash_finalizer< cpp_type >(PG_PASS_FARGS); \
   }
 
+#define DECL_AGG_HASH_ARG1_FCNS(cpp_type, k0) \
+  Datum agg_hash_## k0 ##_state_transition(PG_FUNCTION_ARGS); \
+  Datum agg_hash_## k0 ##_finalizer(PG_FUNCTION_ARGS); \
+  PG_FUNCTION_INFO_V1(agg_hash_## k0 ##_state_transition); \
+  PG_FUNCTION_INFO_V1(agg_hash_## k0 ##_finalizer); \
+  Datum agg_hash_## k0 ##_finalizer(PG_FUNCTION_ARGS) { \
+    return agg_hash_finalizer< cpp_type >(PG_PASS_FARGS); \
+  }
+
 #define DECL_AGG_HASH_ARG2_FCNS(cpp_type, k0, k1) \
   Datum agg_hash_## k0 ## _ ## k1 ##_state_transition(PG_FUNCTION_ARGS); \
   Datum agg_hash_## k0 ## _ ## k1 ##_finalizer(PG_FUNCTION_ARGS); \
@@ -851,6 +872,7 @@ extern "C" {
 
 
 DECL_AGG_HASH_ARG0_FCNS(nokey);
+DECL_AGG_HASH_ARG1_FCNS(std::string, bytea);
 DECL_AGG_HASH_ARG2_FCNS(tuple2_u64_u64, u64, u64);
 
 // args ( for N-col group key ):
@@ -870,6 +892,12 @@ DECL_AGG_HASH_ARG2_FCNS(tuple2_u64_u64, u64, u64);
 
 Datum agg_hash_nokey_state_transition(PG_FUNCTION_ARGS) {
   return agg_hash_state_transition_impl(PG_PASS_FARGS, nokey());
+}
+
+Datum agg_hash_bytea_state_transition(PG_FUNCTION_ARGS) {
+  return agg_hash_state_transition_impl(
+      PG_PASS_FARGS,
+      getstring_fromba(PG_PASS_FARGS, ARG0_IDX));
 }
 
 Datum agg_hash_u64_u64_state_transition(PG_FUNCTION_ARGS) {
