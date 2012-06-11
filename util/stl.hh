@@ -45,7 +45,7 @@ inline std::set<T> vec_to_set(const std::vector<T>& v)
 template <typename K, typename V>
 std::map<K, V> map_from_pair_vec(const std::vector< std::pair<K, V> >& v)
 {
-	return std::map<K, V>(v.begin(), v.end());
+  return std::map<K, V>(v.begin(), v.end());
 }
 
 }

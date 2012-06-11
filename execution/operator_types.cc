@@ -28,6 +28,11 @@ using namespace std;
     dprintf("called %s times\n", TO_C(_n)); \
   } while (0)
 
+static inline bool is_valid_param_token(char c)
+{
+  return isalnum(c) || c == '_' || c == '$';
+}
+
 void
 remote_sql_op::open(exec_context& ctx)
 {
@@ -53,7 +58,7 @@ remote_sql_op::open(exec_context& ctx)
           i++;
           ostringstream p;
           while (i < _do_cache_write_sql.size() &&
-                !isspace(_do_cache_write_sql[i])) {
+                 is_valid_param_token(_do_cache_write_sql[i])) {
             p << _do_cache_write_sql[i];
             i++;
           }
@@ -65,7 +70,10 @@ remote_sql_op::open(exec_context& ctx)
           // TODO: hacky
           if (isdigit(p0[0])) {
 #ifdef EXTRA_SANITY_CHECKS
-            for (size_t i = 1; i < p0.size(); i++) SANITY(isdigit(p0[i]));
+            for (size_t i = 1; i < p0.size(); i++) {
+              if (!isdigit(p0[i])) cerr << "bad token found: " << p0 << endl;
+              SANITY(isdigit(p0[i]));
+            }
 #endif
             size_t idx = resultFromStr<size_t>(p0);
             assert(param_map.find(idx) != param_map.end());
