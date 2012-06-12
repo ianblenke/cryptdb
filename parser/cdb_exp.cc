@@ -19,6 +19,15 @@
 #include <util/executor.hpp>
 #include <util/util.hh>
 
+#define LINEITEM_INT_NAME "lineitem_int_inflate"
+#define CUSTOMER_INT_NAME "customer_int_inflate"
+#define ORDERS_INT_NAME "orders_int_inflate"
+#define PART_INT_NAME "part_int_inflate"
+#define PARTSUPP_INT_NAME "partsupp_int_inflate"
+#define SUPPLIER_INT_NAME "supplier_int_inflate"
+#define REGION_INT_NAME "region_int_inflate"
+#define NATION_INT_NAME "nation_int_inflate"
+
 using namespace std;
 using namespace NTL;
 
@@ -845,6 +854,56 @@ static void do_query_q1(ConnectNew &conn,
             sum_base_price,
             sum_disc_price,
             sum_charge,
+            avg_qty,
+            avg_price,
+            avg_disc,
+            count_order));
+    }
+}
+
+static void do_query_q1_int(ConnectNew &conn,
+                            uint32_t year,
+                            vector<q1entry> &results) {
+    NamedTimer fcnTimer(__func__);
+
+    ostringstream buf;
+    buf << "select  l_returnflag, l_linestatus, sum(l_quantity) as sum_qty, sum(l_extendedprice) as sum_base_price, sum(l_extendedprice * (100 - l_discount)) as sum_disc_price, sum(l_extendedprice * (100 - l_discount) * (100 + l_tax)) as sum_charge, avg(l_quantity) as avg_qty, avg(l_extendedprice) as avg_price, avg(l_discount) as avg_disc, count(*) as count_order from " LINEITEM_INT_NAME
+
+        << "where l_shipdate <= date '" << year << "-1-1' "
+        << "group by l_returnflag, l_linestatus order by l_returnflag, l_linestatus"
+
+        ;
+    cerr << buf.str() << endl;
+
+    DBResultNew * dbres;
+    {
+      NamedTimer t(__func__, "execute");
+      conn.execute(buf.str(), dbres);
+    }
+    ResType res;
+    {
+      NamedTimer t(__func__, "unpack");
+      res = dbres->unpack();
+      assert(res.ok);
+    }
+    for (auto row : res.rows) {
+        const string &l_returnflag = row[0].data;
+        const string &l_linestatus = row[1].data;
+        double sum_qty = resultFromStr<double>(row[2].data);
+        double sum_base_price = resultFromStr<double>(row[3].data);
+        double sum_disc_price = resultFromStr<double>(row[4].data);
+        double sum_charge = resultFromStr<double>(row[5].data);
+        double avg_qty = resultFromStr<double>(row[6].data);
+        double avg_price = resultFromStr<double>(row[7].data);
+        double avg_disc = resultFromStr<double>(row[8].data);
+        uint64_t count_order = resultFromStr<uint64_t>(row[9].data);
+        results.push_back(q1entry(
+            l_returnflag,
+            l_linestatus,
+            sum_qty/100.0,
+            sum_base_price/100.0,
+            sum_disc_price/(100.0 * 100.0),
+            sum_charge/(100.0 * 100.0 * 100.0),
             avg_qty,
             avg_price,
             avg_disc,
@@ -1825,8 +1884,8 @@ static void do_query_q2(ConnectNew &conn,
     ostringstream s;
     s <<
       "select  s_acctbal, s_name, n_name, p_partkey, p_mfgr, s_address, s_phone, s_comment "
-      "from PART_INT, SUPPLIER_INT, PARTSUPP_INT, NATION_INT, REGION_INT "
-      "where p_partkey = ps_partkey and s_suppkey = ps_suppkey and p_size = " << size << " and p_type like '%" << type << "' and s_nationkey = n_nationkey and n_regionkey = r_regionkey and r_name = '" << name << "' and ps_supplycost = ( select min(ps_supplycost) from PARTSUPP_INT, SUPPLIER_INT, NATION_INT, REGION_INT where p_partkey = ps_partkey and s_suppkey = ps_suppkey and s_nationkey = n_nationkey and n_regionkey = r_regionkey and r_name = '" << name << "') order by s_acctbal desc, n_name, s_name, p_partkey limit 100";
+      "from " PART_INT_NAME ", " SUPPLIER_INT_NAME ", " PARTSUPP_INT_NAME ", " NATION_INT_NAME ", " REGION_INT_NAME " "
+      "where p_partkey = ps_partkey and s_suppkey = ps_suppkey and p_size = " << size << " and p_type like '%" << type << "' and s_nationkey = n_nationkey and n_regionkey = r_regionkey and r_name = '" << name << "' and ps_supplycost = ( select min(ps_supplycost) from " PARTSUPP_INT_NAME ", " SUPPLIER_INT_NAME ", " NATION_INT_NAME ", " REGION_INT_NAME " where p_partkey = ps_partkey and s_suppkey = ps_suppkey and s_nationkey = n_nationkey and n_regionkey = r_regionkey and r_name = '" << name << "') order by s_acctbal desc, n_name, s_name, p_partkey limit 100";
     cerr << s.str() << endl;
 
     DBResultNew * dbres;
@@ -2171,7 +2230,7 @@ static void do_query_q3(ConnectNew &conn,
     } else {
       s <<
         "select l_orderkey, sum(l_extendedprice * (100 - l_discount)) as revenue, o_orderdate, o_shippriority "
-        "from LINEITEM_INT, ORDERS_INT, CUSTOMER_INT "
+        "from " LINEITEM_INT_NAME ", " ORDERS_INT_NAME ", " CUSTOMER_INT_NAME " "
         "where l_orderkey = o_orderkey and c_custkey = o_custkey and c_mktsegment = '" << mktsegment << "' and o_orderdate < date '" << d << "' and l_shipdate > date '" << d << "' "
         "group by l_orderkey, o_orderdate, o_shippriority "
         "order by revenue desc, o_orderdate limit 10;"
@@ -2364,12 +2423,12 @@ static void do_query_q4(ConnectNew &conn,
     ostringstream s;
     s <<
       "select o_orderpriority, count(*) as order_count "
-      "from ORDERS_INT "
+      "from " ORDERS_INT_NAME " "
       "where o_orderdate >= date '" << d << "' "
       "and o_orderdate < date '" << d << "' + interval '3' month "
       "and exists ( "
       "    select * from "
-      "      LINEITEM_INT where l_orderkey = o_orderkey and l_commitdate < l_receiptdate) "
+      "      " LINEITEM_INT_NAME " where l_orderkey = o_orderkey and l_commitdate < l_receiptdate) "
       "group by o_orderpriority "
       "order by o_orderpriority"
       ;
@@ -2471,12 +2530,12 @@ static void do_query_q5(ConnectNew &conn,
       "  n_name,"
       "  sum(l_extendedprice * (100 - l_discount)) as revenue "
       "from"
-      "  CUSTOMER_INT,"
-      "  ORDERS_INT,"
-      "  LINEITEM_INT,"
-      "  SUPPLIER_INT,"
-      "  NATION_INT,"
-      "  REGION_INT "
+      "  " CUSTOMER_INT_NAME ","
+      "  " ORDERS_INT_NAME ","
+      "  " LINEITEM_INT_NAME ","
+      "  " SUPPLIER_INT_NAME ","
+      "  " NATION_INT_NAME ","
+      "  " REGION_INT_NAME " "
       "where"
       "  c_custkey = o_custkey"
       "  and l_orderkey = o_orderkey"
@@ -2675,7 +2734,7 @@ static void do_query_q6(ConnectNew &conn,
       "select"
       "  sum(l_extendedprice * l_discount) as revenue "
       "from"
-      "  LINEITEM_INT "
+      "  " LINEITEM_INT_NAME " "
       "where"
       "  l_shipdate >= date '" << d << "'"
       "  and l_shipdate < date '" << d << "' + interval '1' year"
@@ -2870,12 +2929,12 @@ static void do_query_q7(ConnectNew &conn,
     "   extract(year from l_shipdate) as l_year,"
     "    l_extendedprice * (100 - l_discount) as volume) "
     "from"
-    "  SUPPLIER_INT,"
-    "  LINEITEM_INT,"
-    "  ORDERS_INT,"
-    "  CUSTOMER_INT,"
-    "  NATION_INT n1,"
-    "  NATION_INT n2 "
+    "  " SUPPLIER_INT_NAME ","
+    "  " LINEITEM_INT_NAME ","
+    "  " ORDERS_INT_NAME ","
+    "  " CUSTOMER_INT_NAME ","
+    "  " NATION_INT_NAME " n1,"
+    "  " NATION_INT_NAME " n2 "
     "where"
     "  s_suppkey = l_suppkey"
     "  and o_orderkey = l_orderkey"
@@ -3101,14 +3160,14 @@ static void do_query_q8(ConnectNew &conn,
       "      l_extendedprice * (100 - l_discount) as volume,"
       "      n2.n_name as nation"
       "    from"
-      "      PART_INT,"
-      "      SUPPLIER_INT,"
-      "      LINEITEM_INT,"
-      "      ORDERS_INT,"
-      "      CUSTOMER_INT,"
-      "      NATION_INT n1,"
-      "      NATION_INT n2,"
-      "      REGION_INT"
+      "      " PART_INT_NAME ","
+      "      " SUPPLIER_INT_NAME ","
+      "      " LINEITEM_INT_NAME ","
+      "      " ORDERS_INT_NAME ","
+      "      " CUSTOMER_INT_NAME ","
+      "      " NATION_INT_NAME " n1,"
+      "      " NATION_INT_NAME " n2,"
+      "      " REGION_INT_NAME ""
       "    where"
       "      p_partkey = l_partkey"
       "      and s_suppkey = l_suppkey"
@@ -3340,12 +3399,12 @@ static void do_query_q9(ConnectNew &conn,
       "      extract(year from o_orderdate) as o_year, "
       "      l_extendedprice * (100 - l_discount) - ps_supplycost * l_quantity as amount "
       "    from "
-      "      PART_INT, "
-      "      SUPPLIER_INT, "
-      "      LINEITEM_INT, "
-      "      PARTSUPP_INT, "
-      "      ORDERS_INT, "
-      "      NATION_INT "
+      "      " PART_INT_NAME ", "
+      "      " SUPPLIER_INT_NAME ", "
+      "      " LINEITEM_INT_NAME ", "
+      "      " PARTSUPP_INT_NAME ", "
+      "      " ORDERS_INT_NAME ", "
+      "      " NATION_INT_NAME " "
       "    where "
       "      s_suppkey = l_suppkey "
       "      and ps_suppkey = l_suppkey "
@@ -3612,7 +3671,7 @@ static void do_query_q10(ConnectNew &conn,
     <<
     ((UseMySQL) ?
       "LINEITEM_INT straight_join ORDERS_INT straight_join CUSTOMER_INT straight_join NATION_INT " :
-      "LINEITEM_INT, ORDERS_INT, CUSTOMER_INT, NATION_INT ")
+      "" LINEITEM_INT_NAME ", " ORDERS_INT_NAME ", " CUSTOMER_INT_NAME ", " NATION_INT_NAME " ")
     <<
     "where "
     "  c_custkey = o_custkey "
@@ -4178,7 +4237,7 @@ static void do_query_q11_nosubquery(ConnectNew &conn,
     {
         ostringstream s;
         s << "select sum(ps_supplycost * ps_availqty) * " << fraction << " "
-          << "from PARTSUPP_INT, SUPPLIER_INT, NATION_INT "
+          << "from " PARTSUPP_INT_NAME ", " SUPPLIER_INT_NAME ", " NATION_INT_NAME " "
           << "where ps_suppkey = s_suppkey and s_nationkey = n_nationkey and n_name = '"
           << name << "'";
 
@@ -4200,7 +4259,7 @@ static void do_query_q11_nosubquery(ConnectNew &conn,
 
     ostringstream s;
     s << "select  ps_partkey, sum(ps_supplycost * ps_availqty) as value "
-      << "from PARTSUPP_INT, SUPPLIER_INT, NATION_INT "
+      << "from " PARTSUPP_INT_NAME ", " SUPPLIER_INT_NAME ", " NATION_INT_NAME " "
       << "where ps_suppkey = s_suppkey and s_nationkey = n_nationkey and n_name = '" << name << "' "
       << "group by ps_partkey having sum(ps_supplycost * ps_availqty) > " << roundToLong(threshold * 10000.0)
       //<< "order by value desc"
@@ -4786,8 +4845,8 @@ static void do_query_q12(ConnectNew &conn,
     "    else 0 "
     "  end) as low_line_count "
     "from "
-    "  ORDERS_INT, "
-    "  LINEITEM_INT "
+    "  " ORDERS_INT_NAME ", "
+    "  " LINEITEM_INT_NAME " "
     "where "
     "  o_orderkey = l_orderkey "
     "  and l_shipmode in ('" << l_a << "', '" << l_b << "') "
@@ -5314,7 +5373,7 @@ static void do_query_q14(ConnectNew &conn,
     }
 
     ostringstream s;
-    s << "select  100.00 * sum(case when p_type like 'PROMO%' then l_extendedprice * (100 - l_discount) else 0 end) / sum(l_extendedprice * (100 - l_discount)) as promo_revenue from LINEITEM_INT, " << (UseMySQL ? "part_tmp" : "PART_INT") << " where l_partkey = p_partkey and l_shipdate >= date '" << year << "-07-01' and l_shipdate < date '" << year << "-07-01' + interval '1' month";
+    s << "select  100.00 * sum(case when p_type like 'PROMO%' then l_extendedprice * (100 - l_discount) else 0 end) / sum(l_extendedprice * (100 - l_discount)) as promo_revenue from " LINEITEM_INT_NAME ", " << (UseMySQL ? "part_tmp" : "" PART_INT_NAME "") << " where l_partkey = p_partkey and l_shipdate >= date '" << year << "-07-01' and l_shipdate < date '" << year << "-07-01' + interval '1' month";
     cerr << s.str() << endl;
 
     DBResultNew * dbres;
@@ -5346,7 +5405,7 @@ static void do_query_q15(ConnectNew &conn,
     "  l_suppkey, "
     "  sum(l_extendedprice * (100 - l_discount)) as revenue "
     "from "
-    "  LINEITEM_INT "
+    "  " LINEITEM_INT_NAME " "
     "where "
     "  l_shipdate >= date '" << l_a << "' "
     "  and l_shipdate < date '"<< l_a << "' + interval '3' month "
@@ -5380,7 +5439,7 @@ static void do_query_q15(ConnectNew &conn,
     "  s_address, "
     "  s_phone "
     "from "
-    "  SUPPLIER_INT "
+    "  " SUPPLIER_INT_NAME " "
     "where "
     "  s_suppkey = " << res.rows[0][0].data << " "
     "order by "
@@ -5621,7 +5680,7 @@ static void do_query_q17(ConnectNew &conn,
     "select "
     " l_partkey, 0.2 * avg(l_quantity), "
       << group_concat("l_quantity") << ", " << group_concat("l_extendedprice") << " "
-    "from LINEITEM_INT, PART_INT "
+    "from " LINEITEM_INT_NAME ", " PART_INT_NAME " "
     "where "
     "  p_partkey = l_partkey "
     "  and p_brand = '" << p_a << "'"
@@ -5796,7 +5855,7 @@ static void do_query_q18(ConnectNew &conn,
         "select "
         "    l_orderkey "
         "from "
-        "    LINEITEM_INT "
+        "    " LINEITEM_INT_NAME " "
         "group by "
         "    l_orderkey having "
         "        sum(l_quantity) > " << (threshold * 100);
@@ -5828,7 +5887,7 @@ static void do_query_q18(ConnectNew &conn,
         "    c_name, c_custkey, o_orderkey, "
         "    o_orderdate, o_totalprice, sum(l_quantity) "
         "from "
-        "    CUSTOMER_INT, ORDERS_INT, LINEITEM_INT "
+        "    " CUSTOMER_INT_NAME ", " ORDERS_INT_NAME ", " LINEITEM_INT_NAME " "
         "where "
         "    o_orderkey in ( "
         << join(l_orderkeys, ",") <<
@@ -6512,7 +6571,7 @@ static void do_query_q20(ConnectNew &conn,
     {
         ostringstream s;
         s <<
-        "select  ps_suppkey, ps_availqty from PARTSUPP_INT, LINEITEM_INT, PART_INT "
+        "select  ps_suppkey, ps_availqty from " PARTSUPP_INT_NAME ", " LINEITEM_INT_NAME ", " PART_INT_NAME " "
         " where "
         "     ps_partkey = l_partkey and "
         "     ps_suppkey = l_suppkey and "
@@ -6550,7 +6609,7 @@ static void do_query_q20(ConnectNew &conn,
     {
         ostringstream s;
         s <<
-        "select  s_name, s_address from SUPPLIER_INT, NATION_INT where s_suppkey in ( "
+        "select  s_name, s_address from " SUPPLIER_INT_NAME ", " NATION_INT_NAME " where s_suppkey in ( "
         << join(suppkeys ,",") <<
         ") and s_nationkey = n_nationkey and n_name = '" << n_name << "' order by s_name";
 
@@ -6933,7 +6992,7 @@ static void do_query_q22_normal(ConnectNew &conn,
       "select "
       "  avg(c_acctbal), count(*) "
       "from "
-      "  CUSTOMER_INT "
+      "  " CUSTOMER_INT_NAME " "
       "where "
       //"  c_acctbal > 0 and "
       "  substring(c_phone from 1 for 2) in "
@@ -6962,7 +7021,7 @@ static void do_query_q22_normal(ConnectNew &conn,
     "from ( "
     "  select substring(c_phone from 1 for 2) as cntrycode, c_acctbal "
     "  from "
-    "    CUSTOMER_INT "
+    "    " CUSTOMER_INT_NAME " "
       "where "
       "  substring(c_phone from 1 for 2) in "
       "    ('" << c1 << "', '" << c2 << "', '" << c3 << "', '" << c4 << "', '"
@@ -6973,7 +7032,7 @@ static void do_query_q22_normal(ConnectNew &conn,
       "    select "
       "      * "
       "    from "
-      "      ORDERS_INT "
+      "      " ORDERS_INT_NAME " "
       "    where "
       "      o_custkey = c_custkey "
       "  ) "
@@ -7561,6 +7620,13 @@ int main(int argc, char **argv) {
             // vanilla MYSQL case
             for (size_t i = 0; i < nruns; i++) {
               do_query_q1(conn, year, results);
+              ctr += results.size();
+              PRINT_RESULTS();
+              results.clear();
+            }
+          } else if (mode == "orig-query1-int") {
+            for (size_t i = 0; i < nruns; i++) {
+              do_query_q1_int(conn, year, results);
               ctr += results.size();
               PRINT_RESULTS();
               results.clear();
