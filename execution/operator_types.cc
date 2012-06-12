@@ -646,13 +646,13 @@ local_decrypt_op::next(exec_context& ctx, db_tuple_vec& tuples)
 
         tuple.columns[p] = db_elem(elems);
       } else {
-        if (d.type == db_elem::TYPE_INT) {
-          dprintf("decrypt pos %s with d.type=(%s), d.size=(%s), unsigned_value=(%s)\n",
-                  TO_C(p), TO_C(d.type), TO_C(d.size), TO_C(e));
-        } else {
-          dprintf("decrypt pos %s with d.type=(%s), d.size=(%s)\n",
-                  TO_C(p), TO_C(d.type), TO_C(d.size));
-        }
+        //if (d.type == db_elem::TYPE_INT) {
+        //  dprintf("decrypt pos %s with d.type=(%s), d.size=(%s), unsigned_value=(%s)\n",
+        //          TO_C(p), TO_C(d.type), TO_C(d.size), TO_C(e));
+        //} else {
+        //  dprintf("decrypt pos %s with d.type=(%s), d.size=(%s)\n",
+        //          TO_C(p), TO_C(d.type), TO_C(d.size));
+        //}
         tuple.columns[p] = do_decrypt_op(ctx, e, d);
       }
     }

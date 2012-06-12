@@ -25,6 +25,7 @@ public:
 
   inline static void print_tuples(const db_tuple_vec& tuples) {
     for (auto &t : tuples) std::cout << t << std::endl;
+    std::cout << "(" << tuples.size() << " rows)" << std::endl;
   }
 
   static const unsigned int BatchSize = 8192 * 4; // hinted batch size for operators
