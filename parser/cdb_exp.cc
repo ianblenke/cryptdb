@@ -28,6 +28,15 @@
 #define REGION_INT_NAME "region_int_inflate"
 #define NATION_INT_NAME "nation_int_inflate"
 
+//#define LINEITEM_INT_NAME "lineitem_int"
+//#define CUSTOMER_INT_NAME "customer_int"
+//#define ORDERS_INT_NAME "orders_int"
+//#define PART_INT_NAME "part_int"
+//#define PARTSUPP_INT_NAME "partsupp_int"
+//#define SUPPLIER_INT_NAME "supplier_int"
+//#define REGION_INT_NAME "region_int"
+//#define NATION_INT_NAME "nation_int"
+
 using namespace std;
 using namespace NTL;
 
@@ -867,7 +876,7 @@ static void do_query_q1_int(ConnectNew &conn,
     NamedTimer fcnTimer(__func__);
 
     ostringstream buf;
-    buf << "select  l_returnflag, l_linestatus, sum(l_quantity) as sum_qty, sum(l_extendedprice) as sum_base_price, sum(l_extendedprice * (100 - l_discount)) as sum_disc_price, sum(l_extendedprice * (100 - l_discount) * (100 + l_tax)) as sum_charge, avg(l_quantity) as avg_qty, avg(l_extendedprice) as avg_price, avg(l_discount) as avg_disc, count(*) as count_order from " LINEITEM_INT_NAME
+    buf << "select  l_returnflag, l_linestatus, sum(l_quantity) as sum_qty, sum(l_extendedprice) as sum_base_price, sum(l_extendedprice * (100 - l_discount)) as sum_disc_price, sum(l_extendedprice * (100 - l_discount) * (100 + l_tax)) as sum_charge, avg(l_quantity) as avg_qty, avg(l_extendedprice) as avg_price, avg(l_discount) as avg_disc, count(*) as count_order from " LINEITEM_INT_NAME " "
 
         << "where l_shipdate <= date '" << year << "-1-1' "
         << "group by l_returnflag, l_linestatus order by l_returnflag, l_linestatus"
@@ -7438,6 +7447,7 @@ int main(int argc, char **argv) {
 
     static const char * Query1Strings[] = {
         "--orig-query1",
+        "--orig-query1-int",
         "--orig-nosort-int-query1",
         "--orig-nosort-double-query1",
         "--crypt-query1",
