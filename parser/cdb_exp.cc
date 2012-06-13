@@ -2923,6 +2923,7 @@ static void do_query_crypt_q6(ConnectNew &conn,
     }
 }
 
+/*
 static void do_query_q7(ConnectNew &conn,
                         const string& n_a,
                         const string& n_b,
@@ -2991,6 +2992,81 @@ static void do_query_q7(ConnectNew &conn,
             cust_nation,
             l_year,
             double(value) / 10000.0));
+    }
+}
+*/
+
+static void do_query_q7_int(ConnectNew &conn,
+                            const string& n_a,
+                            const string& n_b,
+                            vector<q7entry> &results) {
+    NamedTimer fcnTimer(__func__);
+
+    ostringstream s;
+    s <<
+      "select "
+      "  supp_nation, "
+      "  cust_nation, "
+      "  l_year, "
+      "  sum(volume) as revenue "
+      "from "
+      "  ( "
+      "    select "
+      "      n1.n_name as supp_nation, "
+      "      n2.n_name as cust_nation, "
+      "      extract(year from l_shipdate) as l_year, "
+      "      l_extendedprice * (100 - l_discount) as volume "
+      "    from "
+      "      " SUPPLIER_INT_NAME ", "
+      "      " LINEITEM_INT_NAME ", "
+      "      " ORDERS_INT_NAME ", "
+      "      " CUSTOMER_INT_NAME ", "
+      "      " NATION_INT_NAME " n1, "
+      "      " NATION_INT_NAME " n2 "
+      "    where "
+      "      s_suppkey = l_suppkey "
+      "      and o_orderkey = l_orderkey "
+      "      and c_custkey = o_custkey "
+      "      and s_nationkey = n1.n_nationkey "
+      "      and c_nationkey = n2.n_nationkey "
+      "      and ( "
+      "        (n1.n_name = 'SAUDI ARABIA' and n2.n_name = 'ARGENTINA') "
+      "        or (n1.n_name = 'ARGENTINA' and n2.n_name = 'SAUDI ARABIA') "
+      "      ) "
+      "      and l_shipdate between date '1995-01-01' and date '1996-12-31' "
+      "  ) as shipping "
+      "group by "
+      "  supp_nation, "
+      "  cust_nation, "
+      "  l_year "
+      "order by "
+      "  supp_nation, "
+      "  cust_nation, "
+      "  l_year; "
+      ;
+
+    cerr << s.str() << endl;
+
+    DBResultNew * dbres;
+    {
+      NamedTimer t(__func__, "execute");
+      conn.execute(s.str(), dbres);
+    }
+    ResType res;
+    {
+      NamedTimer t(__func__, "unpack");
+      res = dbres->unpack();
+      assert(res.ok);
+    }
+
+
+    for (auto &row : res.rows) {
+      results.push_back(
+          q7entry(
+            row[0].data,
+            row[1].data,
+            resultFromStr<uint64_t>(row[2].data),
+            double(resultFromStr<uint64_t>(row[3].data)) / 10000.0));
     }
 }
 
@@ -7817,7 +7893,7 @@ int main(int argc, char **argv) {
           vector<q7entry> results;
           if (mode == "orig-query7") {
             for (size_t i = 0; i < nruns; i++) {
-              do_query_q7(conn, n_a, n_b, results);
+              do_query_q7_int(conn, n_a, n_b, results);
               ctr += results.size();
               PRINT_RESULTS();
               results.clear();
