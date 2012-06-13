@@ -59,7 +59,12 @@ public:
     return first_child()->has_more(ctx);
   }
 
-  virtual void next(exec_context& ctx, db_tuple_vec& tuple) = 0;
+  // the next() invocation contract is as follows:
+  //   A) has_more() must be true
+  //   B) it assumes the tuples vector is empty to start with
+  //      if you put contents in tuples before passing to next(),
+  //      results are undefined
+  virtual void next(exec_context& ctx, db_tuple_vec& tuples) = 0;
 
   // second interface type - one shot execution
   void slurp(exec_context& ctx, db_tuple_vec& tuples) {

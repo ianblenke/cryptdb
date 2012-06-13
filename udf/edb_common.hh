@@ -1,4 +1,5 @@
 #include <crypto-old/CryptoManager.hh> /* various functions for EDB */
+#include <util/likely.hh>
 #include <util/params.hh>
 #include <util/util.hh>
 #include <util/timer.hh>
@@ -12,8 +13,6 @@
 #include <tbb/concurrent_queue.h>
 #include <cassert>
 
-#define LIKELY(pred)   __builtin_expect(!!(pred), true)
-#define UNLIKELY(pred) __builtin_expect(!!(pred), false)
 #define ATTR_UNUSED    __attribute__ ((unused))
 
 #define TRACE()

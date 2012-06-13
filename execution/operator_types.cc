@@ -10,6 +10,7 @@
 #include <parser/cdb_helpers.hh>
 #include <crypto/paillier.hh>
 
+#include <util/likely.hh>
 #include <util/serializer.hh>
 #include <util/stl.hh>
 #include <util/timer.hh>
@@ -26,6 +27,13 @@ using namespace std;
     static size_t _n = 0; \
     _n++; \
     dprintf("called %s times\n", TO_C(_n)); \
+  } while (0)
+
+#define WARN_IF_NOT_EMPTY(t)\
+  do { \
+    if (UNLIKELY(!t.empty())) { \
+      dprintf("WARNING: input %s was not empty\n", #t); \
+    } \
   } while (0)
 
 static inline bool is_valid_param_token(char c)
@@ -178,6 +186,7 @@ void
 remote_sql_op::next(exec_context& ctx, db_tuple_vec& tuples)
 {
   TRACE_OPERATOR();
+  WARN_IF_NOT_EMPTY(tuples);
 
   assert(has_more(ctx));
 
@@ -421,7 +430,7 @@ do_decrypt_hom_agg(exec_context& ctx, const string& data)
 }
 
 static db_elem
-do_decrypt_op(
+do_decrypt_db_elem_op(
     exec_context& ctx,
     const db_elem& elem,
     const db_column_desc& d)
@@ -534,20 +543,123 @@ do_decrypt_op(
   }
 }
 
-struct decrypt_args {
+struct decrypt_db_elem_args {
   exec_context* ctx;
   const vector< db_elem >* elems;
   const db_column_desc* desc;
   vector< db_elem >* results;
 };
 
-static void* do_decrypt_op_wrapper(void* p) {
-  decrypt_args* args = (decrypt_args *) p;
+static void* do_decrypt_db_elem_op_wrapper(void* p) {
+  decrypt_db_elem_args* args = (decrypt_db_elem_args *) p;
   size_t n = args->elems->size();
   args->results->reserve(n);
   for (size_t i = 0; i < n; i++) {
     args->results->push_back(
-        do_decrypt_op(*args->ctx, args->elems->operator[](i), *args->desc));
+        do_decrypt_db_elem_op(*args->ctx, args->elems->operator[](i), *args->desc));
+  }
+  return NULL;
+}
+
+// on vise4, it takes about 0.377 ms to spawn and join 8 threads
+// (which do nothing). it also takes about 0.0173 ms to do one DET
+// decryption. doing the math, this means we should switch over to
+// parallel (8 threads) at n = 25 elems
+static const size_t ParThreshold = 25;
+static const size_t NThreads = 8;
+
+// modifies tuple in place
+static void
+do_decrypt_db_tuple_op(
+    exec_context& ctx,
+    db_tuple& tuple,
+    const local_decrypt_op::desc_vec& desc,
+    const local_decrypt_op::pos_vec& pos)
+{
+  SANITY(tuple.columns.size() == desc.size());
+
+  for (auto p : pos) {
+    const db_column_desc& d = desc[p];
+    db_elem& e = tuple.columns[p];
+    if (e.is_vector()) {
+      vector< db_elem > elems;
+      elems.reserve(e.size());
+
+      if (e.size() >= ParThreshold) {
+
+        dprintf("using parallel impl to decrypt %s elems\n", TO_C(e.size()));
+        timer t;
+
+        vector< vector< db_elem > > groups;
+        SplitRowsIntoGroups(groups, e.elements(), NThreads);
+        SANITY(groups.size() == NThreads);
+
+        // TODO: all threads write into shared array
+        vector< vector< db_elem > > group_results;
+        group_results.resize(NThreads);
+
+        // TODO: should really use a thread-pool of workers. However:
+        // A) the exec implementation is not quite there yet
+        // B) this is easier though- no need for managing a global shared thread-pool
+        //    (and measured to be not that slow)
+
+        pthread_t thds[NThreads];
+        decrypt_db_elem_args args[NThreads];
+
+        for (size_t i = 0; i < NThreads; i++) {
+          args[i].ctx     = &ctx;
+          args[i].elems   = &groups[i];
+          args[i].desc    = &d;
+          args[i].results = &group_results[i];
+          int r = pthread_create(&thds[i], NULL, do_decrypt_db_elem_op_wrapper, &args[i]);
+          if (r) assert(false);
+        }
+
+        for (size_t i = 0; i < NThreads; i++) {
+          int r = pthread_join(thds[i], NULL);
+          if (r) assert(false);
+          // TODO: this copy is un-necessary
+          elems.reserve(elems.size() + group_results[i].size());
+          elems.insert(elems.end(), group_results[i].begin(), group_results[i].end());
+        }
+
+        assert(elems.size() == e.size());
+        dprintf("decryption took %s ms\n", TO_C( double(t.lap()) / 1000.0 ));
+
+      } else {
+        for (auto &e0 : e) {
+          elems.push_back(do_decrypt_db_elem_op(ctx, e0, d));
+        }
+      }
+
+      tuple.columns[p] = db_elem(elems);
+    } else {
+      //if (d.type == db_elem::TYPE_INT) {
+      //  dprintf("decrypt pos %s with d.type=(%s), d.size=(%s), unsigned_value=(%s)\n",
+      //          TO_C(p), TO_C(d.type), TO_C(d.size), TO_C(e));
+      //} else {
+      //  dprintf("decrypt pos %s with d.type=(%s), d.size=(%s)\n",
+      //          TO_C(p), TO_C(d.type), TO_C(d.size));
+      //}
+      tuple.columns[p] = do_decrypt_db_elem_op(ctx, e, d);
+    }
+  }
+}
+
+struct decrypt_db_tuple_args {
+  exec_context* ctx;
+  const vector< db_tuple* >* tuples;
+  const local_decrypt_op::desc_vec* desc;
+  const local_decrypt_op::pos_vec* pos;
+};
+
+static void* do_decrypt_db_tuple_op_wrapper(void* p) {
+  decrypt_db_tuple_args* args = (decrypt_db_tuple_args *) p;
+  size_t n = args->tuples->size();
+  for (size_t i = 0; i < n; i++) {
+    // modifies tuples[i]
+    do_decrypt_db_tuple_op(
+      *args->ctx, *args->tuples->operator[](i), *args->desc, *args->pos);
   }
   return NULL;
 }
@@ -556,6 +668,7 @@ void
 local_decrypt_op::next(exec_context& ctx, db_tuple_vec& tuples)
 {
   TRACE_OPERATOR();
+  WARN_IF_NOT_EMPTY(tuples);
 
   assert(first_child()->has_more(ctx));
   desc_vec desc = first_child()->tuple_desc();
@@ -579,84 +692,47 @@ local_decrypt_op::next(exec_context& ctx, db_tuple_vec& tuples)
   }
 #endif
 
-  for (size_t i = 0; i < tuples.size(); i++) { // parallelism (0)
-    db_tuple& tuple = tuples[i];
-    SANITY(tuple.columns.size() == desc.size());
+  timer t;
+  if (tuples.size() >= ParThreshold) {
 
-    for (auto p : _pos) { // parallelism (1)
-      db_column_desc& d = desc[p];
-      db_elem& e = tuple.columns[p];
-      if (e.is_vector()) {
-        vector< db_elem > elems;
-        elems.reserve(e.size());
+    dprintf("using parallel impl to decrypt %s tuples\n", TO_C(tuples.size()));
 
-        // on vise4, it takes about 0.377 ms to spawn and join 8 threads
-        // (which do nothing). it also takes about 0.0173 ms to do one DET
-        // decryption. doing the math, this means we should switch over to
-        // parallel (8 threads) at n = 25 elems
+    // take pointers of all the tuples (modify in place)
+    vector< db_tuple* > tuple_pointers;
+    tuple_pointers.reserve(tuples.size());
+    for (size_t i = 0; i < tuples.size(); i++) {
+      tuple_pointers.push_back(&tuples[i]);
+    }
 
-        static const size_t ParThreshold = 25;
-        static const size_t NThreads = 8;
+    vector< vector< db_tuple* > > groups;
+    SplitRowsIntoGroups(groups, tuple_pointers, NThreads);
+    SANITY(groups.size() == NThreads);
 
-        if (e.size() >= ParThreshold) {
+    pthread_t thds[NThreads];
+    decrypt_db_tuple_args args[NThreads];
 
-          dprintf("using parallel impl to decrypt %s elems\n", TO_C(e.size()));
-          timer t;
+    for (size_t i = 0; i < NThreads; i++) {
+      args[i].ctx     = &ctx;
+      args[i].tuples  = &groups[i];
+      args[i].desc    = &desc;
+      args[i].pos     = &_pos;
+      int r = pthread_create(&thds[i], NULL, do_decrypt_db_tuple_op_wrapper, &args[i]);
+      if (r) assert(false);
+    }
 
-          vector< vector< db_elem > > groups;
-          SplitRowsIntoGroups(groups, e.elements(), NThreads);
-          assert(groups.size() == NThreads);
+    for (size_t i = 0; i < NThreads; i++) {
+      int r = pthread_join(thds[i], NULL);
+      if (r) assert(false);
+    }
 
-          // TODO: all threads write into shared array
-          vector< vector< db_elem > > group_results;
-          group_results.resize(NThreads);
-
-          // TODO: should really use a thread-pool of workers. However:
-          // A) the exec implementation is not quite there yet
-          // B) this is easier though- no need for managing a global shared thread-pool
-          //    (and measured to be not that slow)
-
-          pthread_t thds[NThreads];
-          decrypt_args args[NThreads];
-
-          for (size_t i = 0; i < NThreads; i++) {
-            args[i].ctx     = &ctx;
-            args[i].elems   = &groups[i];
-            args[i].desc    = &d;
-            args[i].results = &group_results[i];
-            int r = pthread_create(&thds[i], NULL, do_decrypt_op_wrapper, &args[i]);
-            if (r) assert(false);
-          }
-
-          for (size_t i = 0; i < NThreads; i++) {
-            int r = pthread_join(thds[i], NULL);
-            if (r) assert(false);
-            // TODO: this copy is un-necessary
-            elems.insert(elems.end(), group_results[i].begin(), group_results[i].end());
-          }
-
-          assert(elems.size() == e.size());
-          dprintf("decryption took %s ms\n", TO_C( double(t.lap()) / 1000.0 ));
-
-        } else {
-          for (auto &e0 : e) { // parallelism (2)
-            elems.push_back(do_decrypt_op(ctx, e0, d));
-          }
-        }
-
-        tuple.columns[p] = db_elem(elems);
-      } else {
-        //if (d.type == db_elem::TYPE_INT) {
-        //  dprintf("decrypt pos %s with d.type=(%s), d.size=(%s), unsigned_value=(%s)\n",
-        //          TO_C(p), TO_C(d.type), TO_C(d.size), TO_C(e));
-        //} else {
-        //  dprintf("decrypt pos %s with d.type=(%s), d.size=(%s)\n",
-        //          TO_C(p), TO_C(d.type), TO_C(d.size));
-        //}
-        tuple.columns[p] = do_decrypt_op(ctx, e, d);
-      }
+  } else {
+    for (size_t i = 0; i < tuples.size(); i++) {
+      db_tuple& tuple = tuples[i];
+      do_decrypt_db_tuple_op(ctx, tuple, desc, _pos);
     }
   }
+  dprintf("decryption took %s ms\n", TO_C( double(t.lap()) / 1000.0 ));
+
 }
 
 local_encrypt_op::desc_vec
@@ -753,6 +829,7 @@ void
 local_encrypt_op::next(exec_context& ctx, db_tuple_vec& tuples)
 {
   TRACE_OPERATOR();
+  WARN_IF_NOT_EMPTY(tuples);
   map<size_t, db_column_desc> m = util::map_from_pair_vec(_enc_desc_vec);
   assert(first_child()->has_more(ctx));
   first_child()->next(ctx, tuples);
@@ -770,7 +847,7 @@ void
 local_filter_op::next(exec_context& ctx, db_tuple_vec& tuples)
 {
   TRACE_OPERATOR();
-
+  WARN_IF_NOT_EMPTY(tuples);
   assert(first_child()->has_more(ctx));
   db_tuple_vec v;
   first_child()->next(ctx, v);
@@ -824,7 +901,7 @@ void
 local_transform_op::next(exec_context& ctx, db_tuple_vec& tuples)
 {
   TRACE_OPERATOR();
-
+  WARN_IF_NOT_EMPTY(tuples);
   assert(first_child()->has_more(ctx));
   db_tuple_vec v;
   first_child()->next(ctx, v);
@@ -861,12 +938,13 @@ void
 local_group_by::next(exec_context& ctx, db_tuple_vec& tuples)
 {
   TRACE_OPERATOR();
-
+  WARN_IF_NOT_EMPTY(tuples);
   assert(first_child()->has_more(ctx));
 
   while (first_child()->has_more(ctx)) {
     db_tuple_vec v;
     first_child()->next(ctx, v);
+    tuples.reserve(tuples.size() + v.size());
     tuples.insert(tuples.end(), v.begin(), v.end());
   }
 
@@ -941,6 +1019,7 @@ void
 local_group_filter::next(exec_context& ctx, db_tuple_vec& tuples)
 {
   TRACE_OPERATOR();
+  WARN_IF_NOT_EMPTY(tuples);
 
   assert(first_child()->has_more(ctx));
 
@@ -976,6 +1055,7 @@ void
 local_order_by::next(exec_context& ctx, db_tuple_vec& tuples)
 {
   TRACE_OPERATOR();
+  WARN_IF_NOT_EMPTY(tuples);
 
   // TODO: external merge sort?
   assert(first_child()->has_more(ctx));
@@ -999,6 +1079,7 @@ void
 local_limit::next(exec_context& ctx, db_tuple_vec& tuples)
 {
   TRACE_OPERATOR();
+  WARN_IF_NOT_EMPTY(tuples);
 
   assert(has_more(ctx));
   db_tuple_vec v;
