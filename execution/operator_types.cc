@@ -144,12 +144,15 @@ remote_sql_op::open(exec_context& ctx)
   }
 
   // open and execute the sql statement
+  timer t;
   if (!ctx.connection->execute(_do_cache_write_sql, _res)) {
     throw runtime_error("Could not execute sql");
   }
   assert(_res);
 
-  dprintf("expect %s rows\n", TO_C(_res->size()));
+  dprintf("query took %s ms to execute - expect %s rows\n",
+          TO_C( double(t.lap()) / 1000.0 ),
+          TO_C(_res->size()));
 }
 
 void
