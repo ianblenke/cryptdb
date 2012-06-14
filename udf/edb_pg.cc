@@ -2,10 +2,14 @@
 #include <unordered_map>
 #include <util/serializer.hh>
 
+#include <sys/time.h>
+
 extern "C" {
 #include "postgres.h"
 #include "fmgr.h"
 }
+
+#define DBGOUT(x)
 
 static unsigned char *
 getba(PG_FUNCTION_ARGS, int i, unsigned int & len)
@@ -51,6 +55,12 @@ copy_to_pg_return_buffer(const std::string& s)
   SET_VARSIZE(ret, s.size() + VARHDRSZ);
   memcpy(VARDATA(ret), s.data(), s.size());
   return ret;
+}
+
+static inline uint64_t cur_usec() {
+  struct timeval tv;
+  gettimeofday(&tv, 0);
+  return ((uint64_t)tv.tv_sec) * 1000000 + tv.tv_usec;
 }
 
 extern "C" {
@@ -145,7 +155,8 @@ Datum test_sum_final(PG_FUNCTION_ARGS) {
 
 struct nokey {};
 
-static std::ostream& operator<<(std::ostream& o, const nokey&) {
+static inline std::ostream&
+operator<<(std::ostream& o, const nokey&) {
   o << "<nokey>";
   return o;
 }
@@ -236,6 +247,7 @@ public:
       size_t agg_size,
       size_t rows_per_agg)
     : filename(filename), agg_size(agg_size), rows_per_agg(rows_per_agg),
+      _start_time_us(cur_usec()),
       _fp(NULL), _internal_buffer(NULL), _internal_block_id(-1) {
 
     // public key
@@ -243,8 +255,8 @@ public:
     MPZFromBytes(public_key, (const uint8_t *) key.data(), key.size());
 
     // debug crap
-    debug_stream.open("/tmp/debug.txt");
-    assert(debug_stream.good());
+    _debug_stream.open("/tmp/debug.txt");
+    assert(_debug_stream.good());
 
     // file
     _fp = fopen(filename.c_str(), "rb");
@@ -260,6 +272,9 @@ public:
   ~agg_static_state() {
     mpz_clear(public_key);
 
+    _debug_stream.flush();
+    _debug_stream.close();
+
     fclose(_fp);
 
     free(_internal_buffer);
@@ -271,8 +286,7 @@ public:
   const size_t agg_size;
   const size_t rows_per_agg;
 
-  // DEBUG
-  std::ofstream debug_stream;
+  inline std::ostream& debug_stream() { return _debug_stream; }
 
   stats st;
 
@@ -285,27 +299,27 @@ public:
   // if idx invalid)
   const char* get_block(size_t idx) {
 
-    debug_stream << "get_block(" << idx << ")" << std::endl;
+    DBGOUT( debug_stream() << "get_block(" << idx << ")" << std::endl );
 
     // TODO: test this impl VS mmap() implementation
 
     if (LIKELY( is_internal_buffer_valid() )) {
-      debug_stream << "  buffer is valid" << std::endl;
+      DBGOUT( debug_stream() << "  buffer is valid" << std::endl );
       if (LIKELY( internal_block_id() <= idx && idx < last_internal_block_id_excl() )) {
-        debug_stream << "  answered by fast path" << std::endl;
+        DBGOUT( debug_stream() << "  answered by fast path" << std::endl );
         // fast path- if the block is already located in the _internal_buffer
         return _internal_buffer + block_id_to_file_offset(idx - internal_block_id());
       }
     }
 
-    debug_stream << "  answering by slow path" << std::endl;
+    DBGOUT( debug_stream() << "  answering by slow path" << std::endl );
 
     // slow path- seek the _fp to block idx and read in an entire block
     long int pos = ftell(_fp); // TODO: how expensive is ftell?
     assert(pos != -1);
 
     if (size_t(pos) != block_id_to_file_offset(idx)) {
-      debug_stream << "  answering with seek" << std::endl;
+      DBGOUT( debug_stream() << "  answering with seek" << std::endl );
       st.seeks++;
       int ret = fseek(_fp, block_id_to_file_offset(idx), SEEK_SET);
       if (ret) assert(false);
@@ -318,6 +332,10 @@ public:
     }
     _internal_block_id = idx;
     return _internal_buffer;
+  }
+
+  inline double millis_alive() const {
+    return double(cur_usec() - _start_time_us) / 1000.0;
   }
 
 private:
@@ -336,6 +354,10 @@ private:
     SANITY(_internal_block_id >= 0);
     return internal_block_id() + NumBlocksInternalBuffer;
   }
+
+  std::ofstream _debug_stream;
+
+  const uint64_t _start_time_us;
 
   // TODO: buffered vs unbuffered IO, which is better here?
   FILE* _fp;
@@ -396,7 +418,9 @@ template <typename Key>
 class agg_typed_state {
 public:
   static const size_t NThreads = 8;
-  static const size_t BufferSize = 1024;
+
+  /** Gives us about a 16MB element buffer */
+  static const size_t BufferSize = 1024 * 1024;
 
   static void* agg_worker_main(void *p) {
     worker_state<Key>* ctx = (worker_state<Key> *) p;
@@ -458,6 +482,8 @@ public:
 
   void offer(const Key& key, uint64_t row_id, uint64_t group_bitmask) {
 
+    DBGOUT( _static_state->debug_stream() << "offered row_id " << row_id << std::endl );
+
     // insert key
     auto it = _element_buffer.find(key);
     std::vector< std::pair<uint64_t, uint64_t> >* elem_buffer = NULL;
@@ -476,6 +502,7 @@ public:
     // if per group buffer is full, then flush all group buffers
     if (UNLIKELY(elem_buffer->size() >= BufferSize)) {
       flush_group_buffers();
+      SANITY(elem_buffer->empty());
     }
   }
 
@@ -574,6 +601,8 @@ public:
     buffer = buf.str();
   }
 
+  inline agg_static_state* static_state() { return _static_state; };
+
 private:
 
   // flush _element_buffer
@@ -614,8 +643,11 @@ private:
       alloc_map[eit_pos].first = eit->first;
       control_group &m = alloc_map[eit_pos].second;
 
-      _static_state->debug_stream
-        << "going over " << eit->second.size() << " buffered entries for group: " << eit->first << std::endl;
+      DBGOUT(
+        _static_state->debug_stream() <<
+          "going over " << eit->second.size() <<
+          " buffered entries for group: " << eit->first << std::endl );
+
       //timer t0;
       for (vector< pair< uint64_t, uint64_t > >::iterator it = eit->second.begin();
           it != eit->second.end(); ++it) {
@@ -651,7 +683,6 @@ private:
           }
         }
       }
-      //as->debug_stream << "finished iteration in " << t0.lap() << " usec" << endl;
       eit->second.clear(); // clear buffer
     }
 
@@ -669,9 +700,6 @@ private:
       group_done[alloc_map_pos].first  = false;
       group_done[alloc_map_pos].second = it->second.begin();
     }
-
-    //as->debug_stream << "flush_group_buffers: allocation took: " << t.lap() << " usec. IO reads starting" << endl;
-    //as->debug_stream.flush();
 
     while (pos_first_non_empty < alloc_map.size()) {
       // find min block id for all groups
@@ -733,9 +761,6 @@ private:
         else break;
       }
     }
-
-    //as->debug_stream << "flush_group_buffers: IO reads finished: " << t.lap() << endl;
-    //as->debug_stream.flush();
   }
 
   agg_static_state* _static_state; // ownership
@@ -764,7 +789,16 @@ static Datum agg_hash_finalizer(PG_FUNCTION_ARGS) {
   assert(state);
   std::string buf;
   state->compute_final_answer_and_serialize(buf);
-  std::cout << "return buf is " << buf.size() << " bytes" << std::endl;
+
+  DBGOUT(
+    state->static_state()->debug_stream() <<
+      "finished agg in " << state->static_state()->millis_alive() <<
+      " ms" << std::endl );
+
+  DBGOUT(
+    state->static_state()->debug_stream() <<
+      "...return buf is " << buf.size() << " bytes" << std::endl );
+
   delete state;
   // TODO: eliminate redundant buffer copy
   PG_RETURN_BYTEA_P(copy_to_pg_return_buffer(buf));
@@ -783,6 +817,8 @@ static agg_typed_state<Key>* extract_state(PG_FUNCTION_ARGS, size_t n_groups) {
       n_groups
     );
     state->init();
+
+    DBGOUT( state->static_state()->debug_stream() << "started agg" << std::endl );
   }
   return state;
 }
@@ -797,6 +833,10 @@ Datum agg_hash_state_transition_impl(PG_FUNCTION_ARGS, const Key& key) {
     // if row id is null, we take that to mean exclude the row.
     // this is a fast way to implement addition by 0
     state->offer(key, AGG_ROW_ID(), 0x1);
+  } else {
+    DBGOUT(
+      state->static_state()->debug_stream() <<
+        "was offered NULL row_id" << std::endl );
   }
   PG_RETURN_INT64(state);
 }
