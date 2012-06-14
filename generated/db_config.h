@@ -13,11 +13,12 @@
 
 #define LINEITEM_ENC_NAME "lineitem_enc_rowid"
 #define CUSTOMER_ENC_NAME "customer_enc_rowid"
+#define PARTSUPP_ENC_NAME "partsupp_enc_rowid"
 //#define LINEITEM_ENC_NAME "lineitem_enc"
 //#define CUSTOMER_ENC_NAME "customer_enc"
+//#define PARTSUPP_ENC_NAME "partsupp_enc"
 
 #define ORDERS_ENC_NAME   "orders_enc"
-#define PARTSUPP_ENC_NAME "partsupp_enc"
 #define PART_ENC_NAME     "part_enc"
 #define REGION_ENC_NAME   "region_enc"
 #define SUPPLIER_ENC_NAME "supplier_enc"
