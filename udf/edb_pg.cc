@@ -787,12 +787,17 @@ static agg_typed_state<Key>* extract_state(PG_FUNCTION_ARGS, size_t n_groups) {
   return state;
 }
 
-#define AGG_ROW_ID() PG_GETARG_INT64(5)
+#define AGG_ROW_ID_IDX 5
+#define AGG_ROW_ID()   PG_GETARG_INT64(AGG_ROW_ID_IDX)
 
 template <typename Key>
 Datum agg_hash_state_transition_impl(PG_FUNCTION_ARGS, const Key& key) {
   agg_typed_state<Key>* state = extract_state<Key>(PG_PASS_FARGS, 1);
-  state->offer(key, AGG_ROW_ID(), 0x1);
+  if (!PG_ARGISNULL(AGG_ROW_ID_IDX)) {
+    // if row id is null, we take that to mean exclude the row.
+    // this is a fast way to implement addition by 0
+    state->offer(key, AGG_ROW_ID(), 0x1);
+  }
   PG_RETURN_INT64(state);
 }
 
