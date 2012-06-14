@@ -1350,11 +1350,22 @@ protected:
     push_binary_string(enccols, enc);
   }
 
+  void precomputeForNormal(const vector<string>& tokens,
+                           vector<string>& enccols,
+                           crypto_manager_stub &cm) {
+    double ps_value = psValueFromRow(tokens);
+    do_encrypt(0, DT_FLOAT, ONION_DET,
+               to_s(ps_value), enccols, cm, usenull);
+  }
+
   virtual
   void postprocessRow(const vector<string> &tokens,
                       vector<string>       &enccols,
                       crypto_manager_stub        &cm) {
     switch (tpe) {
+      case opt_type::normal:
+        precomputeForNormal(tokens, enccols, cm);
+        break;
       case opt_type::normal_agg:
         precomputeExprs(tokens, enccols, cm);
         break;
