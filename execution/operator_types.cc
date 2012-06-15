@@ -432,6 +432,82 @@ do_decrypt_hom_agg(exec_context& ctx, const string& data)
   return db_elem(buf.str());
 }
 
+template <typename Key, typename Value>
+class random_eviction_cache {
+public:
+  explicit random_eviction_cache(size_t s)
+    : _max_elems(s), _n_lookups(0), _n_hits(0), _n_evictions(0)
+  { assert(s > 0); }
+
+  bool lookup(const Key& k, Value& v) {
+    _n_lookups++;
+    auto it = _cache.find(k);
+    if (it != _cache.end()) {
+      _n_hits++;
+      v = it->second;
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+  void insert(const Key& k, const Value& v) {
+    if (_cache.size() == _max_elems) {
+      _n_evictions++;
+      // TODO: make random
+      _cache.erase(_cache.begin());
+    }
+    assert(_cache.size() < _max_elems);
+    _cache[k] = v;
+  }
+
+  inline size_t n_lookups() const { return _n_lookups; }
+  inline size_t n_hits() const { return _n_hits; }
+  inline size_t n_evictions() const { return _n_evictions; }
+
+private:
+  size_t _max_elems;
+  std::unordered_map<Key, Value> _cache;
+
+  size_t _n_lookups;
+  size_t _n_hits;
+  size_t _n_evictions;
+};
+
+struct decrypt_cache_key {
+  db_elem::type type;
+  size_t size;
+  onion onion_type;
+  SECLEVEL level;
+  size_t pos;
+  string ciphertext;
+};
+
+namespace std {
+  template <> struct hash<decrypt_cache_key> {
+    inline size_t operator()(const decrypt_cache_key& k) const {
+      // TODO: better hash function
+      return
+        size_t(k.type) ^ k.size ^ size_t(k.onion_type) ^
+        size_t(k.level) ^ k.pos ^ hash<string>()(k.ciphertext);
+    }
+  };
+  template <> struct equal_to<decrypt_cache_key> {
+    inline bool operator()(const decrypt_cache_key& a,
+                           const decrypt_cache_key& b) const {
+      return a.type == b.type &&
+             a.size == b.size &&
+             a.onion_type == b.onion_type &&
+             a.level == b.level &&
+             a.pos == b.pos &&
+             a.ciphertext == b.ciphertext;
+    }
+  };
+}
+
+typedef random_eviction_cache<decrypt_cache_key, db_elem>
+        decrypt_cache;
+
 static db_elem
 do_decrypt_db_elem_op(
     exec_context& ctx,
@@ -546,6 +622,34 @@ do_decrypt_db_elem_op(
   }
 }
 
+static db_elem
+do_decrypt_db_elem_op_with_cache(
+    exec_context& ctx,
+    const db_elem& elem,
+    const db_column_desc& d,
+    decrypt_cache& cache)
+{
+  decrypt_cache_key key;
+  key.type       = d.type;
+  key.size       = d.size;
+  key.onion_type = d.onion_type;
+  key.level      = d.level;
+  key.pos        = d.pos;
+  key.ciphertext = elem.stringify(); // TODO: avoid redundant stringify
+
+  // lookup value first
+  db_elem ret;
+  if (cache.lookup(key, ret)) {
+    // fast path
+    return ret;
+  }
+
+  // slow path
+  ret = do_decrypt_db_elem_op(ctx, elem, d);
+  cache.insert(key, ret);
+  return ret;
+}
+
 struct decrypt_db_elem_args {
   exec_context* ctx;
   const vector< db_elem >* elems;
@@ -577,18 +681,28 @@ do_decrypt_db_tuple_op(
     exec_context& ctx,
     db_tuple& tuple,
     const local_decrypt_op::desc_vec& desc,
-    const local_decrypt_op::pos_vec& pos)
+    const local_decrypt_op::pos_vec& pos,
+    const vector<decrypt_cache*>& column_caches)
 {
   SANITY(tuple.columns.size() == desc.size());
+  SANITY(column_caches.empty() || column_caches.size() == desc.size());
 
   for (auto p : pos) {
     const db_column_desc& d = desc[p];
     db_elem& e = tuple.columns[p];
+    decrypt_cache* cache = column_caches.empty() ? NULL : column_caches[p];
+    SANITY(cache || column_caches.empty());
+
     if (e.is_vector()) {
       vector< db_elem > elems;
       elems.reserve(e.size());
 
       if (e.size() >= ParThreshold) {
+
+        // TODO: bootstrap these vector parallel decrypts with
+        // the given decrypt cache. we don't just pass it along
+        // because we want the decrypt_cache to avoid concurrenecy
+        // control
 
         dprintf("using parallel impl to decrypt %s elems\n", TO_C(e.size()));
         timer t;
@@ -631,20 +745,19 @@ do_decrypt_db_tuple_op(
 
       } else {
         for (auto &e0 : e) {
-          elems.push_back(do_decrypt_db_elem_op(ctx, e0, d));
+          elems.push_back(
+              cache ?
+                do_decrypt_db_elem_op_with_cache(ctx, e0, d, *cache) :
+                do_decrypt_db_elem_op(ctx, e0, d));
         }
       }
 
       tuple.columns[p] = db_elem(elems);
     } else {
-      //if (d.type == db_elem::TYPE_INT) {
-      //  dprintf("decrypt pos %s with d.type=(%s), d.size=(%s), unsigned_value=(%s)\n",
-      //          TO_C(p), TO_C(d.type), TO_C(d.size), TO_C(e));
-      //} else {
-      //  dprintf("decrypt pos %s with d.type=(%s), d.size=(%s)\n",
-      //          TO_C(p), TO_C(d.type), TO_C(d.size));
-      //}
-      tuple.columns[p] = do_decrypt_db_elem_op(ctx, e, d);
+      tuple.columns[p] =
+        cache ?
+          do_decrypt_db_elem_op_with_cache(ctx, e, d, *cache) :
+          do_decrypt_db_elem_op(ctx, e, d);
     }
   }
 }
@@ -658,11 +771,32 @@ struct decrypt_db_tuple_args {
 
 static void* do_decrypt_db_tuple_op_wrapper(void* p) {
   decrypt_db_tuple_args* args = (decrypt_db_tuple_args *) p;
+
+  // use a thread-local decrypt cache
+  vector<decrypt_cache*> caches;
+  caches.reserve(args->desc->size());
+  for (size_t i = 0; i < args->desc->size(); i++) {
+    caches.push_back(new decrypt_cache(512));
+  }
+
   size_t n = args->tuples->size();
   for (size_t i = 0; i < n; i++) {
     // modifies tuples[i]
     do_decrypt_db_tuple_op(
-      *args->ctx, *args->tuples->operator[](i), *args->desc, *args->pos);
+      *args->ctx, *args->tuples->operator[](i), *args->desc, *args->pos, caches);
+  }
+
+  // cleanup caches
+  for (size_t i = 0; i < args->desc->size(); i++) {
+    // emit cache stats
+
+    dprintf("cache for col=(%s) stats: n_lookups=(%s), n_hits_pct=(%s), n_evictions=(%s)\n",
+            TO_C(i),
+            TO_C(caches[i]->n_lookups()),
+            TO_C(double(caches[i]->n_hits()) / double(caches[i]->n_lookups()) * 100.0),
+            TO_C(caches[i]->n_evictions()));
+
+    delete caches[i];
   }
   return NULL;
 }
@@ -731,7 +865,7 @@ local_decrypt_op::next(exec_context& ctx, db_tuple_vec& tuples)
   } else {
     for (size_t i = 0; i < tuples.size(); i++) {
       db_tuple& tuple = tuples[i];
-      do_decrypt_db_tuple_op(ctx, tuple, desc, _pos);
+      do_decrypt_db_tuple_op(ctx, tuple, desc, _pos, vector<decrypt_cache*>());
     }
   }
   dprintf("decryption took %s ms\n", TO_C( double(t.lap()) / 1000.0 ));
