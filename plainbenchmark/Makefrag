@@ -1,0 +1,6 @@
+OBJDIRS += plainbenchmark
+PLAINBENCHMARKPROGS := program
+PLAINBENCHMARKPROGOBJS := $(patsubst %,$(OBJDIR)/plainbenchmark/%,$(PLAINBENCHMARKPROGS))
+all: $(PLAINBENCHMARKPROGOBJS)
+$(PLAINBENCHMARKPROGOBJS): %: %.o $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbutil.so
+	$(CXX) $< -o $@ -ledbparser  $(LDFLAGS) -ledbutil -lcryptdb -lmysqlclient -ltbb -lgmp -lpq

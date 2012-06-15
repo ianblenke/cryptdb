@@ -56,6 +56,8 @@ include edb/Makefrag
 include parser/Makefrag
 include execution/Makefrag
 include generated/Makefrag
+include plainbenchmark/Makefrag
+-include playground/Makefrag
 include estimators/Makefrag
 include test/Makefrag
 include util/Makefrag
