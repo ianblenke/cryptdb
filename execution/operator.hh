@@ -28,7 +28,9 @@ public:
     std::cout << "(" << tuples.size() << " rows)" << std::endl;
   }
 
-  static const unsigned int BatchSize = 8192 * 4; // hinted batch size for operators
+  /** Assuming each tuple is about 128 bytes, this gives us a ~32MB buffer */
+  // NOTE: should match the one in edb/ConnectNew.hh
+  static const unsigned int BatchSize = (1024 * 256);
 
   /** Takes ownership of children */
   physical_operator(

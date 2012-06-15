@@ -15,7 +15,7 @@ class DBResultNew {
 
     virtual size_t size() const = 0;
 
-    static const unsigned int BatchSize = 8192 * 4; // hinted batch size
+    static const unsigned int BatchSize = (1024 * 256);
 };
 
 class ConnectNew {
