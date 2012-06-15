@@ -967,4 +967,19 @@ Datum agg_ident_i64_state_transition(PG_FUNCTION_ARGS) {
   PG_RETURN_INT64(PG_GETARG_INT64(1));
 }
 
+Datum fast_sum_i64_state_transition(PG_FUNCTION_ARGS);
+PG_FUNCTION_INFO_V1(fast_sum_i64_state_transition);
+
+// create function fast_sum_i64_state_transition(bigint, bigint)
+//    returns bigint language C as '/home/stephentu/cryptdb/obj/udf/edb_pg.so';
+// create aggregate fast_sum(bigint)
+//  (
+//    sfunc=fast_sum_i64_state_transition,
+//    stype=bigint,
+//    initcond='0'
+//  );
+Datum fast_sum_i64_state_transition(PG_FUNCTION_ARGS) {
+  PG_RETURN_INT64(PG_GETARG_INT64(0) + PG_GETARG_INT64(1));
+}
+
 }
