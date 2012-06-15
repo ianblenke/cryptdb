@@ -951,4 +951,20 @@ Datum agg_hash_u64_u64_state_transition(PG_FUNCTION_ARGS) {
   return agg_hash_state_transition_impl(PG_PASS_FARGS, make_tuple2(k0, k1));
 }
 
+Datum agg_ident_i64_state_transition(PG_FUNCTION_ARGS);
+PG_FUNCTION_INFO_V1(agg_ident_i64_state_transition);
+
+// create function agg_ident_i64_state_transition(bigint, bigint)
+//    returns bigint language C as '/home/stephentu/cryptdb/obj/udf/edb_pg.so';
+// create aggregate agg_ident(bigint)
+//  (
+//    sfunc=agg_ident_i64_state_transition,
+//    stype=bigint,
+//    initcond='0'
+//  );
+Datum agg_ident_i64_state_transition(PG_FUNCTION_ARGS) {
+  // always return the incoming value
+  PG_RETURN_INT64(PG_GETARG_INT64(1));
+}
+
 }
