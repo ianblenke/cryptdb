@@ -1,4 +1,4 @@
-#define DB_HOSTNAME "localhost"
+#define DB_HOSTNAME "vise4.csail.mit.edu"
 #define DB_USERNAME "stephentu"
 #define DB_PASSWORD "letmein"
 
