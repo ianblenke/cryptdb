@@ -489,6 +489,8 @@ public:
   enum opt_type {
     normal,
     row_packed_acctbal,
+
+    normal_vldb_orig,
   };
 
   customer_encryptor(enum opt_type tpe)
@@ -496,17 +498,33 @@ public:
     schema = CustSchema;
     onions = CustOnions;
     usenull = false;
-    processrow = tpe == normal;
+    processrow = (tpe == normal || tpe == normal_vldb_orig);
   }
 
   virtual
   void postprocessRow(const vector<string> &tokens,
                       vector<string>       &enccols,
                       crypto_manager_stub        &cm) {
-    assert(tpe == normal);
-    string phone_prefix = tokens[customer::c_phone].substr(0, 2);
-    do_encrypt(customer::c_phone, DT_STRING, ONION_DET,
-               phone_prefix, enccols, cm, false);
+    assert(tpe == normal || tpe == normal_vldb_orig);
+
+    switch (tpe) {
+      case normal: {
+        string phone_prefix = tokens[customer::c_phone].substr(0, 2);
+        do_encrypt(customer::c_phone, DT_STRING, ONION_DET,
+                   phone_prefix, enccols, cm, false);
+        break;
+      }
+
+      case normal_vldb_orig: {
+        long c_acctbal_int =
+          roundToLong(fabs(resultFromStr<double>(tokens[customer::c_acctbal])) * 100.0);
+        ZZ z = to_ZZ(c_acctbal_int);
+        push_binary_string(enccols, cm.encrypt_Paillier(z));
+        break;
+      }
+
+      default: assert(false);
+    }
   }
 
 protected:
@@ -658,6 +676,9 @@ public:
       row_packed_disc_price,
       row_packed_revenue,
       row_col_packed,
+
+      // the following below are for the VLDB experiments
+      normal_vldb_orig, // what we use for the "state-of-the-art" before us
   };
 
   static vector<datatypes> Schema;
@@ -676,6 +697,7 @@ public:
         break;
       case normal:
       case normal_agg:
+      case normal_vldb_orig:
         onions = Onions;
         usenull = false;
         processrow = true;
@@ -1149,6 +1171,36 @@ protected:
           push_binary_string(enccols, enc);
           break;
         }
+
+      case opt_type::normal_vldb_orig:
+        {
+          ZZ z1, z2, z3;
+
+          // l_quantity agg
+          long l_quantity_int = roundToLong(resultFromStr<double>(tokens[lineitem::l_quantity]) * 100.0);
+          z1 = to_ZZ(l_quantity_int);
+
+          // l_extendedprice agg
+          long l_extendedprice_int = roundToLong(resultFromStr<double>(tokens[lineitem::l_extendedprice]) * 100.0);
+          z2 = to_ZZ(l_extendedprice_int);
+
+          // l_discount agg
+          long l_discount_int = roundToLong(resultFromStr<double>(tokens[lineitem::l_discount]) * 100.0);
+          z3 = to_ZZ(l_discount_int);
+
+          string e1, e2, e3;
+
+          e1 = cm.encrypt_Paillier(z1);
+          e2 = cm.encrypt_Paillier(z2);
+          e3 = cm.encrypt_Paillier(z3);
+
+          push_binary_string(enccols, e1);
+          push_binary_string(enccols, e2);
+          push_binary_string(enccols, e3);
+
+          break;
+        }
+
       default: break;
     }
 
@@ -1626,6 +1678,8 @@ int main(int argc, char **argv) {
     //cryptdb_logger::enable(log_name_to_group["crypto"]);
 
     CryptoManager cm("12345");
+    cerr << "paillier public key: " << marshallBinary(cm.getPKInfo()) << endl;
+
     crypto_manager_stub stub(&cm, false);
     vector<string> lines;
     for (;;) {
