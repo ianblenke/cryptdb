@@ -5,6 +5,7 @@
 #include <edb/ConnectNew.hh>
 #include <util/cryptdb_log.hh>
 #include <util/pgoids.hh>
+#include <util/static_assert.hh>
 
 using namespace std;
 
@@ -205,6 +206,32 @@ protected:
         buffer = to_hex(string(ptr, PQgetlength(native(), row, col)));
         break;
 
+      case FLOAT4OID: {
+        union {
+          float f;
+          uint32_t i;
+        } swap;
+        _static_assert(sizeof(swap) == sizeof(uint32_t));
+        swap.i = ntohl(*((uint32_t *) ptr));
+        buffer = to_s(swap.f);
+        break;
+      }
+
+      case FLOAT8OID: {
+        union {
+          double f;
+          uint64_t i;
+        } swap;
+        _static_assert(sizeof(swap) == sizeof(uint64_t));
+        swap.i = bswap64(*((uint64_t *) ptr));
+        buffer = to_s(swap.f);
+        break;
+      }
+
+      case INT2OID:
+        buffer = to_s(ntohs(*((uint16_t *) ptr)));
+        break;
+
       case INT4OID:
         // yes, this is weird, but we are trying to respect the
         // SqlItem contract here
@@ -217,7 +244,7 @@ protected:
 
       default:
         cerr << "WARNING: unhandled OID type: " << type << endl;
-        buffer = string(ptr, PQgetlength(native(), row, col));
+        buffer = to_hex(string(ptr, PQgetlength(native(), row, col)));
         break;
     }
   }
@@ -246,6 +273,7 @@ private:
 
   // no ntohll
   static uint64_t bswap64(uint64_t orig) {
+    // TODO: assert little endian machine
     const uint8_t* src = (const uint8_t*) &orig;
     uint64_t res = 0;
     uint8_t* dest = (uint8_t*) &res;
