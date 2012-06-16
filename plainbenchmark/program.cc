@@ -5,6 +5,17 @@
 #include <iostream>
 #include <edb/ConnectNew.hh>
 #include <util/util.hh>
+
+static std::string
+join(const std::vector<std::string>& tokens, const std::string &sep) {
+  std::ostringstream s;
+  for (size_t i = 0; i < tokens.size(); i++) {
+    s << tokens[i];
+    if (i != tokens.size() - 1) s << sep;
+  }
+  return s.str();
+}
+
 static void query_0(ConnectNew& conn) {
   DBResultNew* dbres;
   conn.execute("select l_returnflag, l_linestatus, fast_sum(l_quantity) as sum_qty, fast_sum(l_extendedprice) as sum_base_price, fast_sum((l_extendedprice) * ((100) - (l_discount))) as sum_disc_price, fast_sum(((l_extendedprice) * ((100) - (l_discount))) * ((100) + (l_tax))) as sum_charge, fast_sum(l_quantity) / count(*) as avg_qty, fast_sum(l_extendedprice) / count(*) as avg_price, fast_sum(l_discount) / count(*) as avg_disc, count(*) as count_order from " LINEITEM_NAME " where (l_shipdate) <= (date '1998-01-01') group by l_returnflag, l_linestatus order by l_returnflag ASC, l_linestatus ASC", dbres);
@@ -33,6 +44,7 @@ static void query_0(ConnectNew& conn) {
     std::cout << std::endl;
   }
   std::cout << "(" << res.rows.size() << " rows)" << std::endl;
+  delete dbres;
 }
 static void query_1(ConnectNew& conn) {
   DBResultNew* dbres;
@@ -58,6 +70,7 @@ static void query_1(ConnectNew& conn) {
     std::cout << std::endl;
   }
   std::cout << "(" << res.rows.size() << " rows)" << std::endl;
+  delete dbres;
 }
 static void query_2(ConnectNew& conn) {
   DBResultNew* dbres;
@@ -75,6 +88,7 @@ static void query_2(ConnectNew& conn) {
     std::cout << std::endl;
   }
   std::cout << "(" << res.rows.size() << " rows)" << std::endl;
+  delete dbres;
 }
 static void query_3(ConnectNew& conn) {
   DBResultNew* dbres;
@@ -88,6 +102,7 @@ static void query_3(ConnectNew& conn) {
     std::cout << std::endl;
   }
   std::cout << "(" << res.rows.size() << " rows)" << std::endl;
+  delete dbres;
 }
 static void query_4(ConnectNew& conn) {
   DBResultNew* dbres;
@@ -101,6 +116,7 @@ static void query_4(ConnectNew& conn) {
     std::cout << std::endl;
   }
   std::cout << "(" << res.rows.size() << " rows)" << std::endl;
+  delete dbres;
 }
 static void query_5(ConnectNew& conn) {
   DBResultNew* dbres;
@@ -112,6 +128,7 @@ static void query_5(ConnectNew& conn) {
     std::cout << std::endl;
   }
   std::cout << "(" << res.rows.size() << " rows)" << std::endl;
+  delete dbres;
 }
 static void query_6(ConnectNew& conn) {
   DBResultNew* dbres;
@@ -129,6 +146,7 @@ static void query_6(ConnectNew& conn) {
     std::cout << std::endl;
   }
   std::cout << "(" << res.rows.size() << " rows)" << std::endl;
+  delete dbres;
 }
 static void query_7(ConnectNew& conn) {
   DBResultNew* dbres;
@@ -142,6 +160,7 @@ static void query_7(ConnectNew& conn) {
     std::cout << std::endl;
   }
   std::cout << "(" << res.rows.size() << " rows)" << std::endl;
+  delete dbres;
 }
 static void query_8(ConnectNew& conn) {
   conn.execute("SET enable_indexscan TO FALSE");
@@ -186,6 +205,7 @@ static void query_9(ConnectNew& conn) {
     std::cout << std::endl;
   }
   std::cout << "(" << res.rows.size() << " rows)" << std::endl;
+  delete dbres;
 }
 static void query_10(ConnectNew& conn) {
   DBResultNew* dbres;
@@ -199,6 +219,7 @@ static void query_10(ConnectNew& conn) {
     std::cout << std::endl;
   }
   std::cout << "(" << res.rows.size() << " rows)" << std::endl;
+  delete dbres;
 }
 static void query_11(ConnectNew& conn) {
   DBResultNew* dbres;
@@ -214,6 +235,7 @@ static void query_11(ConnectNew& conn) {
     std::cout << std::endl;
   }
   std::cout << "(" << res.rows.size() << " rows)" << std::endl;
+  delete dbres;
 }
 static void query_12(ConnectNew& conn) {
   DBResultNew* dbres;
@@ -225,6 +247,7 @@ static void query_12(ConnectNew& conn) {
     std::cout << std::endl;
   }
   std::cout << "(" << res.rows.size() << " rows)" << std::endl;
+  delete dbres;
 }
 static void query_13(ConnectNew& conn) {
   DBResultNew* dbres;
@@ -238,10 +261,36 @@ static void query_13(ConnectNew& conn) {
     std::cout << std::endl;
   }
   std::cout << "(" << res.rows.size() << " rows)" << std::endl;
+  delete dbres;
 }
 static void query_14(ConnectNew& conn) {
+  // NOTE: we use a custom implementation here, because postgres
+  // handles this version better.
+  std::vector<std::string> l_orderkeys;
+  {
+    DBResultNew* dbres;
+    const char *q =
+        "select "
+        "    l_orderkey "
+        "from "
+        "    " LINEITEM_NAME " "
+        "group by "
+        "    l_orderkey having "
+        "        sum(l_quantity) > (315 * 100)";
+    conn.execute(q, dbres);
+    ResType res = dbres->unpack();
+    assert(res.ok);
+    l_orderkeys.reserve(res.rows.size());
+    for (auto &row : res.rows) {
+      l_orderkeys.push_back(row[0].data);
+    }
+    delete dbres;
+  }
+  if (l_orderkeys.empty()) return;
   DBResultNew* dbres;
-  conn.execute("select c_name, c_custkey, o_orderkey, o_orderdate, o_totalprice, fast_sum(l_quantity) from " CUSTOMER_NAME ", " ORDERS_NAME ", " LINEITEM_NAME " where ((o_orderkey in ( (select l_orderkey from " LINEITEM_NAME " group by l_orderkey having (fast_sum(l_quantity)) > (315 * 100)) )) and ((c_custkey) = (o_custkey))) and ((o_orderkey) = (l_orderkey)) group by c_name, c_custkey, o_orderkey, o_orderdate, o_totalprice order by o_totalprice DESC, o_orderdate ASC limit 100", dbres);
+  std::ostringstream buf;
+  buf << "select c_name, c_custkey, o_orderkey, o_orderdate, o_totalprice, fast_sum(l_quantity) from " CUSTOMER_NAME ", " ORDERS_NAME ", " LINEITEM_NAME " where ((o_orderkey in (" << join(l_orderkeys, ",") <<" )) and ((c_custkey) = (o_custkey))) and ((o_orderkey) = (l_orderkey)) group by c_name, c_custkey, o_orderkey, o_orderdate, o_totalprice order by o_totalprice DESC, o_orderdate ASC limit 100";
+  conn.execute(buf.str(), dbres);
   ResType res = dbres->unpack();
   assert(res.ok);
   for (auto &row : res.rows) {
@@ -259,6 +308,7 @@ static void query_14(ConnectNew& conn) {
     std::cout << std::endl;
   }
   std::cout << "(" << res.rows.size() << " rows)" << std::endl;
+  delete dbres;
 }
 static void query_15(ConnectNew& conn) {
   DBResultNew* dbres;
@@ -270,6 +320,7 @@ static void query_15(ConnectNew& conn) {
     std::cout << std::endl;
   }
   std::cout << "(" << res.rows.size() << " rows)" << std::endl;
+  delete dbres;
 }
 static void query_16(ConnectNew& conn) {
   DBResultNew* dbres;
@@ -285,6 +336,7 @@ static void query_16(ConnectNew& conn) {
     std::cout << std::endl;
   }
   std::cout << "(" << res.rows.size() << " rows)" << std::endl;
+  delete dbres;
 }
 int main(int argc, char **argv) {
   if (argc != 2) {
