@@ -47,12 +47,13 @@ class MySQLConnect : public ConnectNew {
 class PGConnect : public ConnectNew {
   public:
     PGConnect(std::string server, std::string user, std::string passwd,
-             std::string dbname, uint port = 0);
+             std::string dbname, uint port = 0, bool binary = false);
     virtual ~PGConnect();
 
     virtual bool execute(const std::string &query, DBResultNew *&);
     virtual std::string getError();
 
   private:
+    bool _binary;
     PGconn* conn;
 };

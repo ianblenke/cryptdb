@@ -1,7 +1,10 @@
 #include <stdexcept>
 #include <assert.h>
+#include <netinet/in.h>
+
 #include <edb/ConnectNew.hh>
 #include <util/cryptdb_log.hh>
+#include <util/pgoids.hh>
 
 using namespace std;
 
@@ -76,17 +79,17 @@ class MySQLDBRes : public DBResultNew {
     MYSQL_RES* native;
 };
 
-class PGDBRes : public DBResultNew {
+class PGDBBaseRes : public DBResultNew {
   public:
-    PGDBRes(PGresult* native)
-      : native(native), _i(0), _n(0), _c(0) {
-      assert(native);
-      _n = PQntuples(native);
-      _c = PQnfields(native);
+    PGDBBaseRes(PGresult* native)
+      : _native(native), _i(0), _n(0), _c(0) {
+      assert(_native);
+      _n = PQntuples(_native);
+      _c = PQnfields(_native);
     }
 
-    virtual ~PGDBRes() {
-      PQclear(native);
+    virtual ~PGDBBaseRes() {
+      PQclear(_native);
     }
 
     virtual ResType unpack() {
@@ -101,56 +104,160 @@ class PGDBRes : public DBResultNew {
 
     virtual size_t size() const { return _n; }
 
+  protected:
+    virtual void
+      read_into_buffer(
+          size_t row, size_t col, unsigned int type, std::string& buffer) = 0;
+
+    inline PGresult* native() { return _native; }
+
   private:
 
     void fill(ResType& res, unsigned int to) {
       unsigned int end = to > _n ? _n : to;
       for (; _i < end; _i++) {
-        vector<SqlItem> resrow;
+        res.rows.push_back(vector<SqlItem>());
+        vector<SqlItem>& resrow = res.rows.back();
         for (unsigned int col = 0; col < _c; col++) {
-          SqlItem item;
-          item.data = string(PQgetvalue(native, _i, col), PQgetlength(native, _i, col));
-          item.type = PQftype(native, col);
-          assert(item.type >= 17); // look at: select oid, typname from pg_type
-          if (item.type == 17 /*BYTEAOID*/) {
-            // need to escape (binary string)
-            ostringstream o;
-            for (size_t i = 0; i < item.data.size(); ) {
-              switch (item.data[i]) {
-                case '\\':
-                  if (item.data[i + 1] == '\\') {
-                    o << '\\';
-                    i += 2;
-                  } else {
-                    char buf[3];
-                    buf[0] = item.data[i + 1];
-                    buf[1] = item.data[i + 2];
-                    buf[2] = item.data[i + 3];
-                    o << (unsigned char) strtoul(buf, NULL, 8);
-                    i += 4;
-                  }
-                  break;
-                default:
-                  o << item.data[i];
-                  i++;
-              }
-            }
-            item.data = o.str();
-          }
-          resrow.push_back(item);
+          resrow.push_back(SqlItem());
+          SqlItem& item = resrow.back();
+          item.type = PQftype(_native, col);
+          read_into_buffer(_i, col, item.type, item.data);
         }
-        res.rows.push_back(resrow);
       }
 
       for (unsigned int col = 0; col < _c; col++) {
-        res.types.push_back(PQftype(native, col));
+        res.types.push_back(PQftype(_native, col));
       }
     }
 
-    PGresult* native;
+    PGresult* _native;
     size_t _i;
     size_t _n;
     size_t _c;
+};
+
+class PGDBTextRes : public PGDBBaseRes {
+public:
+  PGDBTextRes(PGresult* native) : PGDBBaseRes(native) {}
+protected:
+  virtual void
+    read_into_buffer(size_t row, size_t col, unsigned int type, std::string& buffer) {
+    buffer = string(PQgetvalue(native(), row, col), PQgetlength(native(), col, col));
+    if (type == 17 /*BYTEAOID*/) {
+      // need to escape (binary string)
+      ostringstream o;
+      for (size_t i = 0; i < buffer.size(); ) {
+        switch (buffer[i]) {
+          case '\\':
+            if (buffer[i + 1] == '\\') {
+              o << '\\';
+              i += 2;
+            } else {
+              char buf[3];
+              buf[0] = buffer[i + 1];
+              buf[1] = buffer[i + 2];
+              buf[2] = buffer[i + 3];
+              o << (unsigned char) strtoul(buf, NULL, 8);
+              i += 4;
+            }
+            break;
+          default:
+            o << buffer[i];
+            i++;
+        }
+      }
+      buffer = o.str();
+    }
+  }
+};
+
+class PGDBBinaryRes : public PGDBBaseRes {
+public:
+  PGDBBinaryRes(PGresult* native) : PGDBBaseRes(native) {}
+protected:
+  virtual void read_into_buffer(
+      size_t row, size_t col, unsigned int type, std::string& buffer)
+  {
+
+    // null check
+    if (PQgetisnull(native(), row, col)) {
+      // TODO: do something more intelligent
+      buffer = "";
+      return;
+    }
+
+    char* ptr = PQgetvalue(native(), row, col);
+    switch (type) {
+      case BYTEAOID:
+      case CHAROID:
+      case TEXTOID:
+      case VARCHAROID:
+        // can treat as string
+        buffer = string(ptr, PQgetlength(native(), row, col));
+        break;
+
+      case DATEOID:
+        // don't bother to understand the postgres date binary format
+        // since we don't actually do anything with it. so for now,
+        // just convert into hex
+        buffer = to_hex(string(ptr, PQgetlength(native(), row, col)));
+        break;
+
+      case INT4OID:
+        // yes, this is weird, but we are trying to respect the
+        // SqlItem contract here
+        buffer = to_s(ntohl(*((uint32_t *) ptr)));
+        break;
+
+      case INT8OID:
+        buffer = to_s(bswap64(*((uint64_t *) ptr)));
+        break;
+
+      default:
+        cerr << "unhandled OID type: " << type << endl;
+        assert(false);
+        break;
+    }
+  }
+private:
+  template <typename T>
+  static inline std::string to_s(const T& t) {
+    std::ostringstream s;
+    s << t;
+    return s.str();
+  }
+
+  static inline std::string to_hex(const std::string& input) {
+    // copied from parser/cdb_helpers.hh
+    size_t len = input.length();
+    const char* const lut = "0123456789ABCDEF";
+
+    std::string output;
+    output.reserve(2 * len);
+    for (size_t i = 0; i < len; ++i) {
+      const unsigned char c = (unsigned char) input[i];
+      output.push_back(lut[c >> 4]);
+      output.push_back(lut[c & 15]);
+    }
+    return output;
+  }
+
+  // no ntohll
+  static uint64_t bswap64(uint64_t orig) {
+    const uint8_t* src = (const uint8_t*) &orig;
+    uint64_t res = 0;
+    uint8_t* dest = (uint8_t*) &res;
+    dest[0] = src[7];
+    dest[1] = src[6];
+    dest[2] = src[5];
+    dest[3] = src[4];
+    dest[4] = src[3];
+    dest[5] = src[2];
+    dest[6] = src[1];
+    dest[7] = src[0];
+    return res;
+  }
 };
 
 bool
@@ -225,7 +332,8 @@ MySQLConnect::getError() {
 }
 
 PGConnect::PGConnect(std::string server, std::string user, std::string passwd,
-             std::string dbname, uint port) : conn(NULL) {
+             std::string dbname, uint port, bool binary)
+  : _binary(binary), conn(NULL) {
   ostringstream o;
   o << "host = " << server << " ";
   if (port) o << "port = " << port << " ";
@@ -247,14 +355,17 @@ PGConnect::~PGConnect() {
 
 bool
 PGConnect::execute(const string& query, DBResultNew*& res) {
-  PGresult* pg = PQexec(conn, query.c_str());
+  PGresult* pg =
+    PQexecParams(conn, query.c_str(), 0, NULL, NULL, NULL, NULL, _binary ? 1 : 0);
   if (!pg) {
     res = 0;
     return false;
   }
   ExecStatusType status = PQresultStatus(pg);
   if ((status == PGRES_COMMAND_OK) || (status == PGRES_TUPLES_OK)) {
-      res = new PGDBRes(pg);
+      res =
+        _binary ? ((DBResultNew*)new PGDBBinaryRes(pg)) :
+                  ((DBResultNew*)new PGDBTextRes(pg));
       return true;
   } else {
     LOG(warn) << "PQerrorMessage: " << PQerrorMessage(conn);
