@@ -1128,4 +1128,55 @@ Datum hom_agg_finalizer(PG_FUNCTION_ARGS) {
   PG_RETURN_BYTEA_P(copy_to_pg_return_buffer(buf));
 }
 
+// efficiently implements group_concat(<i64>)
+class u64_agg_serializer {
+public:
+  inline void offer(uint64_t v) { serializer<uint64_t>::write(_buf, v); }
+  inline std::string finalize() { return _buf.str(); }
+  static u64_agg_serializer* extract_state(PG_FUNCTION_ARGS) {
+    u64_agg_serializer* state = (u64_agg_serializer*) PG_GETARG_INT64(0);
+    if (UNLIKELY(state == NULL)) state = new u64_agg_serializer;
+    return state;
+  }
+private:
+  std::ostringstream _buf;
+};
+
+extern "C" {
+
+// create function group_serializer_state_transition
+//  (bigint, bigint)
+//    returns bigint language C as '/home/stephentu/cryptdb/obj/udf/edb_pg.so';
+// create function group_serializer_finalizer(bigint)
+//    returns bytea language C as '/home/stephentu/cryptdb/obj/udf/edb_pg.so';
+// create aggregate group_serializer
+//  (bigint)
+//  (
+//    sfunc=group_serializer_state_transition,
+//    stype=bigint,
+//    finalfunc=group_serializer_finalizer,
+//    initcond='0'
+//  );
+
+Datum group_serializer_state_transition(PG_FUNCTION_ARGS);
+PG_FUNCTION_INFO_V1(group_serializer_state_transition);
+
+Datum group_serializer_state_transition(PG_FUNCTION_ARGS) {
+  u64_agg_serializer* state = u64_agg_serializer::extract_state(PG_PASS_FARGS);
+  state->offer((uint64_t)PG_GETARG_INT64(1));
+  PG_RETURN_INT64(state);
+}
+
+Datum group_serializer_finalizer(PG_FUNCTION_ARGS);
+PG_FUNCTION_INFO_V1(group_serializer_finalizer);
+
+Datum group_serializer_finalizer(PG_FUNCTION_ARGS) {
+  u64_agg_serializer* state = u64_agg_serializer::extract_state(PG_PASS_FARGS);
+  std::string buf = state->finalize();
+  delete state;
+  PG_RETURN_BYTEA_P(copy_to_pg_return_buffer(buf));
+}
+
+}
+
 }
