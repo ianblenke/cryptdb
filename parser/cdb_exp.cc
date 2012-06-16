@@ -1379,7 +1379,7 @@ static void do_query_q1_opt_row_col_pack(ConnectNew &conn,
           "'" << filename << "', "
           << (RowColPackCipherSize/8) << ", "
           << "3, row_id, l_returnflag_DET, l_linestatus_DET"
-        ") FROM lineitem_enc WHERE l_shipdate_OPE <= " << encDATE
+        ") FROM lineitem_enc_rowid WHERE l_shipdate_OPE <= " << encDATE
         ;
     }
     cerr << s.str() << endl;
