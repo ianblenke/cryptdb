@@ -193,6 +193,7 @@ protected:
       case CHAROID:
       case TEXTOID:
       case VARCHAROID:
+      case BPCHAROID:
         // can treat as string
         buffer = string(ptr, PQgetlength(native(), row, col));
         break;
@@ -215,8 +216,8 @@ protected:
         break;
 
       default:
-        cerr << "unhandled OID type: " << type << endl;
-        assert(false);
+        cerr << "WARNING: unhandled OID type: " << type << endl;
+        buffer = string(ptr, PQgetlength(native(), row, col));
         break;
     }
   }
