@@ -2,5 +2,5 @@ OBJDIRS += generated
 GENERATEDPROGS := program
 GENERATEDPROGOBJS := $(patsubst %,$(OBJDIR)/generated/%,$(GENERATEDPROGS))
 all: $(GENERATEDPROGOBJS)
-$(GENERATEDPROGOBJS): %: %.o $(OBJDIR)/libedbparser.so  $(OBJDIR)/libedbutil.so $(OBJDIR)/libexecution.so
+$(GENERATEDPROGOBJS): %: %.o $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbparser.so  $(OBJDIR)/libedbutil.so $(OBJDIR)/libexecution.so
 	$(CXX) $< -o $@ -ledbparser  $(LDFLAGS) -ledbutil -lcryptdb -ledbcrypto -ledbcrypto2 -lexecution -lmysqlclient -ltbb -lgmp -lpq
