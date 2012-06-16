@@ -242,31 +242,46 @@ remote_sql_op::next(exec_context& ctx, db_tuple_vec& tuples)
           // simplifying assumption for now (relax if needed)
           SANITY(_desc_vec[j].onion_type == oDET);
 
-          vector<string> tokens;
-          tokenize(col.data, ",", tokens); // this is always safe, because ',' is
-                                           // not ever going to be part of the data
+          if (_desc_vec[j].type == db_elem::TYPE_DECIMAL_15_2) {
+            // here, we use the group_serializer()
+            vector<db_elem> elems;
 
-#ifdef EXTRA_SANITY_CHECKS
-          // check that every vector group we pull out has the same size
-          if (vsize == -1) {
-            vsize = tokens.size();
-          } else {
-            SANITY((size_t)vsize == tokens.size());
-          }
-#endif
-
-          bool needUnhex = (_desc_vec[j].type == db_elem::TYPE_STRING);
-
-          vector<db_elem> elems;
-          elems.reserve(tokens.size());
-          for (auto t : tokens) {
-            if (needUnhex) {
-              elems.push_back(CreateFromString(from_hex(t), db_elem::TYPE_STRING));
-            } else {
-              elems.push_back(CreateFromString(t, db_elem::TYPE_INT));
+            SANITY((col.data.size() % sizeof(uint64_t)) == 0);
+            const uint8_t* p = (const uint8_t *) col.data.data();
+            const uint8_t* end = p + col.data.size();
+            elems.reserve((col.data.size() / sizeof(uint64_t)));
+            while (p < end) {
+              uint64_t v;
+              deserializer<uint64_t>::read(p, v);
+              elems.push_back(db_elem((int64_t)v));
             }
+            SANITY(p == end);
+            tuple.columns.push_back(db_elem(elems));
+
+          } else {
+            vector<string> tokens;
+            tokenize(col.data, ",", tokens); // this is always safe, because ',' is
+                                             // not ever going to be part of the data
+#ifdef EXTRA_SANITY_CHECKS
+            // check that every vector group we pull out has the same size
+            if (vsize == -1) {
+              vsize = tokens.size();
+            } else {
+              SANITY((size_t)vsize == tokens.size());
+            }
+#endif
+            bool needUnhex = (_desc_vec[j].type == db_elem::TYPE_STRING);
+            vector<db_elem> elems;
+            elems.reserve(tokens.size());
+            for (auto t : tokens) {
+              if (needUnhex) {
+                elems.push_back(CreateFromString(from_hex(t), db_elem::TYPE_STRING));
+              } else {
+                elems.push_back(CreateFromString(t, db_elem::TYPE_INT));
+              }
+            }
+            tuple.columns.push_back(db_elem(elems));
           }
-          tuple.columns.push_back(db_elem(elems));
         } else {
           tuple.columns.push_back(
               CreateFromString(col.data, db_elem::TypeFromPGOid(col.type)));

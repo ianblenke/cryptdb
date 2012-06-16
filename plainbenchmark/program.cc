@@ -344,7 +344,7 @@ int main(int argc, char **argv) {
     return 1;
   }
   int q = atoi(argv[1]);
-  PGConnect pg(DB_HOSTNAME, DB_USERNAME, DB_PASSWORD, DB_DATABASE, DB_PORT);
+  PGConnect pg(DB_HOSTNAME, DB_USERNAME, DB_PASSWORD, DB_DATABASE, DB_PORT, true);
   switch (q) {
     case 0: query_0(pg); break;
     case 1: query_1(pg); break;
