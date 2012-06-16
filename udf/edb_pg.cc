@@ -983,3 +983,149 @@ Datum fast_sum_i64_state_transition(PG_FUNCTION_ARGS) {
 }
 
 }
+
+// port of parallel hom agg functions from mysql
+
+struct basic_hom_agg {
+private:
+  struct worker_msg {
+    worker_msg(const uint8_t* p, size_t s) {
+      mpz_init2(value, s * 8);
+      MPZFromBytes(value, p, s);
+    }
+
+    ~worker_msg() {
+      mpz_clear(value);
+    }
+
+    mpz_t value; // has ownership
+  };
+
+  struct worker_state {
+    worker_state() { mpz_init_set_ui(agg, 1); }
+    ~worker_state() { mpz_clear(agg); }
+    mpz_t agg;
+    tbb::concurrent_bounded_queue<worker_msg*> q;
+    basic_hom_agg* global_state;
+  };
+
+public:
+  static const size_t NThreads = 8;
+
+  basic_hom_agg(const std::string& key) : _workerCnt(0) {
+    mpz_init(public_key);
+    MPZFromBytes(public_key, (const uint8_t *) key.data(), key.size());
+
+    _workers.resize(NThreads);
+    _worker_states.resize(NThreads);
+  }
+
+  ~basic_hom_agg() {
+    mpz_clear(public_key);
+  }
+
+  void init() {
+    for (size_t i = 0; i < NThreads; i++) {
+      _worker_states[i].global_state = this;
+      int ret = pthread_create(&_workers[i], NULL, worker_main, &_worker_states[i]);
+      if (ret) assert(false);
+    }
+  }
+
+  void offer(const std::string& v) {
+    worker_msg* m = new worker_msg((const uint8_t *) v.data(), v.size());
+    _worker_states[_workerCnt++ % NThreads].q.push(m);
+  }
+
+  void compute_final_answer_and_serialize(std::string& buffer) {
+    for (size_t i = 0; i < NThreads; i++) {
+      _worker_states[i].q.push(NULL);
+    }
+    for (size_t i = 0; i < NThreads; i++) {
+      pthread_join(_workers[i], NULL);
+    }
+
+    mpz_t agg;
+    mpz_init_set_ui(agg, 1);
+    for (size_t i = 0; i < NThreads; i++) {
+      mpz_mul(agg, agg, _worker_states[i].agg);
+      mpz_mod(agg, agg, public_key);
+    }
+
+    buffer.clear();
+    buffer.resize(256);
+    BytesFromMPZ((uint8_t*)&buffer[0], agg, 256);
+  }
+
+  static basic_hom_agg* extract_state(PG_FUNCTION_ARGS) {
+    basic_hom_agg* state = (basic_hom_agg*) PG_GETARG_INT64(0);
+    if (UNLIKELY(state == NULL)) {
+      state = new basic_hom_agg(getstring_fromba(PG_PASS_FARGS, 1));
+      state->init();
+    }
+    return state;
+  }
+
+private:
+
+  mpz_t public_key;
+
+  std::vector< pthread_t > _workers;
+  std::vector< worker_state > _worker_states;
+  size_t _workerCnt;
+
+  static void* worker_main(void* p) {
+    worker_state* ctx = (worker_state *) p;
+    worker_msg* m;
+    while (true) {
+      ctx->q.pop(m);
+      if (UNLIKELY(m == NULL)) break;
+      else {
+        mpz_mul(ctx->agg, ctx->agg, m->value);
+        mpz_mod(ctx->agg, ctx->agg, ctx->global_state->public_key);
+        delete m;
+      }
+    }
+    return NULL;
+  }
+};
+
+extern "C" {
+
+// create function hom_agg_state_transition
+//  (bigint, bytea, bytea)
+//    returns bigint language C as '/home/stephentu/cryptdb/obj/udf/edb_pg.so';
+// create function hom_agg_finalizer(bigint)
+//    returns bytea language C as '/home/stephentu/cryptdb/obj/udf/edb_pg.so';
+// create aggregate hom_agg
+//  (bytea, bytea)
+//  (
+//    sfunc=hom_agg_state_transition,
+//    stype=bigint,
+//    finalfunc=hom_agg_finalizer,
+//    initcond='0'
+//  );
+
+Datum hom_agg_state_transition(PG_FUNCTION_ARGS);
+PG_FUNCTION_INFO_V1(hom_agg_state_transition);
+
+Datum hom_agg_state_transition(PG_FUNCTION_ARGS) {
+  basic_hom_agg* state = basic_hom_agg::extract_state(PG_PASS_FARGS);
+  if (!PG_ARGISNULL(2)) {
+    state->offer(getstring_fromba(PG_PASS_FARGS, 2));
+  }
+  PG_RETURN_INT64(state);
+}
+
+Datum hom_agg_finalizer(PG_FUNCTION_ARGS);
+PG_FUNCTION_INFO_V1(hom_agg_finalizer);
+
+Datum hom_agg_finalizer(PG_FUNCTION_ARGS) {
+  basic_hom_agg* state = basic_hom_agg::extract_state(PG_PASS_FARGS);
+  std::string buf;
+  state->compute_final_answer_and_serialize(buf);
+  delete state;
+  PG_RETURN_BYTEA_P(copy_to_pg_return_buffer(buf));
+}
+
+}
