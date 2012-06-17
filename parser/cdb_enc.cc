@@ -518,8 +518,7 @@ public:
       case normal_vldb_orig: {
         long c_acctbal_int =
           roundToLong(fabs(resultFromStr<double>(tokens[customer::c_acctbal])) * 100.0);
-        ZZ z = to_ZZ(c_acctbal_int);
-        push_binary_string(enccols, cm.encrypt_Paillier(z));
+        push_binary_string(enccols, cm.cm->encrypt_u64_paillier(c_acctbal_int));
         break;
       }
 
@@ -1174,25 +1173,18 @@ protected:
 
       case opt_type::normal_vldb_orig:
         {
-          ZZ z1, z2, z3;
-
           // l_quantity agg
           long l_quantity_int = roundToLong(resultFromStr<double>(tokens[lineitem::l_quantity]) * 100.0);
-          z1 = to_ZZ(l_quantity_int);
 
           // l_extendedprice agg
           long l_extendedprice_int = roundToLong(resultFromStr<double>(tokens[lineitem::l_extendedprice]) * 100.0);
-          z2 = to_ZZ(l_extendedprice_int);
 
           // l_discount agg
           long l_discount_int = roundToLong(resultFromStr<double>(tokens[lineitem::l_discount]) * 100.0);
-          z3 = to_ZZ(l_discount_int);
 
-          string e1, e2, e3;
-
-          e1 = cm.encrypt_Paillier(z1);
-          e2 = cm.encrypt_Paillier(z2);
-          e3 = cm.encrypt_Paillier(z3);
+          string e1 = cm.cm->encrypt_u64_paillier(l_quantity_int);
+          string e2 = cm.cm->encrypt_u64_paillier(l_extendedprice_int);
+          string e3 = cm.cm->encrypt_u64_paillier(l_discount_int);
 
           push_binary_string(enccols, e1);
           push_binary_string(enccols, e2);
@@ -1586,6 +1578,8 @@ static map<string, table_encryptor *> EncryptorMap = {
   {"lineitem-row-packed-revenue", new lineitem_encryptor(lineitem_encryptor::row_packed_revenue)},
   {"lineitem-row-col-packed", new lineitem_encryptor(lineitem_encryptor::row_col_packed)},
 
+  {"lineitem-normal-vldb-orig", new lineitem_encryptor(lineitem_encryptor::normal_vldb_orig)},
+
   {"partsupp-none", new partsupp_encryptor(partsupp_encryptor::none)},
   {"partsupp-normal", new partsupp_encryptor(partsupp_encryptor::normal)},
   {"partsupp-projection", new partsupp_encryptor(partsupp_encryptor::projection)},
@@ -1602,6 +1596,8 @@ static map<string, table_encryptor *> EncryptorMap = {
 
   {"customer-none", new customer_encryptor(customer_encryptor::normal)},
   {"customer-row-packed-acctbal", new customer_encryptor(customer_encryptor::row_packed_acctbal)},
+
+  {"customer-normal-vldb-orig", new customer_encryptor(customer_encryptor::normal_vldb_orig)},
 };
 
 static inline string process_input(const string &s, crypto_manager_stub &cm, table_encryptor *tenc) {
@@ -1678,7 +1674,7 @@ int main(int argc, char **argv) {
     //cryptdb_logger::enable(log_name_to_group["crypto"]);
 
     CryptoManager cm("12345");
-    cerr << "paillier public key: " << marshallBinary(cm.getPKInfo()) << endl;
+    //cerr << "paillier public key: " << marshallBinary(cm.getPKInfo()) << endl;
 
     crypto_manager_stub stub(&cm, false);
     vector<string> lines;

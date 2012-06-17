@@ -57,6 +57,8 @@ CryptoManager::CryptoManager(const string &masterKeyArg)
     //setup Paillier encryption
     Paillier_fast = true;
 
+    _n_hom_enc_lookups = _n_hom_enc_hits = 0;
+
     if (Paillier_fast) {
         uint abits = Paillier_len_bits/8;   /* ~256 bits for a 2048-bit n^2 */
         do {
@@ -1450,6 +1452,25 @@ CryptoManager::encrypt_Paillier(const ZZ &val)
     ZZ r = RandomLen_ZZ(Paillier_len_bits/2) % Paillier_n;
     ZZ c = PowerMod(Paillier_g, val + Paillier_n*r, Paillier_n2);
     return StringFromZZ(c);
+}
+
+string
+CryptoManager::encrypt_u64_paillier(uint64_t val)
+{
+  _n_hom_enc_lookups++;
+  auto it = HOMEncTable.find(val);
+  if (it != HOMEncTable.end()) {
+    _n_hom_enc_hits++;
+    if ((_n_hom_enc_hits % (10000)) == 0) {
+      cerr << "hom hits so far: " << _n_hom_enc_hits << endl;
+    }
+    return it->second;
+  }
+
+  ZZ z = to_ZZ(val);
+  string r = encrypt_Paillier(z);
+  HOMEncTable[val] = r;
+  return r;
 }
 
 int

@@ -183,6 +183,9 @@ class CryptoManager {
     static const unsigned int Paillier_len_bits = Paillier_len_bytes * 8;
     std::string encrypt_Paillier(uint64_t val);
     std::string encrypt_Paillier(const NTL::ZZ& val);
+
+    std::string encrypt_u64_paillier(uint64_t val);
+
     int decrypt_Paillier(const std::string &ciphertext);
     void decrypt_Paillier(const std::string &ciphertext, NTL::ZZ& m);
 
@@ -226,6 +229,9 @@ class CryptoManager {
     //todo: one HOM enc should not be reused
     std::map<uint64_t, std::string > HOMEncTable;
     std::list<NTL::ZZ> HOMRandCache;
+
+    uint64_t _n_hom_enc_hits;
+    uint64_t _n_hom_enc_lookups;
 
     bool VERBOSE;
 
