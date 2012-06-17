@@ -214,7 +214,7 @@ remote_sql_op::next(exec_context& ctx, db_tuple_vec& tuples)
         //cerr << "col #: " << j << endl;
         //cerr << "  col.data: " << col.data << endl;
         //cerr << "  col.type: " << col.type << endl;
-        if (_desc_vec[j].is_vector) {
+        if (_desc_vec[j].is_vector()) {
 
           // TODO: this is broken in general, but we might
           // be able to get away with it for TPC-H. there are a
@@ -224,13 +224,7 @@ remote_sql_op::next(exec_context& ctx, db_tuple_vec& tuples)
           // if the underlying type is string (binary), then we encode
           // it in hex. otherwise, if the underlying type is numeric, then
           // we use the ascii repr of the number.
-          //
-          // gross? very much so! we *really* should be using the binary
-          // interface to postgres, but its too much work to change it now
-          // (unless this becomes a potential source of inefficiency)
 
-          // array_to_string(...) always produces a string (from postgres's point
-          // of view)
           SANITY(db_elem::TypeFromPGOid(col.type) == db_elem::TYPE_STRING);
 
           // whitelist the cases we are ready to handle (add more if needed)
@@ -243,22 +237,69 @@ remote_sql_op::next(exec_context& ctx, db_tuple_vec& tuples)
           SANITY(_desc_vec[j].onion_type == oDET);
 
           if (_desc_vec[j].type == db_elem::TYPE_DECIMAL_15_2) {
-            // here, we use the group_serializer()
-            vector<db_elem> elems;
+            // for now, this is the only type we care about the actual
+            // *value* of the descriptor's vtype
 
-            SANITY((col.data.size() % sizeof(uint64_t)) == 0);
+            vector<db_elem> elems;
             const uint8_t* p = (const uint8_t *) col.data.data();
             const uint8_t* end = p + col.data.size();
-            elems.reserve((col.data.size() / sizeof(uint64_t)));
-            while (p < end) {
-              uint64_t v;
-              deserializer<uint64_t>::read(p, v);
-              elems.push_back(db_elem((int64_t)v));
+
+            switch (_desc_vec[j].vtype) {
+              case db_column_desc::vtype_normal:
+                // standard fixed-length slotted arrangement
+                SANITY((col.data.size() % sizeof(uint64_t)) == 0);
+                elems.reserve((col.data.size() / sizeof(uint64_t)));
+                while (p < end) {
+                  uint64_t v;
+                  deserializer<uint64_t>::read(p, v);
+                  elems.push_back(db_elem((int64_t)v));
+                }
+                break;
+
+              case db_column_desc::vtype_delta_compressed: {
+                // delta compressed
+                vector<uint64_t> vs;
+                varint_serializer::delta_decode_uvint64_vector(col.data, vs);
+                p = end; // processed all input
+                elems.reserve(vs.size());
+                for (auto v : vs) elems.push_back(db_elem((int64_t)v));
+                break;
+              }
+
+              case db_column_desc::vtype_dict_compressed: {
+                // dictionary compressions
+                SANITY(ctx.dict_tables != NULL);
+                SANITY(_desc_vec[j].dictionary_idx >= 0);
+                SANITY(size_t(_desc_vec[j].dictionary_idx) < ctx.dict_tables->size());
+
+                auto &dict = ctx.dict_tables->at(_desc_vec[j].dictionary_idx);
+
+                // uvint32 num_dict_hits
+                uint32_t n_hits;
+                varint_serializer::read_uvint32(p, n_hits);
+                elems.reserve(n_hits);
+
+                for (size_t i = 0; i < n_hits; i++) {
+                  uint32_t x;
+                  varint_serializer::read_uvint32(p, x);
+                  elems.push_back(db_elem((int64_t)dict[x]));
+                }
+
+                vector<uint64_t> vs;
+                varint_serializer::delta_decode_uvint64_vector(p, end, vs);
+                elems.reserve(elems.size() + vs.size());
+                for (auto v : vs) elems.push_back(db_elem((int64_t)v));
+
+                break;
+              }
+              default: assert(false);
             }
+
             SANITY(p == end);
             tuple.columns.push_back(db_elem(elems));
-
           } else {
+            SANITY(_desc_vec[j].vtype == db_column_desc::vtype_normal);
+
             vector<string> tokens;
             tokenize(col.data, ",", tokens); // this is always safe, because ',' is
                                              // not ever going to be part of the data

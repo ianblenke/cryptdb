@@ -1,5 +1,5 @@
 OBJDIRS += generated
-GENERATEDPROGS := program
+GENERATEDPROGS := program program-netopt
 GENERATEDPROGOBJS := $(patsubst %,$(OBJDIR)/generated/%,$(GENERATEDPROGS))
 all: $(GENERATEDPROGOBJS)
 $(GENERATEDPROGOBJS): %: %.o $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbparser.so  $(OBJDIR)/libedbutil.so $(OBJDIR)/libexecution.so

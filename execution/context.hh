@@ -32,6 +32,9 @@ private:
   std::map< std::pair< size_t, size_t >, Paillier_priv* > _pp_cache;
 };
 
+typedef std::vector< std::vector< uint64_t > >
+        dict_compress_tables;
+
 class exec_context {
 public:
   exec_context(
@@ -39,6 +42,8 @@ public:
       ConnectNew* connection,
       crypto_manager_stub* crypto,
       paillier_cache* pp_cache,
+
+      dict_compress_tables* dict_tables = NULL,
 
       query_cache* cache = NULL,
 
@@ -50,8 +55,8 @@ public:
 
       db_tuple* args = NULL
 
-  ) : connection(connection), crypto(crypto), pp_cache(pp_cache), cache(cache),
-      tuple(tuple), idx(idx), subqueries(subqueries), args(args) {}
+  ) : connection(connection), crypto(crypto), pp_cache(pp_cache), dict_tables(dict_tables),
+      cache(cache), tuple(tuple), idx(idx), subqueries(subqueries), args(args) {}
 
   // if previous tuple bound, the information is discarded
   inline exec_context bind(
@@ -63,6 +68,7 @@ public:
         connection,
         crypto,
         pp_cache,
+        dict_tables,
         cache,
         tuple,
         -1,
@@ -78,6 +84,7 @@ public:
         connection,
         crypto,
         pp_cache,
+        dict_tables,
         cache,
         tuple,
         ssize_t(idx),
@@ -91,6 +98,7 @@ public:
         connection,
         crypto,
         pp_cache,
+        dict_tables,
         cache,
         tuple,
         ssize_t(idx),
@@ -103,6 +111,7 @@ public:
   ConnectNew* const connection;
   crypto_manager_stub* const crypto;
   paillier_cache* const pp_cache;
+  dict_compress_tables* const dict_tables;
   query_cache* const cache;
 
   db_tuple* const tuple;

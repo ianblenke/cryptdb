@@ -1,12 +1,18 @@
-#include <udf/edb_common.hh>
+#include <algorithm>
 #include <unordered_map>
-#include <util/serializer.hh>
-
 #include <sys/time.h>
+
+#include <udf/edb_common.hh>
+#include <util/serializer.hh>
 
 extern "C" {
 #include "postgres.h"
 #include "fmgr.h"
+#include "utils/array.h"
+
+// utils/lsyscache.h
+extern void get_typlenbyvalalign(Oid typid, int16 *typlen, bool *typbyval, char *typalign);
+
 }
 
 #define DBGOUT(x)
@@ -1128,11 +1134,11 @@ Datum hom_agg_finalizer(PG_FUNCTION_ARGS) {
   PG_RETURN_BYTEA_P(copy_to_pg_return_buffer(buf));
 }
 
-// efficiently implements group_concat(<i64>)
+// simplest serializer: encodes each uint64 in a fixed-width 8-byte slot
 class u64_agg_serializer {
 public:
   inline void offer(uint64_t v) { serializer<uint64_t>::write(_buf, v); }
-  inline std::string finalize() { return _buf.str(); }
+  std::string finalize() { return _buf.str(); }
   static u64_agg_serializer* extract_state(PG_FUNCTION_ARGS) {
     u64_agg_serializer* state = (u64_agg_serializer*) PG_GETARG_INT64(0);
     if (UNLIKELY(state == NULL)) state = new u64_agg_serializer;
@@ -1142,7 +1148,146 @@ private:
   std::ostringstream _buf;
 };
 
+// more complex serializer: sorts the integers and delta compresses
+// them
+class u64_varint_agg_serializer {
+public:
+  inline void offer(uint64_t v) { _vs.push_back(v); }
+  inline std::string finalize() {
+    std::sort(_vs.begin(), _vs.end());
+    std::ostringstream buf;
+    varint_serializer::delta_encode_uvint64_vector(buf, _vs);
+    return buf.str();
+  }
+  static u64_varint_agg_serializer* extract_state(PG_FUNCTION_ARGS) {
+    u64_varint_agg_serializer* state = (u64_varint_agg_serializer*) PG_GETARG_INT64(0);
+    if (UNLIKELY(state == NULL)) state = new u64_varint_agg_serializer;
+    return state;
+  }
+private:
+  std::vector<uint64_t> _vs;
+};
+
+// dictionary encoder: caller supplies a dictionary of known numbers.
+// encoding is as follows:
+// [ uvint32 num_dict_hits | [fixed width uvint32 array of hits] | [delta compressed uvint64 array with remaining elems]]
+
+typedef std::unordered_map<uint64_t, uint32_t> dict_lookup_table;
+
+// TODO: per-connection lookup manager, which is why we don't bother with
+// making it thread-safe (so we don't inherit the overheads of locking)
+class lookup_table_manager {
+public:
+  const dict_lookup_table* get_table(uint64_t table_id) const {
+    auto it = _tables.find(table_id);
+    if (it == _tables.end()) return NULL;
+    return it->second;
+  }
+
+  // takes ownership
+  void insert_table(uint64_t table_id, dict_lookup_table* table) {
+    // TODO: make sure we aren't overriding anything
+    _tables[table_id] = table;
+  }
+
+  ~lookup_table_manager() {
+    for (auto kv : _tables) delete kv.second;
+  }
+
+private:
+  std::unordered_map<uint64_t, dict_lookup_table*> _tables;
+} LookupTableMgr;
+
+class u64_dict_agg_serializer {
+public:
+  u64_dict_agg_serializer(const std::unordered_map<uint64_t, uint32_t>* lookup)
+    : _lookup(lookup) {
+    assert(lookup != NULL);
+  }
+
+  inline void offer(uint64_t v) {
+    auto it = _lookup->find(v);
+    if (it != _lookup->end()) {
+      _hits.push_back(it->second);
+    } else {
+      _misses.push_back(v);
+    }
+  }
+
+  std::string finalize() {
+    std::ostringstream buf;
+    varint_serializer::write_uvint32(buf, _hits.size());
+    for (auto h : _hits) varint_serializer::write_uvint32(buf, h);
+    varint_serializer::delta_encode_uvint64_vector(buf, _misses);
+    return buf.str();
+  }
+
+  static u64_dict_agg_serializer* extract_state(PG_FUNCTION_ARGS) {
+    u64_dict_agg_serializer* state = (u64_dict_agg_serializer*) PG_GETARG_INT64(0);
+    if (UNLIKELY(state == NULL)) {
+      state = new u64_dict_agg_serializer(LookupTableMgr.get_table(PG_GETARG_INT64(2)));
+    }
+    return state;
+  }
+
+private:
+  // lookup element -> idx in dictionary
+  const std::unordered_map<uint64_t, uint32_t>* const _lookup;
+  std::vector<uint32_t> _hits;
+  std::vector<uint64_t> _misses;
+};
+
 extern "C" {
+
+Datum insert_dict_table(PG_FUNCTION_ARGS);
+PG_FUNCTION_INFO_V1(insert_dict_table);
+
+// create function insert_dict_table
+//  (bigint, bigint[])
+//    returns bool language C as '/home/stephentu/cryptdb/obj/udf/edb_pg.so';
+Datum insert_dict_table(PG_FUNCTION_ARGS) {
+  uint64_t id = PG_GETARG_INT64(0);
+
+  // extract bigint array
+  // most of these details come from:
+  // http://archives.postgresql.org/pgsql-novice/2008-02/msg00129.php
+  //
+  // there's really no proper documentation on how to extract an array
+  // in a C UDF, other than reading source code.
+
+  ArrayType* input;
+  Datum* i_data;
+  bool* nulls;
+  Oid i_eltype;
+  int16_t i_typlen;
+  bool i_typbyval;
+  char i_typalign;
+  int i, n;
+
+  input = PG_GETARG_ARRAYTYPE_P(1);
+  i_eltype = ARR_ELEMTYPE(input);
+  get_typlenbyvalalign(i_eltype, &i_typlen, &i_typbyval, &i_typalign);
+
+  deconstruct_array(
+      input, i_eltype, i_typlen, i_typbyval, i_typalign,
+      &i_data, &nulls, &n);
+
+  std::vector<uint64_t> vs;
+  vs.reserve(n);
+
+  for (i = 0; i < n; i++) vs.push_back(DatumGetInt64(i_data[i]));
+
+  pfree(i_data);
+  pfree(nulls);
+
+  dict_lookup_table* tbl = new dict_lookup_table;
+  for (uint32_t idx = 0; idx < vs.size(); idx++) {
+    tbl->operator[](vs[idx]) = idx;
+  }
+
+  LookupTableMgr.insert_table(id, tbl);
+  PG_RETURN_BOOL(true);
+}
 
 // create function group_serializer_state_transition
 //  (bigint, bigint)
@@ -1162,7 +1307,8 @@ Datum group_serializer_state_transition(PG_FUNCTION_ARGS);
 PG_FUNCTION_INFO_V1(group_serializer_state_transition);
 
 Datum group_serializer_state_transition(PG_FUNCTION_ARGS) {
-  u64_agg_serializer* state = u64_agg_serializer::extract_state(PG_PASS_FARGS);
+  u64_agg_serializer* state =
+    u64_agg_serializer::extract_state(PG_PASS_FARGS);
   state->offer((uint64_t)PG_GETARG_INT64(1));
   PG_RETURN_INT64(state);
 }
@@ -1171,7 +1317,43 @@ Datum group_serializer_finalizer(PG_FUNCTION_ARGS);
 PG_FUNCTION_INFO_V1(group_serializer_finalizer);
 
 Datum group_serializer_finalizer(PG_FUNCTION_ARGS) {
-  u64_agg_serializer* state = u64_agg_serializer::extract_state(PG_PASS_FARGS);
+  u64_agg_serializer* state =
+    u64_agg_serializer::extract_state(PG_PASS_FARGS);
+  std::string buf = state->finalize();
+  delete state;
+  PG_RETURN_BYTEA_P(copy_to_pg_return_buffer(buf));
+}
+
+// create function group_serializer_dict_comp_state_transition
+//  (bigint, bigint, bigint)
+//    returns bigint language C as '/home/stephentu/cryptdb/obj/udf/edb_pg.so';
+// create function group_serializer_dict_comp_finalizer(bigint)
+//    returns bytea language C as '/home/stephentu/cryptdb/obj/udf/edb_pg.so';
+// create aggregate group_serializer
+//  (bigint, bigint)
+//  (
+//    sfunc=group_serializer_dict_comp_state_transition,
+//    stype=bigint,
+//    finalfunc=group_serializer_dict_comp_finalizer,
+//    initcond='0'
+//  );
+
+Datum group_serializer_dict_comp_state_transition(PG_FUNCTION_ARGS);
+PG_FUNCTION_INFO_V1(group_serializer_dict_comp_state_transition);
+
+Datum group_serializer_dict_comp_state_transition(PG_FUNCTION_ARGS) {
+  u64_dict_agg_serializer* state =
+    u64_dict_agg_serializer::extract_state(PG_PASS_FARGS);
+  state->offer((uint64_t)PG_GETARG_INT64(1));
+  PG_RETURN_INT64(state);
+}
+
+Datum group_serializer_dict_comp_finalizer(PG_FUNCTION_ARGS);
+PG_FUNCTION_INFO_V1(group_serializer_dict_comp_finalizer);
+
+Datum group_serializer_dict_comp_finalizer(PG_FUNCTION_ARGS) {
+  u64_dict_agg_serializer* state =
+    u64_dict_agg_serializer::extract_state(PG_PASS_FARGS);
   std::string buf = state->finalize();
   delete state;
   PG_RETURN_BYTEA_P(copy_to_pg_return_buffer(buf));

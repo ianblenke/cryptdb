@@ -435,8 +435,18 @@ std::ostream& operator<<(std::ostream& o, const db_tuple& tuple);
 class db_column_desc {
 public:
 
+  // necessary evil because we want vectors of db_column_desc
   db_column_desc() {}
 
+  enum vector_type {
+    vtype_none,
+    vtype_normal,
+    vtype_delta_compressed,
+    vtype_dict_compressed,
+  };
+
+  // constructor for backwards compatibility
+  // if is_vector is true, then uses vtype_normal
   db_column_desc(
     db_elem::type type,
     size_t size,
@@ -446,18 +456,50 @@ public:
     bool is_vector)
 
     : type(type), size(size), onion_type(onion_type), level(level),
-      pos(pos), is_vector(is_vector) {}
+      pos(pos), vtype(is_vector ? vtype_normal : vtype_none),
+      dictionary_idx(-1) {
+
+  }
+
+  db_column_desc(
+    db_elem::type type,
+    size_t size,
+    onion onion_type,
+    SECLEVEL level,
+    size_t pos,
+    vector_type vtype = vtype_none,
+    ssize_t dictionary_idx = -1 /* only meaningful if vtype == vtype_dict_compressed */)
+
+    : type(type), size(size), onion_type(onion_type), level(level),
+      pos(pos), vtype(vtype), dictionary_idx(dictionary_idx) {
+
+#ifdef EXTRA_SANITY_CHECKS
+    if (vtype != vtype_dict_compressed) {
+      SANITY(dictionary_idx == -1);
+    } else {
+      SANITY(dictionary_idx >= 0);
+    }
+    // TODO: other assertions regarding onions etc
+#endif
+
+  }
 
   // creates a descriptor after decryption
   db_column_desc decrypt_desc() const {
-    return db_column_desc(type, size, oNONE, SECLEVEL::PLAIN, pos, is_vector);
+    return db_column_desc(
+        type, size, oNONE, SECLEVEL::PLAIN, pos,
+        is_vector() ? vtype_normal : vtype_none, -1);
   }
 
   db_column_desc vectorize() const {
-    return db_column_desc(type, size, onion_type, level, pos, true);
+    return db_column_desc(
+        type, size, onion_type, level, pos,
+        vtype_normal, -1);
   }
 
-  // TODO: these really should all be const
+  inline bool is_vector() const { return vtype != vtype_none; }
+
+  // TODO: hide mutability behind accessors
 
   db_elem::type type; // the original type
   size_t size; // the original type size (in bytes)
@@ -467,5 +509,6 @@ public:
 
   size_t pos; // the column position (used for key generation)
 
-  bool is_vector;
+  vector_type vtype;
+  ssize_t dictionary_idx;
 };
