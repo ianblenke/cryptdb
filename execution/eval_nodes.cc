@@ -173,3 +173,71 @@ function_call_node::eval_hom_get_pos(exec_context& ctx, db_tuple& args)
   //dprintf("pos=(%s), res=(%s)\n", TO_C(pos), TO_C(res));
   return res;
 }
+
+db_elem
+in_node::eval(exec_context& ctx)
+{
+  db_elem needle = first_child()->eval(ctx);
+
+  vector<db_elem> haystack;
+  haystack.reserve(_children.size() - 1);
+  for (auto it = _children.begin() + 1; it != _children.end(); ++it) {
+    db_elem test = (*it)->eval(ctx);
+    haystack.push_back(test);
+  }
+
+  if (needle.is_vector()) {
+    vector<db_elem> elems;
+    elems.reserve(needle.size());
+    for (auto &e : needle.elements()) {
+      bool found = false;
+      for (auto &h : haystack) {
+        if (e == h) {
+          found = true;
+          break;
+        }
+      }
+      elems.push_back(found);
+    }
+    return db_elem(elems);
+  } else {
+    for (auto &h : haystack) if (needle == h) return db_elem(true);
+  }
+
+  return db_elem(false);
+}
+
+db_elem
+substring_node::eval(exec_context& ctx)
+{
+  db_elem e = first_child()->eval(ctx);
+  if (e.is_vector()) {
+    vector< db_elem > v;
+    for (auto &e : e.elements()) {
+      const string& s = e.unsafe_cast_string();
+      v.push_back(db_elem(s.substr(_from_arg - 1, _for_arg)));
+    }
+    return db_elem(v);
+  } else {
+    const string& s = e.unsafe_cast_string();
+    return db_elem(s.substr(_from_arg - 1, _for_arg));
+  }
+}
+
+db_elem
+count_star_node::eval(exec_context& ctx)
+{
+  SANITY(ctx.tuple != NULL);
+  SANITY(ctx.idx == -1);
+
+  vector<size_t> vcs = ctx.tuple->get_vector_columns();
+
+  // TODO: this is not correct. consider:
+  //   select foo, count(*) ...
+  // we are not necessarily guaranteed there is some group vector
+  // we really need to keep some additional group metadata
+  SANITY(!vcs.empty());
+
+  return db_elem((int64_t)ctx.tuple->columns[vcs.front()].size());
+
+}

@@ -132,6 +132,18 @@ public:
   }
 };
 
+class substring_node : public expr_node {
+public:
+  substring_node(expr_node* child, size_t from_arg, size_t for_arg)
+    : expr_node({child}), _from_arg(from_arg), _for_arg(for_arg) {
+    assert(from_arg > 0); // SQL SUBSTRING is 1-indexed
+  }
+  virtual db_elem eval(exec_context& ctx);
+private:
+  size_t _from_arg;
+  size_t _for_arg;
+};
+
 class sum_node : public expr_node {
 public:
   sum_node(expr_node* child, bool distinct)
@@ -141,6 +153,12 @@ public:
   }
 private:
   bool _distinct;
+};
+
+class count_star_node : public expr_node {
+public:
+  count_star_node() : expr_node(std::vector<expr_node*>()) {}
+  virtual db_elem eval(exec_context& ctx);
 };
 
 class avg_node : public expr_node {
