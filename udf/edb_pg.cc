@@ -1008,18 +1008,26 @@ private:
   };
 
   struct worker_state {
-    worker_state() { mpz_init_set_ui(agg, 1); }
+    worker_state() : global_state(NULL) {
+      init_and_set_mpz_for_paillier(agg);
+    }
     ~worker_state() { mpz_clear(agg); }
     mpz_t agg;
     tbb::concurrent_bounded_queue<worker_msg*> q;
-    basic_hom_agg* global_state;
+    basic_hom_agg* global_state; // no ownership
   };
+
+  // inits to 1 w/ adequate space reserved
+  static void init_and_set_mpz_for_paillier(mpz_t rop) {
+    mpz_init2(rop, 256 * 8);
+    mpz_set_ui(rop, 1);
+  }
 
 public:
   static const size_t NThreads = 8;
 
   basic_hom_agg(const std::string& key) : _workerCnt(0) {
-    mpz_init(public_key);
+    mpz_init2(public_key, key.size() * 8);
     MPZFromBytes(public_key, (const uint8_t *) key.data(), key.size());
 
     _workers.resize(NThreads);
@@ -1052,7 +1060,7 @@ public:
     }
 
     mpz_t agg;
-    mpz_init_set_ui(agg, 1);
+    init_and_set_mpz_for_paillier(agg);
     for (size_t i = 0; i < NThreads; i++) {
       mpz_mul(agg, agg, _worker_states[i].agg);
       mpz_mod(agg, agg, public_key);
