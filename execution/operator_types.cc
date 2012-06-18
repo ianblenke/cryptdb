@@ -746,6 +746,13 @@ static void* do_decrypt_db_elem_op_wrapper(void* p) {
 static const size_t ParThreshold = 25;
 static const size_t NThreads = 8;
 
+static bool column_desc_qualifies_for_parallel_decryption(const db_column_desc& d)
+{
+  if (d.onion_type == oAGG ||
+      d.onion_type == oAGG_ORIGINAL) return false;
+  return true;
+}
+
 // modifies tuple in place
 static void
 do_decrypt_db_tuple_op(
@@ -769,6 +776,8 @@ do_decrypt_db_tuple_op(
       elems.reserve(e.size());
 
       if (e.size() >= ParThreshold) {
+
+        SANITY(column_desc_qualifies_for_parallel_decryption(d));
 
         // TODO: bootstrap these vector parallel decrypts with
         // the given decrypt cache. we don't just pass it along
@@ -872,6 +881,17 @@ static void* do_decrypt_db_tuple_op_wrapper(void* p) {
   return NULL;
 }
 
+static bool
+desc_vec_qualifies_for_parallel_decryption(const local_decrypt_op::desc_vec& dv)
+{
+  // NTL isn't thread-safe unfortunately. So we can't do
+  // hom decryptions in parallel, unfortunately.
+  for (auto &d : dv) {
+    if (!column_desc_qualifies_for_parallel_decryption(d)) return false;
+  }
+  return true;
+}
+
 void
 local_decrypt_op::next(exec_context& ctx, db_tuple_vec& tuples)
 {
@@ -900,9 +920,17 @@ local_decrypt_op::next(exec_context& ctx, db_tuple_vec& tuples)
   }
 #endif
 
-  timer t;
-  if (tuples.size() >= ParThreshold) {
+  bool enough_tuples = tuples.size() >= ParThreshold;
+  bool do_par = enough_tuples &&
+                desc_vec_qualifies_for_parallel_decryption(desc);
 
+  if (enough_tuples && !do_par) {
+    dprintf("SUB-OPTIMALITY: could not do parallel decryption for %s tuples\n",
+            TO_C(tuples.size()));
+  }
+
+  timer t;
+  if (do_par) {
     dprintf("using parallel impl to decrypt %s tuples\n", TO_C(tuples.size()));
 
     // take pointers of all the tuples (modify in place)
@@ -934,6 +962,7 @@ local_decrypt_op::next(exec_context& ctx, db_tuple_vec& tuples)
     }
 
   } else {
+    // TODO: consider using a decryption cache here?
     for (size_t i = 0; i < tuples.size(); i++) {
       db_tuple& tuple = tuples[i];
       do_decrypt_db_tuple_op(ctx, tuple, desc, _pos, vector<decrypt_cache*>());
