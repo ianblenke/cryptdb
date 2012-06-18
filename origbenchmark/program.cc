@@ -37,7 +37,7 @@ virtual param_map get_param_map(exec_context& ctx) {
     auto pk = pp.pubkey();
     m[2] = (RowColPackCipherSize == 2048) ? db_elem(ctx.crypto->cm->getPKInfo()) : db_elem(StringFromZZ(pk[0] * pk[0]));
   }
-  m[3] = db_elem((int64_t)encrypt_date_ope(ctx.crypto, 1023009 /*1998-1-1*/, 10, false));
+  m[3] = db_elem((int64_t)encrypt_date_ope(ctx.crypto, 1023009 /*1998-1-1*/, 10, true));
   return m;
 }
 };
@@ -63,7 +63,7 @@ virtual param_map get_param_map(exec_context& ctx) {
   param_map m;
   m[0] = db_elem(encrypt_string_det(ctx.crypto, "FURNITURE", 6, false));
   m[1] = db_elem((int64_t)encrypt_date_ope(ctx.crypto, 1021548 /*1995-3-12*/, 4, false));
-  m[2] = db_elem((int64_t)encrypt_date_ope(ctx.crypto, 1021548 /*1995-3-12*/, 10, false));
+  m[2] = db_elem((int64_t)encrypt_date_ope(ctx.crypto, 1021548 /*1995-3-12*/, 10, true));
   return m;
 }
 };
@@ -90,8 +90,8 @@ class param_generator_id5 : public sql_param_generator {
 public:
 virtual param_map get_param_map(exec_context& ctx) {
   param_map m;
-  m[0] = db_elem((int64_t)encrypt_date_ope(ctx.crypto, 1020449 /*1993-1-1*/, 10, false));
-  m[1] = db_elem((int64_t)encrypt_date_ope(ctx.crypto, 1020961 /*1994-1-1*/, 10, false));
+  m[0] = db_elem((int64_t)encrypt_date_ope(ctx.crypto, 1020449 /*1993-1-1*/, 10, true));
+  m[1] = db_elem((int64_t)encrypt_date_ope(ctx.crypto, 1020961 /*1994-1-1*/, 10, true));
   m[2] = db_elem(str_reverse(str_resize(encrypt_decimal_15_2_ope(ctx.crypto, 4 /*0.04*/, 6, false), 16)));
   m[3] = db_elem(str_reverse(str_resize(encrypt_decimal_15_2_ope(ctx.crypto, 6 /*0.060000000000000005*/, 6, false), 16)));
   m[4] = db_elem(str_reverse(str_resize(encrypt_decimal_15_2_ope(ctx.crypto, 2500 /*25*/, 4, false), 16)));
@@ -106,8 +106,8 @@ virtual param_map get_param_map(exec_context& ctx) {
   m[1] = db_elem(encrypt_string_det(ctx.crypto, "ARGENTINA", 1, false));
   m[2] = db_elem(encrypt_string_det(ctx.crypto, "ARGENTINA", 1, false));
   m[3] = db_elem(encrypt_string_det(ctx.crypto, "SAUDI ARABIA", 1, false));
-  m[4] = db_elem((int64_t)encrypt_date_ope(ctx.crypto, 1021473 /*1995-1-1*/, 10, false));
-  m[5] = db_elem((int64_t)encrypt_date_ope(ctx.crypto, 1022367 /*1996-12-31*/, 10, false));
+  m[4] = db_elem((int64_t)encrypt_date_ope(ctx.crypto, 1021473 /*1995-1-1*/, 10, true));
+  m[5] = db_elem((int64_t)encrypt_date_ope(ctx.crypto, 1022367 /*1996-12-31*/, 10, true));
   return m;
 }
 };
@@ -171,8 +171,8 @@ virtual param_map get_param_map(exec_context& ctx) {
   m[3] = db_elem(encrypt_string_det(ctx.crypto, "2-HIGH", 5, false));
   m[4] = db_elem(encrypt_string_det(ctx.crypto, "AIR", 14, false));
   m[5] = db_elem(encrypt_string_det(ctx.crypto, "FOB", 14, false));
-  m[6] = db_elem((int64_t)encrypt_date_ope(ctx.crypto, 1020449 /*1993-1-1*/, 12, false));
-  m[7] = db_elem((int64_t)encrypt_date_ope(ctx.crypto, 1020961 /*1994-1-1*/, 12, false));
+  m[6] = db_elem((int64_t)encrypt_date_ope(ctx.crypto, 1020449 /*1993-1-1*/, 12, true));
+  m[7] = db_elem((int64_t)encrypt_date_ope(ctx.crypto, 1020961 /*1994-1-1*/, 12, true));
   return m;
 }
 };
@@ -180,8 +180,8 @@ class param_generator_id13 : public sql_param_generator {
 public:
 virtual param_map get_param_map(exec_context& ctx) {
   param_map m;
-  m[0] = db_elem((int64_t)encrypt_date_ope(ctx.crypto, 1022177 /*1996-7-1*/, 10, false));
-  m[1] = db_elem((int64_t)encrypt_date_ope(ctx.crypto, 1022209 /*1996-8-1*/, 10, false));
+  m[0] = db_elem((int64_t)encrypt_date_ope(ctx.crypto, 1022177 /*1996-7-1*/, 10, true));
+  m[1] = db_elem((int64_t)encrypt_date_ope(ctx.crypto, 1022209 /*1996-8-1*/, 10, true));
   return m;
 }
 };
