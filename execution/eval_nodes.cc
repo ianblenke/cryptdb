@@ -213,7 +213,8 @@ substring_node::eval(exec_context& ctx)
   db_elem e = first_child()->eval(ctx);
   if (e.is_vector()) {
     vector< db_elem > v;
-    for (auto &e : e.elements()) {
+    vector< db_elem >& elements = e.elements();
+    for (auto &e : elements) {
       const string& s = e.unsafe_cast_string();
       v.push_back(db_elem(s.substr(_from_arg - 1, _for_arg)));
     }
