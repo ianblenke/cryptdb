@@ -28,10 +28,13 @@ FIELDTYPE(__temp_m)
 
 #undef FIELDTYPE
 
+// oAGG_ORIGINAL is a hack for now, so we can distingush between
+// new style agg and old-style agg
 #define ONION(m) \
     m(oDET) \
     m(oOPE) \
     m(oAGG) \
+    m(oAGG_ORIGINAL) \
     m(oNONE) \
     m(oSWP) \
     m(oINVALID)

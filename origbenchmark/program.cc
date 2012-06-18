@@ -615,7 +615,7 @@ int main(int argc, char **argv) {
   PGConnect pg(DB_HOSTNAME, DB_USERNAME, DB_PASSWORD, DB_DATABASE, DB_PORT);
   paillier_cache pp_cache;
   query_cache cache;
-  exec_context ctx(&pg, &cm_stub, &pp_cache, &cache);
+  exec_context ctx(&pg, &cm_stub, &pp_cache, NULL, &cache);
   switch (q) {
     case 0: query_0(ctx); break;
     case 1: query_1(ctx); break;
