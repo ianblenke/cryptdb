@@ -134,11 +134,19 @@ function_call_node::eval_hom_get_pos(exec_context& ctx, db_tuple& args)
   if (args.columns.size() != 2) {
     throw runtime_error("hom_get_pos() requires 2 arguments");
   }
-  if (args.columns[0].get_type() != db_elem::TYPE_STRING) {
-    throw runtime_error("hom_get_pos() requires arg0 as string");
+  if (args.columns[0].get_type() != db_elem::TYPE_STRING &&
+      args.columns[0].get_type() != db_elem::TYPE_DOUBLE) {
+    throw runtime_error("hom_get_pos() requires arg0 as string or double");
   }
   if (args.columns[1].get_type() != db_elem::TYPE_INT) {
     throw runtime_error("hom_get_pos() requires arg1 as int");
+  }
+
+  // check for old-style hom agg
+  if (args.columns[0].get_type() == db_elem::TYPE_DOUBLE) {
+    int64_t pos = args.columns[1].unsafe_cast_i64();
+    SANITY(pos == 0);
+    return args.columns[0];
   }
 
   const string& data = args.columns[0].unsafe_cast_string();

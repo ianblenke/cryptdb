@@ -488,6 +488,18 @@ do_decrypt_hom_agg(exec_context& ctx, const string& data)
   return db_elem(buf.str());
 }
 
+static db_elem
+do_decrypt_hom_agg_original(exec_context& ctx, const string& data)
+{
+  NTL::ZZ pt;
+  ctx.crypto->cm->decrypt_Paillier(data, pt);
+
+  // TPC-H assumption: all hom aggs are DECIMAL(15, 2)
+  uint64_t v = NTL::to_long(pt);
+  return db_elem( double(v) / 100.0 );
+}
+
+
 template <typename Key, typename Value>
 class random_eviction_cache {
 public:
@@ -626,15 +638,18 @@ do_decrypt_db_elem_op(
     case db_elem::TYPE_STRING: {
 
       assert(d.onion_type == oDET ||
-             d.onion_type == oAGG);
+             d.onion_type == oAGG ||
+             d.onion_type == oAGG_ORIGINAL);
       // NO decryption of OPE onions
 
-      if (d.onion_type == oAGG) {
-        return db_elem(do_decrypt_hom_agg(ctx, s));
+      switch (d.onion_type) {
+        case oAGG:
+          return do_decrypt_hom_agg(ctx, s);
+        case oAGG_ORIGINAL:
+          return do_decrypt_hom_agg_original(ctx, s);
+        default:
+          return db_elem(decrypt_string_det(ctx.crypto, s, d.pos, d.level));
       }
-
-      return db_elem(decrypt_string_det(ctx.crypto, s, d.pos, d.level));
-
     }
 
     case db_elem::TYPE_DATE: {
