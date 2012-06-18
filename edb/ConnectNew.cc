@@ -144,7 +144,7 @@ public:
 protected:
   virtual void
     read_into_buffer(size_t row, size_t col, unsigned int type, std::string& buffer) {
-    buffer = string(PQgetvalue(native(), row, col), PQgetlength(native(), col, col));
+    buffer = string(PQgetvalue(native(), row, col), PQgetlength(native(), row, col));
     if (type == 17 /*BYTEAOID*/) {
       // need to escape (binary string)
       ostringstream o;
