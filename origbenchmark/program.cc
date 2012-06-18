@@ -591,7 +591,7 @@ static void query_14(exec_context& ctx) {
           new gt_node(new function_call_node("hom_get_pos", {new tuple_pos_node(0), new int_literal_node(0)}), new int_literal_node(315)),
           new local_decrypt_op(
             {0},
-            new remote_sql_op(new param_generator_id15, "select hom_agg(:0, " LINEITEM_ENC_NAME ".l_quantity_AGG), " LINEITEM_ENC_NAME ".l_orderkey_DET from ( select * from " LINEITEM_ENC_NAME " limit 100 ) as " LINEITEM_ENC_NAME " group by " LINEITEM_ENC_NAME ".l_orderkey_DET", {db_column_desc(db_elem::TYPE_STRING, 2147483647, oAGG_ORIGINAL, SECLEVEL::SEMANTIC_AGG, 0, false), db_column_desc(db_elem::TYPE_INT, 4, oDET, SECLEVEL::DETJOIN, 0, false)}, {}, util::map_from_pair_vec<std::string, physical_operator*>({})))
+            new remote_sql_op(new param_generator_id15, "select hom_agg(:0, " LINEITEM_ENC_NAME ".l_quantity_AGG), " LINEITEM_ENC_NAME ".l_orderkey_DET from " LINEITEM_ENC_NAME " group by " LINEITEM_ENC_NAME ".l_orderkey_DET", {db_column_desc(db_elem::TYPE_STRING, 2147483647, oAGG_ORIGINAL, SECLEVEL::SEMANTIC_AGG, 0, false), db_column_desc(db_elem::TYPE_INT, 4, oDET, SECLEVEL::DETJOIN, 0, false)}, {}, util::map_from_pair_vec<std::string, physical_operator*>({})))
           , {
           }
         )
