@@ -2,8 +2,8 @@
 
 using namespace std;
 
-const int N = 4;
-const double alpha = 0.3;
+const int N = 8;
+const double alpha = 0.15;
 
 template<class EncT>
 struct tree_node;

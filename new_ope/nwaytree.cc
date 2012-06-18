@@ -128,56 +128,54 @@ struct tree_node
 
 	}
 
-	pair<vector<EncT>, vector<EncT> > split(vector<EncT> key_list){
-		int mid = key_list.size()/2;
-		vector<EncT> lower, higher;
-		for(int i=0; i<mid; i++){
-			lower.push_back(key_list[i]);
-		}
-		for(int i=mid+1; i<key_list.size(); i++){
-			higher.push_back(key_list[i]);
-		}
-		return make_pair(lower, higher);
-	}
-
-	EncT getMid(vector<EncT> key_list){
-		int mid = key_list.size()/2;
-		return key_list[mid];
-	}
 
 	tree_node* rebuild(vector<EncT> key_list){
+		//Avoid building a node without any values
+		if(key_list.size()==0) return NULL;
+
 		tree_node* rtn_node = new tree_node();
 
 		if(key_list.size()<N){
+			//Remaining keys fit in one node, return that node
 			rtn_node->keys=key_list;
 		}else{
-			//Assuming N is 4
-			EncT lm, m, rm;
-			vector<EncT> l, ll, rl, r, lr, rr;
+			//Borders to divide key_list by
+			double base = ((double) key_list.size())/ ((double) N);
 
-			m = getMid(key_list);
-			pair<vector<EncT>, vector<EncT> > split_pair = split(key_list);
-			l = split_pair.first;
-			r = split_pair.second;
-			lm = getMid(l);
-			rm = getMid(r);
+			//Fill keys with every base-th key;
+			for(int i=1; i<N; i++){
+				rtn_node->keys.push_back(key_list[floor(i*base)]);
+			}
+			//Handle the subvector rebuilding except for the first and last
+			for(int i=1; i<N-1; i++){
+				vector<EncT> subvector;
+				for(int j=floor(i*base)+1; j<floor((i+1)*base); j++){
+					subvector.push_back(key_list[j]);
+				}
+				tree_node* tmp_child = rebuild(subvector);
+				if(tmp_child!=NULL){
+					rtn_node->right[key_list[floor(i*base)]]=tmp_child;
+				}
+			}
+			//First subvector rebuilding special case
+			vector<EncT> subvector;
+			for(int j=0; j<floor(base); j++){
+				subvector.push_back(key_list[j]);
+			}
+			tree_node* tmp_child = rebuild(subvector);
+			if(tmp_child!=NULL){
+				rtn_node->right[NULL]=tmp_child;
+			}	
+			subvector.clear();
+			//Last subvector rebuilding special case
+			for(int j=floor((N-1)*base)+1; j<key_list.size(); j++){
+				subvector.push_back(key_list[j]);
+			}
+			tmp_child = rebuild(subvector);
+			if(tmp_child!=NULL){
+				rtn_node->right[key_list[floor((N-1)*base)]]=tmp_child;
+			}	
 
-			pair<vector<EncT>, vector<EncT> > left_pair = split(l);
-			pair<vector<EncT>, vector<EncT> > right_pair = split(r);
-
-			ll = left_pair.first;
-			lr = left_pair.second;
-			rl = right_pair.first;
-			rr = right_pair.second;
-
-			rtn_node->keys.push_back(lm);
-			rtn_node->keys.push_back(m);
-			rtn_node->keys.push_back(rm);
-
-			if(ll.size()>0)	rtn_node->right[NULL]= rebuild(ll);
-			if(lr.size()>0)	rtn_node->right[lm]=rebuild(lr);
-			if(rl.size()>0)	rtn_node->right[m]=rebuild(rl);
-			if(rr.size()>0)	rtn_node->right[rm]=rebuild(rr);
 		}
 		return rtn_node;
 
@@ -283,7 +281,7 @@ bool
 tree<EncT>::test_node(tree_node<EncT>* cur_node){
 	vector<EncT> sorted_keys = cur_node->keys;
 	if(sorted_keys.size()==0) return false;
-	if(sorted_keys.size()>3) return false;
+	if(sorted_keys.size()>N-1) return false;
 	sort(sorted_keys.begin(), sorted_keys.end());
 
 	int low = 0;
@@ -293,24 +291,18 @@ tree<EncT>::test_node(tree_node<EncT>* cur_node){
 		if(test_vals(cur_node->right[NULL], low, high)!=true) return false;
 	}
 
-	if(sorted_keys.size()>1){
-		i++;
-		low = high;
-		high = sorted_keys[1];
+	for(int j=1; j<N-1; j++){
+		if(sorted_keys.size()>j){
+			i++;
+			low = high;
+			high = sorted_keys[j];
 
-		if(cur_node->key_in_map(sorted_keys[0])){
-			if(test_vals(cur_node->right[sorted_keys[0]], low, high)!=true) return false;
+			if(cur_node->key_in_map(sorted_keys[j-1])){
+				if(test_vals(cur_node->right[sorted_keys[j-1]], low, high)!=true) return false;
+			}
+
 		}
 
-	}
-	if(sorted_keys.size()>2){
-		i++;
-		low = high;
-		high = sorted_keys[2];
-
-		if(cur_node->key_in_map(sorted_keys[1])){
-			if(test_vals(cur_node->right[sorted_keys[1]], low, high)!=true) return false;
-		}		
 	}
 	
 	low = high;
@@ -319,6 +311,11 @@ tree<EncT>::test_node(tree_node<EncT>* cur_node){
 	if(cur_node->key_in_map(sorted_keys[i])){
 		if(test_vals(cur_node->right[sorted_keys[i]], low, high)!=true) return false;
 	}
+
+	for(int x=0; x<sorted_keys.size()-1; x++){
+		if(sorted_keys[x]==sorted_keys[x+1]) return false;
+	}
+
 	return true;
 
 }
@@ -332,6 +329,7 @@ tree<EncT>::test_vals(tree_node<EncT>* cur_node, EncT low, EncT high){
 			return false;
 		}
 	}
+
 	typename boost::unordered_map<EncT, tree_node<EncT> *>::iterator it;
 
 	for(it=cur_node->right.begin(); it!=cur_node->right.end(); it++){
@@ -350,7 +348,7 @@ int main(){
 	}
 	cout<<"Done inserting"<<endl;
 	cout<<"Testing tree: "<<my_tree->test_tree(my_tree->root)<<endl;
-	cout<<"Size: "<<my_tree->size<<" Height: "<<my_tree->root->height()<<endl;
+	cout<<"Size: "<<my_tree->size<<" Height: "<<my_tree->root->height()<<" Len: "<<my_tree->root->len()<<endl;
 	cout<<"Alpha-height balanced: "<<(my_tree->root->height()< log(my_tree->size)/log(((double)1.0)/alpha)+1)<<endl;
 	
 }
