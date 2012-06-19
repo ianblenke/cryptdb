@@ -28,12 +28,12 @@ getba(PG_FUNCTION_ARGS, int i, unsigned int & len)
     return eValueBytes;
 }
 
-static unsigned char *
+static const unsigned char *
 getba_rdonly(PG_FUNCTION_ARGS, int i, unsigned int & len)
 {
     bytea * eValue = PG_GETARG_BYTEA_P(i);
     len = VARSIZE(eValue) - VARHDRSZ;
-    return (unsigned char *) VARDATA(eValue);
+    return (const unsigned char *) VARDATA(eValue);
 }
 
 static std::string
@@ -50,8 +50,8 @@ static inline std::string
 getstring_fromba(PG_FUNCTION_ARGS, int i)
 {
   unsigned int len;
-  unsigned char *p  = getba_rdonly(PG_PASS_FARGS, i, len);
-  return std::string((char*) p, len);
+  const unsigned char *p  = getba_rdonly(PG_PASS_FARGS, i, len);
+  return std::string((const char*) p, len);
 }
 
 static inline unsigned char*
@@ -94,11 +94,11 @@ PG_FUNCTION_INFO_V1(test_sum_final);
 
 Datum bytea_cmp_less(PG_FUNCTION_ARGS) {
   unsigned int l1, l2;
-  unsigned char* b1 = getba_rdonly(PG_PASS_FARGS, 0, l1);
-  unsigned char* b2 = getba_rdonly(PG_PASS_FARGS, 1, l2);
+  const unsigned char* b1 = getba_rdonly(PG_PASS_FARGS, 0, l1);
+  const unsigned char* b2 = getba_rdonly(PG_PASS_FARGS, 1, l2);
 
   int res = memcmp(b1, b2, l1 < l2 ? l1 : l2);
-  unsigned char *p = (res < 0) ? b1 : b2;
+  const unsigned char *p = (res < 0) ? b1 : b2;
   unsigned int l = (res < 0) ? l1 : l2;
 
   unsigned char* ret = (unsigned char *) palloc( l + VARHDRSZ );
@@ -971,6 +971,39 @@ PG_FUNCTION_INFO_V1(agg_ident_i64_state_transition);
 Datum agg_ident_i64_state_transition(PG_FUNCTION_ARGS) {
   // always return the incoming value
   PG_RETURN_INT64(PG_GETARG_INT64(1));
+}
+
+// create function agg_ident_bytea_state_transition(bigint, bytea)
+//    returns bigint language C as '/home/stephentu/cryptdb/obj/udf/edb_pg.so';
+// create aggregate agg_ident(bytea)
+//  (
+//    sfunc=agg_ident_bytea_state_transition,
+//    stype=bigint,
+//    finalfunc=agg_ident_bytea_finalizer,
+//    initcond='0'
+//  );
+Datum agg_ident_bytea_state_transition(PG_FUNCTION_ARGS);
+PG_FUNCTION_INFO_V1(agg_ident_bytea_state_transition);
+
+Datum agg_ident_bytea_state_transition(PG_FUNCTION_ARGS) {
+  char* s = (char *) PG_GETARG_INT64(0);
+  if (s == NULL) {
+    unsigned int len;
+    const unsigned char* p = getba_rdonly(PG_PASS_FARGS, 1, len);
+    s = (char *) palloc(len + VARHDRSZ);
+    SET_VARSIZE(s, len + VARHDRSZ);
+    memcpy(VARDATA(s), p, len);
+  }
+  PG_RETURN_INT64(s);
+}
+
+Datum agg_ident_bytea_finalizer(PG_FUNCTION_ARGS);
+PG_FUNCTION_INFO_V1(agg_ident_bytea_finalizer);
+
+Datum agg_ident_bytea_finalizer(PG_FUNCTION_ARGS) {
+  char* s = (char *) PG_GETARG_INT64(0);
+  assert(s);
+  PG_RETURN_BYTEA_P(s);
 }
 
 Datum fast_sum_i64_state_transition(PG_FUNCTION_ARGS);
