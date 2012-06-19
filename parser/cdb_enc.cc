@@ -491,6 +491,7 @@ public:
     row_packed_acctbal,
 
     normal_vldb_orig,
+    normal_vldb_greedy,
   };
 
   customer_encryptor(enum opt_type tpe)
@@ -498,7 +499,9 @@ public:
     schema = CustSchema;
     onions = CustOnions;
     usenull = false;
-    processrow = (tpe == normal || tpe == normal_vldb_orig);
+    processrow = (tpe == normal ||
+                  tpe == normal_vldb_orig ||
+                  tpe == normal_vldb_greedy);
   }
 
   virtual
@@ -519,6 +522,13 @@ public:
         long c_acctbal_int =
           roundToLong(fabs(resultFromStr<double>(tokens[customer::c_acctbal])) * 100.0);
         push_binary_string(enccols, cm.cm->encrypt_u64_paillier(c_acctbal_int));
+        break;
+      }
+
+      case normal_vldb_greedy: {
+        string phone_prefix = tokens[customer::c_phone].substr(0, 2);
+        do_encrypt(customer::c_phone, DT_STRING, ONION_DET | ONION_OPE,
+                   phone_prefix, enccols, cm, false);
         break;
       }
 
@@ -605,14 +615,50 @@ static const vector<int> OrdersOnions = {
     ONION_DET,
 };
 
+static const vector<int> OrdersVldbCdbGreedyOnions = {
+    ONION_DETJOIN,
+    ONION_DETJOIN,
+    ONION_DET,
+    ONION_DET | ONION_OPE,
+    ONION_DET | ONION_OPE,
+    ONION_DET | ONION_OPE,
+    ONION_DET,
+    ONION_DET,
+    ONION_DET,
+};
+
 class orders_encryptor : public table_encryptor {
 public:
-  orders_encryptor() {
-    schema = OrdersSchema;
-    onions = OrdersOnions;
-    usenull = false;
-    processrow = true;
+  enum opt_type {
+    normal,
+
+    normal_vldb_greedy,
+
+  };
+
+  orders_encryptor(enum opt_type tpe) : tpe(tpe) {
+
+    switch (tpe) {
+      case normal:
+        schema = OrdersSchema;
+        onions = OrdersOnions;
+        usenull = false;
+        processrow = true;
+        break;
+
+      case normal_vldb_greedy:
+        schema = OrdersSchema;
+        onions = OrdersVldbCdbGreedyOnions;
+        usenull = false;
+        processrow = true;
+        break;
+
+      default: assert(false);
+    }
   }
+
+private:
+  opt_type tpe;
 
 protected:
   virtual
@@ -635,6 +681,15 @@ protected:
                              getMin(oDET), SECLEVEL::DET, isBin, 12345);
     assert(!isBin);
     enccols.push_back(encDET);
+
+    if (tpe == normal_vldb_greedy) {
+      bool isBin = false;
+      string encOPE = cm.crypt<2>(cm.cm->getmkey(), to_s(year), TYPE_INTEGER,
+                               fieldname(0, "OPE"),
+                               getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
+      assert(!isBin);
+      enccols.push_back(encOPE);
+    }
   }
 };
 
@@ -672,17 +727,23 @@ public:
       normal,
       normal_agg,
       packed,
+
       row_packed_disc_price,
       row_packed_revenue,
+      row_packed_quantity,
+
       row_col_packed,
 
       // the following below are for the VLDB experiments
       normal_vldb_orig, // what we use for the "state-of-the-art" before us
+      normal_vldb_greedy, // cryptdb-greedy
   };
 
   static vector<datatypes> Schema;
   static vector<int>       Onions;
   static vector<int>       PackedOnions;
+
+  static vector<int> VldbCdbGreedyOnions;
 
   lineitem_encryptor(enum opt_type tpe)
     : tpe(tpe) {
@@ -701,9 +762,17 @@ public:
         usenull = false;
         processrow = true;
         break;
+
+      case normal_vldb_greedy:
+        onions = VldbCdbGreedyOnions;
+        usenull = false;
+        processrow = true;
+        break;
+
       case packed:
       case row_packed_disc_price:
       case row_packed_revenue:
+      case row_packed_quantity:
       case row_col_packed:
         onions = PackedOnions;
         usenull = false;
@@ -1097,6 +1166,7 @@ protected:
     case opt_type::packed:                do_group_pack  (tokens, enccols, cm); break;
     case opt_type::row_packed_disc_price: do_row_pack    (tokens, enccols, (0x1 << 3), cm); break;
     case opt_type::row_packed_revenue:    do_row_pack    (tokens, enccols, (0x1 << 5), cm); break;
+    case opt_type::row_packed_quantity:   do_row_pack    (tokens, enccols, (0x1), cm); break;
     case opt_type::row_col_packed:        do_row_col_pack(tokens, enccols, cm); break;
     default: assert(false);
     }
@@ -1130,6 +1200,43 @@ protected:
           do_encrypt(0, DT_FLOAT, ONION_DET, to_s(l_disc_price),
                      enccols, cm, false);
         }
+        break;
+
+      case opt_type::normal_vldb_greedy:
+        {
+          // l_shipdate's year
+          const string& l_shipdate = tokens[lineitem::l_shipdate];
+          int year, month, day;
+          int ret = sscanf(l_shipdate.c_str(), "%d-%d-%d", &year, &month, &day);
+          assert(ret == 3);
+          assert(year >= 0);
+
+          {
+            bool isBin = false;
+            string enc = cm.crypt<2>(
+                cm.cm->getmkey(), to_s(year), TYPE_INTEGER,
+                fieldname(0, "DET"), getMin(oDET), SECLEVEL::DET, isBin, 12345);
+            assert(!isBin);
+            enccols.push_back(enc);
+          }
+
+          {
+            bool isBin = false;
+            string enc = cm.crypt<2>(
+                cm.cm->getmkey(), to_s(year), TYPE_INTEGER,
+                fieldname(0, "OPE"), getMin(oOPE), SECLEVEL::OPE, isBin, 12345);
+            assert(!isBin);
+            enccols.push_back(enc);
+          }
+
+          // l_disc_price = l_extendedprice * (1 - l_discount)
+          double l_extendedprice  = resultFromStr<double>(tokens[lineitem::l_extendedprice]);
+          double l_discount       = resultFromStr<double>(tokens[lineitem::l_discount]);
+          double l_disc_price     = l_extendedprice * (1.0 - l_discount);
+          do_encrypt(0, DT_FLOAT, ONION_DET, to_s(l_disc_price),
+                     enccols, cm, false);
+        }
+
         break;
       case opt_type::normal_agg:
         {
@@ -1246,6 +1353,29 @@ vector<int> lineitem_encryptor::Onions = {
 
   ONION_DET,
   ONION_DET,
+  ONION_DET,
+};
+
+vector<int> lineitem_encryptor::VldbCdbGreedyOnions = {
+  ONION_DETJOIN,
+  ONION_DETJOIN,
+  ONION_DETJOIN,
+  ONION_DETJOIN,
+
+  ONION_DET | ONION_OPE,
+  ONION_DET,
+  ONION_OPE,
+  ONION_DET,
+
+  ONION_DET | ONION_OPE,
+  ONION_DET | ONION_OPE,
+
+  ONION_OPEJOIN,
+  ONION_OPEJOIN,
+  ONION_OPEJOIN,
+
+  ONION_DET,
+  ONION_DET | ONION_OPE,
   ONION_DET,
 };
 
@@ -1576,9 +1706,11 @@ static map<string, table_encryptor *> EncryptorMap = {
   {"lineitem-packed", new lineitem_encryptor(lineitem_encryptor::packed)},
   {"lineitem-row-packed-disc-price", new lineitem_encryptor(lineitem_encryptor::row_packed_disc_price)},
   {"lineitem-row-packed-revenue", new lineitem_encryptor(lineitem_encryptor::row_packed_revenue)},
+  {"lineitem-row-packed-quantity", new lineitem_encryptor(lineitem_encryptor::row_packed_quantity)},
   {"lineitem-row-col-packed", new lineitem_encryptor(lineitem_encryptor::row_col_packed)},
 
   {"lineitem-normal-vldb-orig", new lineitem_encryptor(lineitem_encryptor::normal_vldb_orig)},
+  {"lineitem-normal-vldb-greedy", new lineitem_encryptor(lineitem_encryptor::normal_vldb_greedy)},
 
   {"partsupp-none", new partsupp_encryptor(partsupp_encryptor::none)},
   {"partsupp-normal", new partsupp_encryptor(partsupp_encryptor::normal)},
@@ -1592,12 +1724,15 @@ static map<string, table_encryptor *> EncryptorMap = {
 
   {"region-none", new table_encryptor(RegionSchema, RegionOnions, false, true)},
 
-  {"orders-none", new orders_encryptor},
+  {"orders-none", new orders_encryptor(orders_encryptor::normal)},
+
+  {"orders-normal-vldb-greedy", new orders_encryptor(orders_encryptor::normal_vldb_greedy)},
 
   {"customer-none", new customer_encryptor(customer_encryptor::normal)},
   {"customer-row-packed-acctbal", new customer_encryptor(customer_encryptor::row_packed_acctbal)},
 
   {"customer-normal-vldb-orig", new customer_encryptor(customer_encryptor::normal_vldb_orig)},
+  {"customer-normal-vldb-greedy", new customer_encryptor(customer_encryptor::normal_vldb_greedy)},
 };
 
 static inline string process_input(const string &s, crypto_manager_stub &cm, table_encryptor *tenc) {
