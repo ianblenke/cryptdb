@@ -390,7 +390,7 @@ static db_elem
 do_decrypt_hom_agg(exec_context& ctx, const string& data)
 {
   const uint8_t* p = (const uint8_t *) data.data();
-  dprintf("got %s bytes data\n", TO_C(data.size()));
+  //dprintf("got %s bytes data\n", TO_C(data.size()));
 
   using namespace hom_agg_constants;
 
@@ -422,7 +422,7 @@ do_decrypt_hom_agg(exec_context& ctx, const string& data)
   // read group count
   uint64_t group_count;
   deserializer<uint64_t>::read(p, group_count);
-  dprintf("group count(*): %s\n", TO_C(group_count));
+  //dprintf("group count(*): %s\n", TO_C(group_count));
 
   // read number of aggs
   uint32_t n_aggs;

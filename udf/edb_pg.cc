@@ -235,6 +235,7 @@ public:
 
   // buffer is large to optimizer for sequential scans
   static const size_t NumBlocksInternalBuffer = 524288; // roughly 128MB buffer
+  //static const size_t NumBlocksInternalBuffer = 4069; // 1MB buffer
 
   // stats
   struct stats {
@@ -600,6 +601,16 @@ public:
           for (auto it1 = it0->begin(); it1 != it0->end(); ++it1) {
             mpz_clear(it1->mp);
           }
+        }
+      }
+    }
+
+    // need to clear global aggregate states
+    for (auto it = _aggs.begin(); it != _aggs.end(); ++it) {
+      for (auto it0 = it->second.running_sums_mp.begin();
+           it0 != it->second.running_sums_mp.end(); ++it0) {
+        for (auto it1 = it0->begin(); it1 != it0->end(); ++it1) {
+          mpz_clear(it1->mp);
         }
       }
     }
