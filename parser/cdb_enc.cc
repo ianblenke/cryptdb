@@ -1161,6 +1161,7 @@ protected:
     assert(tpe == opt_type::packed ||
            tpe == opt_type::row_packed_disc_price ||
            tpe == opt_type::row_packed_revenue ||
+           tpe == opt_type::row_packed_quantity ||
            tpe == opt_type::row_col_packed);
     switch (tpe) {
     case opt_type::packed:                do_group_pack  (tokens, enccols, cm); break;
