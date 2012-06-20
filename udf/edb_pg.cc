@@ -1073,6 +1073,8 @@ Datum agg_ident_i64_state_transition(PG_FUNCTION_ARGS) {
 
 // create function agg_ident_bytea_state_transition(bigint, bytea)
 //    returns bigint language C as '/home/stephentu/cryptdb/obj/udf/edb_pg.so';
+// create function agg_ident_bytea_finalizer(bigint)
+//    returns bytea language C as '/home/stephentu/cryptdb/obj/udf/edb_pg.so';
 // create aggregate agg_ident(bytea)
 //  (
 //    sfunc=agg_ident_bytea_state_transition,
@@ -1084,13 +1086,11 @@ Datum agg_ident_bytea_state_transition(PG_FUNCTION_ARGS);
 PG_FUNCTION_INFO_V1(agg_ident_bytea_state_transition);
 
 Datum agg_ident_bytea_state_transition(PG_FUNCTION_ARGS) {
-  char* s = (char *) PG_GETARG_INT64(0);
+  std::string* s = (std::string *) PG_GETARG_INT64(0);
   if (s == NULL) {
     unsigned int len;
     const unsigned char* p = getba_rdonly(PG_PASS_FARGS, 1, len);
-    s = (char *) palloc(len + VARHDRSZ);
-    SET_VARSIZE(s, len + VARHDRSZ);
-    memcpy(VARDATA(s), p, len);
+    s = new std::string((const char *)p, len);
   }
   PG_RETURN_INT64(s);
 }
@@ -1099,9 +1099,11 @@ Datum agg_ident_bytea_finalizer(PG_FUNCTION_ARGS);
 PG_FUNCTION_INFO_V1(agg_ident_bytea_finalizer);
 
 Datum agg_ident_bytea_finalizer(PG_FUNCTION_ARGS) {
-  char* s = (char *) PG_GETARG_INT64(0);
+  std::string* s = (std::string *) PG_GETARG_INT64(0);
   assert(s);
-  PG_RETURN_BYTEA_P(s);
+  unsigned char * ret = copy_to_pg_return_buffer(*s);
+  delete s;
+  PG_RETURN_BYTEA_P(ret);
 }
 
 Datum fast_sum_i64_state_transition(PG_FUNCTION_ARGS);
