@@ -508,7 +508,9 @@ public:
   void postprocessRow(const vector<string> &tokens,
                       vector<string>       &enccols,
                       crypto_manager_stub        &cm) {
-    assert(tpe == normal || tpe == normal_vldb_orig);
+    assert(tpe == normal ||
+           tpe == normal_vldb_orig ||
+           tpe == normal_vldb_greedy);
 
     switch (tpe) {
       case normal: {
@@ -1421,6 +1423,8 @@ public:
       normal,
       normal_agg,
       projection,
+
+      row_packed_volume,
   };
 
   static vector<datatypes> PartSuppSchema;
@@ -1439,6 +1443,11 @@ public:
         processrow = true;
         break;
       case projection:
+        onions = PartSuppProjOnions;
+        usenull = false;
+        processrow = false;
+        break;
+      case row_packed_volume:
         onions = PartSuppProjOnions;
         usenull = false;
         processrow = false;
@@ -1463,37 +1472,76 @@ public:
                     vector<vector<string> >       &enccols,
                     crypto_manager_stub &cm) {
     typedef PallierSlotManager<uint32_t, 2> PSM;
-    assert(tpe == projection);
-    assert(!IraqNationKeySet.empty());
+    assert(tpe == projection || tpe == row_packed_volume);
 
-    vector<vector<string> > filtered(tokens);
-    filtered.erase(
-        remove_if(filtered.begin(), filtered.end(), remover()),
-        filtered.end());
+    switch (tpe) {
+      case projection: {
+        assert(!IraqNationKeySet.empty());
 
-    size_t nbatches = filtered.size() / PSM::NumSlots +
-                      ((filtered.size() % PSM::NumSlots) ? 1 : 0);
+        vector<vector<string> > filtered(tokens);
+        filtered.erase(
+            remove_if(filtered.begin(), filtered.end(), remover()),
+            filtered.end());
 
-    for (size_t i = 0; i < nbatches; i++) {
-      ZZ z;
-      size_t remaining = filtered.size() - i * PSM::NumSlots;
-      assert(remaining > 0);
-      size_t limit = min(remaining, PSM::NumSlots);
-      for (size_t j = 0; j < limit; j++) {
-        size_t idx = i * PSM::NumSlots + j;
-        assert(idx < filtered.size());
-        const vector<string> &v = filtered[idx];
-        double ps_value = psValueFromRow(v);
-        uint32_t ps_value_int = (uint32_t) roundToLong(ps_value * 100.0);
-        PSM::insert_into_slot(z, ps_value_int, j);
-        //assert(ps_value_int == PSM::extract_from_slot(z, j));
+        size_t nbatches = filtered.size() / PSM::NumSlots +
+                          ((filtered.size() % PSM::NumSlots) ? 1 : 0);
+
+        for (size_t i = 0; i < nbatches; i++) {
+          ZZ z;
+          size_t remaining = filtered.size() - i * PSM::NumSlots;
+          assert(remaining > 0);
+          size_t limit = min(remaining, PSM::NumSlots);
+          for (size_t j = 0; j < limit; j++) {
+            size_t idx = i * PSM::NumSlots + j;
+            assert(idx < filtered.size());
+            const vector<string> &v = filtered[idx];
+            double ps_value = psValueFromRow(v);
+            uint32_t ps_value_int = (uint32_t) roundToLong(ps_value * 100.0);
+            PSM::insert_into_slot(z, ps_value_int, j);
+            //assert(ps_value_int == PSM::extract_from_slot(z, j));
+          }
+          string enc = cm.encrypt_Paillier(z);
+          vector<string> e;
+          do_encrypt(0, DT_INTEGER, ONION_DETJOIN,
+                     to_s(IraqNationKey), e, cm, false);
+          push_binary_string(e, enc);
+          enccols.push_back(e);
+        }
+
+        break;
       }
-      string enc = cm.encrypt_Paillier(z);
-      vector<string> e;
-      do_encrypt(0, DT_INTEGER, ONION_DETJOIN,
-                 to_s(IraqNationKey), e, cm, false);
-      push_binary_string(e, enc);
-      enccols.push_back(e);
+
+      case row_packed_volume: {
+        do_row_pack(tokens, enccols, cm);
+        break;
+      }
+
+      default: assert(false);
+    }
+  }
+
+private:
+  static const size_t BitsPerAggField = 83;
+  static const size_t FieldsPerAgg = 1024 / BitsPerAggField;
+
+  void do_row_pack(const vector<vector<string> > &rows,
+                   vector<vector<string> > &enccols,
+                   crypto_manager_stub &cm) {
+    _static_assert(FieldsPerAgg == 12); // this is hardcoded various places
+    size_t nAggs = rows.size() / FieldsPerAgg +
+      (rows.size() % FieldsPerAgg ? 1 : 0);
+    for (size_t i = 0; i < nAggs; i++) {
+      size_t base = i * FieldsPerAgg;
+      ZZ z0 = to_ZZ(0);
+      for (size_t j = 0; j < min(FieldsPerAgg, rows.size() - base); j++) {
+        size_t row_id = base + j;
+        const vector<string>& tokens = rows[row_id];
+        long ps_volume_int = roundToLong(psValueFromRow(tokens) * 100.0);
+        insert_into_slot<BitsPerAggField>(z0, ps_volume_int, j);
+      }
+      string e0 = cm.encrypt_Paillier(z0);
+      e0.resize(256);
+      cout << e0;
     }
   }
 
@@ -1716,6 +1764,8 @@ static map<string, table_encryptor *> EncryptorMap = {
   {"partsupp-none", new partsupp_encryptor(partsupp_encryptor::none)},
   {"partsupp-normal", new partsupp_encryptor(partsupp_encryptor::normal)},
   {"partsupp-projection", new partsupp_encryptor(partsupp_encryptor::projection)},
+
+  {"partsupp-row-packed-volume", new partsupp_encryptor(partsupp_encryptor::row_packed_volume)},
 
   {"supplier-none", new table_encryptor(SupplierSchema, SupplierOnions, false, true)},
 
