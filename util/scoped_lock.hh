@@ -1,15 +1,18 @@
 #pragma once
 
+#include <cassert>
 #include <pthread.h>
 
 class scoped_lock {
  public:
     scoped_lock(pthread_mutex_t *muarg) : mu(muarg) {
-        pthread_mutex_lock(mu);
+        int r = pthread_mutex_lock(mu);
+        if (r) assert(false);
     }
 
     ~scoped_lock() {
-        pthread_mutex_unlock(mu);
+        int r = pthread_mutex_unlock(mu);
+        if (r) assert(false);
     }
 
  private:

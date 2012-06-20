@@ -4,6 +4,7 @@
 
 #include <udf/edb_common.hh>
 #include <util/serializer.hh>
+#include <util/scoped_lock.hh>
 
 extern "C" {
 #include "postgres.h"
@@ -234,8 +235,8 @@ class agg_static_state {
 public:
 
   // buffer is large to optimizer for sequential scans
-  static const size_t NumBlocksInternalBuffer = 524288; // roughly 128MB buffer
-  //static const size_t NumBlocksInternalBuffer = 4069; // 1MB buffer
+  //static const size_t NumBlocksInternalBuffer = 524288; // roughly 128MB buffer
+  static const size_t NumBlocksInternalBuffer = 4069; // 1MB buffer
 
   // stats
   struct stats {
@@ -380,25 +381,136 @@ private:
 
 };
 
-template <typename Key>
-struct worker_msg {
-  worker_msg(const uint8_t* p, size_t s) {
-    mpz_init2(value, s * 8);
-    MPZFromBytes(value, p, s);
+class one_time_latch {
+public:
+  one_time_latch() : _signaled(false) {
+    int r0 = pthread_mutex_init(&_mutex, NULL);
+    if (r0) assert(false);
+    int r1 = pthread_cond_init(&_cond, NULL);
+    if (r1) assert(false);
   }
 
-  ~worker_msg() {
-    mpz_clear(value);
+  ~one_time_latch() {
+    int r0 = pthread_mutex_destroy(&_mutex);
+    if (r0) assert(false);
+    int r1 = pthread_cond_destroy(&_cond);
+    if (r1) assert(false);
   }
 
-  struct ent {
-    Key group_key;
-    size_t group_id;
-    size_t idx;
+  void signal() {
+    scoped_lock l(&_mutex);
+    assert(!_signaled);
+    _signaled = true;
+    int r = pthread_cond_broadcast(&_cond);
+    if (r) assert(false);
+  }
+
+  // blocks until signaled
+  void wait_for() {
+    scoped_lock l(&_mutex);
+    while (!_signaled) {
+      int r = pthread_cond_wait(&_cond, &_mutex);
+      if (r) assert(false);
+    }
+  }
+
+private:
+  bool _signaled;
+  pthread_mutex_t _mutex;
+  pthread_cond_t _cond;
+};
+
+struct worker_pool {
+
+  // this message has semantics:
+  //   multiply value into all values in ent, modulo public_key
+  struct worker_msg {
+    worker_msg(const uint8_t* p, size_t s,
+               const std::vector< mpz_wrapper* >& ents,
+               const mpz_t* public_key)
+      : ents(ents), public_key(public_key) {
+      mpz_init2(value, s * 8);
+      MPZFromBytes(value, p, s);
+    }
+    ~worker_msg() {
+      mpz_clear(value);
+    }
+    mpz_t value; // has ownership
+    const std::vector< mpz_wrapper* > ents; // no ownership
+    const mpz_t* const public_key; // no ownership
   };
-  std::vector< ent > ents;
 
-  mpz_t value; // has ownership
+  static const size_t NThreads = 8;
+
+  worker_pool() {
+    DBGOUT( std::cerr << "worker_pool initializing" << std::endl );
+
+    _workers.resize(NThreads);
+    _queues.resize(NThreads);
+
+    // initialize threads
+    for (size_t i = 0; i < NThreads; i++) {
+      int ret = pthread_create(&_workers[i], NULL, agg_worker_main, &_queues[i]);
+      if (ret) assert(false);
+    }
+  }
+
+  ~worker_pool() {
+    // TODO cleanup threads
+  }
+
+  static worker_pool& GetInstance() {
+    static worker_pool pool; // is properly DCL-ed on GCC
+    return pool;
+  }
+
+  // this is kind of messy- the callers have to participate in the
+  // load balancing scheme- this allows us to share memory with the
+  // workers easier though w/o worrying about races, since the caller
+  // can control how a task gets allocated
+
+  // takes ownership of msg
+  void offer(size_t worker_id, worker_msg* msg) {
+    DBGOUT( std::cerr << "offering msg to worker_id=" << worker_id << std::endl );
+    _queues[worker_id % NThreads].push( worker_msg_pair(msg, NULL) );
+  }
+
+  // does NOT take ownership
+  void offer(size_t worker_id, one_time_latch* latch) {
+    DBGOUT( std::cerr << "offering latch to worker_id=" << worker_id << std::endl );
+    _queues[worker_id % NThreads].push( worker_msg_pair(NULL, latch) );
+  }
+
+private:
+
+  static void* agg_worker_main(void *p) {
+    DBGOUT( std::cerr << __func__ << ": starting up with pthread id "
+                      << pthread_self() << std::endl );
+    worker_queue* q = (worker_queue *) p;
+    while (true) {
+      worker_msg_pair m;
+      q->pop(m);
+      assert((m.first != NULL) ^ (m.second != NULL));
+      if (m.first) {
+        for (auto mw : m.first->ents) {
+          mpz_mul(mw->mp, mw->mp, m.first->value);
+          mpz_mod(mw->mp, mw->mp, *m.first->public_key);
+        }
+        delete m.first;
+      } else {
+        DBGOUT( std::cerr << __func__ << ": signaling with pthread id "
+                          << pthread_self() << std::endl );
+        m.second->signal();
+      }
+    }
+    return NULL;
+  }
+
+  std::vector< pthread_t > _workers;
+
+  typedef std::pair<worker_msg*, one_time_latch*> worker_msg_pair;
+  typedef tbb::concurrent_bounded_queue< worker_msg_pair > worker_queue;
+  std::vector< worker_queue > _queues;
 };
 
 template <typename Key> class agg_typed_state;
@@ -408,10 +520,6 @@ struct worker_state {
   std::unordered_map<
     Key,
     std::vector< std::vector< mpz_wrapper > > > group_map;
-
-  tbb::concurrent_bounded_queue< worker_msg<Key>* > q;
-
-  agg_typed_state<Key>* typed_state;
 };
 
 struct per_group_state {
@@ -419,47 +527,13 @@ struct per_group_state {
   uint64_t count;
 };
 
-// this contains the threadpool
 // key must be something hashable by std::unordered_map
 template <typename Key>
 class agg_typed_state {
 public:
-  static const size_t NThreads = 8;
 
   /** Gives us about a 16MB element buffer */
   static const size_t BufferSize = 1024 * 1024;
-
-  static void* agg_worker_main(void *p) {
-    worker_state<Key>* ctx = (worker_state<Key> *) p;
-    worker_msg<Key>* m;
-    while (true) {
-      ctx->q.pop(m);
-      if (UNLIKELY(m == NULL)) break;
-      else {
-        for (auto ent_it = m->ents.begin(); ent_it != m->ents.end(); ++ent_it) {
-          auto it = ctx->group_map.find(ent_it->group_key);
-          std::vector< std::vector< mpz_wrapper > >* v = NULL;
-          if (UNLIKELY(it == ctx->group_map.end())) {
-            // init it
-            v = &ctx->group_map[ent_it->group_key]; // create
-            v->resize(ctx->typed_state->_num_groups);
-            for (size_t i = 0; i < ctx->typed_state->_num_groups; i++) {
-              InitMPZRunningSums(
-                  ctx->typed_state->_static_state->rows_per_agg,
-                  v->operator[](i));
-            }
-          } else {
-            v = &it->second;
-          }
-          std::vector<mpz_wrapper>& vr = v->operator[](ent_it->group_id);
-          mpz_mul(vr[ent_it->idx].mp, vr[ent_it->idx].mp, m->value);
-          mpz_mod(vr[ent_it->idx].mp, vr[ent_it->idx].mp, ctx->typed_state->_static_state->public_key);
-        }
-        delete m;
-      }
-    }
-    return NULL;
-  }
 
   agg_typed_state(
       agg_static_state* static_state,
@@ -469,23 +543,14 @@ public:
     assert(static_state);
     assert(num_groups <= 64); // current limitation
 
-    _workers.resize(NThreads);
-    _worker_states.resize(NThreads);
+    _worker_states.resize(worker_pool::NThreads);
   }
 
   ~agg_typed_state() {
     delete _static_state;
   }
 
-  // init so we can pass this pointer safely
-  void init() {
-    // initialize threads
-    for (size_t i = 0; i < NThreads; i++) {
-      _worker_states[i].typed_state = this;
-      int ret = pthread_create(&_workers[i], NULL, agg_worker_main, &_worker_states[i]);
-      if (ret) assert(false);
-    }
-  }
+  inline void init() {}
 
   void offer(const Key& key, uint64_t row_id, uint64_t group_bitmask) {
 
@@ -518,17 +583,24 @@ public:
 
     flush_group_buffers();
 
-    for (size_t i = 0; i < NThreads; i++) {
-      // signal all threads to stop
-      _worker_states[i].q.push(NULL);
+    std::vector<one_time_latch*> latches;
+    latches.resize(worker_pool::NThreads);
+
+    for (size_t i = 0; i < worker_pool::NThreads; i++) {
+      // send latch down pipe
+      latches[i] = new one_time_latch;
+      worker_pool::GetInstance().offer(i, latches[i]);
     }
 
-    for (size_t i = 0; i < NThreads; i++) {
+    for (size_t i = 0; i < worker_pool::NThreads; i++) {
       // wait until computation is done
-      pthread_join(_workers[i], NULL);
+      latches[i]->wait_for();
     }
 
-    for (size_t i = 0; i < NThreads; i++) {
+    // ok to delete latches now
+    for (auto p : latches) delete p;
+
+    for (size_t i = 0; i < worker_pool::NThreads; i++) {
       // merge (aggregate) results from workers into main results
       worker_state<Key>& s = _worker_states[i];
       for (auto it = s.group_map.begin(); it != s.group_map.end(); ++it) {
@@ -594,7 +666,7 @@ public:
     }
 
     // need to clear worker states
-    for (size_t i = 0; i < NThreads; i++) {
+    for (size_t i = 0; i < worker_pool::NThreads; i++) {
       worker_state<Key>& s = _worker_states[i];
       for (auto it = s.group_map.begin(); it != s.group_map.end(); ++it) {
         for (auto it0 = it->second.begin(); it0 != it->second.end(); ++it0) {
@@ -733,7 +805,12 @@ private:
         (const uint8_t *) _static_state->get_block(minSoFar);
 
       // service the requests
-      worker_msg<Key>* m = new worker_msg<Key>(block_ptr, _static_state->agg_size);
+
+      size_t worker_id = _workerCnt++ % worker_pool::NThreads;
+      assert(worker_id < _worker_states.size());
+      worker_state<Key>& work_state = _worker_states[worker_id];
+
+      std::vector< mpz_wrapper* > ents;
 
       for (size_t i = pos_first_non_empty; i < group_done.size(); i++) {
         pair< bool, control_group::iterator > &group = group_done[i];
@@ -742,19 +819,28 @@ private:
 
         Key& group_key = alloc_map[i].first;
 
+        std::vector< std::vector< mpz_wrapper > >* v = NULL;
+        // check that group key exists in the work_state- if not, allocate
+        // memory for that group
+        auto group_map_it = work_state.group_map.find(group_key);
+        if (UNLIKELY(group_map_it == work_state.group_map.end())) {
+          // init it
+          v = &work_state.group_map[group_key]; // create it
+          v->resize(_num_groups);
+          for (size_t i = 0; i < _num_groups; i++) {
+            InitMPZRunningSums(_static_state->rows_per_agg, v->operator[](i));
+          }
+        } else {
+          v = &group_map_it->second;
+        }
+
         // push all these multiplications into the queue
         size_t group_id_idx = 0;
         for (auto it = group.second->second.begin();
             it != group.second->second.end();
             ++it, ++group_id_idx) {
-
           for (auto it0 = it->begin(); it0 != it->end(); ++it0) {
-
-            typename worker_msg<Key>::ent e;
-            e.group_key = group_key;
-            e.group_id  = group_id_idx;
-            e.idx       = (*it0) - 1;
-            m->ents.push_back(e);
+            ents.push_back(&v->operator[](group_id_idx)[(*it0) - 1]);
 
             // stats
             _static_state->st.mults++;
@@ -764,12 +850,13 @@ private:
         }
 
         // advance this group
-
         group.second++;
         group.first = group.second == alloc_map[i].second.end();
       }
 
-      _worker_states[ _workerCnt++ % NThreads ].q.push(m);
+      worker_pool::worker_msg* m =
+        new worker_pool::worker_msg(block_ptr, _static_state->agg_size, ents, &_static_state->public_key);
+      worker_pool::GetInstance().offer(worker_id, m);
 
       // find first non-empty
       for (group_done_vec::iterator it = group_done.begin() + pos_first_non_empty;
