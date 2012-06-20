@@ -5,6 +5,7 @@
 #include <map>
 #include <utility>
 
+#include <execution/common.hh>
 #include <edb/ConnectNew.hh>
 #include <crypto/paillier.hh>
 #include <parser/cdb_helpers.hh>
@@ -63,7 +64,7 @@ public:
       db_tuple* tuple,
       const std::vector< physical_operator* >& subqueries =
         std::vector< physical_operator* >()) {
-    assert(tuple != NULL);
+    SANITY(tuple != NULL);
     return exec_context(
         connection,
         crypto,
@@ -78,8 +79,8 @@ public:
 
   // assumes a tuple has already been bound, but the row is not bound
   inline exec_context bind_row(size_t idx) {
-    assert(this->tuple != NULL);
-    assert(this->idx == -1);
+    SANITY(this->tuple != NULL);
+    SANITY(this->idx == -1);
     return exec_context(
         connection,
         crypto,
@@ -93,7 +94,7 @@ public:
   }
 
   inline exec_context bind_args(db_tuple* args) {
-    assert(args);
+    SANITY(args);
     return exec_context(
         connection,
         crypto,

@@ -47,9 +47,9 @@ public:
   date_literal_node(
       const std::string& fmt) {
     int ret = sscanf(fmt.c_str(), "%d-%d-%d", &_year, &_month, &_day);
-    assert(ret == 3);
-    assert(1 <= _day && _day <= 31);
-    assert(1 <= _month && _month <= 12);
+    SANITY(ret == 3);
+    SANITY(1 <= _day && _day <= 31);
+    SANITY(1 <= _month && _month <= 12);
     // TODO: validate for actual date
   }
 
@@ -136,7 +136,7 @@ class substring_node : public expr_node {
 public:
   substring_node(expr_node* child, size_t from_arg, size_t for_arg)
     : expr_node({child}), _from_arg(from_arg), _for_arg(for_arg) {
-    assert(from_arg > 0); // SQL SUBSTRING is 1-indexed
+    SANITY(from_arg > 0); // SQL SUBSTRING is 1-indexed
   }
   virtual db_elem eval(exec_context& ctx);
 private:
@@ -234,7 +234,7 @@ public:
   virtual db_elem eval(exec_context& ctx) {
     db_elem& c = ctx.tuple->columns[_pos];
     if (ctx.idx != -1 && c.is_vector()) {
-      assert(ctx.idx >= 0);
+      SANITY(ctx.idx >= 0);
       return c[ctx.idx];
     } else {
       return c;

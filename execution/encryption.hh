@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <string>
 
+#include <execution/common.hh>
 #include <parser/cdb_helpers.hh>
 #include <util/static_assert.hh>
 
@@ -27,7 +28,7 @@ inline uint64_t encrypt_at_most_u64_det(
         fieldname(field_pos, "DET"), SECLEVEL::PLAIN_DET,
         join ? SECLEVEL::DETJOIN : SECLEVEL::DET,
         isBin, 12345);
-  assert(!isBin);
+  SANITY(!isBin);
   return resultFromStr<uint64_t>(enc_value);
 }
 
@@ -132,7 +133,7 @@ inline std::string encrypt_string_det(
         fieldname(field_pos, "DET"), SECLEVEL::PLAIN_DET,
         join ? SECLEVEL::DETJOIN : SECLEVEL::DET,
         isBin, 12345);
-  assert(isBin);
+  SANITY(isBin);
   return enc_value;
 }
 
@@ -162,7 +163,7 @@ inline uint64_t encrypt_at_most_u32_ope(
         cm->cm->getmkey(), to_s(value), TYPE_INTEGER,
         (join ? "ope_join" : fieldname(field_pos, "OPE")), SECLEVEL::PLAIN_OPE,
         SECLEVEL::OPE, isBin, 12345);
-  assert(!isBin);
+  SANITY(!isBin);
   return resultFromStr<uint64_t>(enc_value);
 }
 
@@ -240,7 +241,7 @@ inline std::string encrypt_at_most_u64_ope(
         cm->cm->getmkey(), to_s(value), TYPE_INTEGER,
         (join ? "ope_join" : fieldname(field_pos, "OPE")), SECLEVEL::PLAIN_OPE,
         SECLEVEL::OPE, isBin, 12345);
-  assert(isBin);
+  SANITY(isBin);
   return enc_value;
 }
 
@@ -280,7 +281,7 @@ inline uint64_t encrypt_string_ope(
         fieldname(field_pos, "OPE"), SECLEVEL::PLAIN_OPE,
         SECLEVEL::OPE /* OPEJOIN does not exist for strings, in current impl... */,
         isBin, 12345);
-  assert(!isBin);
+  SANITY(!isBin);
   // TODO: OPE string is currenlty just a prefix match...
   return resultFromStr<uint64_t>(enc_value);
 }
