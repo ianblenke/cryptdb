@@ -7,6 +7,11 @@
 #include <set>
 #include <pthread.h>
 
+#include <unistd.h>
+#include <sys/mman.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+
 #include <parser/cdb_helpers.hh>
 #include <crypto/paillier.hh>
 
@@ -385,6 +390,9 @@ local_decrypt_op::tuple_desc()
   }
   return ret;
 }
+
+// a decrypted agg cannot exceed this many bytes
+static const size_t MaxAggPtSize = (256 + sizeof(uint64_t));
 
 static db_elem
 do_decrypt_hom_agg(exec_context& ctx, const string& data)
@@ -882,14 +890,53 @@ static void* do_decrypt_db_tuple_op_wrapper(void* p) {
 }
 
 static bool
-desc_vec_qualifies_for_parallel_decryption(const local_decrypt_op::desc_vec& dv)
+desc_vec_qualifies_for_parallel_decryption(
+    const local_decrypt_op::desc_vec& dv,
+    const local_decrypt_op::pos_vec& pv)
 {
   // NTL isn't thread-safe unfortunately. So we can't do
   // hom decryptions in parallel, unfortunately.
-  for (auto &d : dv) {
-    if (!column_desc_qualifies_for_parallel_decryption(d)) return false;
+  for (auto p : pv) {
+    if (!column_desc_qualifies_for_parallel_decryption(dv[p])) return false;
   }
   return true;
+}
+
+// modifies tuples in place
+static void
+do_parallel_tuple_decrypt(
+    exec_context& ctx,
+    vector<db_tuple>& tuples,
+    const local_decrypt_op::desc_vec& desc,
+    const vector<size_t>& pos)
+{
+  // take pointers of all the tuples (modify in place)
+  vector< db_tuple* > tuple_pointers;
+  tuple_pointers.reserve(tuples.size());
+  for (size_t i = 0; i < tuples.size(); i++) {
+    tuple_pointers.push_back(&tuples[i]);
+  }
+
+  vector< vector< db_tuple* > > groups;
+  SplitRowsIntoGroups(groups, tuple_pointers, NThreads);
+  SANITY(groups.size() == NThreads);
+
+  pthread_t thds[NThreads];
+  decrypt_db_tuple_args args[NThreads];
+
+  for (size_t i = 0; i < NThreads; i++) {
+    args[i].ctx     = &ctx;
+    args[i].tuples  = &groups[i];
+    args[i].desc    = &desc;
+    args[i].pos     = &pos;
+    int r = pthread_create(&thds[i], NULL, do_decrypt_db_tuple_op_wrapper, &args[i]);
+    if (r) SANITY(false);
+  }
+
+  for (size_t i = 0; i < NThreads; i++) {
+    int r = pthread_join(thds[i], NULL);
+    if (r) SANITY(false);
+  }
 }
 
 void
@@ -922,47 +969,128 @@ local_decrypt_op::next(exec_context& ctx, db_tuple_vec& tuples)
 
   bool enough_tuples = tuples.size() >= ParThreshold;
   bool do_par = enough_tuples &&
-                desc_vec_qualifies_for_parallel_decryption(desc);
-
-  if (enough_tuples && !do_par) {
-    dprintf("SUB-OPTIMALITY: could not do parallel decryption for %s tuples\n",
-            TO_C(tuples.size()));
-  }
+                desc_vec_qualifies_for_parallel_decryption(desc, _pos);
 
   timer t;
   if (do_par) {
+    // easy parallel case
     dprintf("using parallel impl to decrypt %s tuples\n", TO_C(tuples.size()));
+    do_parallel_tuple_decrypt(ctx, tuples, desc, _pos);
+  } else if (enough_tuples) {
+    // not as easy parallel case
+    dprintf("SUB-OPTIMALITY: having to use fork parallel decryption for %s tuples\n",
+            TO_C(tuples.size()));
 
-    // take pointers of all the tuples (modify in place)
     vector< db_tuple* > tuple_pointers;
     tuple_pointers.reserve(tuples.size());
     for (size_t i = 0; i < tuples.size(); i++) {
       tuple_pointers.push_back(&tuples[i]);
     }
+    size_t nelems_per_group = tuple_pointers.size() / NThreads; // excluding the last group
 
     vector< vector< db_tuple* > > groups;
     SplitRowsIntoGroups(groups, tuple_pointers, NThreads);
     SANITY(groups.size() == NThreads);
 
-    pthread_t thds[NThreads];
-    decrypt_db_tuple_args args[NThreads];
+    set<size_t> already_decrypted;
+    for (auto col : _pos) {
+      if (!column_desc_qualifies_for_parallel_decryption(desc[col])) {
+        already_decrypted.insert(col);
 
-    for (size_t i = 0; i < NThreads; i++) {
-      args[i].ctx     = &ctx;
-      args[i].tuples  = &groups[i];
-      args[i].desc    = &desc;
-      args[i].pos     = &_pos;
-      int r = pthread_create(&thds[i], NULL, do_decrypt_db_tuple_op_wrapper, &args[i]);
-      if (r) SANITY(false);
+        SANITY(desc[col].type == db_elem::TYPE_STRING);
+
+        bool orig = desc[col].onion_type == oAGG_ORIGINAL;
+        size_t mmap_elem_size = orig ? sizeof(double) : (MaxAggPtSize + sizeof(uint32_t));
+
+        vector<char*> mapped_regions;
+        mapped_regions.reserve(NThreads);
+        for (size_t i = 0; i < NThreads; i++) {
+          char* p = (char *) mmap(NULL, groups[i].size() * mmap_elem_size,
+                                  PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+          SANITY(p != MAP_FAILED);
+          mapped_regions.push_back(p);
+        }
+
+        vector<pid_t> pids;
+        pids.reserve(NThreads);
+        for (size_t i = 0; i < NThreads; i++) {
+          pid_t pid;
+          switch ((pid = fork())) {
+            case -1: SANITY(false);
+            case 0: // child
+              {
+                char *group_buffer = mapped_regions[i];
+                // take control of group i
+                for (size_t row = 0; row < groups[i].size(); row++) {
+                  char *row_buffer = group_buffer + row * mmap_elem_size;
+                  if (orig) {
+                    db_elem x =
+                      do_decrypt_hom_agg_original(ctx, groups[i][row]->columns[col].unsafe_cast_string());
+                    double *ptr = (double *) row_buffer;
+                    *ptr = x.unsafe_cast_double();
+                  } else {
+                    db_elem x =
+                      do_decrypt_hom_agg(ctx, groups[i][row]->columns[col].unsafe_cast_string());
+                    string s = x.unsafe_cast_string();
+                    SANITY(s.size() <= MaxAggPtSize);
+                    _static_assert(MaxAggPtSize <= std::numeric_limits<uint32_t>::max());
+                    uint32_t* ptr = (uint32_t *) row_buffer;
+                    *ptr = s.size();
+                    memcpy((row_buffer + sizeof(uint32_t)), s.data(), s.size());
+                  }
+                }
+                // msync
+                int ret = msync(group_buffer, groups[i].size() * mmap_elem_size, MS_SYNC);
+                SANITY(ret != -1);
+                _exit(0);
+              }
+            default: // parent
+              pids.push_back(pid);
+              break;
+          }
+        }
+
+        for (auto x : pids) {
+          int st;
+          int ret = waitpid(x, &st, 0);
+          SANITY(ret != -1);
+          SANITY(WIFEXITED(st));
+          SANITY(WEXITSTATUS(st) == 0);
+        }
+
+        // now set the elements to reflect the decrypted versions
+        for (size_t i = 0; i < NThreads; i++) {
+          char *group_ptr = mapped_regions[i];
+          for (size_t j = 0; j < groups[i].size(); j++) {
+            char *row_ptr = group_ptr + j * mmap_elem_size;
+            size_t row_id = i * nelems_per_group + j;
+            if (orig) {
+              tuples[row_id].columns[col] = db_elem(*((double*)row_ptr));
+            } else {
+              tuples[row_id].columns[col] =
+                db_elem(string(row_ptr + sizeof(uint32_t), *((uint32_t*)row_ptr)));
+            }
+          }
+          // munmap the region
+          int ret = munmap(group_ptr, mmap_elem_size * groups[i].size());
+          SANITY(ret != -1);
+        }
+      }
     }
 
-    for (size_t i = 0; i < NThreads; i++) {
-      int r = pthread_join(thds[i], NULL);
-      if (r) SANITY(false);
+    SANITY(!already_decrypted.empty());
+
+    // decrypt remaining things in parallel using standard threads
+    vector<size_t> new_pos;
+    for (auto p : _pos) {
+      if (already_decrypted.count(p) == 0) {
+        new_pos.push_back(p);
+      }
     }
+    if (!new_pos.empty()) do_parallel_tuple_decrypt(ctx, tuples, desc, new_pos);
 
   } else {
-    // TODO: consider using a decryption cache here?
+    // no tuple-level parallelism
     for (size_t i = 0; i < tuples.size(); i++) {
       db_tuple& tuple = tuples[i];
       do_decrypt_db_tuple_op(ctx, tuple, desc, _pos, vector<decrypt_cache*>());
