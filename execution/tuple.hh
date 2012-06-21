@@ -95,9 +95,9 @@ private:
   // this must be a numeric type and promotable
   // for now, we don't handle nulls correctly
   db_elem promote(type t) const {
-    assert(IsNumericType(t));
-    assert(IsNumericType(_t));
-    assert(_t < t);
+    SANITY(IsNumericType(t));
+    SANITY(IsNumericType(_t));
+    SANITY(_t < t);
     switch (_t) {
       case TYPE_BOOL:
         switch (t) {
@@ -106,7 +106,7 @@ private:
           default: assert(false);
         }
       case TYPE_INT:
-        assert(t == TYPE_DOUBLE);
+        SANITY(t == TYPE_DOUBLE);
         return db_elem( (double) _d.i64 );
       default: assert(false);
     }
@@ -118,7 +118,7 @@ public:
   /** WARNING: currently not thread-safe */
   /* hash not supported for vector type */
   int64_t hash() const {
-    assert(!is_vector());
+    SANITY(!is_vector());
     if (_hash == -1) {
       // must compute
 

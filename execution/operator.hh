@@ -86,7 +86,7 @@ public:
 protected:
 
   inline physical_operator* first_child() {
-    assert(!_children.empty());
+    SANITY(!_children.empty());
     return _children.front();
   }
 

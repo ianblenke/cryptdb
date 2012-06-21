@@ -115,7 +115,7 @@ db_elem::like(const db_elem& qstr, bool case_sensitive) const
     return db_elem(target == pattern);
   }
 
-  assert(!pattern.empty());
+  SANITY(!pattern.empty());
 
   if (pos.size() == 1 && pos.front() == 0) {
     // pattern = "%..."

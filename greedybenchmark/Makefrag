@@ -1,0 +1,6 @@
+OBJDIRS += greedybenchmark
+GREEDYPROGS := program
+GREEDYPROGOBJS := $(patsubst %,$(OBJDIR)/greedybenchmark/%,$(GREEDYPROGS))
+all: $(GREEDYPROGOBJS)
+$(GREEDYPROGOBJS): %: %.o $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbparser.so $(OBJDIR)/libedbutil.so $(OBJDIR)/libexecution.so
+	$(CXX) $< -o $@ -ledbparser  $(LDFLAGS) -ledbutil -lcryptdb -ledbcrypto -ledbcrypto2 -lexecution -lmysqlclient -ltbb -lgmp -lpq

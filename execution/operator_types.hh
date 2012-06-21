@@ -75,8 +75,8 @@ public:
       const pos_vec& pos,
       physical_operator* child)
     : physical_operator({child}), _pos(pos) {
-    assert(!pos.empty());
-    assert(child);
+    SANITY(!pos.empty());
+    SANITY(child);
   }
 
   virtual desc_vec tuple_desc();
@@ -110,8 +110,8 @@ public:
       physical_operator* child,
       const op_vec& subqueries)
     : physical_operator({child}), _filter(filter), _subqueries(subqueries) {
-    assert(filter);
-    assert(child);
+    SANITY(filter);
+    SANITY(child);
   }
 
   ~local_filter_op() {
@@ -207,7 +207,7 @@ public:
       size_t n,
       physical_operator* child)
     : physical_operator({child}), _i(0), _n(n) {
-    assert(child);
+    SANITY(child);
   }
 
   DECL_PHY_OP_ITER_IFACE;

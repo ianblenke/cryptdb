@@ -7,6 +7,11 @@
 #include <set>
 #include <pthread.h>
 
+#include <unistd.h>
+#include <sys/mman.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+
 #include <parser/cdb_helpers.hh>
 #include <crypto/paillier.hh>
 
@@ -71,7 +76,7 @@ remote_sql_op::open(exec_context& ctx)
             i++;
           }
           string p0 = p.str();
-          assert(!p0.empty());
+          SANITY(!p0.empty());
 
           // if first char numeric, then look in pos map
           // otherwise, named subselect
@@ -84,14 +89,14 @@ remote_sql_op::open(exec_context& ctx)
             }
 #endif
             size_t idx = resultFromStr<size_t>(p0);
-            assert(param_map.find(idx) != param_map.end());
+            SANITY(param_map.find(idx) != param_map.end());
             buf << param_map[idx].sqlify(true);
           } else {
             SANITY(_named_subselects.find(p0) != _named_subselects.end());
 
             // find + exec named subselect
             physical_operator* op = _named_subselects[p0];
-            assert(op);
+            SANITY(op);
             dprintf("executing named subselect %s\n", TO_C(p0));
 
             db_tuple_vec tuples;
@@ -106,7 +111,7 @@ remote_sql_op::open(exec_context& ctx)
               // write the results as a comma separated list
               for (size_t i = 0; i < tuples.size(); i++) {
                 db_tuple& tuple = tuples[i];
-                assert(tuple.columns.size() == 1);
+                SANITY(tuple.columns.size() == 1);
                 buf << tuple.columns.front().sqlify(false);
                 if ((i + 1) != tuples.size()) buf << ",";
               }
@@ -134,7 +139,7 @@ remote_sql_op::open(exec_context& ctx)
     if (it != ctx.cache->cache.end()) {
       _read_cursor = 0;
       _cached_results = it->second;
-      assert(_res == NULL); // sets read
+      SANITY(_res == NULL); // sets read
       dprintf("cache hit! %s rows\n", TO_C(_cached_results.size()));
       if (!_cached_results.empty()) {
         dprintf("  answer[0]: %s\n", TO_C(_cached_results[0]));
@@ -148,7 +153,7 @@ remote_sql_op::open(exec_context& ctx)
   if (!ctx.connection->execute(_do_cache_write_sql, _res)) {
     throw runtime_error("Could not execute sql");
   }
-  assert(_res);
+  SANITY(_res);
 
   dprintf("query took %s ms to execute - expect %s rows\n",
           TO_C( double(t.lap()) / 1000.0 ),
@@ -162,7 +167,7 @@ remote_sql_op::close(exec_context& ctx)
 
   // place result in cache if qualifies
   if (_do_cache_write) {
-    assert(!_do_cache_write_sql.empty());
+    SANITY(!_do_cache_write_sql.empty());
     if (ctx.cache) {
       ctx.cache->cache[_do_cache_write_sql] = _cached_results;
     }
@@ -191,7 +196,7 @@ remote_sql_op::next(exec_context& ctx, db_tuple_vec& tuples)
   TRACE_OPERATOR();
   WARN_IF_NOT_EMPTY(tuples);
 
-  assert(has_more(ctx));
+  SANITY(has_more(ctx));
 
   if (_res) {
     // read from DB
@@ -332,13 +337,13 @@ remote_sql_op::next(exec_context& ctx, db_tuple_vec& tuples)
 
     // for now, only write to query cache if 0/1 result
     if (_res->size() <= 1) {
-      assert(tuples.size() == _res->size());
+      SANITY(tuples.size() == _res->size());
       _cached_results = tuples;
       _do_cache_write = true;
     }
   } else {
     // read from cache
-    assert(_read_cursor == 0);
+    SANITY(_read_cursor == 0);
     tuples = _cached_results;
     _read_cursor = _cached_results.size();
   }
@@ -353,7 +358,7 @@ remote_sql_op::CreateFromString(
       return (db_elem(resultFromStr<int64_t>(data)));
 
     case db_elem::TYPE_BOOL:
-      assert(data == "f" || data == "t");
+      SANITY(data == "f" || data == "t");
       return (db_elem(data == "t"));
 
     case db_elem::TYPE_DOUBLE:
@@ -386,11 +391,14 @@ local_decrypt_op::tuple_desc()
   return ret;
 }
 
+// a decrypted agg cannot exceed this many bytes
+static const size_t MaxAggPtSize = (256 + sizeof(uint64_t));
+
 static db_elem
 do_decrypt_hom_agg(exec_context& ctx, const string& data)
 {
   const uint8_t* p = (const uint8_t *) data.data();
-  dprintf("got %s bytes data\n", TO_C(data.size()));
+  //dprintf("got %s bytes data\n", TO_C(data.size()));
 
   using namespace hom_agg_constants;
 
@@ -422,7 +430,7 @@ do_decrypt_hom_agg(exec_context& ctx, const string& data)
   // read group count
   uint64_t group_count;
   deserializer<uint64_t>::read(p, group_count);
-  dprintf("group count(*): %s\n", TO_C(group_count));
+  //dprintf("group count(*): %s\n", TO_C(group_count));
 
   // read number of aggs
   uint32_t n_aggs;
@@ -431,7 +439,7 @@ do_decrypt_hom_agg(exec_context& ctx, const string& data)
   //cerr << "n_aggs: " << n_aggs << endl;
 
   //NTL::ZZ mask = NTL::to_ZZ(1); mask <<= BitsPerDecimalSlot; mask -= 1;
-  //assert(NTL::NumBits(mask) == (int)BitsPerDecimalSlot);
+  //SANITY(NTL::NumBits(mask) == (int)BitsPerDecimalSlot);
 
   // TODO: if n_aggs is large enough consider parallel decryption
   NTL::ZZ accum = NTL::to_ZZ(0);
@@ -505,7 +513,7 @@ class random_eviction_cache {
 public:
   explicit random_eviction_cache(size_t s)
     : _max_elems(s), _n_lookups(0), _n_hits(0), _n_evictions(0)
-  { assert(s > 0); }
+  { SANITY(s > 0); }
 
   bool lookup(const Key& k, Value& v) {
     _n_lookups++;
@@ -525,7 +533,7 @@ public:
       // TODO: make random
       _cache.erase(_cache.begin());
     }
-    assert(_cache.size() < _max_elems);
+    SANITY(_cache.size() < _max_elems);
     _cache[k] = v;
   }
 
@@ -582,17 +590,17 @@ do_decrypt_db_elem_op(
     const db_elem& elem,
     const db_column_desc& d)
 {
-  assert(elem.get_type() != db_elem::TYPE_VECTOR);
+  SANITY(elem.get_type() != db_elem::TYPE_VECTOR);
   string s = elem.stringify();
   switch (d.type) {
     case db_elem::TYPE_INT: {
 
-      assert(d.size == 1 ||
+      SANITY(d.size == 1 ||
              d.size == 2 ||
              d.size == 4 ||
              d.size == 8);
 
-      assert(d.onion_type == oDET ||
+      SANITY(d.onion_type == oDET ||
              d.onion_type == oOPE);
 
       bool isDet = d.onion_type == oDET;
@@ -621,8 +629,8 @@ do_decrypt_db_elem_op(
 
     case db_elem::TYPE_CHAR: {
 
-      assert(d.size == 1);
-      assert(d.onion_type == oDET ||
+      SANITY(d.size == 1);
+      SANITY(d.onion_type == oDET ||
              d.onion_type == oOPE);
 
       uint64_t x =
@@ -630,14 +638,14 @@ do_decrypt_db_elem_op(
           decrypt_u8_det(ctx.crypto, s, d.pos, d.level) :
           decrypt_u8_ope(ctx.crypto, s, d.pos, d.level) ;
 
-      assert( x <= numeric_limits<unsigned char>::max() );
+      SANITY( x <= numeric_limits<unsigned char>::max() );
 
       return db_elem(char(x));
     }
 
     case db_elem::TYPE_STRING: {
 
-      assert(d.onion_type == oDET ||
+      SANITY(d.onion_type == oDET ||
              d.onion_type == oAGG ||
              d.onion_type == oAGG_ORIGINAL);
       // NO decryption of OPE onions
@@ -654,9 +662,9 @@ do_decrypt_db_elem_op(
 
     case db_elem::TYPE_DATE: {
 
-      assert(d.size == 3);
+      SANITY(d.size == 3);
 
-      assert(d.onion_type == oDET ||
+      SANITY(d.onion_type == oDET ||
              d.onion_type == oOPE);
 
       uint64_t x = (d.onion_type == oDET) ?
@@ -676,7 +684,7 @@ do_decrypt_db_elem_op(
     // TODO: fix hack...
     case db_elem::TYPE_DECIMAL_15_2: {
 
-      assert(d.onion_type == oDET ||
+      SANITY(d.onion_type == oDET ||
              d.onion_type == oOPE);
 
       uint64_t x =
@@ -746,6 +754,13 @@ static void* do_decrypt_db_elem_op_wrapper(void* p) {
 static const size_t ParThreshold = 25;
 static const size_t NThreads = 8;
 
+static bool column_desc_qualifies_for_parallel_decryption(const db_column_desc& d)
+{
+  if (d.onion_type == oAGG ||
+      d.onion_type == oAGG_ORIGINAL) return false;
+  return true;
+}
+
 // modifies tuple in place
 static void
 do_decrypt_db_tuple_op(
@@ -770,12 +785,14 @@ do_decrypt_db_tuple_op(
 
       if (e.size() >= ParThreshold) {
 
+        SANITY(column_desc_qualifies_for_parallel_decryption(d));
+
         // TODO: bootstrap these vector parallel decrypts with
         // the given decrypt cache. we don't just pass it along
         // because we want the decrypt_cache to avoid concurrenecy
         // control
 
-        dprintf("using parallel impl to decrypt %s elems\n", TO_C(e.size()));
+        //dprintf("using parallel impl to decrypt %s elems\n", TO_C(e.size()));
         timer t;
 
         vector< vector< db_elem > > groups;
@@ -800,19 +817,19 @@ do_decrypt_db_tuple_op(
           args[i].desc    = &d;
           args[i].results = &group_results[i];
           int r = pthread_create(&thds[i], NULL, do_decrypt_db_elem_op_wrapper, &args[i]);
-          if (r) assert(false);
+          if (r) SANITY(false);
         }
 
         for (size_t i = 0; i < NThreads; i++) {
           int r = pthread_join(thds[i], NULL);
-          if (r) assert(false);
+          if (r) SANITY(false);
           // TODO: this copy is un-necessary
           elems.reserve(elems.size() + group_results[i].size());
           elems.insert(elems.end(), group_results[i].begin(), group_results[i].end());
         }
 
-        assert(elems.size() == e.size());
-        dprintf("decryption took %s ms\n", TO_C( double(t.lap()) / 1000.0 ));
+        SANITY(elems.size() == e.size());
+        //dprintf("decryption took %s ms\n", TO_C( double(t.lap()) / 1000.0 ));
 
       } else {
         for (auto &e0 : e) {
@@ -872,13 +889,63 @@ static void* do_decrypt_db_tuple_op_wrapper(void* p) {
   return NULL;
 }
 
+static bool
+desc_vec_qualifies_for_parallel_decryption(
+    const local_decrypt_op::desc_vec& dv,
+    const local_decrypt_op::pos_vec& pv)
+{
+  // NTL isn't thread-safe unfortunately. So we can't do
+  // hom decryptions in parallel, unfortunately.
+  for (auto p : pv) {
+    if (!column_desc_qualifies_for_parallel_decryption(dv[p])) return false;
+  }
+  return true;
+}
+
+// modifies tuples in place
+static void
+do_parallel_tuple_decrypt(
+    exec_context& ctx,
+    vector<db_tuple>& tuples,
+    const local_decrypt_op::desc_vec& desc,
+    const vector<size_t>& pos)
+{
+  // take pointers of all the tuples (modify in place)
+  vector< db_tuple* > tuple_pointers;
+  tuple_pointers.reserve(tuples.size());
+  for (size_t i = 0; i < tuples.size(); i++) {
+    tuple_pointers.push_back(&tuples[i]);
+  }
+
+  vector< vector< db_tuple* > > groups;
+  SplitRowsIntoGroups(groups, tuple_pointers, NThreads);
+  SANITY(groups.size() == NThreads);
+
+  pthread_t thds[NThreads];
+  decrypt_db_tuple_args args[NThreads];
+
+  for (size_t i = 0; i < NThreads; i++) {
+    args[i].ctx     = &ctx;
+    args[i].tuples  = &groups[i];
+    args[i].desc    = &desc;
+    args[i].pos     = &pos;
+    int r = pthread_create(&thds[i], NULL, do_decrypt_db_tuple_op_wrapper, &args[i]);
+    if (r) SANITY(false);
+  }
+
+  for (size_t i = 0; i < NThreads; i++) {
+    int r = pthread_join(thds[i], NULL);
+    if (r) SANITY(false);
+  }
+}
+
 void
 local_decrypt_op::next(exec_context& ctx, db_tuple_vec& tuples)
 {
   TRACE_OPERATOR();
   WARN_IF_NOT_EMPTY(tuples);
 
-  assert(first_child()->has_more(ctx));
+  SANITY(first_child()->has_more(ctx));
   desc_vec desc = first_child()->tuple_desc();
 
   first_child()->next(ctx, tuples);
@@ -896,44 +963,134 @@ local_decrypt_op::next(exec_context& ctx, db_tuple_vec& tuples)
     if (p >= desc.size()) {
       cerr << "ERROR: p=(" << p << "), desc.size()=(" << desc.size() << ")" << endl;
     }
-    assert(p < desc.size());
+    SANITY(p < desc.size());
   }
 #endif
 
+  bool enough_tuples = tuples.size() >= ParThreshold;
+  bool do_par = enough_tuples &&
+                desc_vec_qualifies_for_parallel_decryption(desc, _pos);
+
   timer t;
-  if (tuples.size() >= ParThreshold) {
-
+  if (do_par) {
+    // easy parallel case
     dprintf("using parallel impl to decrypt %s tuples\n", TO_C(tuples.size()));
+    do_parallel_tuple_decrypt(ctx, tuples, desc, _pos);
+  } else if (enough_tuples) {
+    // not as easy parallel case
+    dprintf("SUB-OPTIMALITY: having to use fork parallel decryption for %s tuples\n",
+            TO_C(tuples.size()));
 
-    // take pointers of all the tuples (modify in place)
     vector< db_tuple* > tuple_pointers;
     tuple_pointers.reserve(tuples.size());
     for (size_t i = 0; i < tuples.size(); i++) {
       tuple_pointers.push_back(&tuples[i]);
     }
+    size_t nelems_per_group = tuple_pointers.size() / NThreads; // excluding the last group
 
     vector< vector< db_tuple* > > groups;
     SplitRowsIntoGroups(groups, tuple_pointers, NThreads);
     SANITY(groups.size() == NThreads);
 
-    pthread_t thds[NThreads];
-    decrypt_db_tuple_args args[NThreads];
+    set<size_t> already_decrypted;
+    for (auto col : _pos) {
+      if (!column_desc_qualifies_for_parallel_decryption(desc[col])) {
+        already_decrypted.insert(col);
 
-    for (size_t i = 0; i < NThreads; i++) {
-      args[i].ctx     = &ctx;
-      args[i].tuples  = &groups[i];
-      args[i].desc    = &desc;
-      args[i].pos     = &_pos;
-      int r = pthread_create(&thds[i], NULL, do_decrypt_db_tuple_op_wrapper, &args[i]);
-      if (r) assert(false);
+        SANITY(desc[col].type == db_elem::TYPE_STRING);
+
+        bool orig = desc[col].onion_type == oAGG_ORIGINAL;
+        size_t mmap_elem_size = orig ? sizeof(double) : (MaxAggPtSize + sizeof(uint32_t));
+
+        vector<char*> mapped_regions;
+        mapped_regions.reserve(NThreads);
+        for (size_t i = 0; i < NThreads; i++) {
+          char* p = (char *) mmap(NULL, groups[i].size() * mmap_elem_size,
+                                  PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+          SANITY(p != MAP_FAILED);
+          mapped_regions.push_back(p);
+        }
+
+        vector<pid_t> pids;
+        pids.reserve(NThreads);
+        for (size_t i = 0; i < NThreads; i++) {
+          pid_t pid;
+          switch ((pid = fork())) {
+            case -1: SANITY(false);
+            case 0: // child
+              {
+                char *group_buffer = mapped_regions[i];
+                // take control of group i
+                for (size_t row = 0; row < groups[i].size(); row++) {
+                  char *row_buffer = group_buffer + row * mmap_elem_size;
+                  if (orig) {
+                    db_elem x =
+                      do_decrypt_hom_agg_original(ctx, groups[i][row]->columns[col].unsafe_cast_string());
+                    double *ptr = (double *) row_buffer;
+                    *ptr = x.unsafe_cast_double();
+                  } else {
+                    db_elem x =
+                      do_decrypt_hom_agg(ctx, groups[i][row]->columns[col].unsafe_cast_string());
+                    string s = x.unsafe_cast_string();
+                    SANITY(s.size() <= MaxAggPtSize);
+                    _static_assert(MaxAggPtSize <= std::numeric_limits<uint32_t>::max());
+                    uint32_t* ptr = (uint32_t *) row_buffer;
+                    *ptr = s.size();
+                    memcpy((row_buffer + sizeof(uint32_t)), s.data(), s.size());
+                  }
+                }
+                // msync
+                int ret = msync(group_buffer, groups[i].size() * mmap_elem_size, MS_SYNC);
+                SANITY(ret != -1);
+                _exit(0);
+              }
+            default: // parent
+              pids.push_back(pid);
+              break;
+          }
+        }
+
+        for (auto x : pids) {
+          int st;
+          int ret = waitpid(x, &st, 0);
+          SANITY(ret != -1);
+          SANITY(WIFEXITED(st));
+          SANITY(WEXITSTATUS(st) == 0);
+        }
+
+        // now set the elements to reflect the decrypted versions
+        for (size_t i = 0; i < NThreads; i++) {
+          char *group_ptr = mapped_regions[i];
+          for (size_t j = 0; j < groups[i].size(); j++) {
+            char *row_ptr = group_ptr + j * mmap_elem_size;
+            size_t row_id = i * nelems_per_group + j;
+            if (orig) {
+              tuples[row_id].columns[col] = db_elem(*((double*)row_ptr));
+            } else {
+              tuples[row_id].columns[col] =
+                db_elem(string(row_ptr + sizeof(uint32_t), *((uint32_t*)row_ptr)));
+            }
+          }
+          // munmap the region
+          int ret = munmap(group_ptr, mmap_elem_size * groups[i].size());
+          SANITY(ret != -1);
+        }
+      }
     }
 
-    for (size_t i = 0; i < NThreads; i++) {
-      int r = pthread_join(thds[i], NULL);
-      if (r) assert(false);
+    SANITY(!already_decrypted.empty());
+
+    // decrypt remaining things in parallel using standard threads
+    vector<size_t> new_pos;
+    for (auto p : _pos) {
+      if (already_decrypted.count(p) == 0) {
+        new_pos.push_back(p);
+      }
     }
+    if (!new_pos.empty()) do_parallel_tuple_decrypt(ctx, tuples, desc, new_pos);
 
   } else {
+    // no tuple-level parallelism
     for (size_t i = 0; i < tuples.size(); i++) {
       db_tuple& tuple = tuples[i];
       do_decrypt_db_tuple_op(ctx, tuple, desc, _pos, vector<decrypt_cache*>());
@@ -964,16 +1121,16 @@ local_encrypt_op::tuple_desc()
 static db_elem
 do_encrypt_op(exec_context& ctx, const db_elem& elem, const db_column_desc& d)
 {
-  assert(elem.get_type() != db_elem::TYPE_VECTOR);
+  SANITY(elem.get_type() != db_elem::TYPE_VECTOR);
   switch (d.type) {
     case db_elem::TYPE_INT: {
 
-      assert(d.size == 1 ||
+      SANITY(d.size == 1 ||
              d.size == 2 ||
              d.size == 4 ||
              d.size == 8);
 
-      assert(d.onion_type == oDET ||
+      SANITY(d.onion_type == oDET ||
              d.onion_type == oOPE);
 
       bool isDet = d.onion_type == oDET;
@@ -981,7 +1138,7 @@ do_encrypt_op(exec_context& ctx, const db_elem& elem, const db_column_desc& d)
                     (d.level == SECLEVEL::OPEJOIN);
 
       // TODO: allow float w/ conversion
-      assert(elem.get_type() == db_elem::TYPE_INT);
+      SANITY(elem.get_type() == db_elem::TYPE_INT);
       int64_t val = elem.unsafe_cast_i64();
 
       switch (d.size) {
@@ -1008,14 +1165,14 @@ do_encrypt_op(exec_context& ctx, const db_elem& elem, const db_column_desc& d)
 
     case db_elem::TYPE_DECIMAL_15_2: {
 
-      assert(d.onion_type == oDET ||
+      SANITY(d.onion_type == oDET ||
              d.onion_type == oOPE);
 
       bool isJoin = (d.level == SECLEVEL::DETJOIN) ||
                     (d.level == SECLEVEL::OPEJOIN);
 
       // TODO: allow int w/ conversion
-      assert(elem.get_type() == db_elem::TYPE_DOUBLE);
+      SANITY(elem.get_type() == db_elem::TYPE_DOUBLE);
       double val = elem.unsafe_cast_double() * 100.0;
 
       return (d.onion_type == oDET) ?
@@ -1039,7 +1196,7 @@ local_encrypt_op::next(exec_context& ctx, db_tuple_vec& tuples)
   TRACE_OPERATOR();
   WARN_IF_NOT_EMPTY(tuples);
   map<size_t, db_column_desc> m = util::map_from_pair_vec(_enc_desc_vec);
-  assert(first_child()->has_more(ctx));
+  SANITY(first_child()->has_more(ctx));
   first_child()->next(ctx, tuples);
   for (auto &tuple : tuples) {
     for (size_t i = 0; i < tuple.columns.size(); i++) {
@@ -1056,13 +1213,13 @@ local_filter_op::next(exec_context& ctx, db_tuple_vec& tuples)
 {
   TRACE_OPERATOR();
   WARN_IF_NOT_EMPTY(tuples);
-  assert(first_child()->has_more(ctx));
+  SANITY(first_child()->has_more(ctx));
   db_tuple_vec v;
   first_child()->next(ctx, v);
   for (auto &tuple : v) {
     exec_context eval_ctx = ctx.bind(&tuple, _subqueries);
     db_elem test = _filter->eval(eval_ctx);
-    assert(test.get_type() == db_elem::TYPE_BOOL ||
+    SANITY(test.get_type() == db_elem::TYPE_BOOL ||
            test.get_type() == db_elem::TYPE_VECTOR);
     if (test.get_type() == db_elem::TYPE_BOOL) {
       if (test) tuples.push_back(tuple);
@@ -1110,7 +1267,7 @@ local_transform_op::next(exec_context& ctx, db_tuple_vec& tuples)
 {
   TRACE_OPERATOR();
   WARN_IF_NOT_EMPTY(tuples);
-  assert(first_child()->has_more(ctx));
+  SANITY(first_child()->has_more(ctx));
   db_tuple_vec v;
   first_child()->next(ctx, v);
   tuples.reserve(v.size());
@@ -1147,7 +1304,7 @@ local_group_by::next(exec_context& ctx, db_tuple_vec& tuples)
 {
   TRACE_OPERATOR();
   WARN_IF_NOT_EMPTY(tuples);
-  assert(first_child()->has_more(ctx));
+  SANITY(first_child()->has_more(ctx));
 
   while (first_child()->has_more(ctx)) {
     db_tuple_vec v;
@@ -1180,7 +1337,7 @@ local_group_by::next(exec_context& ctx, db_tuple_vec& tuples)
       // new group- initialize it
 
       vector< vector<db_elem> >& group = m[group_key];
-      assert( e.columns.size() > _pos.size() );
+      SANITY( e.columns.size() > _pos.size() );
       group.resize( e.columns.size() - _pos.size() );
 
       size_t i = 0, j = 0;
@@ -1229,7 +1386,7 @@ local_group_filter::next(exec_context& ctx, db_tuple_vec& tuples)
   TRACE_OPERATOR();
   WARN_IF_NOT_EMPTY(tuples);
 
-  assert(first_child()->has_more(ctx));
+  SANITY(first_child()->has_more(ctx));
 
   db_tuple_vec v;
   first_child()->next(ctx, v);
@@ -1266,7 +1423,7 @@ local_order_by::next(exec_context& ctx, db_tuple_vec& tuples)
   WARN_IF_NOT_EMPTY(tuples);
 
   // TODO: external merge sort?
-  assert(first_child()->has_more(ctx));
+  SANITY(first_child()->has_more(ctx));
 
   while (first_child()->has_more(ctx)) {
     db_tuple_vec v;
@@ -1289,7 +1446,7 @@ local_limit::next(exec_context& ctx, db_tuple_vec& tuples)
   TRACE_OPERATOR();
   WARN_IF_NOT_EMPTY(tuples);
 
-  assert(has_more(ctx));
+  SANITY(has_more(ctx));
   db_tuple_vec v;
   first_child()->next(ctx, v);
   size_t i = 0;
