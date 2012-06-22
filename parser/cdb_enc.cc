@@ -739,6 +739,9 @@ public:
       // the following below are for the VLDB experiments
       normal_vldb_orig, // what we use for the "state-of-the-art" before us
       normal_vldb_greedy, // cryptdb-greedy
+
+      normal_vldb_col_pack_no_precomputation,
+      normal_vldb_col_pack_with_precomputation,
   };
 
   static vector<datatypes> Schema;
@@ -766,6 +769,8 @@ public:
         break;
 
       case normal_vldb_greedy:
+      case normal_vldb_col_pack_no_precomputation:
+      case normal_vldb_col_pack_with_precomputation:
         onions = VldbCdbGreedyOnions;
         usenull = false;
         processrow = true;
@@ -1205,7 +1210,31 @@ protected:
         }
         break;
 
+      case opt_type::normal_vldb_col_pack_no_precomputation:
+        {
+          ZZ z;
+
+          // l_quantity_AGG
+          long l_quantity_int = roundToLong(resultFromStr<double>(tokens[lineitem::l_quantity]) * 100.0);
+          insert_into_slot<BitsPerAggField>(z, l_quantity_int, 0);
+
+          // l_extendedprice_AGG
+          long l_extendedprice_int = roundToLong(resultFromStr<double>(tokens[lineitem::l_extendedprice]) * 100.0);
+          insert_into_slot<BitsPerAggField>(z, l_extendedprice_int, 1);
+
+          // l_discount_AGG
+          long l_discount_int = roundToLong(resultFromStr<double>(tokens[lineitem::l_discount]) * 100.0);
+          insert_into_slot<BitsPerAggField>(z, l_discount_int, 2);
+
+          string enc = cm.encrypt_Paillier(z);
+          assert(enc.size() <= 256);
+          push_binary_string(enccols, enc);
+
+          break;
+        }
+
       case opt_type::normal_vldb_greedy:
+      case opt_type::normal_vldb_col_pack_with_precomputation:
         {
           // l_shipdate's year
           const string& l_shipdate = tokens[lineitem::l_shipdate];
@@ -1238,6 +1267,39 @@ protected:
           double l_disc_price     = l_extendedprice * (1.0 - l_discount);
           do_encrypt(0, DT_FLOAT, ONION_DET, to_s(l_disc_price),
                      enccols, cm, false);
+        }
+
+        if (tpe == opt_type::normal_vldb_col_pack_with_precomputation) {
+          ZZ z;
+
+          // l_quantity_AGG
+          long l_quantity_int = roundToLong(resultFromStr<double>(tokens[lineitem::l_quantity]) * 100.0);
+          insert_into_slot<BitsPerAggField>(z, l_quantity_int, 0);
+
+          // l_extendedprice_AGG
+          long l_extendedprice_int = roundToLong(resultFromStr<double>(tokens[lineitem::l_extendedprice]) * 100.0);
+          insert_into_slot<BitsPerAggField>(z, l_extendedprice_int, 1);
+
+          // l_disc_price = l_extendedprice * (1 - l_discount)
+          double l_extendedprice  = resultFromStr<double>(tokens[lineitem::l_extendedprice]);
+          double l_discount       = resultFromStr<double>(tokens[lineitem::l_discount]);
+          double l_disc_price     = l_extendedprice * (1.0 - l_discount);
+          long   l_disc_price_int = roundToLong(l_disc_price * 100.0);
+          insert_into_slot<BitsPerAggField>(z, l_disc_price_int, 2);
+
+          // l_charge = l_extendedprice * (1 - l_discount) * (1 + l_tax)
+          double l_tax        = resultFromStr<double>(tokens[lineitem::l_tax]);
+          double l_charge     = l_extendedprice * (1.0 - l_discount) * (1.0 + l_tax);
+          long   l_charge_int = roundToLong(l_charge * 100.0);
+          insert_into_slot<BitsPerAggField>(z, l_charge_int, 3);
+
+          // l_discount_AGG
+          long l_discount_int = roundToLong(resultFromStr<double>(tokens[lineitem::l_discount]) * 100.0);
+          insert_into_slot<BitsPerAggField>(z, l_discount_int, 4);
+
+          string enc = cm.encrypt_Paillier(z);
+          assert(enc.size() <= 256);
+          push_binary_string(enccols, enc);
         }
 
         break;
@@ -1760,6 +1822,8 @@ static map<string, table_encryptor *> EncryptorMap = {
 
   {"lineitem-normal-vldb-orig", new lineitem_encryptor(lineitem_encryptor::normal_vldb_orig)},
   {"lineitem-normal-vldb-greedy", new lineitem_encryptor(lineitem_encryptor::normal_vldb_greedy)},
+  {"lineitem-normal-vldb-col-pack-with-precomputation", new lineitem_encryptor(lineitem_encryptor::normal_vldb_col_pack_with_precomputation)},
+  {"lineitem-normal-vldb-col-pack-no-precomputation", new lineitem_encryptor(lineitem_encryptor::normal_vldb_col_pack_no_precomputation)},
 
   {"partsupp-none", new partsupp_encryptor(partsupp_encryptor::none)},
   {"partsupp-normal", new partsupp_encryptor(partsupp_encryptor::normal)},
