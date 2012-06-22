@@ -392,7 +392,9 @@ local_decrypt_op::tuple_desc()
 }
 
 // a decrypted agg cannot exceed this many bytes
-static const size_t MaxAggPtSize = (256 + sizeof(uint64_t));
+// these are the same for now
+static const size_t MaxAggPtSizeOrig = 256;
+static const size_t MaxAggPtSize = 256;
 
 static db_elem
 do_decrypt_hom_agg(exec_context& ctx, const string& data)
@@ -483,10 +485,10 @@ do_decrypt_hom_agg(exec_context& ctx, const string& data)
   }
 
   // now we write this data into a string db_elem, where the data in the string
-  // is [count, ZZ]
+  // is the plaintext ZZ
 
   ostringstream buf;
-  serializer<uint64_t>::write(buf, group_count);
+  //serializer<uint64_t>::write(buf, group_count);
   string x = StringFromZZ(accum_final);
   buf << x;
 
@@ -501,12 +503,8 @@ do_decrypt_hom_agg_original(exec_context& ctx, const string& data)
 {
   NTL::ZZ pt;
   ctx.crypto->cm->decrypt_Paillier(data, pt);
-
-  // TPC-H assumption: all hom aggs are DECIMAL(15, 2)
-  uint64_t v = NTL::to_long(pt);
-  return db_elem( double(v) / 100.0 );
+  return db_elem(StringFromZZ(pt));
 }
-
 
 template <typename Key, typename Value>
 class random_eviction_cache {
@@ -1000,7 +998,7 @@ local_decrypt_op::next(exec_context& ctx, db_tuple_vec& tuples)
         SANITY(desc[col].type == db_elem::TYPE_STRING);
 
         bool orig = desc[col].onion_type == oAGG_ORIGINAL;
-        size_t mmap_elem_size = orig ? sizeof(double) : (MaxAggPtSize + sizeof(uint32_t));
+        size_t mmap_elem_size = ((orig ? MaxAggPtSizeOrig : MaxAggPtSize) + sizeof(uint32_t));
 
         vector<char*> mapped_regions;
         mapped_regions.reserve(NThreads);
@@ -1021,26 +1019,24 @@ local_decrypt_op::next(exec_context& ctx, db_tuple_vec& tuples)
               {
                 char *group_buffer = mapped_regions[i];
                 // take control of group i
-                for (size_t row = 0; row < groups[i].size(); row++) {
+                auto &group = groups[i];
+                for (size_t row = 0; row < group.size(); row++) {
                   char *row_buffer = group_buffer + row * mmap_elem_size;
-                  if (orig) {
-                    db_elem x =
-                      do_decrypt_hom_agg_original(ctx, groups[i][row]->columns[col].unsafe_cast_string());
-                    double *ptr = (double *) row_buffer;
-                    *ptr = x.unsafe_cast_double();
-                  } else {
-                    db_elem x =
-                      do_decrypt_hom_agg(ctx, groups[i][row]->columns[col].unsafe_cast_string());
-                    string s = x.unsafe_cast_string();
-                    SANITY(s.size() <= MaxAggPtSize);
-                    _static_assert(MaxAggPtSize <= std::numeric_limits<uint32_t>::max());
-                    uint32_t* ptr = (uint32_t *) row_buffer;
-                    *ptr = s.size();
-                    memcpy((row_buffer + sizeof(uint32_t)), s.data(), s.size());
-                  }
+                  db_elem x = orig ?
+                    do_decrypt_hom_agg_original(ctx, group[row]->columns[col].unsafe_cast_string()) :
+                    do_decrypt_hom_agg(ctx, group[row]->columns[col].unsafe_cast_string());
+                  string s = x.unsafe_cast_string();
+                  SANITY(s.size() <= (orig ? MaxAggPtSizeOrig : MaxAggPtSize));
+
+                  _static_assert(MaxAggPtSize     <= std::numeric_limits<uint32_t>::max());
+                  _static_assert(MaxAggPtSizeOrig <= std::numeric_limits<uint32_t>::max());
+
+                  uint32_t* ptr = (uint32_t *) row_buffer;
+                  *ptr = s.size();
+                  memcpy((row_buffer + sizeof(uint32_t)), s.data(), s.size());
                 }
                 // msync
-                int ret = msync(group_buffer, groups[i].size() * mmap_elem_size, MS_SYNC);
+                int ret = msync(group_buffer, group.size() * mmap_elem_size, MS_SYNC);
                 SANITY(ret != -1);
                 _exit(0);
               }
@@ -1064,12 +1060,8 @@ local_decrypt_op::next(exec_context& ctx, db_tuple_vec& tuples)
           for (size_t j = 0; j < groups[i].size(); j++) {
             char *row_ptr = group_ptr + j * mmap_elem_size;
             size_t row_id = i * nelems_per_group + j;
-            if (orig) {
-              tuples[row_id].columns[col] = db_elem(*((double*)row_ptr));
-            } else {
-              tuples[row_id].columns[col] =
-                db_elem(string(row_ptr + sizeof(uint32_t), *((uint32_t*)row_ptr)));
-            }
+            tuples[row_id].columns[col] =
+              db_elem(string(row_ptr + sizeof(uint32_t), *((uint32_t*)row_ptr)));
           }
           // munmap the region
           int ret = munmap(group_ptr, mmap_elem_size * groups[i].size());
