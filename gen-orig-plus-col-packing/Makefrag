@@ -1,0 +1,6 @@
+OBJDIRS += gen-orig-plus-col-packing
+GEN_ORIG_PLUS_COL_PACKINGPROGS := program
+GEN_ORIG_PLUS_COL_PACKINGPROGOBJS := $(patsubst %,$(OBJDIR)/gen-orig-plus-col-packing/%,$(GEN_ORIG_PLUS_COL_PACKINGPROGS))
+all: $(GEN_ORIG_PLUS_COL_PACKINGPROGOBJS)
+$(GEN_ORIG_PLUS_COL_PACKINGPROGOBJS): %: %.o $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbparser.so $(OBJDIR)/libedbutil.so $(OBJDIR)/libexecution.so
+	$(CXX) $< -o $@ -ledbparser  $(LDFLAGS) -ledbutil -lcryptdb -ledbcrypto -ledbcrypto2 -lexecution -lmysqlclient -ltbb -lgmp -lpq

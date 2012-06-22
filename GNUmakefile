@@ -59,6 +59,7 @@ include generated/Makefrag
 include plainbenchmark/Makefrag
 include origbenchmark/Makefrag
 include greedybenchmark/Makefrag
+include gen-orig-plus-col-packing/Makefrag
 -include playground/Makefrag
 include estimators/Makefrag
 include test/Makefrag
