@@ -36,10 +36,10 @@ create table lineitem_enc_orig_plus_precomputation (
 
   l_comment_DET bytea NOT NULL,
 
-  l_disc_price_DET bytea NOT NULL,
-
   l_shipdate_year_DET integer NOT NULL,
   l_shipdate_year_OPE bigint NOT NULL,
+
+  l_disc_price_DET bigint NOT NULL,
 
   l_packed_precompute_AGG bytea NOT NULL
 

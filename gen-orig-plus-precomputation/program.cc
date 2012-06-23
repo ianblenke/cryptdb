@@ -375,13 +375,20 @@ class param_generator_id19 : public sql_param_generator {
 public:
 virtual param_map get_param_map(exec_context& ctx) {
   param_map m;
-  m[0] = db_elem(encrypt_string_det(ctx.crypto, "41", 4, false));
-  m[1] = db_elem(encrypt_string_det(ctx.crypto, "26", 4, false));
-  m[2] = db_elem(encrypt_string_det(ctx.crypto, "36", 4, false));
-  m[3] = db_elem(encrypt_string_det(ctx.crypto, "27", 4, false));
-  m[4] = db_elem(encrypt_string_det(ctx.crypto, "38", 4, false));
-  m[5] = db_elem(encrypt_string_det(ctx.crypto, "37", 4, false));
-  m[6] = db_elem(encrypt_string_det(ctx.crypto, "22", 4, false));
+  {
+    static const size_t RowColPackPlainSize = 1024;
+    static const size_t RowColPackCipherSize = RowColPackPlainSize * 2;
+    auto pp = ctx.pp_cache->get_paillier_priv(RowColPackCipherSize / 2, RowColPackCipherSize / 8);
+    auto pk = pp.pubkey();
+    m[0] = (RowColPackCipherSize == 2048) ? db_elem(ctx.crypto->cm->getPKInfo()) : db_elem(StringFromZZ(pk[0] * pk[0]));
+  }
+  m[1] = db_elem(encrypt_string_det(ctx.crypto, "41", 4, false));
+  m[2] = db_elem(encrypt_string_det(ctx.crypto, "26", 4, false));
+  m[3] = db_elem(encrypt_string_det(ctx.crypto, "36", 4, false));
+  m[4] = db_elem(encrypt_string_det(ctx.crypto, "27", 4, false));
+  m[5] = db_elem(encrypt_string_det(ctx.crypto, "38", 4, false));
+  m[6] = db_elem(encrypt_string_det(ctx.crypto, "37", 4, false));
+  m[7] = db_elem(encrypt_string_det(ctx.crypto, "22", 4, false));
   return m;
 }
 };
@@ -511,7 +518,7 @@ static void query_7(exec_context& ctx) {
     {local_transform_op::trfm_desc(0), local_transform_op::trfm_desc(std::make_pair(db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oNONE, SECLEVEL::PLAIN, 0, false), new div_node(new function_call_node("hom_get_pos", {new tuple_pos_node(1), new int_literal_node(2)}), new function_call_node("hom_get_pos", {new tuple_pos_node(2), new int_literal_node(2)})))), },
     new local_decrypt_op(
       {0, 1, 2},
-      new remote_sql_op(new param_generator_id7, "select agg_ident(all_nations.o_year_DET), hom_agg(:0, case when (all_nations.nation) = (:1) then all_nations.volume else NULL end), agg_hash(:2, all_nations.volume) from ( select " ORDERS_ENC_NAME ".o_orderdate_year_OPE as o_year, " ORDERS_ENC_NAME ".o_orderdate_year_DET as o_year_DET, " LINEITEM_ENC_NAME ".l_packed_precompute_AGG as volume, n2.n_name_DET as nation from " PART_ENC_NAME ", " SUPPLIER_ENC_NAME ", " LINEITEM_ENC_NAME ", " ORDERS_ENC_NAME ", " CUSTOMER_ENC_NAME ", " NATION_ENC_NAME " n1, " NATION_ENC_NAME " n2, " REGION_ENC_NAME " where (((((((((((" PART_ENC_NAME ".p_partkey_DET) = (" LINEITEM_ENC_NAME ".l_partkey_DET)) and ((" SUPPLIER_ENC_NAME ".s_suppkey_DET) = (" LINEITEM_ENC_NAME ".l_suppkey_DET))) and ((" LINEITEM_ENC_NAME ".l_orderkey_DET) = (" ORDERS_ENC_NAME ".o_orderkey_DET))) and ((" ORDERS_ENC_NAME ".o_custkey_DET) = (" CUSTOMER_ENC_NAME ".c_custkey_DET))) and ((" CUSTOMER_ENC_NAME ".c_nationkey_DET) = (n1.n_nationkey_DET))) and ((n1.n_regionkey_DET) = (" REGION_ENC_NAME ".r_regionkey_DET))) and ((" REGION_ENC_NAME ".r_name_DET) = (:3))) and ((" SUPPLIER_ENC_NAME ".s_nationkey_DET) = (n2.n_nationkey_DET))) and ((" ORDERS_ENC_NAME ".o_orderdate_OPE) >= (:4))) and ((" ORDERS_ENC_NAME ".o_orderdate_OPE) <= (:5))) and ((" PART_ENC_NAME ".p_type_DET) = (:6)) ) as all_nations group by all_nations.o_year order by all_nations.o_year ASC", {db_column_desc(db_elem::TYPE_INT, 2, oDET, SECLEVEL::DET, 0, false), db_column_desc(db_elem::TYPE_STRING, 2147483647, oAGG_ORIGINAL, SECLEVEL::SEMANTIC_AGG, 0, false), db_column_desc(db_elem::TYPE_STRING, 2147483647, oAGG_ORIGINAL, SECLEVEL::SEMANTIC_AGG, 0, false)}, {}, util::map_from_pair_vec<std::string, physical_operator*>({})))
+      new remote_sql_op(new param_generator_id7, "select agg_ident(all_nations.o_year_DET), hom_agg(:0, case when (all_nations.nation) = (:1) then all_nations.volume else NULL end), hom_agg(:2, all_nations.volume) from ( select " ORDERS_ENC_NAME ".o_orderdate_year_OPE as o_year, " ORDERS_ENC_NAME ".o_orderdate_year_DET as o_year_DET, " LINEITEM_ENC_NAME ".l_packed_precompute_AGG as volume, n2.n_name_DET as nation from " PART_ENC_NAME ", " SUPPLIER_ENC_NAME ", " LINEITEM_ENC_NAME ", " ORDERS_ENC_NAME ", " CUSTOMER_ENC_NAME ", " NATION_ENC_NAME " n1, " NATION_ENC_NAME " n2, " REGION_ENC_NAME " where (((((((((((" PART_ENC_NAME ".p_partkey_DET) = (" LINEITEM_ENC_NAME ".l_partkey_DET)) and ((" SUPPLIER_ENC_NAME ".s_suppkey_DET) = (" LINEITEM_ENC_NAME ".l_suppkey_DET))) and ((" LINEITEM_ENC_NAME ".l_orderkey_DET) = (" ORDERS_ENC_NAME ".o_orderkey_DET))) and ((" ORDERS_ENC_NAME ".o_custkey_DET) = (" CUSTOMER_ENC_NAME ".c_custkey_DET))) and ((" CUSTOMER_ENC_NAME ".c_nationkey_DET) = (n1.n_nationkey_DET))) and ((n1.n_regionkey_DET) = (" REGION_ENC_NAME ".r_regionkey_DET))) and ((" REGION_ENC_NAME ".r_name_DET) = (:3))) and ((" SUPPLIER_ENC_NAME ".s_nationkey_DET) = (n2.n_nationkey_DET))) and ((" ORDERS_ENC_NAME ".o_orderdate_OPE) >= (:4))) and ((" ORDERS_ENC_NAME ".o_orderdate_OPE) <= (:5))) and ((" PART_ENC_NAME ".p_type_DET) = (:6)) ) as all_nations group by all_nations.o_year order by all_nations.o_year ASC", {db_column_desc(db_elem::TYPE_INT, 2, oDET, SECLEVEL::DET, 0, false), db_column_desc(db_elem::TYPE_STRING, 2147483647, oAGG_ORIGINAL, SECLEVEL::SEMANTIC_AGG, 0, false), db_column_desc(db_elem::TYPE_STRING, 2147483647, oAGG_ORIGINAL, SECLEVEL::SEMANTIC_AGG, 0, false)}, {}, util::map_from_pair_vec<std::string, physical_operator*>({})))
   )
   ;
   op->open(ctx);
@@ -649,7 +656,7 @@ static void query_13(exec_context& ctx) {
     {local_transform_op::trfm_desc(0), local_transform_op::trfm_desc(std::make_pair(db_column_desc(db_elem::TYPE_DOUBLE, 8, oNONE, SECLEVEL::PLAIN, 0, false), new mult_node(new double_literal_node(0.200000), new div_node(new function_call_node("hom_get_pos", {new tuple_pos_node(1), new int_literal_node(0)}), new tuple_pos_node(2))))), },
     new local_decrypt_op(
       {0, 1},
-      new remote_sql_op(new param_generator_id14, "select " LINEITEM_ENC_NAME ".l_partkey_DET, agg_hash(:0, " LINEITEM_ENC_NAME ".l_packed_precompute_AGG), count(*) from " LINEITEM_ENC_NAME ", " PART_ENC_NAME " where (((" PART_ENC_NAME ".p_partkey_DET) = (" LINEITEM_ENC_NAME ".l_partkey_DET)) and ((" PART_ENC_NAME ".p_brand_DET) = (:1))) and ((" PART_ENC_NAME ".p_container_DET) = (:2)) group by " LINEITEM_ENC_NAME ".l_partkey_DET", {db_column_desc(db_elem::TYPE_INT, 4, oDET, SECLEVEL::DETJOIN, 1, false), db_column_desc(db_elem::TYPE_STRING, 2147483647, oAGG_ORIGINAL, SECLEVEL::SEMANTIC_AGG, 0, false), db_column_desc(db_elem::TYPE_INT, 4, oNONE, SECLEVEL::PLAIN, 0, false)}, {}, util::map_from_pair_vec<std::string, physical_operator*>({})))
+      new remote_sql_op(new param_generator_id14, "select " LINEITEM_ENC_NAME ".l_partkey_DET, hom_agg(:0, " LINEITEM_ENC_NAME ".l_packed_precompute_AGG), count(*) from " LINEITEM_ENC_NAME ", " PART_ENC_NAME " where (((" PART_ENC_NAME ".p_partkey_DET) = (" LINEITEM_ENC_NAME ".l_partkey_DET)) and ((" PART_ENC_NAME ".p_brand_DET) = (:1))) and ((" PART_ENC_NAME ".p_container_DET) = (:2)) group by " LINEITEM_ENC_NAME ".l_partkey_DET", {db_column_desc(db_elem::TYPE_INT, 4, oDET, SECLEVEL::DETJOIN, 1, false), db_column_desc(db_elem::TYPE_STRING, 2147483647, oAGG_ORIGINAL, SECLEVEL::SEMANTIC_AGG, 0, false), db_column_desc(db_elem::TYPE_INT, 4, oNONE, SECLEVEL::PLAIN, 0, false)}, {}, util::map_from_pair_vec<std::string, physical_operator*>({})))
   )
   ;
   op->open(ctx);
