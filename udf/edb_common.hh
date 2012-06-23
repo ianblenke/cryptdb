@@ -88,10 +88,11 @@ BytesFromMPZ(uint8_t* p, mpz_t rop, size_t n) {
 }
 
 inline void
-InitMPZRunningSums(size_t rows_per_agg, std::vector<mpz_wrapper>& v) {
+InitMPZRunningSums(size_t rows_per_agg, bool allow_multi_slots, std::vector<mpz_wrapper>& v) {
     assert( rows_per_agg > 0 );
-    v.resize( (0x1u << rows_per_agg) - 1 );
-    for (size_t i = 0; i < (0x1u << rows_per_agg) - 1; i++) {
+    size_t n_elems = allow_multi_slots ? ((0x1UL << rows_per_agg) - 1) : rows_per_agg;
+    v.resize(n_elems);
+    for (size_t i = 0; i < n_elems; i++) {
       mpz_init_set_ui(v[i].mp, 1);
     }
 }

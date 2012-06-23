@@ -1243,7 +1243,7 @@ static void* worker_main(void* p) {
           v = &ctx->group_map[ent_it->group_key]; // create
           v->resize(ctx->as->num_groups);
           for (size_t i = 0; i < ctx->as->num_groups; i++) {
-            InitMPZRunningSums(ctx->as->rows_per_agg, v->operator[](i));
+            InitMPZRunningSums(ctx->as->rows_per_agg, true, v->operator[](i));
           }
         } else {
           v = &it->second;
@@ -1455,7 +1455,7 @@ static void flush_group_buffers(agg_hash_agg_row_pack_state *as) {
           s = &as->aggs[eit->first]; // creates on demand
           s->running_sums_mp.resize(as->num_groups);
           for (size_t i = 0; i < as->num_groups; i++) {
-            InitMPZRunningSums(as->rows_per_agg, s->running_sums_mp[i]);
+            InitMPZRunningSums(as->rows_per_agg, true, s->running_sums_mp[i]);
           }
           s->count = 0;
       } else {

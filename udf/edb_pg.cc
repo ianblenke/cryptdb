@@ -3,6 +3,7 @@
 #include <sys/time.h>
 
 #include <udf/edb_common.hh>
+#include <util/atomic.hh>
 #include <util/serializer.hh>
 #include <util/scoped_lock.hh>
 
@@ -16,7 +17,28 @@ extern void get_typlenbyvalalign(Oid typid, int16 *typlen, bool *typbyval, char 
 
 }
 
-#define DBGOUT(x)
+//#define DEBUG_MODE
+//#define PRINT_OUT_VERBOSE
+//#define PRINT_OUT_TIMING
+//#define PRINT_OUT_STATS
+
+#if defined(DEBUG_MODE) && defined(PRINT_OUT_VERBOSE)
+  #define DBGOUT(x) x
+#else
+  #define DBGOUT(x)
+#endif
+
+#if defined(DEBUG_MODE) && defined(PRINT_OUT_TIMING)
+  #define TIMINGOUT(x) x
+#else
+  #define TIMINGOUT(x)
+#endif
+
+#if defined(DEBUG_MODE) && defined(PRINT_OUT_STATS)
+  #define STATSOUT(x) x
+#else
+  #define STATSOUT(x)
+#endif
 
 static unsigned char *
 getba(PG_FUNCTION_ARGS, int i, unsigned int & len)
@@ -240,31 +262,52 @@ public:
 
   // stats
   struct stats {
-    stats() : seeks(0), mults(0), all_pos(0), masks_sum(0), masks_cnt(0) {}
+    stats() : seeks(0), mults(0), all_pos(0), merge_mults(0) {}
     uint32_t seeks;
     uint32_t mults;
     uint32_t all_pos;
-
-    uint32_t masks_sum;
-    uint32_t masks_cnt;
+    uint32_t merge_mults;
   };
+
+#ifdef DEBUG_MODE
+private:
+  static atomic_u64 _ctr;
+public:
+#endif
 
   agg_static_state(
       const std::string& key,
       const std::string& filename,
       size_t agg_size,
-      size_t rows_per_agg)
+      size_t rows_per_agg,
+      bool allow_multi_slots)
     : filename(filename), agg_size(agg_size), rows_per_agg(rows_per_agg),
-      _start_time_us(cur_usec()),
+      allow_multi_slots(allow_multi_slots), _start_time_us(cur_usec()),
       _fp(NULL), _internal_buffer(NULL), _internal_block_id(-1) {
 
     // public key
     mpz_init(public_key);
     MPZFromBytes(public_key, (const uint8_t *) key.data(), key.size());
 
+#ifdef DEBUG_MODE
     // debug crap
-    _debug_stream.open("/tmp/debug.txt");
-    assert(_debug_stream.good());
+    {
+      std::ostringstream buf;
+      buf << "/tmp/debug" << _ctr.get_and_incr() << ".txt";
+      _debug_stream.open(buf.str());
+      assert(_debug_stream.good());
+
+      _debug_stream << "created agg_static_state with parameters:" << std::endl;
+      _debug_stream << "  filename: " << filename << std::endl;
+      _debug_stream << "  agg_size: " << agg_size << std::endl;
+      _debug_stream << "  rows_per_agg: " << rows_per_agg << std::endl;
+      _debug_stream << "  allow_multi_slots: " << allow_multi_slots << std::endl;
+    }
+#endif
+
+    // TODO: should we try to cache open file pointers?
+    // need to measure the overhead of sitting in a loop
+    // and opening/closing a file pointer
 
     // file
     _fp = fopen(filename.c_str(), "rb");
@@ -280,8 +323,10 @@ public:
   ~agg_static_state() {
     mpz_clear(public_key);
 
+#ifdef DEBUG_MODE
     _debug_stream.flush();
     _debug_stream.close();
+#endif
 
     fclose(_fp);
 
@@ -293,8 +338,11 @@ public:
 
   const size_t agg_size;
   const size_t rows_per_agg;
+  const bool allow_multi_slots;
 
+#ifdef DEBUG_MODE
   inline std::ostream& debug_stream() { return _debug_stream; }
+#endif
 
   stats st;
 
@@ -363,7 +411,9 @@ private:
     return internal_block_id() + NumBlocksInternalBuffer;
   }
 
+#ifdef DEBUG_MODE
   std::ofstream _debug_stream;
+#endif
 
   const uint64_t _start_time_us;
 
@@ -380,6 +430,10 @@ private:
                               // or -1 if no blocks read into _internal_buffer
 
 };
+
+#ifdef DEBUG_MODE
+atomic_u64 agg_static_state::_ctr;
+#endif
 
 class one_time_latch {
 public:
@@ -583,6 +637,8 @@ public:
 
     flush_group_buffers();
 
+    timer t;
+
     std::vector<one_time_latch*> latches;
     latches.resize(worker_pool::NThreads);
 
@@ -613,6 +669,7 @@ public:
             mpz_mul(v[i].mp, v[i].mp, it->second[group_id][i].mp);
             mpz_mod(v[i].mp, v[i].mp, _static_state->public_key);
           }
+          _static_state->st.merge_mults += v.size();
         }
       }
     }
@@ -624,7 +681,13 @@ public:
       for (size_t i = 0; i < _num_groups; i++) {
         size_t non_zero = 0;
         size_t s = it->second.running_sums_mp[i].size();
-        assert(s == size_t((0x1 << _static_state->rows_per_agg) - 1));
+
+        if (_static_state->allow_multi_slots) {
+          assert(s == size_t((0x1UL << _static_state->rows_per_agg) - 1));
+        } else {
+          assert(s == _static_state->rows_per_agg);
+        }
+
         for (size_t idx = 0; idx < s; idx++) {
           if (mpz_cmp_ui(it->second.running_sums_mp[i][idx].mp, 1)) non_zero++;
         }
@@ -652,7 +715,11 @@ public:
             continue; // test usefullness
           }
 
-          serializer<uint32_t>::write(buf, idx+1);
+          if (_static_state->allow_multi_slots) {
+            serializer<uint32_t>::write(buf, idx+1);
+          } else {
+            serializer<uint32_t>::write(buf, (1UL << idx));
+          }
 
           std::string b;
           b.resize(_static_state->agg_size);
@@ -688,6 +755,10 @@ public:
     }
 
     buffer = buf.str();
+
+    TIMINGOUT(
+      _static_state->debug_stream() <<
+        __func__ << " took " << (double(t.lap())/1000.0) << " ms" << std::endl );
   }
 
   inline agg_static_state* static_state() { return _static_state; };
@@ -696,6 +767,8 @@ private:
 
   // flush _element_buffer
   void flush_group_buffers() {
+    timer t;
+
     using namespace std;
 
     typedef
@@ -711,6 +784,7 @@ private:
 
     alloc_map.resize(_element_buffer.size());
 
+    timer t_region1;
     size_t eit_pos = 0;
     for (auto eit = _element_buffer.begin();
         eit != _element_buffer.end(); ++eit, ++eit_pos) {
@@ -719,9 +793,13 @@ private:
       per_group_state* s = NULL;
       if (UNLIKELY(it == _aggs.end())) {
         s = &_aggs[eit->first]; // creates on demand
+        assert(_aggs.find(eit->first) != _aggs.end());
         s->running_sums_mp.resize(_num_groups);
         for (size_t i = 0; i < _num_groups; i++) {
-          InitMPZRunningSums(_static_state->rows_per_agg, s->running_sums_mp[i]);
+          InitMPZRunningSums(
+              _static_state->rows_per_agg,
+              _static_state->allow_multi_slots,
+              s->running_sums_mp[i]);
         }
         s->count = 0;
       } else {
@@ -774,6 +852,9 @@ private:
       }
       eit->second.clear(); // clear buffer
     }
+    TIMINGOUT(
+      _static_state->debug_stream() <<
+        __func__ << " region 1 took " << (double(t_region1.lap())/1000.0) << " ms" << std::endl );
 
     typedef vector
       <
@@ -790,6 +871,7 @@ private:
       group_done[alloc_map_pos].second = it->second.begin();
     }
 
+    timer t_region2;
     while (pos_first_non_empty < alloc_map.size()) {
       // find min block id for all groups
       uint64_t minSoFar = group_done[pos_first_non_empty].second->first; // block_id
@@ -826,9 +908,14 @@ private:
         if (UNLIKELY(group_map_it == work_state.group_map.end())) {
           // init it
           v = &work_state.group_map[group_key]; // create it
+          assert(work_state.group_map.find(group_key) !=
+                 work_state.group_map.end());
           v->resize(_num_groups);
           for (size_t i = 0; i < _num_groups; i++) {
-            InitMPZRunningSums(_static_state->rows_per_agg, v->operator[](i));
+            InitMPZRunningSums(
+                _static_state->rows_per_agg,
+                _static_state->allow_multi_slots,
+                v->operator[](i));
           }
         } else {
           v = &group_map_it->second;
@@ -840,12 +927,25 @@ private:
             it != group.second->second.end();
             ++it, ++group_id_idx) {
           for (auto it0 = it->begin(); it0 != it->end(); ++it0) {
-            ents.push_back(&v->operator[](group_id_idx)[(*it0) - 1]);
-
-            // stats
-            _static_state->st.mults++;
-            //static const uint32_t AllPosHigh = (0x1 << _static_state->rows_per_agg) - 1;
-            //if (group.second.front().mask == AllPosHigh) as->st.all_pos++;
+            uint64_t mask = *it0;
+            if (_static_state->allow_multi_slots) {
+              ents.push_back(&v->operator[](group_id_idx)[mask - 1]);
+              // stats
+              _static_state->st.mults++;
+              if (mask == ((0x1UL << _static_state->rows_per_agg) - 1)) {
+                _static_state->st.all_pos++;
+              }
+            } else {
+              uint64_t pos = 0;
+              while (mask) {
+                if (mask & 0x1) {
+                  ents.push_back(&v->operator[](group_id_idx)[pos]);
+                  _static_state->st.mults++;
+                }
+                pos++;
+                mask >>= 1;
+              }
+            }
           }
         }
 
@@ -865,6 +965,13 @@ private:
         else break;
       }
     }
+    TIMINGOUT(
+      _static_state->debug_stream() <<
+        __func__ << " region 2 took " << (double(t_region2.lap())/1000.0) << " ms" << std::endl );
+
+    TIMINGOUT(
+      _static_state->debug_stream() <<
+        __func__ << " took " << (double(t.lap())/1000.0) << " ms" << std::endl );
   }
 
   agg_static_state* _static_state; // ownership
@@ -903,6 +1010,14 @@ static Datum agg_hash_finalizer(PG_FUNCTION_ARGS) {
     state->static_state()->debug_stream() <<
       "...return buf is " << buf.size() << " bytes" << std::endl );
 
+  agg_static_state::stats& ATTR_UNUSED st = state->static_state()->st;
+
+  STATSOUT(
+    state->static_state()->debug_stream() <<
+      "seeks=(" << st.seeks << "), mults=(" <<
+      st.mults << "), all_pos_mults=(" << st.all_pos << "), merge_mults=(" <<
+      st.merge_mults << ")" << std::endl );
+
   delete state;
   // TODO: eliminate redundant buffer copy
   PG_RETURN_BYTEA_P(copy_to_pg_return_buffer(buf));
@@ -917,7 +1032,8 @@ static agg_typed_state<Key>* extract_state(PG_FUNCTION_ARGS, size_t n_groups) {
         getstring_fromba(PG_PASS_FARGS, 1),
         getvarchar(PG_PASS_FARGS, 2),
         PG_GETARG_INT64(3),
-        PG_GETARG_INT64(4)),
+        PG_GETARG_INT64(4),
+        PG_GETARG_BOOL(5)),
       n_groups
     );
     state->init();
@@ -927,7 +1043,7 @@ static agg_typed_state<Key>* extract_state(PG_FUNCTION_ARGS, size_t n_groups) {
   return state;
 }
 
-#define AGG_ROW_ID_IDX 5
+#define AGG_ROW_ID_IDX 6
 #define AGG_ROW_ID()   PG_GETARG_INT64(AGG_ROW_ID_IDX)
 
 template <typename Key>
@@ -951,12 +1067,12 @@ typedef tuple2<uint64_t, uint64_t> tuple2_u64_u64;
 extern "C" {
 
 // create function agg_hash_nokey_state_transition
-//  (bigint, bytea, varchar, bigint, bigint, bigint)
+//  (bigint, bytea, varchar, bigint, bigint, bool, bigint)
 //    returns bigint language C as '/home/stephentu/cryptdb/obj/udf/edb_pg.so';
 // create function agg_hash_nokey_finalizer(bigint)
 //    returns bytea language C as '/home/stephentu/cryptdb/obj/udf/edb_pg.so';
 // create aggregate agg_hash
-//  (bytea, varchar, bigint, bigint, bigint)
+//  (bytea, varchar, bigint, bigint, bool, bigint)
 //  (
 //    sfunc=agg_hash_nokey_state_transition,
 //    stype=bigint,
@@ -965,12 +1081,12 @@ extern "C" {
 //  );
 //
 // create function agg_hash_bytea_state_transition
-//  (bigint, bytea, varchar, bigint, bigint, bigint, bytea)
+//  (bigint, bytea, varchar, bigint, bigint, bool, bigint, bytea)
 //    returns bigint language C as '/home/stephentu/cryptdb/obj/udf/edb_pg.so';
 // create function agg_hash_bytea_finalizer(bigint)
 //    returns bytea language C as '/home/stephentu/cryptdb/obj/udf/edb_pg.so';
 // create aggregate agg_hash
-//  (bytea, varchar, bigint, bigint, bigint, bytea)
+//  (bytea, varchar, bigint, bigint, bool, bigint, bytea)
 //  (
 //    sfunc=agg_hash_bytea_state_transition,
 //    stype=bigint,
@@ -979,12 +1095,12 @@ extern "C" {
 //  );
 //
 // create function agg_hash_u64_u64_state_transition
-//  (bigint, bytea, varchar, bigint, bigint, bigint, bigint, bigint)
+//  (bigint, bytea, varchar, bigint, bigint, bool, bigint, bigint, bigint)
 //    returns bigint language C as '/home/stephentu/cryptdb/obj/udf/edb_pg.so';
 // create function agg_hash_u64_u64_finalizer(bigint)
 //    returns bytea language C as '/home/stephentu/cryptdb/obj/udf/edb_pg.so';
 // create aggregate agg_hash
-//  (bytea, varchar, bigint, bigint, bigint, bigint, bigint)
+//  (bytea, varchar, bigint, bigint, bigint, bool, bigint, bigint)
 //  (
 //    sfunc=agg_hash_u64_u64_state_transition,
 //    stype=bigint,
