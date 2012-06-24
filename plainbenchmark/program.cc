@@ -5,6 +5,7 @@
 #include <iostream>
 #include <edb/ConnectNew.hh>
 #include <util/util.hh>
+#include <execution/commandline.hh>
 
 static std::string
 join(const std::vector<std::string>& tokens, const std::string &sep) {
@@ -339,12 +340,18 @@ static void query_16(ConnectNew& conn) {
   delete dbres;
 }
 int main(int argc, char **argv) {
-  if (argc != 2) {
-    std::cerr << "[Usage]: " << argv[0] << " [query num]" << std::endl;
+  command_line_opts opts(
+    DB_HOSTNAME, DB_USERNAME, DB_PASSWORD, DB_DATABASE, DB_PORT);
+  command_line_opts::parse_options(argc, argv, opts);
+  std::cerr << opts << std::endl;
+  if ((optind + 1) != argc) {
+    std::cerr << "[Usage]: " << argv[0] << " [options] [query num]" << std::endl;
     return 1;
   }
-  int q = atoi(argv[1]);
-  PGConnect pg(DB_HOSTNAME, DB_USERNAME, DB_PASSWORD, DB_DATABASE, DB_PORT, true);
+  int q = atoi(argv[optind]);
+  PGConnect pg(
+   opts.db_hostname, opts.db_username, opts.db_passwd,
+   opts.db_database, opts.db_port, true);
   switch (q) {
     case 0: query_0(pg); break;
     case 1: query_1(pg); break;

@@ -15,6 +15,7 @@
 #include <execution/operator_types.hh>
 #include <execution/eval_nodes.hh>
 #include <execution/query_cache.hh>
+#include <execution/commandline.hh>
 #include <util/util.hh>
 template <typename T>
 static std::string
@@ -429,7 +430,7 @@ static void query_8(exec_context& ctx) {
   ctx.connection->execute("SET enable_indexscan TO FALSE");
   ctx.connection->execute("SET enable_nestloop TO FALSE");
 
-  physical_operator* op = new local_order_by({std::make_pair(0, false), std::make_pair(1, true)}, new local_transform_op({local_transform_op::trfm_desc(std::make_pair(db_column_desc(db_elem::TYPE_STRING, 25, oNONE, SECLEVEL::PLAIN, 1, false), new tuple_pos_node(0))), local_transform_op::trfm_desc(std::make_pair(db_column_desc(db_elem::TYPE_INT, 2, oNONE, SECLEVEL::PLAIN, 0, false), new tuple_pos_node(1))), local_transform_op::trfm_desc(std::make_pair(db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oNONE, SECLEVEL::PLAIN, 0, false), new sum_node(new tuple_pos_node(2), false))), }, new local_transform_op({local_transform_op::trfm_desc(0), local_transform_op::trfm_desc(1), local_transform_op::trfm_desc(std::make_pair(db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oNONE, SECLEVEL::PLAIN, 0, false), new sub_node(new tuple_pos_node(2), new mult_node(new tuple_pos_node(3), new tuple_pos_node(4))))), }, new local_decrypt_op({0, 1, 2, 3, 4}, new remote_sql_op(new param_generator_id8, "select " NATION_ENC_NAME ".n_name_DET as nation, " ORDERS_ENC_NAME ".o_orderdate_year_DET as o_year, group_serializer(" LINEITEM_ENC_NAME ".l_disc_price_DET), group_serializer(" PARTSUPP_ENC_NAME ".ps_supplycost_DET), group_serializer(" LINEITEM_ENC_NAME ".l_quantity_DET, 0) from " PART_ENC_NAME ", " SUPPLIER_ENC_NAME ", " LINEITEM_ENC_NAME ", " PARTSUPP_ENC_NAME ", " ORDERS_ENC_NAME ", " NATION_ENC_NAME " where (((((((" SUPPLIER_ENC_NAME ".s_suppkey_DET) = (" LINEITEM_ENC_NAME ".l_suppkey_DET)) and ((" PARTSUPP_ENC_NAME ".ps_suppkey_DET) = (" LINEITEM_ENC_NAME ".l_suppkey_DET))) and ((" PARTSUPP_ENC_NAME ".ps_partkey_DET) = (" LINEITEM_ENC_NAME ".l_partkey_DET))) and ((" PART_ENC_NAME ".p_partkey_DET) = (" LINEITEM_ENC_NAME ".l_partkey_DET))) and ((" ORDERS_ENC_NAME ".o_orderkey_DET) = (" LINEITEM_ENC_NAME ".l_orderkey_DET))) and ((" SUPPLIER_ENC_NAME ".s_nationkey_DET) = (" NATION_ENC_NAME ".n_nationkey_DET))) and (searchSWP(:0, :1, " PART_ENC_NAME ".p_name_SWP)) group by " NATION_ENC_NAME ".n_name_DET, " ORDERS_ENC_NAME ".o_orderdate_year_DET", {db_column_desc(db_elem::TYPE_STRING, 25, oDET, SECLEVEL::DET, 1, false), db_column_desc(db_elem::TYPE_INT, 2, oDET, SECLEVEL::DET, 0, false), db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oDET, SECLEVEL::DET, 0, true), db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oDET, SECLEVEL::DET, 3, true), db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oDET, SECLEVEL::DET, 4, db_column_desc::vtype_dict_compressed, 0)}, {}, util::map_from_pair_vec<std::string, physical_operator*>({}))))));
+  physical_operator* op = new local_order_by({std::make_pair(0, false), std::make_pair(1, true)}, new local_transform_op({local_transform_op::trfm_desc(std::make_pair(db_column_desc(db_elem::TYPE_STRING, 25, oNONE, SECLEVEL::PLAIN, 1, false), new tuple_pos_node(0))), local_transform_op::trfm_desc(std::make_pair(db_column_desc(db_elem::TYPE_INT, 2, oNONE, SECLEVEL::PLAIN, 0, false), new tuple_pos_node(1))), local_transform_op::trfm_desc(std::make_pair(db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oNONE, SECLEVEL::PLAIN, 0, false), new sum_node(new tuple_pos_node(2), false))), }, new local_transform_op({local_transform_op::trfm_desc(0), local_transform_op::trfm_desc(1), local_transform_op::trfm_desc(std::make_pair(db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oNONE, SECLEVEL::PLAIN, 0, false), new sub_node(new tuple_pos_node(2), new mult_node(new tuple_pos_node(3), new tuple_pos_node(4))))), }, new local_decrypt_op({0, 1, 2, 3, 4}, new remote_sql_op(new param_generator_id8, "select " NATION_ENC_NAME ".n_name_DET as nation, " ORDERS_ENC_NAME ".o_orderdate_year_DET as o_year, group_serializer(" LINEITEM_ENC_NAME ".l_disc_price_DET), group_serializer(" PARTSUPP_ENC_NAME ".ps_supplycost_DET), group_serializer(" LINEITEM_ENC_NAME ".l_quantity_DET) from " PART_ENC_NAME ", " SUPPLIER_ENC_NAME ", " LINEITEM_ENC_NAME ", " PARTSUPP_ENC_NAME ", " ORDERS_ENC_NAME ", " NATION_ENC_NAME " where (((((((" SUPPLIER_ENC_NAME ".s_suppkey_DET) = (" LINEITEM_ENC_NAME ".l_suppkey_DET)) and ((" PARTSUPP_ENC_NAME ".ps_suppkey_DET) = (" LINEITEM_ENC_NAME ".l_suppkey_DET))) and ((" PARTSUPP_ENC_NAME ".ps_partkey_DET) = (" LINEITEM_ENC_NAME ".l_partkey_DET))) and ((" PART_ENC_NAME ".p_partkey_DET) = (" LINEITEM_ENC_NAME ".l_partkey_DET))) and ((" ORDERS_ENC_NAME ".o_orderkey_DET) = (" LINEITEM_ENC_NAME ".l_orderkey_DET))) and ((" SUPPLIER_ENC_NAME ".s_nationkey_DET) = (" NATION_ENC_NAME ".n_nationkey_DET))) and (searchSWP(:0, :1, " PART_ENC_NAME ".p_name_SWP)) group by " NATION_ENC_NAME ".n_name_DET, " ORDERS_ENC_NAME ".o_orderdate_year_DET", {db_column_desc(db_elem::TYPE_STRING, 25, oDET, SECLEVEL::DET, 1, false), db_column_desc(db_elem::TYPE_INT, 2, oDET, SECLEVEL::DET, 0, false), db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oDET, SECLEVEL::DET, 0, true), db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oDET, SECLEVEL::DET, 3, true), db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oDET, SECLEVEL::DET, 4, true)}, {}, util::map_from_pair_vec<std::string, physical_operator*>({}))))));
   op->open(ctx);
   while (op->has_more(ctx)) {
     physical_operator::db_tuple_vec v;
@@ -488,7 +489,7 @@ static void query_12(exec_context& ctx) {
   delete op;
 }
 static void query_13(exec_context& ctx) {
-  physical_operator* op = new local_transform_op({local_transform_op::trfm_desc(0), local_transform_op::trfm_desc(std::make_pair(db_column_desc(db_elem::TYPE_DOUBLE, 8, oNONE, SECLEVEL::PLAIN, 0, false), new mult_node(new double_literal_node(0.200000), new avg_node(new tuple_pos_node(1), false)))), }, new local_decrypt_op({0, 1}, new remote_sql_op(new param_generator_id14, "select " LINEITEM_ENC_NAME ".l_partkey_DET, group_serializer(" LINEITEM_ENC_NAME ".l_quantity_DET, 0) from " LINEITEM_ENC_NAME ", " PART_ENC_NAME " where (((" PART_ENC_NAME ".p_partkey_DET) = (" LINEITEM_ENC_NAME ".l_partkey_DET)) and ((" PART_ENC_NAME ".p_brand_DET) = (:0))) and ((" PART_ENC_NAME ".p_container_DET) = (:1)) group by " LINEITEM_ENC_NAME ".l_partkey_DET", {db_column_desc(db_elem::TYPE_INT, 4, oDET, SECLEVEL::DETJOIN, 1, false), db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oDET, SECLEVEL::DET, 4, db_column_desc::vtype_dict_compressed, 0)}, {}, util::map_from_pair_vec<std::string, physical_operator*>({}))));
+  physical_operator* op = new local_transform_op({local_transform_op::trfm_desc(0), local_transform_op::trfm_desc(std::make_pair(db_column_desc(db_elem::TYPE_DOUBLE, 8, oNONE, SECLEVEL::PLAIN, 0, false), new mult_node(new double_literal_node(0.200000), new avg_node(new tuple_pos_node(1), false)))), }, new local_decrypt_op({0, 1}, new remote_sql_op(new param_generator_id14, "select " LINEITEM_ENC_NAME ".l_partkey_DET, group_serializer(" LINEITEM_ENC_NAME ".l_quantity_DET) from " LINEITEM_ENC_NAME ", " PART_ENC_NAME " where (((" PART_ENC_NAME ".p_partkey_DET) = (" LINEITEM_ENC_NAME ".l_partkey_DET)) and ((" PART_ENC_NAME ".p_brand_DET) = (:0))) and ((" PART_ENC_NAME ".p_container_DET) = (:1)) group by " LINEITEM_ENC_NAME ".l_partkey_DET", {db_column_desc(db_elem::TYPE_INT, 4, oDET, SECLEVEL::DETJOIN, 1, false), db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oDET, SECLEVEL::DET, 4, true)}, {}, util::map_from_pair_vec<std::string, physical_operator*>({}))));
   op->open(ctx);
   while (op->has_more(ctx)) {
     physical_operator::db_tuple_vec v;
@@ -501,12 +502,12 @@ static void query_13(exec_context& ctx) {
 static void query_14(exec_context& ctx) {
 
   std::ostringstream q0;
-  q0 << "select group_serializer(" LINEITEM_ENC_NAME ".l_quantity_DET, 0), " LINEITEM_ENC_NAME ".l_orderkey_DET from " LINEITEM_ENC_NAME " group by " LINEITEM_ENC_NAME ".l_orderkey_DET having (count(*)) >= (7)";
+  q0 << "select group_serializer(" LINEITEM_ENC_NAME ".l_quantity_DET), " LINEITEM_ENC_NAME ".l_orderkey_DET from " LINEITEM_ENC_NAME " group by " LINEITEM_ENC_NAME ".l_orderkey_DET having (count(*)) >= (7)";
 
   std::ostringstream q1;
-  q1 << "select " CUSTOMER_ENC_NAME ".c_name_DET, " CUSTOMER_ENC_NAME ".c_custkey_DET, " ORDERS_ENC_NAME ".o_orderkey_DET, agg_ident(" ORDERS_ENC_NAME ".o_orderdate_DET), agg_ident(" ORDERS_ENC_NAME ".o_totalprice_DET), group_serializer(" LINEITEM_ENC_NAME ".l_quantity_DET, 0) from " CUSTOMER_ENC_NAME ", " ORDERS_ENC_NAME ", " LINEITEM_ENC_NAME " where ((" ORDERS_ENC_NAME ".o_orderkey_DET in ( :_subselect$1 )) and ((" CUSTOMER_ENC_NAME ".c_custkey_DET) = (" ORDERS_ENC_NAME ".o_custkey_DET))) and ((" ORDERS_ENC_NAME ".o_orderkey_DET) = (" LINEITEM_ENC_NAME ".l_orderkey_DET)) group by " CUSTOMER_ENC_NAME ".c_name_DET, " CUSTOMER_ENC_NAME ".c_custkey_DET, " ORDERS_ENC_NAME ".o_orderkey_DET, " ORDERS_ENC_NAME ".o_orderdate_OPE, " ORDERS_ENC_NAME ".o_totalprice_OPE order by " ORDERS_ENC_NAME ".o_totalprice_OPE DESC, " ORDERS_ENC_NAME ".o_orderdate_OPE ASC limit 100";
+  q1 << "select " CUSTOMER_ENC_NAME ".c_name_DET, " CUSTOMER_ENC_NAME ".c_custkey_DET, " ORDERS_ENC_NAME ".o_orderkey_DET, agg_ident(" ORDERS_ENC_NAME ".o_orderdate_DET), agg_ident(" ORDERS_ENC_NAME ".o_totalprice_DET), group_serializer(" LINEITEM_ENC_NAME ".l_quantity_DET) from " CUSTOMER_ENC_NAME ", " ORDERS_ENC_NAME ", " LINEITEM_ENC_NAME " where ((" ORDERS_ENC_NAME ".o_orderkey_DET in ( :_subselect$1 )) and ((" CUSTOMER_ENC_NAME ".c_custkey_DET) = (" ORDERS_ENC_NAME ".o_custkey_DET))) and ((" ORDERS_ENC_NAME ".o_orderkey_DET) = (" LINEITEM_ENC_NAME ".l_orderkey_DET)) group by " CUSTOMER_ENC_NAME ".c_name_DET, " CUSTOMER_ENC_NAME ".c_custkey_DET, " ORDERS_ENC_NAME ".o_orderkey_DET, " ORDERS_ENC_NAME ".o_orderdate_OPE, " ORDERS_ENC_NAME ".o_totalprice_OPE order by " ORDERS_ENC_NAME ".o_totalprice_OPE DESC, " ORDERS_ENC_NAME ".o_orderdate_OPE ASC limit 100";
 
-  physical_operator* op = new local_transform_op({local_transform_op::trfm_desc(0), local_transform_op::trfm_desc(1), local_transform_op::trfm_desc(2), local_transform_op::trfm_desc(3), local_transform_op::trfm_desc(4), local_transform_op::trfm_desc(std::make_pair(db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oNONE, SECLEVEL::PLAIN, 0, false), new sum_node(new tuple_pos_node(5), false))), }, new local_decrypt_op({0, 1, 2, 3, 4, 5}, new remote_sql_op(new param_generator_id17, q1.str(), {db_column_desc(db_elem::TYPE_STRING, 25, oDET, SECLEVEL::DET, 1, false), db_column_desc(db_elem::TYPE_INT, 4, oDET, SECLEVEL::DETJOIN, 0, false), db_column_desc(db_elem::TYPE_INT, 4, oDET, SECLEVEL::DETJOIN, 0, false), db_column_desc(db_elem::TYPE_DATE, 3, oDET, SECLEVEL::DET, 4, false), db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oDET, SECLEVEL::DET, 3, false), db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oDET, SECLEVEL::DET, 4, db_column_desc::vtype_dict_compressed, 0)}, {}, util::map_from_pair_vec<std::string, physical_operator*>({std::pair<std::string, physical_operator*>("_subselect$1", new local_transform_op({local_transform_op::trfm_desc(1), }, new local_group_filter(new gt_node(new sum_node(new tuple_pos_node(0), false), new int_literal_node(315)), new local_decrypt_op({0}, new remote_sql_op(new param_generator_id16, q0.str(), {db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oDET, SECLEVEL::DET, 4, db_column_desc::vtype_dict_compressed, 0), db_column_desc(db_elem::TYPE_INT, 4, oDET, SECLEVEL::DETJOIN, 0, false)}, {}, util::map_from_pair_vec<std::string, physical_operator*>({}))), {})))}))));
+  physical_operator* op = new local_transform_op({local_transform_op::trfm_desc(0), local_transform_op::trfm_desc(1), local_transform_op::trfm_desc(2), local_transform_op::trfm_desc(3), local_transform_op::trfm_desc(4), local_transform_op::trfm_desc(std::make_pair(db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oNONE, SECLEVEL::PLAIN, 0, false), new sum_node(new tuple_pos_node(5), false))), }, new local_decrypt_op({0, 1, 2, 3, 4, 5}, new remote_sql_op(new param_generator_id17, q1.str(), {db_column_desc(db_elem::TYPE_STRING, 25, oDET, SECLEVEL::DET, 1, false), db_column_desc(db_elem::TYPE_INT, 4, oDET, SECLEVEL::DETJOIN, 0, false), db_column_desc(db_elem::TYPE_INT, 4, oDET, SECLEVEL::DETJOIN, 0, false), db_column_desc(db_elem::TYPE_DATE, 3, oDET, SECLEVEL::DET, 4, false), db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oDET, SECLEVEL::DET, 3, false), db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oDET, SECLEVEL::DET, 4, true)}, {}, util::map_from_pair_vec<std::string, physical_operator*>({std::pair<std::string, physical_operator*>("_subselect$1", new local_transform_op({local_transform_op::trfm_desc(1), }, new local_group_filter(new gt_node(new sum_node(new tuple_pos_node(0), false), new int_literal_node(315)), new local_decrypt_op({0}, new remote_sql_op(new param_generator_id16, q0.str(), {db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oDET, SECLEVEL::DET, 4, true), db_column_desc(db_elem::TYPE_INT, 4, oDET, SECLEVEL::DETJOIN, 0, false)}, {}, util::map_from_pair_vec<std::string, physical_operator*>({}))), {})))}))));
   op->open(ctx);
   while (op->has_more(ctx)) {
     physical_operator::db_tuple_vec v;
@@ -538,53 +539,25 @@ static void query_16(exec_context& ctx) {
   op->close(ctx);
   delete op;
 }
-static void bootstrap_dict_table(
-    PGConnect& pg,
-    dict_compress_tables& dict_tables)
-{
-  // manually bootstrap the dictionary compression table
-  // ideally, the program generator would do this for us
-  // TODO: fix
-  //
-  // the rule for dict compressing is as follows:
-  // 1) we ask PG stats for the most common values, and look at their frequencies
-  // 2) if there are any elements with frequency > 0.02, we use them to initialize our
-  //    dictionary
-  // 3) if not, then we don't use dictionary compression
-
-  // table0:
-  // Query: select most_common_vals, most_common_freqs from pg_stats where tablename = 'lineitem_enc_rowid' and attname = 'l_quantity_det';
-  std::vector<uint64_t> t0 = { 66448936024214262UL,12623812247800155UL,23646550778597021UL,68464020996506748UL,2952634687175741UL,59625706772007907UL,20626335040301948UL,68996538940233184UL,15826394590753982UL,36927841606401965UL,63435208938184515UL,2415970775610399UL,59638115573097058UL,6106381937304324UL,43671272837479227UL,31611705999537797UL,10122663756404014UL,44674634796705276UL,10450599039294217UL,69406284896166502UL,7409199818695894UL,17370126333875467UL,71075412751393266UL,40056374688158597UL,23359617838196601UL,18711723002273952UL };
-  dict_tables.push_back(t0);
-
-  {
-    DBResultNew* dbres;
-    std::ostringstream buf;
-    buf << "select insert_dict_table(0, array[" << join(t0, ",") << "])";
-    pg.execute(buf.str(), dbres);
-    delete dbres;
-  }
-}
 int main(int argc, char **argv) {
-  if (argc != 2) {
-    std::cerr << "[Usage]: " << argv[0] << " [query num]" << std::endl;
+  command_line_opts opts(
+    DB_HOSTNAME, DB_USERNAME, DB_PASSWORD, DB_DATABASE, DB_PORT);
+  command_line_opts::parse_options(argc, argv, opts);
+  std::cerr << opts << std::endl;
+  if ((optind + 1) != argc) {
+    std::cerr << "[Usage]: " << argv[0] << " [options] [query num]" << std::endl;
     return 1;
   }
-  int q = atoi(argv[1]);
+  int q = atoi(argv[optind]);
   CryptoManager cm("12345");
   crypto_manager_stub cm_stub(&cm, CRYPTO_USE_OLD_OPE);
-  PGConnect pg(DB_HOSTNAME, DB_USERNAME, DB_PASSWORD, DB_DATABASE, DB_PORT, true);
+  PGConnect pg(
+   opts.db_hostname, opts.db_username, opts.db_passwd,
+   opts.db_database, opts.db_port, true);
   paillier_cache pp_cache;
   dict_compress_tables dict_tables;
   query_cache cache;
   exec_context ctx(&pg, &cm_stub, &pp_cache, &dict_tables, &cache);
-
-  switch (q) {
-    case 8: case 13: case 14:
-      bootstrap_dict_table(pg, dict_tables);
-    default: break;
-  }
-
   switch (q) {
     case 0: query_0(ctx); break;
     case 1: query_1(ctx); break;
@@ -605,9 +578,5 @@ int main(int argc, char **argv) {
     case 16: query_16(ctx); break;
     default: assert(false);
   }
-
-  // TODO:
-  // should cleanup dict tables
-
   return 0;
 }

@@ -11,6 +11,7 @@
 #include <execution/operator_types.hh>
 #include <execution/eval_nodes.hh>
 #include <execution/query_cache.hh>
+#include <execution/commandline.hh>
 #include <util/util.hh>
 class param_generator_id0 : public sql_param_generator {
 public:
@@ -666,17 +667,24 @@ static void query_16(exec_context& ctx) {
 
 }
 int main(int argc, char **argv) {
-  if (argc != 2) {
-    std::cerr << "[Usage]: " << argv[0] << " [query num]" << std::endl;
+  command_line_opts opts(
+    DB_HOSTNAME, DB_USERNAME, DB_PASSWORD, DB_DATABASE, DB_PORT);
+  command_line_opts::parse_options(argc, argv, opts);
+  std::cerr << opts << std::endl;
+  if ((optind + 1) != argc) {
+    std::cerr << "[Usage]: " << argv[0] << " [options] [query num]" << std::endl;
     return 1;
   }
-  int q = atoi(argv[1]);
+  int q = atoi(argv[optind]);
   CryptoManager cm("12345");
   crypto_manager_stub cm_stub(&cm, CRYPTO_USE_OLD_OPE);
-  PGConnect pg(DB_HOSTNAME, DB_USERNAME, DB_PASSWORD, DB_DATABASE, DB_PORT, true);
+  PGConnect pg(
+   opts.db_hostname, opts.db_username, opts.db_passwd,
+   opts.db_database, opts.db_port, true);
   paillier_cache pp_cache;
+  dict_compress_tables dict_tables;
   query_cache cache;
-  exec_context ctx(&pg, &cm_stub, &pp_cache, NULL, &cache);
+  exec_context ctx(&pg, &cm_stub, &pp_cache, &dict_tables, &cache);
   switch (q) {
     case 0: query_0(ctx); break;
     case 1: query_1(ctx); break;
