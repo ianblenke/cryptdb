@@ -433,6 +433,8 @@ static void query_7(exec_context& ctx) {
   delete op;
 }
 static void query_8(exec_context& ctx) {
+  ctx.connection->execute("SET enable_indexscan TO FALSE");
+  ctx.connection->execute("SET enable_nestloop TO FALSE");
   physical_operator* op = new local_order_by(
     {std::make_pair(0, false), std::make_pair(1, true)},
     new local_transform_op(
@@ -460,6 +462,8 @@ static void query_8(exec_context& ctx) {
   }
   op->close(ctx);
   delete op;
+  ctx.connection->execute("SET enable_indexscan TO TRUE");
+  ctx.connection->execute("SET enable_nestloop TO TRUE");
 }
 static void query_9(exec_context& ctx) {
   physical_operator* op = new local_limit(20,
