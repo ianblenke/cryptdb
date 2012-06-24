@@ -740,6 +740,33 @@ static void query_16(exec_context& ctx) {
   op->close(ctx);
   delete op;
 }
+static void bootstrap_dict_table(
+    PGConnect& pg,
+    dict_compress_tables& dict_tables)
+{
+  // manually bootstrap the dictionary compression table
+  // ideally, the program generator would do this for us
+  // TODO: fix
+  //
+  // the rule for dict compressing is as follows:
+  // 1) we ask PG stats for the most common values, and look at their frequencies
+  // 2) if there are any elements with frequency > 0.02, we use them to initialize our
+  //    dictionary
+  // 3) if not, then we don't use dictionary compression
+
+  // table0:
+  // Query: select most_common_vals, most_common_freqs from pg_stats where tablename = 'lineitem_enc_rowid' and attname = 'l_quantity_det';
+  std::vector<uint64_t> t0 = { 66448936024214262UL,12623812247800155UL,23646550778597021UL,68464020996506748UL,2952634687175741UL,59625706772007907UL,20626335040301948UL,68996538940233184UL,15826394590753982UL,36927841606401965UL,63435208938184515UL,2415970775610399UL,59638115573097058UL,6106381937304324UL,43671272837479227UL,31611705999537797UL,10122663756404014UL,44674634796705276UL,10450599039294217UL,69406284896166502UL,7409199818695894UL,17370126333875467UL,71075412751393266UL,40056374688158597UL,23359617838196601UL,18711723002273952UL };
+  dict_tables.push_back(t0);
+
+  {
+    DBResultNew* dbres;
+    std::ostringstream buf;
+    buf << "select insert_dict_table(0, array[" << join(t0, ",") << "])";
+    pg.execute(buf.str(), dbres);
+    delete dbres;
+  }
+}
 int main(int argc, char **argv) {
   if (argc != 2) {
     std::cerr << "[Usage]: " << argv[0] << " [query num]" << std::endl;
@@ -751,15 +778,11 @@ int main(int argc, char **argv) {
   PGConnect pg(DB_HOSTNAME, DB_USERNAME, DB_PASSWORD, DB_DATABASE, DB_PORT, true);
   paillier_cache pp_cache;
   dict_compress_tables dict_tables;
-  std::vector<uint64_t> t0 = { 66448936024214262UL,12623812247800155UL,23646550778597021UL,68464020996506748UL,2952634687175741UL,59625706772007907UL,20626335040301948UL,68996538940233184UL,15826394590753982UL,36927841606401965UL,63435208938184515UL,2415970775610399UL,59638115573097058UL,6106381937304324UL,43671272837479227UL,31611705999537797UL,10122663756404014UL,44674634796705276UL,10450599039294217UL,69406284896166502UL,7409199818695894UL,17370126333875467UL,71075412751393266UL,40056374688158597UL,23359617838196601UL,18711723002273952UL };
-  dict_tables.push_back(t0);
 
-  {
-    DBResultNew* dbres;
-    std::ostringstream buf;
-    buf << "select insert_dict_table(0, array[" << join(t0, ",") << "])";
-    pg.execute(buf.str(), dbres);
-    delete dbres;
+  switch (q) {
+    case 8:
+      bootstrap_dict_table(pg, dict_tables);
+    default: break;
   }
 
   query_cache cache;

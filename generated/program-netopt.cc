@@ -538,18 +538,10 @@ static void query_16(exec_context& ctx) {
   op->close(ctx);
   delete op;
 }
-int main(int argc, char **argv) {
-  if (argc != 2) {
-    std::cerr << "[Usage]: " << argv[0] << " [query num]" << std::endl;
-    return 1;
-  }
-  int q = atoi(argv[1]);
-  CryptoManager cm("12345");
-  crypto_manager_stub cm_stub(&cm, CRYPTO_USE_OLD_OPE);
-  PGConnect pg(DB_HOSTNAME, DB_USERNAME, DB_PASSWORD, DB_DATABASE, DB_PORT, true);
-  paillier_cache pp_cache;
-  dict_compress_tables dict_tables;
-
+static void bootstrap_dict_table(
+    PGConnect& pg,
+    dict_compress_tables& dict_tables)
+{
   // manually bootstrap the dictionary compression table
   // ideally, the program generator would do this for us
   // TODO: fix
@@ -572,9 +564,27 @@ int main(int argc, char **argv) {
     pg.execute(buf.str(), dbres);
     delete dbres;
   }
-
+}
+int main(int argc, char **argv) {
+  if (argc != 2) {
+    std::cerr << "[Usage]: " << argv[0] << " [query num]" << std::endl;
+    return 1;
+  }
+  int q = atoi(argv[1]);
+  CryptoManager cm("12345");
+  crypto_manager_stub cm_stub(&cm, CRYPTO_USE_OLD_OPE);
+  PGConnect pg(DB_HOSTNAME, DB_USERNAME, DB_PASSWORD, DB_DATABASE, DB_PORT, true);
+  paillier_cache pp_cache;
+  dict_compress_tables dict_tables;
   query_cache cache;
   exec_context ctx(&pg, &cm_stub, &pp_cache, &dict_tables, &cache);
+
+  switch (q) {
+    case 8: case 13: case 14:
+      bootstrap_dict_table(pg, dict_tables);
+    default: break;
+  }
+
   switch (q) {
     case 0: query_0(ctx); break;
     case 1: query_1(ctx); break;
