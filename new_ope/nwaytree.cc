@@ -50,7 +50,6 @@ struct tree_node
 		return false;
 	}
 
-
 	vector<tree_node* > insert(EncT key){
 
 		vector<tree_node*> rtn_path;
@@ -182,6 +181,7 @@ struct tree_node
 	}
 
 	void rebalance(){
+		cout<<"Rebalance"<<endl;
 		vector<EncT> key_list = flatten();
 		sort(key_list.begin(), key_list.end());
 		tree_node<EncT>* tmp_node = rebuild(key_list);
@@ -202,6 +202,32 @@ struct tree_node
 	}
 
 };
+
+template<class EncT>
+void 
+tree<EncT>::print_tree(){
+	vector<tree_node<EncT>* > queue;
+	queue.push_back(root);
+	while(queue.size()!=0){
+		tree_node<EncT>* cur_node = queue[0];
+		//if(cur_node==NULL) {cout<<endl; queue.erase(queue.begin()); continue;}
+		cout<<cur_node->height()<<": ";
+		if(cur_node->key_in_map(NULL)){
+			queue.push_back(cur_node->right[NULL]);
+		}	
+		for(int i=0; i<cur_node->keys.size(); i++){
+			EncT key = cur_node->keys[i];
+			cout<<key<<", ";
+			if(cur_node->key_in_map(key)){
+				queue.push_back(cur_node->right[key]);
+			}
+		}	
+		cout<<endl;
+		queue.erase(queue.begin());
+		//queue.push_back(NULL);
+	}
+
+}
 
 template<class EncT>
 tree_node<EncT>* 
@@ -243,7 +269,7 @@ tree<EncT>::findScapegoat( vector<tree_node<EncT>* > path ){
 
 template<class EncT>
 void 
-tree<EncT>::insert(EncT key){
+tree<EncT>::insert_recursive(EncT key){
 
 	vector<tree_node<EncT> * > path =root->insert(key);
 
@@ -251,8 +277,8 @@ tree<EncT>::insert(EncT key){
 
 	if (height==0) return;
 
-	size+=1;
-	if(height> log(size)/log(((double)1.0)/alpha)+1 ){
+	num_nodes+=1;
+	if(height> log(num_nodes)/log(((double)1.0)/alpha)+1 ){
 		tree_node<EncT>* scapegoat = findScapegoat(path);
 		scapegoat->rebalance();
 
@@ -261,9 +287,110 @@ tree<EncT>::insert(EncT key){
 }
 
 template<class EncT>
+void
+tree<EncT>::insert(uint64_t v, uint64_t nbits, EncT encval){
+	vector<tree_node<EncT> * > path=tree_insert(root, v, nbits, encval, nbits);
+	double height= (double) path.size();
+
+	if (height==0) return;
+
+	if(height> log(num_nodes)/log(((double)1.0)/alpha)+1 ){
+		tree_node<EncT>* scapegoat = findScapegoat(path);
+		print_tree();
+		scapegoat->rebalance();
+
+	}
+}
+
+template<class EncT>
+vector<tree_node<EncT>* >
+tree<EncT>::tree_insert(tree_node<EncT>* node, uint64_t v, uint64_t nbits, EncT encval, uint64_t pathlen){
+
+	vector<tree_node<EncT>* > rtn_path;
+
+	if(nbits==0){
+		if(node->keys.size()>N-2) cout<<"Insert fail, found full node"<<endl;
+		else{
+			node->keys.push_back(encval);
+			num_nodes++;
+			rtn_path.push_back(node);
+		}
+		return rtn_path;
+	}
+    //Just a check, can remove for performance
+    int key_index = (int) (v&(mask<<(nbits-num_bits)))>>(nbits-num_bits);
+
+    vector<EncT> sorted = node->keys;
+    sort(sorted.begin(), sorted.end());
+
+    EncT key;
+
+	//cout<<"Index: "<<key_index<<endl;
+
+    if(key_index==0) key=NULL;
+	else if(key_index<N) key = sorted[key_index-1];
+	else cout<<"Insert fail, key_index not legal"<<endl;
+
+	//cout<<"Key: "<<key<<endl;
+
+    if(!node->key_in_map(key)){
+	    if (nbits == num_bits && node->keys.size()==N-1) {
+	    	cout<<"Creating new node"<<endl;
+	    	node->right[key] = new tree_node<EncT>();
+	    }else cout<<"Insert fail, wrong condition to create new node child"<<endl;
+    }
+    rtn_path = tree_insert(node->right[key], v, nbits-num_bits, encval, pathlen);
+    rtn_path.push_back(node);
+    return rtn_path;
+}
+
+template<class EncT>
+tree_node<EncT> *
+tree<EncT>::tree_lookup(tree_node<EncT> *root, uint64_t v, uint64_t nbits) const
+{
+    if (nbits == 0) {
+        return root;
+    }
+    //Just a check, can remove for performance
+    int key_index = (int) (v&(mask<<(nbits-num_bits)))>>(nbits-num_bits);
+
+    vector<EncT> sorted = root->keys;
+    sort(sorted.begin(), sorted.end());
+
+    EncT key;
+
+	//cout<<"Index: "<<key_index<<endl;
+
+    if(key_index==0) key=NULL;
+	else if(key_index<N) key = sorted[key_index-1];
+	else return 0;
+
+
+	//cout<<"Key: "<<key<<endl;
+
+    if(!root->key_in_map(key)){
+    	cout<<"Key not in map"<<endl;
+    	return 0;
+    }
+    return tree_lookup(root->right[key], v, nbits-num_bits);
+}
+
+template<class EncT>
+vector<EncT>
+tree<EncT>::lookup(uint64_t v, uint64_t nbits) const
+{
+    tree_node<EncT>* n = tree_lookup(root, v, nbits);
+    if(n==0){
+    	//throw ope_lookup_failure();
+    	cout<<"NOPE!"<<endl;
+    }
+    return n->keys;
+
+}
+
+template<class EncT>
 bool
 tree<EncT>::test_tree(tree_node<EncT>* cur_node){
-
 	if(test_node(cur_node)!=true) return false;
 
 	typename boost::unordered_map<EncT, tree_node<EncT> *>::iterator it;
@@ -280,8 +407,14 @@ template<class EncT>
 bool
 tree<EncT>::test_node(tree_node<EncT>* cur_node){
 	vector<EncT> sorted_keys = cur_node->keys;
-	if(sorted_keys.size()==0) return false;
-	if(sorted_keys.size()>N-1) return false;
+	if(sorted_keys.size()==0) {
+		cout<<"Node with no keys"<<endl;
+		return false;
+	}
+	if(sorted_keys.size()>N-1) {
+		cout<<"Node with too many keys"<<endl;
+		return false;
+	}
 	sort(sorted_keys.begin(), sorted_keys.end());
 
 	int low = 0;
@@ -296,7 +429,6 @@ tree<EncT>::test_node(tree_node<EncT>* cur_node){
 			i++;
 			low = high;
 			high = sorted_keys[j];
-
 			if(cur_node->key_in_map(sorted_keys[j-1])){
 				if(test_vals(cur_node->right[sorted_keys[j-1]], low, high)!=true) return false;
 			}
@@ -306,7 +438,7 @@ tree<EncT>::test_node(tree_node<EncT>* cur_node){
 	}
 	
 	low = high;
-	high = RAND_MAX;
+	high = RAND_MAX; //Note this is 2147483647
 
 	if(cur_node->key_in_map(sorted_keys[i])){
 		if(test_vals(cur_node->right[sorted_keys[i]], low, high)!=true) return false;
@@ -326,6 +458,7 @@ tree<EncT>::test_vals(tree_node<EncT>* cur_node, EncT low, EncT high){
 	for(int i=0; i<cur_node->keys.size(); i++){
 		EncT this_key = cur_node->keys[i];
 		if(this_key<=low || this_key>=high){
+			cout<<"Values off "<<this_key<<": "<<low<<", "<<high<<endl;
 			return false;
 		}
 	}
@@ -338,17 +471,32 @@ tree<EncT>::test_vals(tree_node<EncT>* cur_node, EncT low, EncT high){
 	return true;
 }
 
+
+
 int main(){
+
+	mask = make_mask();
+
 	tree<uint64_t>* my_tree = new tree<uint64_t>();
 
-	srand( time(NULL));
-
-	for(int i=0; i<1000000; i++){
-		my_tree->insert((uint64_t) rand());
+	//srand( time(NULL));
+	srand(0);
+	for(int i=0; i<15; i++){
+		my_tree->insert_recursive((uint64_t) rand());
 	}
+	my_tree->print_tree();
+	my_tree->insert(10ULL, 4, 2144897763);
+	my_tree->insert(42ULL, 6, 2147483646);	
+	my_tree->print_tree();	
+	vector<uint64_t> root_keys = my_tree->lookup(10ULL,4);
+	cout<<"Search node: ";
+	for(int i=0; i<root_keys.size(); i++){
+		cout<<root_keys[i]<<", ";
+	}
+	cout<<endl;
+
 	cout<<"Done inserting"<<endl;
 	cout<<"Testing tree: "<<my_tree->test_tree(my_tree->root)<<endl;
-	cout<<"Size: "<<my_tree->size<<" Height: "<<my_tree->root->height()<<" Len: "<<my_tree->root->len()<<endl;
-	cout<<"Alpha-height balanced: "<<(my_tree->root->height()< log(my_tree->size)/log(((double)1.0)/alpha)+1)<<endl;
-	
+	cout<<"Size: "<<my_tree->num_nodes<<" Height: "<<my_tree->root->height()<<" Len: "<<my_tree->root->len()<<endl;
+	cout<<"Alpha-height balanced: "<<(my_tree->root->height()< log(my_tree->num_nodes)/log(((double)1.0)/alpha)+1)<<endl;
 }
