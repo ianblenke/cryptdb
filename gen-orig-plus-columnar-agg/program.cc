@@ -13,16 +13,6 @@
 #include <execution/query_cache.hh>
 #include <execution/commandline.hh>
 #include <util/util.hh>
-template <typename T>
-static std::string
-join(const std::vector<T>& tokens, const std::string &sep) {
-  std::ostringstream s;
-  for (size_t i = 0; i < tokens.size(); i++) {
-    s << tokens[i];
-    if (i != tokens.size() - 1) s << sep;
-  }
-  return s.str();
-}
 class param_generator_id0 : public sql_param_generator {
 public:
 virtual param_map get_param_map(exec_context& ctx) {
@@ -548,11 +538,17 @@ static void query_8(exec_context& ctx) {
     {std::make_pair(0, false), std::make_pair(1, true)},
     new local_transform_op(
       {local_transform_op::trfm_desc(std::make_pair(db_column_desc(db_elem::TYPE_STRING, 25, oNONE, SECLEVEL::PLAIN, 1, false), new tuple_pos_node(0))), local_transform_op::trfm_desc(std::make_pair(db_column_desc(db_elem::TYPE_INT, 2, oNONE, SECLEVEL::PLAIN, 0, false), new tuple_pos_node(1))), local_transform_op::trfm_desc(std::make_pair(db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oNONE, SECLEVEL::PLAIN, 0, false), new sum_node(new tuple_pos_node(2), false))), },
-      new local_transform_op(
-        {local_transform_op::trfm_desc(0), local_transform_op::trfm_desc(1), local_transform_op::trfm_desc(std::make_pair(db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oNONE, SECLEVEL::PLAIN, 0, false), new sub_node(new tuple_pos_node(2), new mult_node(new tuple_pos_node(3), new tuple_pos_node(4))))), },
+      new local_group_by(
+        {0, 1},
         new local_decrypt_op(
-          {0, 1, 2, 3, 4},
-          new remote_sql_op(new param_generator_id8, "select " NATION_ENC_NAME ".n_name_DET as nation, " ORDERS_ENC_NAME ".o_orderdate_year_DET as o_year, group_serializer(" LINEITEM_ENC_NAME ".l_disc_price_DET), group_serializer(" PARTSUPP_ENC_NAME ".ps_supplycost_DET), group_serializer(" LINEITEM_ENC_NAME ".l_quantity_DET) from " PART_ENC_NAME ", " SUPPLIER_ENC_NAME ", " LINEITEM_ENC_NAME ", " PARTSUPP_ENC_NAME ", " ORDERS_ENC_NAME ", " NATION_ENC_NAME " where (((((((" SUPPLIER_ENC_NAME ".s_suppkey_DET) = (" LINEITEM_ENC_NAME ".l_suppkey_DET)) and ((" PARTSUPP_ENC_NAME ".ps_suppkey_DET) = (" LINEITEM_ENC_NAME ".l_suppkey_DET))) and ((" PARTSUPP_ENC_NAME ".ps_partkey_DET) = (" LINEITEM_ENC_NAME ".l_partkey_DET))) and ((" PART_ENC_NAME ".p_partkey_DET) = (" LINEITEM_ENC_NAME ".l_partkey_DET))) and ((" ORDERS_ENC_NAME ".o_orderkey_DET) = (" LINEITEM_ENC_NAME ".l_orderkey_DET))) and ((" SUPPLIER_ENC_NAME ".s_nationkey_DET) = (" NATION_ENC_NAME ".n_nationkey_DET))) and (searchSWP(:0, :1, " PART_ENC_NAME ".p_name_SWP)) group by " NATION_ENC_NAME ".n_name_DET, " ORDERS_ENC_NAME ".o_orderdate_year_DET", {db_column_desc(db_elem::TYPE_STRING, 25, oDET, SECLEVEL::DET, 1, false), db_column_desc(db_elem::TYPE_INT, 2, oDET, SECLEVEL::DET, 0, false), db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oDET, SECLEVEL::DET, 0, true), db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oDET, SECLEVEL::DET, 3, true), db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oDET, SECLEVEL::DET, 4, true)}, {}, util::map_from_pair_vec<std::string, physical_operator*>({})))
+          {0, 1},
+          new local_transform_op(
+            {local_transform_op::trfm_desc(0), local_transform_op::trfm_desc(1), local_transform_op::trfm_desc(std::make_pair(db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oNONE, SECLEVEL::PLAIN, 0, false), new sub_node(new tuple_pos_node(2), new mult_node(new tuple_pos_node(3), new tuple_pos_node(4))))), },
+            new local_decrypt_op(
+              {2, 3, 4},
+              new remote_sql_op(new param_generator_id8, "select " NATION_ENC_NAME ".n_name_DET as nation, " ORDERS_ENC_NAME ".o_orderdate_year_DET as o_year, " LINEITEM_ENC_NAME ".l_disc_price_DET, " PARTSUPP_ENC_NAME ".ps_supplycost_DET, " LINEITEM_ENC_NAME ".l_quantity_DET from " PART_ENC_NAME ", " SUPPLIER_ENC_NAME ", " LINEITEM_ENC_NAME ", " PARTSUPP_ENC_NAME ", " ORDERS_ENC_NAME ", " NATION_ENC_NAME " where (((((((" SUPPLIER_ENC_NAME ".s_suppkey_DET) = (" LINEITEM_ENC_NAME ".l_suppkey_DET)) and ((" PARTSUPP_ENC_NAME ".ps_suppkey_DET) = (" LINEITEM_ENC_NAME ".l_suppkey_DET))) and ((" PARTSUPP_ENC_NAME ".ps_partkey_DET) = (" LINEITEM_ENC_NAME ".l_partkey_DET))) and ((" PART_ENC_NAME ".p_partkey_DET) = (" LINEITEM_ENC_NAME ".l_partkey_DET))) and ((" ORDERS_ENC_NAME ".o_orderkey_DET) = (" LINEITEM_ENC_NAME ".l_orderkey_DET))) and ((" SUPPLIER_ENC_NAME ".s_nationkey_DET) = (" NATION_ENC_NAME ".n_nationkey_DET))) and (searchSWP(:0, :1, " PART_ENC_NAME ".p_name_SWP))", {db_column_desc(db_elem::TYPE_STRING, 25, oDET, SECLEVEL::DET, 1, false), db_column_desc(db_elem::TYPE_INT, 2, oDET, SECLEVEL::DET, 0, false), db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oDET, SECLEVEL::DET, 0, false), db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oDET, SECLEVEL::DET, 3, false), db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oDET, SECLEVEL::DET, 4, false)}, {}, util::map_from_pair_vec<std::string, physical_operator*>({})))
+          )
+        )
       )
     )
   )
@@ -684,7 +680,7 @@ static void query_14(exec_context& ctx) {
           new gt_node(new function_call_node("hom_get_pos", {new tuple_pos_node(0), new int_literal_node(0)}), new int_literal_node(315)),
           new local_decrypt_op(
             {0},
-            new remote_sql_op(new param_generator_id15, "select agg_hash(:0, '/space/stephentu/data/" DB_DATABASE "/lineitem_enc/row_pack/quantity', 256, 12, false, " LINEITEM_ENC_NAME ".row_id), " LINEITEM_ENC_NAME ".l_orderkey_DET from " LINEITEM_ENC_NAME " group by " LINEITEM_ENC_NAME ".l_orderkey_DET having (count(*)) >= (7)", {db_column_desc(db_elem::TYPE_STRING, 2147483647, oAGG, SECLEVEL::SEMANTIC_AGG, 0, false), db_column_desc(db_elem::TYPE_INT, 4, oDET, SECLEVEL::DETJOIN, 0, false)}, {}, util::map_from_pair_vec<std::string, physical_operator*>({})))
+            new remote_sql_op(new param_generator_id15, "select agg_hash(:0, '/space/stephentu/data/" DB_DATABASE "/lineitem_enc/row_pack/quantity', 256, 12, false, " LINEITEM_ENC_NAME ".row_id), " LINEITEM_ENC_NAME ".l_orderkey_DET from " LINEITEM_ENC_NAME " group by " LINEITEM_ENC_NAME ".l_orderkey_DET", {db_column_desc(db_elem::TYPE_STRING, 2147483647, oAGG, SECLEVEL::SEMANTIC_AGG, 0, false), db_column_desc(db_elem::TYPE_INT, 4, oDET, SECLEVEL::DETJOIN, 0, false)}, {}, util::map_from_pair_vec<std::string, physical_operator*>({})))
           , {
           }
         )

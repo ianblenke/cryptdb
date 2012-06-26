@@ -1,0 +1,6 @@
+OBJDIRS += gen-orig-plus-precomputation
+GEN_ORIG_PLUS_PRECOMPUTATIONPROGS := program
+GEN_ORIG_PLUS_PRECOMPUTATIONPROGOBJS := $(patsubst %,$(OBJDIR)/gen-orig-plus-precomputation/%,$(GEN_ORIG_PLUS_PRECOMPUTATIONPROGS))
+all: $(GEN_ORIG_PLUS_PRECOMPUTATIONPROGOBJS)
+$(GEN_ORIG_PLUS_PRECOMPUTATIONPROGOBJS): %: %.o $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbparser.so $(OBJDIR)/libedbutil.so $(OBJDIR)/libexecution.so
+	$(CXX) $< -o $@ -ledbparser  $(LDFLAGS) -ledbutil -lcryptdb -ledbcrypto -ledbcrypto2 -lexecution -lmysqlclient -ltbb -lgmp -lpq

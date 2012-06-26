@@ -1,0 +1,6 @@
+OBJDIRS += gen-orig-plus-columnar-agg
+ORIG_PLUS_COLUMNAR_AGGPROGS := program
+ORIG_PLUS_COLUMNAR_AGGPROGOBJS := $(patsubst %,$(OBJDIR)/gen-orig-plus-columnar-agg/%,$(ORIG_PLUS_COLUMNAR_AGGPROGS))
+all: $(ORIG_PLUS_COLUMNAR_AGGPROGOBJS)
+$(ORIG_PLUS_COLUMNAR_AGGPROGOBJS): %: %.o $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbparser.so $(OBJDIR)/libedbutil.so $(OBJDIR)/libexecution.so
+	$(CXX) $< -o $@ -ledbparser  $(LDFLAGS) -ledbutil -lcryptdb -ledbcrypto -ledbcrypto2 -lexecution -lmysqlclient -ltbb -lgmp -lpq

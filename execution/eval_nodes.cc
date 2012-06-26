@@ -128,38 +128,9 @@ function_call_node::eval(exec_context& ctx) {
   throw runtime_error("no handler for function: " + _name);
 }
 
-db_elem
-function_call_node::eval_hom_get_pos(exec_context& ctx, db_tuple& args)
+static db_elem
+db_elem_from_hom(const NTL::ZZ& z, size_t pos)
 {
-  if (args.columns.size() != 2) {
-    throw runtime_error("hom_get_pos() requires 2 arguments");
-  }
-  if (args.columns[0].get_type() != db_elem::TYPE_STRING &&
-      args.columns[0].get_type() != db_elem::TYPE_DOUBLE) {
-    throw runtime_error("hom_get_pos() requires arg0 as string or double");
-  }
-  if (args.columns[1].get_type() != db_elem::TYPE_INT) {
-    throw runtime_error("hom_get_pos() requires arg1 as int");
-  }
-
-  // check for old-style hom agg
-  if (args.columns[0].get_type() == db_elem::TYPE_DOUBLE) {
-    int64_t pos = args.columns[1].unsafe_cast_i64();
-    SANITY(pos == 0);
-    return args.columns[0];
-  }
-
-  const string& data = args.columns[0].unsafe_cast_string();
-  int64_t pos = args.columns[1].unsafe_cast_i64();
-
-  // TODO: this is somewhat inefficient
-  const uint8_t* p = (const uint8_t *) data.data();
-  uint64_t group_count;
-  deserializer<uint64_t>::read(p, group_count);
-
-  NTL::ZZ z;
-  NTL::ZZFromBytes(z, p, data.size() - sizeof(uint64_t));
-
   using namespace hom_agg_constants;
   static const NTL::ZZ Mask = ((NTL::to_ZZ(1) << BitsPerDecimalSlot) - 1);
   SANITY(NumBits(Mask) == (int)BitsPerDecimalSlot);
@@ -172,6 +143,34 @@ function_call_node::eval_hom_get_pos(exec_context& ctx, db_tuple& args)
   db_elem res = db_elem( double(uint64_t(l))/100.0 );
   //dprintf("pos=(%s), res=(%s)\n", TO_C(pos), TO_C(res));
   return res;
+}
+
+db_elem
+function_call_node::eval_hom_get_pos(exec_context& ctx, db_tuple& args)
+{
+  if (args.columns.size() != 2) {
+    throw runtime_error("hom_get_pos() requires 2 arguments");
+  }
+  if (args.columns[0].get_type() != db_elem::TYPE_STRING) {
+    throw runtime_error("hom_get_pos() requires arg0 as string");
+  }
+  if (args.columns[1].get_type() != db_elem::TYPE_INT) {
+    throw runtime_error("hom_get_pos() requires arg1 as int");
+  }
+
+  const string& data = args.columns[0].unsafe_cast_string();
+  int64_t pos = args.columns[1].unsafe_cast_i64();
+
+  // TODO: this is somewhat inefficient
+  const uint8_t* p = (const uint8_t *) data.data();
+
+  //uint64_t group_count;
+  //deserializer<uint64_t>::read(p, group_count);
+
+  NTL::ZZ z;
+  NTL::ZZFromBytes(z, p, data.size());
+
+  return db_elem_from_hom(z, pos);
 }
 
 db_elem

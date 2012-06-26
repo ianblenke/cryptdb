@@ -55,11 +55,16 @@ include crypto-old/Makefrag
 include edb/Makefrag
 include parser/Makefrag
 include execution/Makefrag
+
 include generated/Makefrag
 include plainbenchmark/Makefrag
 include origbenchmark/Makefrag
 include greedybenchmark/Makefrag
+include gen-orig-plus-col-packing/Makefrag
+include gen-orig-plus-precomputation/Makefrag
+include gen-orig-plus-columnar-agg/Makefrag
 -include playground/Makefrag
+
 include estimators/Makefrag
 include test/Makefrag
 include util/Makefrag
