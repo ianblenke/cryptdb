@@ -64,6 +64,7 @@ include gen-orig-plus-col-packing/Makefrag
 include gen-orig-plus-precomputation/Makefrag
 include gen-orig-plus-columnar-agg/Makefrag
 include gen-space-constrained-1.4/Makefrag
+include gen-space-constrained-1.4-greedy/Makefrag
 
 -include playground/Makefrag
 

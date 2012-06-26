@@ -1,0 +1,6 @@
+OBJDIRS += gen-space-constrained-1.4-greedy
+SPACE_CONSTRAINED_14_GREEDYPROGS := program 
+SPACE_CONSTRAINED_14_GREEDYPROGOBJS := $(patsubst %,$(OBJDIR)/gen-space-constrained-1.4-greedy/%,$(SPACE_CONSTRAINED_14_GREEDYPROGS))
+all: $(SPACE_CONSTRAINED_14_GREEDYPROGOBJS)
+$(SPACE_CONSTRAINED_14_GREEDYPROGOBJS): %: %.o $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbparser.so  $(OBJDIR)/libedbutil.so $(OBJDIR)/libexecution.so
+	$(CXX) $< -o $@ -ledbparser  $(LDFLAGS) -ledbutil -lcryptdb -ledbcrypto -ledbcrypto2 -lexecution -lmysqlclient -ltbb -lgmp -lpq
