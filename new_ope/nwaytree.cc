@@ -43,6 +43,10 @@ struct tree_node
 	}
 
 	bool key_in_map(EncT key){
+	    // RP: in order for it->first==key to work you need to define
+	    // an operator == for the EncT class - otherwise, it may not
+	    // compare the way you want; have you defined this and maybe I did
+	    // not see it? 
 		typename boost::unordered_map<EncT, tree_node *>::iterator it;
 		for(it=right.begin(); it!=right.end(); it++){
 			if(it->first==key) return true;
@@ -396,7 +400,9 @@ tree<EncT>::test_tree(tree_node<EncT>* cur_node){
 	typename boost::unordered_map<EncT, tree_node<EncT> *>::iterator it;
 
 	for(it=cur_node->right.begin(); it!=cur_node->right.end(); it++){
-		if(test_tree(it->second)!=true) return false;
+	    if(!test_tree(it->second)) {
+		return false;
+	    }
 	}
 	return true;
 
@@ -471,7 +477,17 @@ tree<EncT>::test_vals(tree_node<EncT>* cur_node, EncT low, EncT high){
 	return true;
 }
 
-
+//RP: We would need the following two tests (automatic) to really be confident
+// that it works
+// 1. test if the height of the tree is not larger than the scapegoat limit: alpha log(weight) 
+// 2. check that an in-order traversal of the tree (with decryptions of the DET)
+// indeed yields sorted order on the values
+// These tests should be automatic -- keeps inserting elements in the tree and
+//  periodically checks the conditions above
+// - would be good to test in three cases: values inserted are random, values
+// inserted are in increasing order, values inserted are in decreasing order
+// I would also count the number of relabelings that happen because we might be
+// triggering relabeling too frequently if the bound is too tight
 
 int main(){
 
