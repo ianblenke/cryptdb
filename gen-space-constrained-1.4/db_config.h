@@ -11,7 +11,7 @@
 
 // this is not auto generated
 
-#define LINEITEM_ENC_NAME "lineitem_enc_cryptdb_opt"
+#define LINEITEM_ENC_NAME "lineitem_enc_space_constrained_14"
 #define CUSTOMER_ENC_NAME "customer_enc_rowid"
 #define PARTSUPP_ENC_NAME "partsupp_enc_cryptdb_opt"
 //#define LINEITEM_ENC_NAME "lineitem_enc"
