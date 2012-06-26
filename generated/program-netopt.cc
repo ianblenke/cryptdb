@@ -17,16 +17,6 @@
 #include <execution/query_cache.hh>
 #include <execution/commandline.hh>
 #include <util/util.hh>
-template <typename T>
-static std::string
-join(const std::vector<T>& tokens, const std::string &sep) {
-  std::ostringstream s;
-  for (size_t i = 0; i < tokens.size(); i++) {
-    s << tokens[i];
-    if (i != tokens.size() - 1) s << sep;
-  }
-  return s.str();
-}
 class param_generator_id0 : public sql_param_generator {
 public:
 virtual param_map get_param_map(exec_context& ctx) {
