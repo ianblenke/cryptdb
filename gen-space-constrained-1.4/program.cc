@@ -356,7 +356,7 @@ static void query_4(exec_context& ctx) {
 }
 static void query_5(exec_context& ctx) {
   physical_operator* op = new local_transform_op(
-    {local_transform_op::trfm_desc(std::make_pair(db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oNONE, SECLEVEL::PLAIN, 0, false), new sum_node(new mult_node(new tuple_pos_node(0), new tuple_pos_node(1)), false))), },
+    {local_transform_op::trfm_desc(std::make_pair(db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oNONE, SECLEVEL::PLAIN, 0, false), new sum_node(new tuple_pos_node(0), false))), },
     new local_decrypt_op(
       {0},
       new remote_sql_op(new param_generator_id5, "select group_serializer(" LINEITEM_ENC_NAME ".l_revenue_DET) from " LINEITEM_ENC_NAME " where (((((" LINEITEM_ENC_NAME ".l_shipdate_OPE) >= (:0)) and ((" LINEITEM_ENC_NAME ".l_shipdate_OPE) < (:1))) and ((" LINEITEM_ENC_NAME ".l_discount_OPE) >= (:2))) and ((" LINEITEM_ENC_NAME ".l_discount_OPE) <= (:3))) and ((" LINEITEM_ENC_NAME ".l_quantity_OPE) < (:4))", {db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oDET, SECLEVEL::DET, 0, true)}, {}, util::map_from_pair_vec<std::string, physical_operator*>({})))
