@@ -1275,44 +1275,77 @@ private:
 public:
   static const size_t NThreads = 8;
 
-  basic_hom_agg(const std::string& key) : _workerCnt(0) {
+  basic_hom_agg(const std::string& key) : _workerCnt(0), _threadInit(false) {
     mpz_init2(public_key, key.size() * 8);
     MPZFromBytes(public_key, (const uint8_t *) key.data(), key.size());
-
-    _workers.resize(NThreads);
-    _worker_states.resize(NThreads);
   }
 
   ~basic_hom_agg() {
     mpz_clear(public_key);
   }
 
-  void init() {
+private:
+  void threadInit() {
+    assert(!_threadInit);
+    _workers.resize(NThreads);
+    _worker_states.resize(NThreads);
     for (size_t i = 0; i < NThreads; i++) {
       _worker_states[i].global_state = this;
       int ret = pthread_create(&_workers[i], NULL, worker_main, &_worker_states[i]);
       if (ret) assert(false);
     }
+    _threadInit = true;
   }
 
-  void offer(const std::string& v) {
+  // assumes _threadInit
+  void enqueue(const std::string& v) {
     worker_msg* m = new worker_msg((const uint8_t *) v.data(), v.size());
     _worker_states[_workerCnt++ % NThreads].q.push(m);
   }
 
-  void compute_final_answer_and_serialize(std::string& buffer) {
-    for (size_t i = 0; i < NThreads; i++) {
-      _worker_states[i].q.push(NULL);
-    }
-    for (size_t i = 0; i < NThreads; i++) {
-      pthread_join(_workers[i], NULL);
-    }
+public:
 
+  inline void init() {}
+
+  void offer(const std::string& v) {
+    if (!_threadInit) {
+      _buffer.push_back(v);
+      if (_buffer.size() >= NTransition) {
+        threadInit();
+        for (auto &v : _buffer) enqueue(v);
+        _buffer.clear();
+      }
+    } else {
+      enqueue(v);
+    }
+  }
+
+  void compute_final_answer_and_serialize(std::string& buffer) {
     mpz_t agg;
     init_and_set_mpz_for_paillier(agg);
-    for (size_t i = 0; i < NThreads; i++) {
-      mpz_mul(agg, agg, _worker_states[i].agg);
-      mpz_mod(agg, agg, public_key);
+
+    if (_threadInit) {
+      assert(_buffer.empty());
+      for (size_t i = 0; i < NThreads; i++) {
+        _worker_states[i].q.push(NULL);
+      }
+      for (size_t i = 0; i < NThreads; i++) {
+        pthread_join(_workers[i], NULL);
+      }
+      for (size_t i = 0; i < NThreads; i++) {
+        mpz_mul(agg, agg, _worker_states[i].agg);
+        mpz_mod(agg, agg, public_key);
+      }
+    } else {
+      for (auto &s : _buffer) {
+        mpz_t value;
+        mpz_init2(value, s.size() * 8);
+        MPZFromBytes(value, (const uint8_t *)s.data(), s.size());
+        mpz_mul(agg, agg, value);
+        mpz_mod(agg, agg, public_key);
+        mpz_clear(value);
+      }
+      _buffer.clear();
     }
 
     buffer.clear();
@@ -1330,6 +1363,8 @@ public:
   }
 
 private:
+
+  static const size_t NTransition = 16;
 
   mpz_t public_key;
 
@@ -1351,6 +1386,9 @@ private:
     }
     return NULL;
   }
+
+  std::vector< std::string > _buffer;
+  bool _threadInit;
 };
 
 extern "C" {
