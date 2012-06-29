@@ -1,3 +1,4 @@
+CREATE SEQUENCE customer_enc_cryptdb_opt_seq MINVALUE 0;
 CREATE TABLE customer_enc_cryptdb_opt ( 
   c_custkey_DET     bigint  not null,
   c_name_DET        bytea not null,
@@ -9,7 +10,7 @@ CREATE TABLE customer_enc_cryptdb_opt (
   c_mktsegment_DET  bytea not null,
   c_comment_DET     bytea not null,
   c_phone_prefix_DET bytea not null,
-  row_id bigint not null
+  row_id bigint not null DEFAULT nextval('customer_enc_cryptdb_opt_seq')
   --PRIMARY KEY (c_custkey_DET)
 );
 
