@@ -339,6 +339,25 @@ static void query_16(ConnectNew& conn) {
   std::cout << "(" << res.rows.size() << " rows)" << std::endl;
   delete dbres;
 }
+static void query_17(ConnectNew& conn) {
+  DBResultNew* dbres;
+  const char *p =
+"select s_name, s_address from " SUPPLIER_NAME ", " NATION_NAME " where s_suppkey in ( select ps_suppkey from ( select ps_suppkey, fast_sum(ps_availqty) * 100 as x, fast_sum(l_quantity) as y from " PARTSUPP_NAME ", " LINEITEM_NAME " where l_partkey = ps_partkey and l_suppkey = ps_suppkey and l_shipdate >= date '1997-01-01' and l_shipdate < date '1997-01-01' + interval '1' year and ps_partkey in ( select p_partkey from " PART_NAME " where p_name like '%khaki%') group by ps_partkey, ps_suppkey) as anon1 where x > 0.5 * y) and s_nationkey = n_nationkey and n_name = 'ALGERIA' order by s_name";
+
+  //std::cerr << p << std::endl;
+
+  conn.execute(p, dbres);
+  ResType res = dbres->unpack();
+  assert(res.ok);
+  for (auto &row : res.rows) {
+    std::cout << row[0].data;
+    std::cout << "|";
+    std::cout << row[1].data;
+    std::cout << std::endl;
+  }
+  std::cout << "(" << res.rows.size() << " rows)" << std::endl;
+  delete dbres;
+}
 int main(int argc, char **argv) {
   command_line_opts opts(
     DB_HOSTNAME, DB_USERNAME, DB_PASSWORD, DB_DATABASE, DB_PORT);
@@ -370,6 +389,7 @@ int main(int argc, char **argv) {
     case 14: query_14(pg); break;
     case 15: query_15(pg); break;
     case 16: query_16(pg); break;
+    case 17: query_17(pg); break;
     default: assert(false);
   }
   return 0;
