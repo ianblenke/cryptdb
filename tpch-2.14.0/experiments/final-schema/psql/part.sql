@@ -6,6 +6,7 @@ CREATE TABLE PART  ( P_PARTKEY     INTEGER NOT NULL,
                           P_SIZE        INTEGER NOT NULL,
                           P_CONTAINER   CHAR(10) NOT NULL,
                           P_RETAILPRICE DECIMAL(15,2) NOT NULL,
-                          P_COMMENT     VARCHAR(23) NOT NULL,
-                          PRIMARY KEY(P_PARTKEY)) ;
+                          P_COMMENT     VARCHAR(23) NOT NULL
+                          --, PRIMARY KEY(P_PARTKEY)
+                        ) ;
 

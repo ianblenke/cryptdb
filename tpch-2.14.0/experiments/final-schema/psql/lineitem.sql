@@ -13,6 +13,7 @@ CREATE TABLE LINEITEM ( L_ORDERKEY    INTEGER NOT NULL,
                              L_RECEIPTDATE DATE NOT NULL,
                              L_SHIPINSTRUCT CHAR(25) NOT NULL,
                              L_SHIPMODE     CHAR(10) NOT NULL,
-                             L_COMMENT      VARCHAR(44) NOT NULL,
-                             PRIMARY KEY (L_ORDERKEY, L_LINENUMBER)) ;
+                             L_COMMENT      VARCHAR(44) NOT NULL
+                             --, PRIMARY KEY (L_ORDERKEY, L_LINENUMBER)
+                          ) ;
 

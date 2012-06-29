@@ -6,5 +6,6 @@ CREATE TABLE ORDERS  ( O_ORDERKEY       INTEGER NOT NULL,
                            O_ORDERPRIORITY  CHAR(15) NOT NULL,  
                            O_CLERK          CHAR(15) NOT NULL, 
                            O_SHIPPRIORITY   INTEGER NOT NULL,
-                           O_COMMENT        VARCHAR(79) NOT NULL,
-                    PRIMARY KEY (O_ORDERKEY)) ;
+                           O_COMMENT        VARCHAR(79) NOT NULL
+                    --, PRIMARY KEY (O_ORDERKEY)
+                  ) ;
