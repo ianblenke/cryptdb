@@ -1,0 +1,6 @@
+OBJDIRS += hardbenchmark
+HARDPROGS := program-opt
+HARDPROGOBJS := $(patsubst %,$(OBJDIR)/hardbenchmark/%,$(HARDPROGS))
+all: $(HARDPROGOBJS)
+$(HARDPROGOBJS): %: %.o $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbparser.so $(OBJDIR)/libedbutil.so $(OBJDIR)/libexecution.so
+	$(CXX) $< -o $@ -ledbparser  $(LDFLAGS) -ledbutil -lcryptdb -ledbcrypto -ledbcrypto2 -lexecution -lmysqlclient -ltbb -lgmp -lpq

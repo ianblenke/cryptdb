@@ -60,6 +60,7 @@ include generated/Makefrag
 include plainbenchmark/Makefrag
 include origbenchmark/Makefrag
 include greedybenchmark/Makefrag
+include hardbenchmark/Makefrag
 include gen-orig-plus-col-packing/Makefrag
 include gen-orig-plus-precomputation/Makefrag
 include gen-orig-plus-columnar-agg/Makefrag
