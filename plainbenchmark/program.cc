@@ -335,6 +335,21 @@ static void query_17(ConnectNew& conn) {
   std::cout << "(" << res.rows.size() << " rows)" << std::endl;
   delete dbres;
 }
+static void query_18(ConnectNew& conn) {
+  DBResultNew* dbres;
+  const char *p = "select s_name, count(*) as numwait from " SUPPLIER_NAME " , " LINEITEM_NAME " l1, " ORDERS_NAME ", " NATION_NAME " where s_suppkey = l1.l_suppkey and o_orderkey = l1.l_orderkey and o_orderstatus = 'F' and l1.l_receiptdate > l1.l_commitdate and exists ( select * from " LINEITEM_NAME " l2 where l2.l_orderkey = l1.l_orderkey and l2.l_suppkey <> l1.l_suppkey) and not exists ( select * from " LINEITEM_NAME " l3 where l3.l_orderkey = l1.l_orderkey and l3.l_suppkey <> l1.l_suppkey and l3.l_receiptdate > l3.l_commitdate) and s_nationkey = n_nationkey and n_name = 'IRAN' group by s_name order by numwait desc, s_name limit 100";
+  conn.execute(p, dbres);
+  ResType res = dbres->unpack();
+  assert(res.ok);
+  for (auto &row : res.rows) {
+    std::cout << row[0].data;
+    std::cout << "|";
+    std::cout << row[1].data;
+    std::cout << std::endl;
+  }
+  std::cout << "(" << res.rows.size() << " rows)" << std::endl;
+  delete dbres;
+}
 int main(int argc, char **argv) {
   command_line_opts opts(
     DB_HOSTNAME, DB_USERNAME, DB_PASSWORD, DB_DATABASE, DB_PORT);
@@ -367,6 +382,7 @@ int main(int argc, char **argv) {
     case 15: query_15(pg); break;
     case 16: query_16(pg); break;
     case 17: query_17(pg); break;
+    case 18: query_18(pg); break;
     default: assert(false);
   }
   return 0;
