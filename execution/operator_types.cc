@@ -1210,7 +1210,28 @@ local_filter_op::next(exec_context& ctx, db_tuple_vec& tuples)
   first_child()->next(ctx, v);
   for (auto &tuple : v) {
     exec_context eval_ctx = ctx.bind(&tuple, _subqueries);
-    db_elem test = _filter->eval(eval_ctx);
+    db_elem test;
+
+    // REALLY UGLY HACK
+    // If data does not exist then treat the filter as failing
+    // This is necessary to get us past Q20.
+    //
+    // The problem is as follows. Suppose we pull out the following clause
+    // (meaning we are running this locally):
+    //   col1 < ( select sum(x) from tbl where tbl.id = $outer_scoped_var )
+    // In SQL, this basically is doing a join on tbl with the current row. However,
+    // if no elements exist, then this row should not pass the predicate test
+    // trivially. However, when we remove this predicate, we potentially get back
+    // rows with $outer_scoped_var which don't join to tbl. So what's happening
+    // is in this case, sum(x) will try to evaluate over an empty vector and
+    // fail. So for now we just catch the exception...
+    try {
+      test = _filter->eval(eval_ctx);
+    } catch (no_data_exception& e) {
+      dprintf("WARNING: no_data_exception caught in filter, assuming false\n");
+      test = db_elem(false);
+    }
+
     SANITY(test.get_type() == db_elem::TYPE_BOOL ||
            test.get_type() == db_elem::TYPE_VECTOR);
     if (test.get_type() == db_elem::TYPE_BOOL) {

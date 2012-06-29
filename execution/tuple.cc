@@ -150,7 +150,7 @@ db_elem::sum(bool distinct) const
 {
   if (distinct) throw runtime_error("UNIMPL");
   requireType(TYPE_VECTOR);
-  if (_elems.empty()) throw runtime_error("sum on empty vector");
+  if (_elems.empty()) throw no_data_exception("sum on empty vector");
   db_elem accum(0L);
   for (auto &e : _elems) accum = accum + e;
   return accum;
