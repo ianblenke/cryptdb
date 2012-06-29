@@ -131,7 +131,7 @@ remote_sql_op::open(exec_context& ctx)
     _do_cache_write_sql = buf.str();
   }
 
-  cerr << "executing sql: " << _do_cache_write_sql << endl;
+  cerr << "executing sql: " << _do_cache_write_sql.substr(0, 1000) << endl;
 
   // look in query cache first
   if (ctx.cache) {

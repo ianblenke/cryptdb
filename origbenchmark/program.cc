@@ -288,6 +288,36 @@ virtual param_map get_param_map(exec_context& ctx) {
   return m;
 }
 };
+class param_generator_id20 : public sql_param_generator {
+public:
+virtual param_map get_param_map(exec_context& ctx) {
+  param_map m;
+  {
+    static const size_t RowColPackPlainSize = 1024;
+    static const size_t RowColPackCipherSize = RowColPackPlainSize * 2;
+    auto pp = ctx.pp_cache->get_paillier_priv(RowColPackCipherSize / 2, RowColPackCipherSize / 8);
+    auto pk = pp.pubkey();
+    m[0] = (RowColPackCipherSize == 2048) ? db_elem(ctx.crypto->cm->getPKInfo()) : db_elem(StringFromZZ(pk[0] * pk[0]));
+  }
+  m[1] = db_elem((int64_t)encrypt_date_ope(ctx.crypto, 1022497 /*1997-1-1*/, 10, true));
+  m[2] = db_elem((int64_t)encrypt_date_ope(ctx.crypto, 1023009 /*1998-1-1*/, 10, true));
+  {
+    Binary key(ctx.crypto->cm->getKey(ctx.crypto->cm->getmkey(), fieldname(1, "SWP"), SECLEVEL::SWP));
+    Token t = CryptoManager::token(key, Binary("khaki"));
+    m[3] = db_elem((const char *)t.ciph.content, t.ciph.len);
+    m[4] = db_elem((const char *)t.wordKey.content, t.wordKey.len);
+  }
+  return m;
+}
+};
+class param_generator_id21 : public sql_param_generator {
+public:
+virtual param_map get_param_map(exec_context& ctx) {
+  param_map m;
+  m[0] = db_elem(encrypt_string_det(ctx.crypto, "ALGERIA", 1, false));
+  return m;
+}
+};
 static void query_0(exec_context& ctx) {
   physical_operator* op = new local_transform_op(
     {local_transform_op::trfm_desc(0), local_transform_op::trfm_desc(1), local_transform_op::trfm_desc(std::make_pair(db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oNONE, SECLEVEL::PLAIN, 0, false), new function_call_node("hom_get_pos", {new tuple_pos_node(2), new int_literal_node(0)}))), local_transform_op::trfm_desc(std::make_pair(db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oNONE, SECLEVEL::PLAIN, 0, false), new function_call_node("hom_get_pos", {new tuple_pos_node(3), new int_literal_node(0)}))), local_transform_op::trfm_desc(std::make_pair(db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oNONE, SECLEVEL::PLAIN, 0, false), new sum_node(new mult_node(new tuple_pos_node(4), new sub_node(new int_literal_node(1), new tuple_pos_node(5))), false))), local_transform_op::trfm_desc(std::make_pair(db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oNONE, SECLEVEL::PLAIN, 0, false), new sum_node(new mult_node(new mult_node(new tuple_pos_node(4), new sub_node(new int_literal_node(1), new tuple_pos_node(5))), new add_node(new int_literal_node(1), new tuple_pos_node(6))), false))), local_transform_op::trfm_desc(std::make_pair(db_column_desc(db_elem::TYPE_DOUBLE, 8, oNONE, SECLEVEL::PLAIN, 0, false), new div_node(new function_call_node("hom_get_pos", {new tuple_pos_node(2), new int_literal_node(0)}), new tuple_pos_node(7)))), local_transform_op::trfm_desc(std::make_pair(db_column_desc(db_elem::TYPE_DOUBLE, 8, oNONE, SECLEVEL::PLAIN, 0, false), new div_node(new function_call_node("hom_get_pos", {new tuple_pos_node(3), new int_literal_node(0)}), new tuple_pos_node(7)))), local_transform_op::trfm_desc(std::make_pair(db_column_desc(db_elem::TYPE_DOUBLE, 8, oNONE, SECLEVEL::PLAIN, 0, false), new div_node(new function_call_node("hom_get_pos", {new tuple_pos_node(8), new int_literal_node(0)}), new tuple_pos_node(7)))), local_transform_op::trfm_desc(7), },
@@ -680,6 +710,38 @@ static void query_16(exec_context& ctx) {
   delete op;
 
 }
+static void query_17(exec_context& ctx) {
+  physical_operator* op = new local_order_by(
+    {std::make_pair(0, false)},
+    new local_decrypt_op(
+      {0, 1},
+      new remote_sql_op(new param_generator_id21, "select " SUPPLIER_ENC_NAME ".s_name_DET, " SUPPLIER_ENC_NAME ".s_address_DET from " SUPPLIER_ENC_NAME ", " NATION_ENC_NAME " where ((" SUPPLIER_ENC_NAME ".s_suppkey_DET in ( :_subselect$1 )) and ((" SUPPLIER_ENC_NAME ".s_nationkey_DET) = (" NATION_ENC_NAME ".n_nationkey_DET))) and ((" NATION_ENC_NAME ".n_name_DET) = (:0))", {db_column_desc(db_elem::TYPE_STRING, 25, oDET, SECLEVEL::DET, 1, false), db_column_desc(db_elem::TYPE_STRING, 40, oDET, SECLEVEL::DET, 2, false)}, {}, util::map_from_pair_vec<std::string, physical_operator*>({std::pair<std::string, physical_operator*>("_subselect$1",
+        new local_transform_op(
+          {local_transform_op::trfm_desc(std::make_pair(db_column_desc(db_elem::TYPE_INT, 4, oNONE, SECLEVEL::PLAIN, 1, false), new tuple_pos_node(0))), },
+          new local_filter_op(
+            new gt_node(new tuple_pos_node(1), new mult_node(new double_literal_node(0.500000), new tuple_pos_node(2))),
+            new local_transform_op(
+              {local_transform_op::trfm_desc(0), local_transform_op::trfm_desc(1), local_transform_op::trfm_desc(std::make_pair(db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oNONE, SECLEVEL::PLAIN, 0, false), new function_call_node("hom_get_pos", {new tuple_pos_node(2), new int_literal_node(0)}))), },
+              new local_decrypt_op(
+                {1, 2},
+                new remote_sql_op(new param_generator_id20, "select " PARTSUPP_ENC_NAME ".ps_suppkey_DET, agg_ident(" PARTSUPP_ENC_NAME ".ps_availqty_DET), hom_agg(:0, " LINEITEM_ENC_NAME ".l_quantity_AGG) from " PARTSUPP_ENC_NAME ", " LINEITEM_ENC_NAME " where (((((" LINEITEM_ENC_NAME ".l_partkey_DET) = (" PARTSUPP_ENC_NAME ".ps_partkey_DET)) and ((" LINEITEM_ENC_NAME ".l_suppkey_DET) = (" PARTSUPP_ENC_NAME ".ps_suppkey_DET))) and ((" LINEITEM_ENC_NAME ".l_shipdate_OPE) >= (:1))) and ((" LINEITEM_ENC_NAME ".l_shipdate_OPE) < (:2))) and (" PARTSUPP_ENC_NAME ".ps_partkey_DET in ( select " PART_ENC_NAME ".p_partkey_DET from " PART_ENC_NAME " where searchSWP(:3, :4, " PART_ENC_NAME ".p_name_SWP) )) group by " PARTSUPP_ENC_NAME ".ps_partkey_DET, " PARTSUPP_ENC_NAME ".ps_suppkey_DET", {db_column_desc(db_elem::TYPE_INT, 4, oDET, SECLEVEL::DETJOIN, 1, false), db_column_desc(db_elem::TYPE_INT, 4, oDET, SECLEVEL::DET, 2, false), db_column_desc(db_elem::TYPE_STRING, 15, oAGG_ORIGINAL, SECLEVEL::SEMANTIC_AGG, 0, false)}, {}, util::map_from_pair_vec<std::string, physical_operator*>({})))
+            )
+            ,{
+            }
+          )
+        )
+      )})))
+  )
+  ;
+  op->open(ctx);
+  while (op->has_more(ctx)) {
+    physical_operator::db_tuple_vec v;
+    op->next(ctx, v);
+    physical_operator::print_tuples(v);
+  }
+  op->close(ctx);
+  delete op;
+}
 int main(int argc, char **argv) {
   command_line_opts opts(
     DB_HOSTNAME, DB_USERNAME, DB_PASSWORD, DB_DATABASE, DB_PORT);
@@ -717,6 +779,7 @@ int main(int argc, char **argv) {
     case 14: query_14(ctx); break;
     case 15: query_15(ctx); break;
     case 16: query_16(ctx); break;
+    case 17: query_17(ctx); break;
     default: assert(false);
   }
   return 0;
