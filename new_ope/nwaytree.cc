@@ -23,68 +23,13 @@ struct tree_node
 		right.clear();
 	}
 
-	//Strict predecessor. aka 7 is pred of 8, but 8 is not pred of 8.
-	EncT pred(EncT key){
-		EncT tmp_pred_key = 0;
-		bool pred_exists = false;
-		for (int i = 0; i<keys.size(); i++)
-		{
-			if (keys[i] < key && keys[i] > tmp_pred_key)
-			{
-				pred_exists=true;
-				tmp_pred_key = keys[i];
-			}
-		}
-		if(pred_exists){
-			return tmp_pred_key;
-		}else{
-			return NULL;
-		}
-	}
-
 	bool key_in_map(EncT key){
-	    // RP: in order for it->first==key to work you need to define
-	    // an operator == for the EncT class - otherwise, it may not
-	    // compare the way you want; have you defined this and maybe I did
-	    // not see it? 
+	    // FL: EncT is being used as a primitive, so this is fine.
 		typename boost::unordered_map<EncT, tree_node *>::iterator it;
 		for(it=right.begin(); it!=right.end(); it++){
 			if(it->first==key) return true;
 		}
 		return false;
-	}
-
-	vector<tree_node* > insert(EncT key){
-
-		vector<tree_node*> rtn_path;
-
-		//Check if key is in node (maybe later can rid this code)
-		for(int i = 0; i<keys.size(); i++){
-			if(keys[i]==key) return rtn_path;
-		}
-
-		
-
-		if( keys.size() < N-1){
-			keys.push_back(key);
-			rtn_path.push_back(this);
-			return rtn_path;
-		}else{
-			EncT pred_key = pred(key);
-			if(!key_in_map(pred_key)){
-				right[pred_key] = new tree_node();
-			}
-			tree_node* pred_node = right[pred_key];
-			rtn_path = pred_node->insert(key);
-			
-			if(rtn_path.size()>0){
-				rtn_path.push_back(this);
-			}
-
-			return rtn_path;
-
-		}
-
 	}
 
 	int height(){
@@ -185,7 +130,7 @@ struct tree_node
 	}
 
 	void rebalance(){
-		cout<<"Rebalance"<<endl;
+		if(DEBUG) cout<<"Rebalance"<<endl;
 		vector<EncT> key_list = flatten();
 		sort(key_list.begin(), key_list.end());
 		tree_node<EncT>* tmp_node = rebuild(key_list);
@@ -214,7 +159,6 @@ tree<EncT>::print_tree(){
 	queue.push_back(root);
 	while(queue.size()!=0){
 		tree_node<EncT>* cur_node = queue[0];
-		//if(cur_node==NULL) {cout<<endl; queue.erase(queue.begin()); continue;}
 		cout<<cur_node->height()<<": ";
 		if(cur_node->key_in_map(NULL)){
 			queue.push_back(cur_node->right[NULL]);
@@ -228,7 +172,6 @@ tree<EncT>::print_tree(){
 		}	
 		cout<<endl;
 		queue.erase(queue.begin());
-		//queue.push_back(NULL);
 	}
 
 }
@@ -243,6 +186,7 @@ tree<EncT>::findScapegoat( vector<tree_node<EncT>* > path ){
 	int childSize=0;
 	vector<int> childSizes;
 
+	//Move along path until you find the scapegoat node
 	for(int i=0; i<path.size(); i++){
 		tree_node<EncT>* cur_node = path[i];
 
@@ -272,37 +216,24 @@ tree<EncT>::findScapegoat( vector<tree_node<EncT>* > path ){
 }
 
 template<class EncT>
-void 
-tree<EncT>::insert_recursive(EncT key){
-
-	vector<tree_node<EncT> * > path =root->insert(key);
-
-	double height= (double) path.size();
-
-	if (height==0) return;
-
-	num_nodes+=1;
-	if(height> log(num_nodes)/log(((double)1.0)/alpha)+1 ){
-		tree_node<EncT>* scapegoat = findScapegoat(path);
-		scapegoat->rebalance();
-
-	}
-	//cout<<(root->height()<=log(size)/log(((double)1.0)/alpha)+1)<<endl;
-}
-
-template<class EncT>
 void
 tree<EncT>::insert(uint64_t v, uint64_t nbits, EncT encval){
+	//If root doesn't exsit yet, create it, then continue insertion
+	if(!root){
+		if(DEBUG) cout<<"Inserting root"<<endl;
+		root=new tree_node<EncT>();
+	}
 	vector<tree_node<EncT> * > path=tree_insert(root, v, nbits, encval, nbits);
 	double height= (double) path.size();
 
 	if (height==0) return;
 
+	if(DEBUG) print_tree();
+
 	if(height> log(num_nodes)/log(((double)1.0)/alpha)+1 ){
 		tree_node<EncT>* scapegoat = findScapegoat(path);
-		print_tree();
 		scapegoat->rebalance();
-
+		if(DEBUG) print_tree();
 	}
 }
 
@@ -312,10 +243,14 @@ tree<EncT>::tree_insert(tree_node<EncT>* node, uint64_t v, uint64_t nbits, EncT 
 
 	vector<tree_node<EncT>* > rtn_path;
 
+	//End of the insert line, check if you can insert
+	//Assumes v and nbits were from a lookup of an insertable node
 	if(nbits==0){
 		if(node->keys.size()>N-2) cout<<"Insert fail, found full node"<<endl;
 		else{
+			if(DEBUG) cout<<"Found node, inserting"<<endl;
 			node->keys.push_back(encval);
+			sort(node->keys.begin(), node->keys.end());
 			num_nodes++;
 			rtn_path.push_back(node);
 		}
@@ -331,15 +266,18 @@ tree<EncT>::tree_insert(tree_node<EncT>* node, uint64_t v, uint64_t nbits, EncT 
 
 	//cout<<"Index: "<<key_index<<endl;
 
+    //Protocol set: index 0 is NULL (branch to node with lesser elements)
+    //Else, index is 1+(key's index in node's key-vector)
     if(key_index==0) key=NULL;
 	else if(key_index<N) key = sorted[key_index-1];
 	else cout<<"Insert fail, key_index not legal"<<endl;
 
 	//cout<<"Key: "<<key<<endl;
 
+	//See if pointer to next node to be checked 
     if(!node->key_in_map(key)){
 	    if (nbits == num_bits && node->keys.size()==N-1) {
-	    	cout<<"Creating new node"<<endl;
+	    	if(DEBUG) cout<<"Creating new node"<<endl;
 	    	node->right[key] = new tree_node<EncT>();
 	    }else cout<<"Insert fail, wrong condition to create new node child"<<endl;
     }
@@ -352,6 +290,12 @@ template<class EncT>
 tree_node<EncT> *
 tree<EncT>::tree_lookup(tree_node<EncT> *root, uint64_t v, uint64_t nbits) const
 {
+	//Handle if root doesn't exist yet
+	if(!root){
+		if(DEBUG) cout<<"First lookup no root"<<endl;
+		return 0;
+	}
+
     if (nbits == 0) {
         return root;
     }
@@ -373,7 +317,7 @@ tree<EncT>::tree_lookup(tree_node<EncT> *root, uint64_t v, uint64_t nbits) const
 	//cout<<"Key: "<<key<<endl;
 
     if(!root->key_in_map(key)){
-    	cout<<"Key not in map"<<endl;
+    	if(DEBUG) cout<<"Key not in map"<<endl;
     	return 0;
     }
     return tree_lookup(root->right[key], v, nbits-num_bits);
@@ -385,8 +329,8 @@ tree<EncT>::lookup(uint64_t v, uint64_t nbits) const
 {
     tree_node<EncT>* n = tree_lookup(root, v, nbits);
     if(n==0){
-    	//throw ope_lookup_failure();
-    	cout<<"NOPE!"<<endl;
+    	if(DEBUG) cout<<"NOPE! "<<v<<": "<<nbits<<endl;    	
+    	throw ope_lookup_failure();
     }
     return n->keys;
 
@@ -495,24 +439,29 @@ int main(){
 
 	tree<uint64_t>* my_tree = new tree<uint64_t>();
 
+	ope_client<uint64_t>* my_client = new ope_client<uint64_t>(my_tree);
+
+	vector<uint64_t> inserted_vals;
 	//srand( time(NULL));
 	srand(0);
-	for(int i=0; i<15; i++){
-		my_tree->insert_recursive((uint64_t) rand());
+	for(int i=0; i<50; i++){
+		uint64_t rand_val = (uint64_t) rand();
+		inserted_vals.push_back(rand_val);
+		uint64_t enc_val = my_client->encrypt(rand_val);
+		if(DEBUG) cout<<"Encryption complete: "<<enc_val<<endl;
 	}
-	my_tree->print_tree();
-	my_tree->insert(10ULL, 4, 2144897763);
-	my_tree->insert(42ULL, 6, 2147483646);	
-	my_tree->print_tree();	
-	vector<uint64_t> root_keys = my_tree->lookup(10ULL,4);
-	cout<<"Search node: ";
-	for(int i=0; i<root_keys.size(); i++){
-		cout<<root_keys[i]<<", ";
-	}
-	cout<<endl;
+	if(DEBUG) my_tree->print_tree();
 
 	cout<<"Done inserting"<<endl;
 	cout<<"Testing tree: "<<my_tree->test_tree(my_tree->root)<<endl;
 	cout<<"Size: "<<my_tree->num_nodes<<" Height: "<<my_tree->root->height()<<" Len: "<<my_tree->root->len()<<endl;
 	cout<<"Alpha-height balanced: "<<(my_tree->root->height()< log(my_tree->num_nodes)/log(((double)1.0)/alpha)+1)<<endl;
+	cout<<endl;
+	cout<<endl;
+	sort(inserted_vals.begin(), inserted_vals.end());
+	for(int i=0; i<inserted_vals.size(); i++){
+		uint64_t enc_val = my_client->encrypt(inserted_vals[i]);
+		cout<<"Encryption for "<<inserted_vals[i]<<" is "<<enc_val<<endl;
+		cout<<"Orig val was "<<my_client->decrypt(enc_val)<<endl;
+	}
 }
