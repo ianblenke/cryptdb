@@ -265,32 +265,9 @@ static void query_13(ConnectNew& conn) {
   delete dbres;
 }
 static void query_14(ConnectNew& conn) {
-  // NOTE: we use a custom implementation here, because postgres
-  // handles this version better.
-  std::vector<std::string> l_orderkeys;
-  {
-    DBResultNew* dbres;
-    const char *q =
-        "select "
-        "    l_orderkey "
-        "from "
-        "    " LINEITEM_NAME " "
-        "group by "
-        "    l_orderkey having "
-        "        sum(l_quantity) > (315 * 100)";
-    conn.execute(q, dbres);
-    ResType res = dbres->unpack();
-    assert(res.ok);
-    l_orderkeys.reserve(res.rows.size());
-    for (auto &row : res.rows) {
-      l_orderkeys.push_back(row[0].data);
-    }
-    delete dbres;
-  }
-  if (l_orderkeys.empty()) return;
   DBResultNew* dbres;
   std::ostringstream buf;
-  buf << "select c_name, c_custkey, o_orderkey, o_orderdate, o_totalprice, fast_sum(l_quantity) from " CUSTOMER_NAME ", " ORDERS_NAME ", " LINEITEM_NAME " where ((o_orderkey in (" << join(l_orderkeys, ",") <<" )) and ((c_custkey) = (o_custkey))) and ((o_orderkey) = (l_orderkey)) group by c_name, c_custkey, o_orderkey, o_orderdate, o_totalprice order by o_totalprice DESC, o_orderdate ASC limit 100";
+  buf << "select c_name, c_custkey, o_orderkey, o_orderdate, o_totalprice, fast_sum(l_quantity) from " CUSTOMER_NAME ", " ORDERS_NAME ", " LINEITEM_NAME " where ((o_orderkey in ( select l_orderkey from " LINEITEM_NAME " group by l_orderkey having fast_sum(l_quantity) > (315 * 100) )) and ((c_custkey) = (o_custkey))) and ((o_orderkey) = (l_orderkey)) group by c_name, c_custkey, o_orderkey, o_orderdate, o_totalprice order by o_totalprice DESC, o_orderdate ASC limit 100";
   conn.execute(buf.str(), dbres);
   ResType res = dbres->unpack();
   assert(res.ok);
