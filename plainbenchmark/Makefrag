@@ -1,5 +1,5 @@
 OBJDIRS += plainbenchmark
-PLAINBENCHMARKPROGS := program
+PLAINBENCHMARKPROGS := program program-nodate
 PLAINBENCHMARKPROGOBJS := $(patsubst %,$(OBJDIR)/plainbenchmark/%,$(PLAINBENCHMARKPROGS))
 all: $(PLAINBENCHMARKPROGOBJS)
 $(PLAINBENCHMARKPROGOBJS): %: %.o $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbutil.so
