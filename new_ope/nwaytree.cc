@@ -155,10 +155,29 @@ struct tree_node
 template<class EncT>
 void 
 tree<EncT>::print_tree(){
+	bool last_was_null = false;
 	vector<tree_node<EncT>* > queue;
 	queue.push_back(root);
 	while(queue.size()!=0){
 		tree_node<EncT>* cur_node = queue[0];
+		if(cur_node==NULL){
+			queue.erase(queue.begin());
+			cout<<endl;
+			continue;
+		}
+/*		if(cur_node==NULL && !last_was_null){
+			last_was_null = true;
+			cout<<endl;
+			queue.erase(queue.begin());
+			continue;
+		}else if(cur_node==NULL && last_was_null){
+			queue.erase(queue.begin());
+			continue;
+		}else if(cur_node!=NULL && last_was_null){
+			last_was_null = false;
+		}else{
+
+		}*/
 		cout<<cur_node->height()<<": ";
 		if(cur_node->key_in_map(NULL)){
 			queue.push_back(cur_node->right[NULL]);
@@ -171,6 +190,7 @@ tree<EncT>::print_tree(){
 			}
 		}	
 		cout<<endl;
+		queue.push_back(NULL);
 		queue.erase(queue.begin());
 	}
 
@@ -433,11 +453,68 @@ tree<EncT>::test_vals(tree_node<EncT>* cur_node, EncT low, EncT high){
 // I would also count the number of relabelings that happen because we might be
 // triggering relabeling too frequently if the bound is too tight
 
+bool test(int num_vals){
+
+	tree<uint64_t>* my_tree = new tree<uint64_t>();
+
+	ope_client<uint64_t>* my_client = new ope_client<uint64_t>(my_tree);
+
+	vector<uint64_t> inserted_vals;
+	//srand( time(NULL));
+	srand(0);
+	for(int i=0; i<num_vals; i++){
+		uint64_t rand_val = (uint64_t) rand();
+		inserted_vals.push_back(rand_val);
+		uint64_t enc_val = my_client->encrypt(rand_val);
+		if(DEBUG) cout<<"Enc complete for "<<rand_val<<" with enc="<<enc_val<<endl;
+
+		if(my_tree->test_tree(my_tree->root)!=1){
+			cout<<"No test_tree pass"<<i<<endl;
+			return false;
+		} 
+		if(my_tree->num_nodes>1){
+			if((my_tree->root->height()< log(my_tree->num_nodes)/log(((double)1.0)/alpha)+1)!=1) {
+				cout<<"Height wrong "<<i<<endl;
+				return false;
+			}
+		}
+
+		sort(inserted_vals.begin(), inserted_vals.end());
+		uint64_t last_val = 0;
+		uint64_t last_enc = 0;
+		uint64_t cur_val = 0;
+		uint64_t cur_enc = 0;
+		for(int j=0; j<inserted_vals.size(); j++){
+			cur_val = inserted_vals[j];
+			cur_enc = my_client->encrypt(cur_val);
+			if(cur_val>=last_val && cur_enc>=last_enc){
+				last_val = cur_val;
+				last_enc = cur_enc;
+			}else{
+				cout<<"j: "<<j<<" cur:"<<cur_val<<": "<<cur_enc<<" last: "<<last_val<<": "<<last_enc<<endl;
+				return false;
+			}
+			if(DEBUG) cout<<"Decrypting "<<cur_enc<<endl;
+			if(cur_val!=my_client->decrypt(cur_enc)) {
+				cout<<"No match with "<<j<<endl;
+				return false;
+			}
+		}		
+	}
+	delete my_tree;
+	delete my_client;
+
+	return true;
+
+}
+
 int main(){
 
 	mask = make_mask();
 
-	tree<uint64_t>* my_tree = new tree<uint64_t>();
+	cout<<test(150)<<endl;
+
+/*	tree<uint64_t>* my_tree = new tree<uint64_t>();
 
 	ope_client<uint64_t>* my_client = new ope_client<uint64_t>(my_tree);
 
@@ -463,5 +540,5 @@ int main(){
 		uint64_t enc_val = my_client->encrypt(inserted_vals[i]);
 		cout<<"Encryption for "<<inserted_vals[i]<<" is "<<enc_val<<endl;
 		cout<<"Orig val was "<<my_client->decrypt(enc_val)<<endl;
-	}
+	}*/
 }

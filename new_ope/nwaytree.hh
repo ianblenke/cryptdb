@@ -10,7 +10,7 @@
 using namespace std;
 
 const int N = 3;
-const double alpha = 0.35;
+const double alpha = 0.4;
 
 const int num_bits = (int) ceil(log(N)/log(2));
 
@@ -34,7 +34,7 @@ ffsl(uint64_t ct)
 		return (0);
 	for (bit = 1; !(ct & 1); bit++)
 		ct = (uint64_t)ct >> 1;
-	return (bit);
+	return (bit+num_bits-1);
 }
 
 class ope_lookup_failure {};
@@ -65,6 +65,11 @@ public:
 		root = NULL;
 	}
 
+	~tree(){
+		root->delete_nodes();
+		delete root;
+	}
+
 	bool test_tree(tree_node<EncT>* cur_node);
 
 	bool test_node(tree_node<EncT>* cur_node);
@@ -80,12 +85,14 @@ class ope_client {
 //        _static_assert(BlockCipher::blocksize == sizeof(V));
     }
 
+    ~ope_client(){}
+
     /* Determines the index of pt's predecesor given a node's key vector
      * Returns -1 if pt is in the vector, 0 is if is smaller than all
      * elements in the vector, or 1+index where index is the pred's index
      * in the vector (1 is added due to my protocol, where 0 represents null)
     */
-    int predIndex(vector<V> vec, V pt){
+    static int predIndex(vector<V> vec, V pt){
 		V tmp_index = 0;
 		V tmp_pred_key =0;
 		bool pred_found=false;
@@ -105,7 +112,7 @@ class ope_client {
 
     }
 
-    V decrypt(uint64_t ct) {
+    V decrypt(uint64_t ct) const {
 		uint64_t nbits = 64 - ffsl((uint64_t)ct);
 		uint64_t v= ct>>(64-nbits); //Orig v
 		uint64_t path = v>>num_bits; //Path part of v
@@ -119,7 +126,7 @@ class ope_client {
      * so that the last num_bits can indicate the index of the value pt at
      * at the node found by the path
      */
-    uint64_t encrypt(V pt) {
+    uint64_t encrypt(V pt) const{
         uint64_t v = 0;
         uint64_t nbits = 0;
         try {
@@ -153,8 +160,8 @@ class ope_client {
         	cout<<"nbits larger than 64 bits!!!!"<<endl;
         }
 		//FL todo: s->update_table(block_encrypt(pt),v,nbits);
-		if(DEBUG) cout<<"Encryption of "<<pt<<" has v="<< v<<endl;;
-        return (v<<(64-nbits)) | (1ULL<<(63-nbits));
+		if(DEBUG) cout<<"Encryption of "<<pt<<" has v="<< v<<" nbits="<<nbits<<endl;
+        return (v<<(64-nbits)) | (mask<<(64-num_bits-nbits));
     }
 
  private:
