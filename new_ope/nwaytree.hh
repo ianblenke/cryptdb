@@ -12,9 +12,13 @@ using namespace std;
 const int N = 3;
 const double alpha = 0.4;
 
-const int num_bits = (int) ceil(log(N)/log(2));
+
+// for N not a power of two, we want ceil(log_2(N))
+// for N power of two we want log_2(N) + 1
+const int num_bits = (int) ceil(log2(N+1.0));
 
 uint64_t mask;
+
 
 //Make mask of num_bits 1's
 uint64_t make_mask(){
