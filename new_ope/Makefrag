@@ -1,25 +1,36 @@
 OBJDIRS     += new_ope
-CRYPTO2SRC  :=
+NEWOPESRC  := bstnode.cc bstree.cc avlnode.cc avltree.cc
+
+
+all:    $(OBJDIR)/libnewope.so
+
+$(OBJDIR)/libnewope.so: $(patsubst %.cc,$(OBJDIR)/new_ope/%.o,$(NEWOPESRC))
+	$(CXX) -shared -o $@ $^ $(LDFLAGS)
 
 
 all:	$(OBJDIR)/new_ope/ope_client
-$(OBJDIR)/new_ope/ope_client: $(OBJDIR)/new_ope/ope_client.o $(OBJDIR)/libedbcrypto2.so $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbutil.so
-	$(CXX) $< -o $@ $(LDFLAGS) -ledbcrypto2 -lcryptdb -ledbutil
+$(OBJDIR)/new_ope/ope_client: $(OBJDIR)/new_ope/ope_client.o $(OBJDIR)/libedbcrypto2.so $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbutil.so $(OBJDIR)/libnewope.so
+	$(CXX) $< -o $@ $(LDFLAGS) -ledbcrypto2 -lcryptdb -ledbutil -lnewope
+
+	
+all:	$(OBJDIR)/new_ope/avltest
+$(OBJDIR)/new_ope/avltest: $(OBJDIR)/new_ope/avltest.o $(OBJDIR)/libedbcrypto2.so $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbutil.so $(OBJDIR)/libnewope.so
+	$(CXX) $< -o $@ $(LDFLAGS) -ledbcrypto2 -lcryptdb -ledbutil -lnewope
 
 all:	$(OBJDIR)/new_ope/ope_server
-$(OBJDIR)/new_ope/ope_server: $(OBJDIR)/new_ope/ope_server.o $(OBJDIR)/libedbcrypto2.so $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbutil.so
-	$(CXX) $< -o $@ $(LDFLAGS) -ledbcrypto2 -lcryptdb -ledbutil
+$(OBJDIR)/new_ope/ope_server: $(OBJDIR)/new_ope/ope_server.o $(OBJDIR)/libedbcrypto2.so $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbutil.so $(OBJDIR)/libnewope.so
+	$(CXX) $< -o $@ $(LDFLAGS) -ledbcrypto2 -lcryptdb -ledbutil -lnewope
 
 all:	$(OBJDIR)/new_ope/exampleserver
-$(OBJDIR)/new_ope/exampleserver: $(OBJDIR)/new_ope/exampleserver.o $(OBJDIR)/libedbcrypto2.so $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbutil.so
-	$(CXX) $< -o $@ $(LDFLAGS) -ledbcrypto2 -lcryptdb -ledbutil
+$(OBJDIR)/new_ope/exampleserver: $(OBJDIR)/new_ope/exampleserver.o $(OBJDIR)/libedbcrypto2.so $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbutil.so $(OBJDIR)/libnewope.so
+	$(CXX) $< -o $@ $(LDFLAGS) -ledbcrypto2 -lcryptdb -ledbutil -lnewope
 
 
 install: install_opsserver
 
 .PHONY: install_opsserver
 install_opsserver: $(OBJDIR)/new_ope/exampleserver \
-		   $(OBJDIR)/new_ope/ope_client 
+		   $(OBJDIR)/new_ope/ope_client
 	install -m 555 -g mysql -o mysql $(OBJDIR)/new_ope/exampleserver $(MYSQL_PLUGIN_DIR); \
 	install -m 555 -g mysql -o mysql $(OBJDIR)/new_ope/ope_server $(MYSQL_PLUGIN_DIR); 
 
