@@ -58,99 +58,111 @@ struct tree_node
 
 	}
 
-	vector<EncT> flatten(){
-		vector<EncT> rtn_keys = keys;
+};
 
-		typename boost::unordered_map<EncT, tree_node *>::iterator it;
+/****************************/
+//Tree rebalancing
 
-		vector<EncT> child_keys;
+template<class EncT>
+vector<EncT> 
+tree<EncT>::flatten(tree_node<EncT>* node){
+	vector<EncT> rtn_keys = node->keys;
 
-		for(it=right.begin(); it!=right.end(); it++){
-			child_keys = it->second->flatten();
-			for(int i=0; i<child_keys.size(); i++){
-				rtn_keys.push_back(child_keys[i]);
+	typename boost::unordered_map<EncT, tree_node<EncT> *>::iterator it;
+
+	vector<EncT> child_keys;
+
+	for(it=node->right.begin(); it!=node->right.end(); it++){
+		child_keys = flatten(it->second);
+		for(int i=0; i<child_keys.size(); i++){
+			rtn_keys.push_back(child_keys[i]);
+		}
+	}	
+
+	return rtn_keys;			
+
+}
+
+template<class EncT>
+tree_node<EncT>* 
+tree<EncT>::rebuild(vector<EncT> key_list){
+	//Avoid building a node without any values
+	if(key_list.size()==0) return NULL;
+
+	tree_node<EncT>* rtn_node = new tree_node<EncT>();
+
+	if(key_list.size()<N){
+		//Remaining keys fit in one node, return that node
+		rtn_node->keys=key_list;
+	}else{
+		//Borders to divide key_list by
+		double base = ((double) key_list.size())/ ((double) N);
+
+		//Fill keys with every base-th key;
+		for(int i=1; i<N; i++){
+			rtn_node->keys.push_back(key_list[floor(i*base)]);
+		}
+		//Handle the subvector rebuilding except for the first and last
+		for(int i=1; i<N-1; i++){
+			vector<EncT> subvector;
+			for(int j=floor(i*base)+1; j<floor((i+1)*base); j++){
+				subvector.push_back(key_list[j]);
 			}
+			tree_node<EncT>* tmp_child = rebuild(subvector);
+			if(tmp_child!=NULL){
+				rtn_node->right[key_list[floor(i*base)]]=tmp_child;
+			}
+		}
+		//First subvector rebuilding special case
+		vector<EncT> subvector;
+		for(int j=0; j<floor(base); j++){
+			subvector.push_back(key_list[j]);
+		}
+		tree_node<EncT>* tmp_child = rebuild(subvector);
+		if(tmp_child!=NULL){
+			rtn_node->right[NULL]=tmp_child;
+		}	
+		subvector.clear();
+		//Last subvector rebuilding special case
+		for(int j=floor((N-1)*base)+1; j<key_list.size(); j++){
+			subvector.push_back(key_list[j]);
+		}
+		tmp_child = rebuild(subvector);
+		if(tmp_child!=NULL){
+			rtn_node->right[key_list[floor((N-1)*base)]]=tmp_child;
 		}	
 
-		return rtn_keys;			
+	}
+	return rtn_node;
 
+}
+
+template<class EncT>
+void 
+tree<EncT>::rebalance(tree_node<EncT>* node){
+	if(DEBUG) cout<<"Rebalance"<<endl;
+	vector<EncT> key_list = flatten(node);
+	sort(key_list.begin(), key_list.end());
+	tree_node<EncT>* tmp_node = rebuild(key_list);
+	delete_nodes(node);
+	node->keys = tmp_node->keys;
+	node->right = tmp_node->right;
+	delete tmp_node;
+}
+
+template<class EncT>
+void 
+tree<EncT>::delete_nodes(tree_node<EncT>* node){
+	typename boost::unordered_map<EncT, tree_node<EncT> *>::iterator it;
+
+	for(it=node->right.begin(); it!=node->right.end(); it++){
+		delete_nodes(it->second);
+		delete it->second;
 	}
 
+}
 
-	tree_node* rebuild(vector<EncT> key_list){
-		//Avoid building a node without any values
-		if(key_list.size()==0) return NULL;
-
-		tree_node* rtn_node = new tree_node();
-
-		if(key_list.size()<N){
-			//Remaining keys fit in one node, return that node
-			rtn_node->keys=key_list;
-		}else{
-			//Borders to divide key_list by
-			double base = ((double) key_list.size())/ ((double) N);
-
-			//Fill keys with every base-th key;
-			for(int i=1; i<N; i++){
-				rtn_node->keys.push_back(key_list[floor(i*base)]);
-			}
-			//Handle the subvector rebuilding except for the first and last
-			for(int i=1; i<N-1; i++){
-				vector<EncT> subvector;
-				for(int j=floor(i*base)+1; j<floor((i+1)*base); j++){
-					subvector.push_back(key_list[j]);
-				}
-				tree_node* tmp_child = rebuild(subvector);
-				if(tmp_child!=NULL){
-					rtn_node->right[key_list[floor(i*base)]]=tmp_child;
-				}
-			}
-			//First subvector rebuilding special case
-			vector<EncT> subvector;
-			for(int j=0; j<floor(base); j++){
-				subvector.push_back(key_list[j]);
-			}
-			tree_node* tmp_child = rebuild(subvector);
-			if(tmp_child!=NULL){
-				rtn_node->right[NULL]=tmp_child;
-			}	
-			subvector.clear();
-			//Last subvector rebuilding special case
-			for(int j=floor((N-1)*base)+1; j<key_list.size(); j++){
-				subvector.push_back(key_list[j]);
-			}
-			tmp_child = rebuild(subvector);
-			if(tmp_child!=NULL){
-				rtn_node->right[key_list[floor((N-1)*base)]]=tmp_child;
-			}	
-
-		}
-		return rtn_node;
-
-	}
-
-	void rebalance(){
-		if(DEBUG) cout<<"Rebalance"<<endl;
-		vector<EncT> key_list = flatten();
-		sort(key_list.begin(), key_list.end());
-		tree_node<EncT>* tmp_node = rebuild(key_list);
-		delete_nodes();
-		keys = tmp_node->keys;
-		right = tmp_node->right;
-		delete tmp_node;
-	}
-
-	void delete_nodes(){
-		typename boost::unordered_map<EncT, tree_node<EncT> *>::iterator it;
-
-		for(it=right.begin(); it!=right.end(); it++){
-			it->second->delete_nodes();
-			delete it->second;
-		}
-
-	}
-
-};
+/****************************/
 
 template<class EncT>
 void 
@@ -165,19 +177,6 @@ tree<EncT>::print_tree(){
 			cout<<endl;
 			continue;
 		}
-/*		if(cur_node==NULL && !last_was_null){
-			last_was_null = true;
-			cout<<endl;
-			queue.erase(queue.begin());
-			continue;
-		}else if(cur_node==NULL && last_was_null){
-			queue.erase(queue.begin());
-			continue;
-		}else if(cur_node!=NULL && last_was_null){
-			last_was_null = false;
-		}else{
-
-		}*/
 		cout<<cur_node->height()<<": ";
 		if(cur_node->key_in_map(NULL)){
 			queue.push_back(cur_node->right[NULL]);
@@ -252,7 +251,7 @@ tree<EncT>::insert(uint64_t v, uint64_t nbits, EncT encval){
 
 	if(height> log(num_nodes)/log(((double)1.0)/alpha)+1 ){
 		tree_node<EncT>* scapegoat = findScapegoat(path);
-		scapegoat->rebalance();
+		rebalance(scapegoat);
 		if(DEBUG) print_tree();
 	}
 }
@@ -273,6 +272,17 @@ tree<EncT>::tree_insert(tree_node<EncT>* node, uint64_t v, uint64_t nbits, EncT 
 			sort(node->keys.begin(), node->keys.end());
 			num_nodes++;
 			rtn_path.push_back(node);
+/*
+			table_storage new_entry;
+			new_entry.v = v;
+			new_entry.pathlen = pathlen;
+			new_entry.index = 0;
+			ope_table[encval] = new_entry;
+
+			for(int i=0; i<node->keys.size(); i++){
+				ope_table[node->keys[i]].index = i;
+			}*/
+			
 		}
 		return rtn_path;
 	}
@@ -354,6 +364,20 @@ tree<EncT>::lookup(uint64_t v, uint64_t nbits) const
     }
     return n->keys;
 
+}
+
+template<class EncT>
+table_storage
+tree<EncT>::lookup(EncT xct){
+    if(ope_table.find(xct)!=ope_table.end()){
+        if(DEBUG) cout <<"Found "<<xct<<" in table with v="<<ope_table[xct].v<<" nbits="<<ope_table[xct].pathlen<<" index="<<ope_table[xct].index<<endl;
+        return ope_table[xct];
+    }
+    table_storage negative;
+    negative.v=-1;
+    negative.pathlen=-1;
+    negative.index=-1;
+    return negative;
 }
 
 template<class EncT>
@@ -463,8 +487,8 @@ bool test_order(int num_vals, int sorted){
 	ope_client<uint64_t>* my_client = new ope_client<uint64_t>(my_tree);
 
 	vector<uint64_t> inserted_vals;
-	//srand( time(NULL));
-	srand(0);
+	srand( time(NULL));
+	//srand(0);
 
 	for(int i=0; i<num_vals; i++){
 		inserted_vals.push_back((uint64_t) rand());

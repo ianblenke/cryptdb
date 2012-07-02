@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <iostream>
 #include <assert.h>
+#include <boost/unordered_map.hpp>
 
 //Whether to print debugging output or not
 #define DEBUG 0
@@ -41,6 +42,12 @@ ffsl(uint64_t ct)
 	return (bit+num_bits-1);
 }
 
+struct table_storage{
+	uint64_t v;
+	uint64_t pathlen;
+	uint64_t index;
+};
+
 class ope_lookup_failure {};
 
 template<class EncT>
@@ -62,7 +69,15 @@ public:
 
 	tree_node<EncT>* tree_lookup(tree_node<EncT> *root, uint64_t v, uint64_t nbits) const;
 	vector<EncT> lookup(uint64_t v, uint64_t nbits) const;
+	table_storage lookup(EncT xct);
 
+	boost::unordered_map<EncT, std::pair<uint64_t,uint64_t> > ope_table;
+	//void update_ope_table(tree_node<EncT>*n);
+
+	vector<EncT> flatten(tree_node<EncT>* node);
+	tree_node<EncT>* rebuild(vector<EncT> key_list);
+	void rebalance(tree_node<EncT>* node);
+	void delete_nodes(tree_node<EncT>* node);
 
 	tree(){
 		num_nodes=0;
@@ -70,7 +85,7 @@ public:
 	}
 
 	~tree(){
-		root->delete_nodes();
+		delete_nodes(root);
 		delete root;
 	}
 
