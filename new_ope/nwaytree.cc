@@ -141,6 +141,9 @@ template<class EncT>
 void 
 tree<EncT>::rebalance(tree_node<EncT>* node){
 	if(DEBUG) cout<<"Rebalance"<<endl;
+
+	table_storage base = ope_table[node->keys[0]];
+
 	vector<EncT> key_list = flatten(node);
 	sort(key_list.begin(), key_list.end());
 	tree_node<EncT>* tmp_node = rebuild(key_list);
@@ -148,6 +151,8 @@ tree<EncT>::rebalance(tree_node<EncT>* node){
 	node->keys = tmp_node->keys;
 	node->right = tmp_node->right;
 	delete tmp_node;
+
+	update_ope_table(node, base);
 }
 
 template<class EncT>
@@ -163,6 +168,33 @@ tree<EncT>::delete_nodes(tree_node<EncT>* node){
 }
 
 /****************************/
+
+template<class EncT>
+void
+tree<EncT>::update_ope_table(tree_node<EncT> *node, table_storage base){
+	for(int i=0; i<node->keys.size(); i++){
+		table_storage tmp = base;
+		tmp.index=i;
+		ope_table[node->keys[i]] = tmp;
+	}
+	if(node->key_in_map(NULL)){
+		table_storage tmp = base;
+		tmp.v = tmp.v<<num_bits;
+		tmp.pathlen+=num_bits;
+		tmp.index=0;
+		update_ope_table(node->right[NULL], tmp);
+	}
+	for(int i=0; i<node->keys.size(); i++){
+		if(node->key_in_map(node->keys[i])){
+			table_storage tmp = base;
+			tmp.v = tmp.v<<num_bits | (i+1);
+			tmp.pathlen+=num_bits;
+			tmp.index=0;
+			update_ope_table(node->right[node->keys[i]], tmp);	
+		}	
+	}
+
+}
 
 template<class EncT>
 void 
@@ -272,7 +304,7 @@ tree<EncT>::tree_insert(tree_node<EncT>* node, uint64_t v, uint64_t nbits, EncT 
 			sort(node->keys.begin(), node->keys.end());
 			num_nodes++;
 			rtn_path.push_back(node);
-/*
+
 			table_storage new_entry;
 			new_entry.v = v;
 			new_entry.pathlen = pathlen;
@@ -281,25 +313,20 @@ tree<EncT>::tree_insert(tree_node<EncT>* node, uint64_t v, uint64_t nbits, EncT 
 
 			for(int i=0; i<node->keys.size(); i++){
 				ope_table[node->keys[i]].index = i;
-			}*/
+			}
 			
 		}
 		return rtn_path;
 	}
-    //Just a check, can remove for performance
+
     int key_index = (int) (v&(mask<<(nbits-num_bits)))>>(nbits-num_bits);
 
-    vector<EncT> sorted = node->keys;
-    sort(sorted.begin(), sorted.end());
-
     EncT key;
-
-	//cout<<"Index: "<<key_index<<endl;
 
     //Protocol set: index 0 is NULL (branch to node with lesser elements)
     //Else, index is 1+(key's index in node's key-vector)
     if(key_index==0) key=NULL;
-	else if(key_index<N) key = sorted[key_index-1];
+	else if(key_index<N) key = node->keys[key_index-1];
 	else cout<<"Insert fail, key_index not legal"<<endl;
 
 	//cout<<"Key: "<<key<<endl;
@@ -318,46 +345,41 @@ tree<EncT>::tree_insert(tree_node<EncT>* node, uint64_t v, uint64_t nbits, EncT 
 
 template<class EncT>
 tree_node<EncT> *
-tree<EncT>::tree_lookup(tree_node<EncT> *root, uint64_t v, uint64_t nbits) const
+tree<EncT>::tree_lookup(tree_node<EncT> *node, uint64_t v, uint64_t nbits) const
 {
-	//Handle if root doesn't exist yet
-	if(!root){
-		if(DEBUG) cout<<"First lookup no root"<<endl;
-		return 0;
-	}
 
     if (nbits == 0) {
-        return root;
+        return node;
     }
-    //Just a check, can remove for performance
-    int key_index = (int) (v&(mask<<(nbits-num_bits)))>>(nbits-num_bits);
 
-    vector<EncT> sorted = root->keys;
-    sort(sorted.begin(), sorted.end());
+    int key_index = (int) (v&(mask<<(nbits-num_bits)))>>(nbits-num_bits);
 
     EncT key;
 
-	//cout<<"Index: "<<key_index<<endl;
-
     if(key_index==0) key=NULL;
-	else if(key_index<N) key = sorted[key_index-1];
+	else if(key_index<N) key = node->keys[key_index-1];
 	else return 0;
 
-
-	//cout<<"Key: "<<key<<endl;
-
-    if(!root->key_in_map(key)){
+    if(!node->key_in_map(key)){
     	if(DEBUG) cout<<"Key not in map"<<endl;
     	return 0;
     }
-    return tree_lookup(root->right[key], v, nbits-num_bits);
+    return tree_lookup(node->right[key], v, nbits-num_bits);
 }
 
 template<class EncT>
 vector<EncT>
 tree<EncT>::lookup(uint64_t v, uint64_t nbits) const
 {
-    tree_node<EncT>* n = tree_lookup(root, v, nbits);
+	tree_node<EncT>* n;
+	//Handle if root doesn't exist yet
+	if(!root){
+		if(DEBUG) cout<<"First lookup no root"<<endl;
+		n=0;
+	}else{
+		n  = tree_lookup(root, v, nbits);
+	}
+
     if(n==0){
     	if(DEBUG) cout<<"NOPE! "<<v<<": "<<nbits<<endl;    	
     	throw ope_lookup_failure();
@@ -487,7 +509,7 @@ bool test_order(int num_vals, int sorted){
 	ope_client<uint64_t>* my_client = new ope_client<uint64_t>(my_tree);
 
 	vector<uint64_t> inserted_vals;
-	srand( time(NULL));
+	//srand( time(NULL));
 	//srand(0);
 
 	for(int i=0; i<num_vals; i++){
@@ -506,6 +528,14 @@ bool test_order(int num_vals, int sorted){
 		uint64_t val = inserted_vals[i];
 		tmp_vals.push_back(val);
 		uint64_t enc_val = my_client->encrypt(val);
+		if(enc_val != my_client->old_encrypt(val)) {
+			cout<<"Original encryption incorrect!"<<endl;
+			return false;
+		}	
+		if(val!=my_client->decrypt(enc_val)) {
+			cout<<"Decryption wrong! "<<val<<" : "<<enc_val<<endl;
+			return false;
+		}			
 		if(DEBUG) cout<<"Enc complete for "<<val<<" with enc="<<enc_val<<endl;
 
 		if(my_tree->test_tree(my_tree->root)!=1){
@@ -526,7 +556,11 @@ bool test_order(int num_vals, int sorted){
 		uint64_t cur_enc = 0;
 		for(int j=0; j<tmp_vals.size(); j++){
 			cur_val = tmp_vals[j];
-			cur_enc = my_client->encrypt(cur_val);
+			cur_enc = my_client->encrypt(cur_val);		
+			if(cur_enc != my_client->old_encrypt(cur_val)) {
+				cout<<"Ope_lookup not correct!"<<endl;
+				return false;
+			}
 			if(cur_val>=last_val && cur_enc>=last_enc){
 				last_val = cur_val;
 				last_enc = cur_enc;
@@ -559,7 +593,7 @@ bool test(int num_vals){
 int main(){
 
 	mask = make_mask();
-	if(test(513)) cout<<"Tests passed!"<<endl;
+	if(test(1531)) cout<<"Tests passed!"<<endl;
 	else cout<<"FAIL"<<endl;
 
 }

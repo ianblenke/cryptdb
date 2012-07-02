@@ -71,8 +71,8 @@ public:
 	vector<EncT> lookup(uint64_t v, uint64_t nbits) const;
 	table_storage lookup(EncT xct);
 
-	boost::unordered_map<EncT, std::pair<uint64_t,uint64_t> > ope_table;
-	//void update_ope_table(tree_node<EncT>*n);
+	boost::unordered_map<EncT, table_storage > ope_table;
+	void update_ope_table(tree_node<EncT>* node, table_storage base);
 
 	vector<EncT> flatten(tree_node<EncT>* node);
 	tree_node<EncT>* rebuild(vector<EncT> key_list);
@@ -136,7 +136,8 @@ class ope_client {
 		uint64_t v= ct>>(64-nbits); //Orig v
 		uint64_t path = v>>num_bits; //Path part of v
 		int index = (int) v & mask; //Index (last num_bits) of v
-        vector<V> vec = s->lookup(path, nbits-num_bits);
+		if(DEBUG) cout<<"Decrypt lookup with path="<<path<<" nbits="<<nbits<<" index="<<index<<endl;
+        vector<V> vec = s->lookup(path, nbits- num_bits);
         return vec[index];
 	
     }
@@ -146,12 +147,67 @@ class ope_client {
      * at the node found by the path
      */
     uint64_t encrypt(V pt) const{
+
         uint64_t v = 0;
         uint64_t nbits = 0;
-        try {
+
+    	table_storage test = s->lookup(pt);
+    	if(test.v==-1 && test.pathlen==-1 && test.index==-1){
+			try {
+	            for (;;) {
+	            	if(DEBUG) cout<<"Do lookup for "<<pt<<" with v: "<<v<<" nbits: "<<nbits<<endl;
+					vector<V> xct = s->lookup(v, nbits);
+					//Throws ope_lookup_failure if xct size < N, meaning can insert at node
+					int pi = predIndex(xct, pt);
+					nbits+=num_bits;
+			        if (pi==-1) {
+			        	//pt already exists at node
+			        	int index;
+			        	for(index=0; index<xct.size(); index++){
+			        		//Last num_bits are set to represent index of pt at node
+			        		if(xct[index]==pt) v = (v<<num_bits) | index;
+			        	}
+					    break;
+					}else {
+			            v = (v<<num_bits) | pi;
+					}
+			    }
+	        } catch (ope_lookup_failure&) {
+		    	if(DEBUG) cout<<pt<<"  not in tree. "<<nbits<<": "<<" v: "<<v<<endl;
+
+	            s->insert(v, nbits, pt);
+		    	//relabeling may have been triggered so we need to lookup value again
+		   		// FL todo: optimize by avoiding extra tree lookup
+		   		return encrypt(pt);
+	        }
+
+    	}else{
+    		v = test.v;
+    		nbits = test.pathlen+num_bits;
+    		if(DEBUG) cout<<"Found "<<pt<<" in table w/ v="<<v<<" nbits="<<nbits<<" index="<<test.index<<endl;
+    		v = (v<<num_bits) | test.index;
+    	}
+        
+        //Check that we don't run out of bits!
+        if(nbits > 63) {
+        	cout<<"nbits larger than 64 bits!!!!"<<endl;
+        }
+		//FL todo: s->update_table(block_encrypt(pt),v,nbits);
+		if(DEBUG) cout<<"Encryption of "<<pt<<" has v="<< v<<" nbits="<<nbits<<endl;
+        return (v<<(64-nbits)) | (mask<<(64-num_bits-nbits));
+    }
+
+
+    //Used purely for testing. Does not use ope_table lookups.
+	uint64_t old_encrypt(V pt) const{
+
+        uint64_t v = 0;
+        uint64_t nbits = 0;
+		try {
             for (;;) {
             	if(DEBUG) cout<<"Do lookup for "<<pt<<" with v: "<<v<<" nbits: "<<nbits<<endl;
 				vector<V> xct = s->lookup(v, nbits);
+				//Throws ope_lookup_failure if xct size < N, meaning can insert at node
 				int pi = predIndex(xct, pt);
 				nbits+=num_bits;
 		        if (pi==-1) {
@@ -174,6 +230,8 @@ class ope_client {
 	   		// FL todo: optimize by avoiding extra tree lookup
 	   		return encrypt(pt);
         }
+
+        
         //Check that we don't run out of bits!
         if(nbits > 63) {
         	cout<<"nbits larger than 64 bits!!!!"<<endl;
@@ -182,7 +240,6 @@ class ope_client {
 		if(DEBUG) cout<<"Encryption of "<<pt<<" has v="<< v<<" nbits="<<nbits<<endl;
         return (v<<(64-nbits)) | (mask<<(64-num_bits-nbits));
     }
-
  private:
 
 
