@@ -453,7 +453,10 @@ tree<EncT>::test_vals(tree_node<EncT>* cur_node, EncT low, EncT high){
 // I would also count the number of relabelings that happen because we might be
 // triggering relabeling too frequently if the bound is too tight
 
-bool test(int num_vals){
+//0 == random
+//1 == sorted incr
+//2 == sorted decr
+bool test_order(int num_vals, int sorted){
 
 	tree<uint64_t>* my_tree = new tree<uint64_t>();
 
@@ -462,11 +465,24 @@ bool test(int num_vals){
 	vector<uint64_t> inserted_vals;
 	//srand( time(NULL));
 	srand(0);
+
 	for(int i=0; i<num_vals; i++){
-		uint64_t rand_val = (uint64_t) rand();
-		inserted_vals.push_back(rand_val);
-		uint64_t enc_val = my_client->encrypt(rand_val);
-		if(DEBUG) cout<<"Enc complete for "<<rand_val<<" with enc="<<enc_val<<endl;
+		inserted_vals.push_back((uint64_t) rand());
+	}
+	if(sorted>0){
+		sort(inserted_vals.begin(), inserted_vals.end());
+	}
+	if(sorted>1){
+		reverse(inserted_vals.begin(), inserted_vals.end());
+	}
+
+	vector<uint64_t> tmp_vals;
+
+	for(int i=0; i<num_vals; i++){
+		uint64_t val = inserted_vals[i];
+		tmp_vals.push_back(val);
+		uint64_t enc_val = my_client->encrypt(val);
+		if(DEBUG) cout<<"Enc complete for "<<val<<" with enc="<<enc_val<<endl;
 
 		if(my_tree->test_tree(my_tree->root)!=1){
 			cout<<"No test_tree pass"<<i<<endl;
@@ -479,13 +495,13 @@ bool test(int num_vals){
 			}
 		}
 
-		sort(inserted_vals.begin(), inserted_vals.end());
+		sort(tmp_vals.begin(), tmp_vals.end());
 		uint64_t last_val = 0;
 		uint64_t last_enc = 0;
 		uint64_t cur_val = 0;
 		uint64_t cur_enc = 0;
-		for(int j=0; j<inserted_vals.size(); j++){
-			cur_val = inserted_vals[j];
+		for(int j=0; j<tmp_vals.size(); j++){
+			cur_val = tmp_vals[j];
 			cur_enc = my_client->encrypt(cur_val);
 			if(cur_val>=last_val && cur_enc>=last_enc){
 				last_val = cur_val;
@@ -501,6 +517,9 @@ bool test(int num_vals){
 			}
 		}		
 	}
+
+	cout<<"Sorted order "<<sorted<<" passes test"<<endl;
+
 	delete my_tree;
 	delete my_client;
 
@@ -508,37 +527,15 @@ bool test(int num_vals){
 
 }
 
+bool test(int num_vals){
+	return test_order(num_vals,0) && test_order(num_vals,1) && test_order(num_vals,2);
+
+}
+
 int main(){
 
 	mask = make_mask();
+	if(test(513)) cout<<"Tests passed!"<<endl;
+	else cout<<"FAIL"<<endl;
 
-	cout<<test(150)<<endl;
-
-/*	tree<uint64_t>* my_tree = new tree<uint64_t>();
-
-	ope_client<uint64_t>* my_client = new ope_client<uint64_t>(my_tree);
-
-	vector<uint64_t> inserted_vals;
-	//srand( time(NULL));
-	srand(0);
-	for(int i=0; i<50; i++){
-		uint64_t rand_val = (uint64_t) rand();
-		inserted_vals.push_back(rand_val);
-		uint64_t enc_val = my_client->encrypt(rand_val);
-		if(DEBUG) cout<<"Encryption complete: "<<enc_val<<endl;
-	}
-	if(DEBUG) my_tree->print_tree();
-
-	cout<<"Done inserting"<<endl;
-	cout<<"Testing tree: "<<my_tree->test_tree(my_tree->root)<<endl;
-	cout<<"Size: "<<my_tree->num_nodes<<" Height: "<<my_tree->root->height()<<" Len: "<<my_tree->root->len()<<endl;
-	cout<<"Alpha-height balanced: "<<(my_tree->root->height()< log(my_tree->num_nodes)/log(((double)1.0)/alpha)+1)<<endl;
-	cout<<endl;
-	cout<<endl;
-	sort(inserted_vals.begin(), inserted_vals.end());
-	for(int i=0; i<inserted_vals.size(); i++){
-		uint64_t enc_val = my_client->encrypt(inserted_vals[i]);
-		cout<<"Encryption for "<<inserted_vals[i]<<" is "<<enc_val<<endl;
-		cout<<"Orig val was "<<my_client->decrypt(enc_val)<<endl;
-	}*/
 }

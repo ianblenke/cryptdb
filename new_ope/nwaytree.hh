@@ -9,8 +9,8 @@
 
 using namespace std;
 
-const int N = 3;
-const double alpha = 0.4;
+const int N = 4;
+const double alpha = 0.3;
 
 
 // for N not a power of two, we want ceil(log_2(N))
