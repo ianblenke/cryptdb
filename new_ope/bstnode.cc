@@ -1,13 +1,9 @@
 #include "bstnode.hh"
 
+int MerkleNode::compare(const NodeData * N) const {
+    const MerkleNode * n = static_cast<const MerkleNode *>(N);
 
-/* Given:  Nothing other than the implicit object.
-   Task:   To look up the Info field of the object.
-   Return: A copy of this data in TheInfo.
-*/
-void BSTNodeClass::GetInfo(ItemType & TheInfo) const
-{
-    TheInfo = Info;   // assumes assignment works on this type
+    return unique_enc.compare(n->unique_enc);
 }
 
 

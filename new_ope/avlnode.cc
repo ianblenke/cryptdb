@@ -1,5 +1,6 @@
 #include "avlnode.hh"
 
+using namespace std;
 
 /* Given:  Item          Data item to place in Info field.
            LeftPtr       Pointer to place in Left field.
@@ -9,14 +10,14 @@
            object containing the above 4 values.
    Return: Nothing directly, but the implicit object is created.
 */
-AVLNodeClass::AVLNodeClass(const ItemType & Item,
-   AVLNodeClass * LeftPtr, AVLNodeClass * RightPtr, int BalanceValue):
-   // call BSTNodeClass constructor, initialize field:
-   BSTNodeClass(Item, LeftPtr, RightPtr), Balance(BalanceValue)
-   {
-   #ifdef DEBUG
-      cout << "DEBUG: AVLNodeClass constructor called" << endl;
-   #endif
-   }
+AVLNode::AVLNode(const NodeData * data,
+		 AVLNode * LeftPtr, AVLNode * RightPtr, int BalanceValue):
+    // call BSTNodeClass constructor, initialize field:
+    BSTNode(data, LeftPtr, RightPtr), Balance(BalanceValue)
+{
+#ifdef DEBUG
+    cout << "DEBUG: AVLNode constructor called" << endl;
+#endif
+}
 
 

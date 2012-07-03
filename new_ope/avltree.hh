@@ -22,27 +22,27 @@ public:
     AVLClass(const AVLClass & Tree);
     ~AVLClass(void);
     AVLClass & operator= (const AVLClass & Tree);
-    void Insert(const ItemType & Item);
+    void Insert(const NodeData * data);
     
     //TODO: lacking delete
 
 private:
-    AVLNodePtr GetNode(const ItemType & Item,
-		       AVLNodePtr LeftPtr = NULL, AVLNodePtr RightPtr = NULL,
+    AVLNode * GetNode(const NodeData * data,
+		       AVLNode * LeftPtr = NULL, AVLNode * RightPtr = NULL,
 		       int BalanceValue = 0);
     void CopyTree(const AVLClass & Tree);
-    AVLNodePtr CopySubtree(const AVLNodePtr Current);
-    void SingleRotateLeft(AVLNodePtr & ParentPtr);
-    void SingleRotateRight(AVLNodePtr & ParentPtr);
-    void DoubleRotateLeft(AVLNodePtr & ParentPtr);
-    void DoubleRotateRight(AVLNodePtr & ParentPtr);
-    void UpdateLeftTree(AVLNodePtr & ParentPtr, bool & ReviseBalance);
-    void UpdateRightTree(AVLNodePtr & ParentPtr, bool & ReviseBalance);
-    void AVLInsert(AVLNodePtr & Tree, AVLNodePtr NewNodePtr,
+    AVLNode * CopySubtree(const AVLNode * Current);
+    void SingleRotateLeft(AVLNode * & ParentPtr);
+    void SingleRotateRight(AVLNode * & ParentPtr);
+    void DoubleRotateLeft(AVLNode * & ParentPtr);
+    void DoubleRotateRight(AVLNode * & ParentPtr);
+    void UpdateLeftTree(AVLNode * & ParentPtr, bool & ReviseBalance);
+    void UpdateRightTree(AVLNode * & ParentPtr, bool & ReviseBalance);
+    void AVLInsert(AVLNode * & Tree, AVLNode * NewNodePtr,
 		   bool & ReviseBalance);
-    void FreeNode(AVLNodePtr NodePtr);
+    void FreeNode(AVLNode * NodePtr);
     void ClearTree(void);
-    void ClearSubtree(AVLNodePtr Current);
+    void ClearSubtree(AVLNode * Current);
        
   
 };

@@ -1,5 +1,6 @@
 #include "bstree.hh"
 
+using namespace std;
 
 /* Given:  Nothing,
    Task:   This is the constructor to initialize a binary search tree as empty.
@@ -45,7 +46,7 @@ BSTClass::ClearTree(void)
    Return: Nothing directly, but the implicit BSTClass object is modified.
 */
 void
-BSTClass::ClearSubtree(BSTNodePtr Current)
+BSTClass::ClearSubtree(BSTNode * Current)
 {
     //  Use a postorder traversal:
     if (Current != NULL)
@@ -57,19 +58,19 @@ BSTClass::ClearSubtree(BSTNodePtr Current)
 }
 
 
-/* Given:  Item      A data item to place into a new node.
+/* Given:  node      A data item to place into a new node.
    LeftPtr   The pointer to place in the left field of the node.
    RightPtr  The pointer to place in the right field of the node.
    Task:   To create a new node containing the above 3 items.
    Return: A pointer to the new node.
 */
-BSTNodePtr
-BSTClass::GetNode(const ItemType & Item,
-			     BSTNodePtr LeftPtr, BSTNodePtr RightPtr)
+BSTNode *
+BSTClass::GetNode(const NodeData * node,
+		  BSTNode * LeftPtr, BSTNode * RightPtr)
 {
-    BSTNodePtr NodePtr;
+    BSTNode * NodePtr;
 
-    NodePtr = new BSTNodeClass(Item, LeftPtr, RightPtr);
+    NodePtr = new BSTNode(node, LeftPtr, RightPtr);
     if (NodePtr == NULL)
     {
 	cerr << "Memory allocation error!" << endl;
@@ -84,7 +85,7 @@ BSTClass::GetNode(const ItemType & Item,
    Return: Nothing directly, but the implicit object is modified.
 */
 void
-BSTClass::FreeNode(BSTNodePtr NodePtr)
+BSTClass::FreeNode(BSTNode * NodePtr)
 {
     delete NodePtr;
 }
@@ -115,82 +116,84 @@ BSTClass::Empty(void) const
 }
 
 
-/* Given:  Item   A data item to be inserted.
-   Task:   To insert a new node containing Item into the implicit binary
+/* Given:  node   A data item to be inserted.
+   Task:   To insert a new node containing node into the implicit binary
    search tree so that it remains a binary search tree.
    Return: Nothing directly, but the implicit binary search tree is modified.
 */
 void
-BSTClass::Insert(const ItemType & Item)
+BSTClass::Insert(const NodeData * node)
 {
-    BSTNodePtr Current, Parent, NewNodePtr;
+    BSTNode * Current, * Parent, * NewNodePtr;
 
     Current = Root;
     Parent = NULL;
     while (Current != NULL)
     {
 	Parent = Current;
-	if (Item < Current->Info)
+	if (Current->data->compare(node) > 0)
 	    Current = Current->Left;
 	else
 	    Current = Current->Right;
     }
 
-    NewNodePtr = GetNode(Item, NULL, NULL);
+    NewNodePtr = GetNode(node, NULL, NULL);
     if (Parent == NULL)
 	Root = NewNodePtr;
-    else if (Item < Parent->Info)
+    else if (Parent->data->compare(node) > 0) { 
 	Parent->Left = NewNodePtr;
-    else
+    }
+    else {
 	Parent->Right = NewNodePtr;
-
+    }
     Count++;
 }
 
 
-/* Given:  Item    A data item to look for.
-   Task:   To search for Item in the implicit binary search tree.
-   Return: A pointer to the node where Item was found or a NULL pointer
+
+/* Given:  node    A data item to look for.
+   Task:   To search for node in the implicit binary search tree.
+   Return: A pointer to the node where node was found or a NULL pointer
    if it was not found.
 */
-BSTNodePtr
-BSTClass::Find(const ItemType & Item) const
+BSTNode *
+BSTClass::Find(const NodeData * node) const
 {
-    return SubtreeFind(Root, Item);
+    return SubtreeFind(Root, node);
 }
 
 
 /* Given:  Current  A pointer to a node in the implicit binary search tree.
-   Item     A data item to look for.
-   Task:   To search for Item in the subtree rooted at the node Current
+   node     A data item to look for.
+   Task:   To search for node in the subtree rooted at the node Current
    points to.
-   Return: A pointer to the node where Item was found or a NULL pointer
+   Return: A pointer to the node where node was found or a NULL pointer
    if it was not found.
 */
-BSTNodePtr
-BSTClass::SubtreeFind(BSTNodePtr Current,
-				 const ItemType & Item) const
+BSTNode *
+BSTClass::SubtreeFind(BSTNode * Current,
+		      const NodeData * node) const
 {
     if (Current == NULL)
 	return NULL;
-    else if (Item == Current->Info)
+    else if (node->compare(Current->data) == 0)
 	return Current;
-    else if (Item < Current->Info)
-	return SubtreeFind(Current->Left, Item);
+    else if (node->compare(Current->data) < 0)
+	return SubtreeFind(Current->Left, node);
     else
-	return SubtreeFind(Current->Right, Item);
+	return SubtreeFind(Current->Right, node);
 }
 
 
 static uint
-do_maxHeight(BSTNodePtr node) {
+do_maxHeight(BSTNode * subroot) {
 
-    if (node == NULL) {
+    if (subroot == NULL) {
 	return 0;
     }
     
-    return max(do_maxHeight(Root->left) + 1,
-	       do_maxHeight(Root->right) + 1);
+    return max(do_maxHeight(subroot->Left) + 1,
+	       do_maxHeight(subroot->Right) + 1);
 }
 
 uint
@@ -206,7 +209,7 @@ BSTClass::maxHeight() const {
    Return: Nothing.
 */
 void
-BSTClass::PrintSubtree(BSTNodePtr NodePtr, int Level) const
+BSTClass::PrintSubtree(BSTNode * NodePtr, int Level) const
 {
     int k;
 
@@ -215,7 +218,7 @@ BSTClass::PrintSubtree(BSTNodePtr NodePtr, int Level) const
 	PrintSubtree(NodePtr->Right, Level + 1);
 	for (k = 0; k < 3 * Level; k++)
 	    cout << " ";
-	cout << NodePtr->Info << endl;
+	cout << NodePtr->data->stringify() << endl;
 	PrintSubtree(NodePtr->Left, Level + 1);
     }
 }

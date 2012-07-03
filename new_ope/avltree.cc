@@ -1,5 +1,7 @@
 #include "avltree.hh"
 
+using namespace std;
+
 
 /* Given:   Item          A data item to insert in a new node.
    LeftPtr       A pointer to place in Left field of the new node.
@@ -8,10 +10,10 @@
    Task:    To create a new node filled with the above 4 values.
    Return:  A pointer to the new node in the function name.
 */
-AVLNodePtr AVLClass::GetNode(const ItemType & Item,
-			     AVLNodeClass * LeftPtr, AVLNodePtr RightPtr, int BalanceValue)
+AVLNode * AVLClass::GetNode(const NodeData * data,
+			     AVLNode * LeftPtr, AVLNode * RightPtr, int BalanceValue)
 {
-    AVLNodePtr NodePtr;
+    AVLNode * NodePtr;
 
 #ifdef DEBUG
     cout << "DEBUG: AVLClass GetNode called" << endl;
@@ -19,7 +21,7 @@ AVLNodePtr AVLClass::GetNode(const ItemType & Item,
     cin.get();
 #endif
 
-    NodePtr = new AVLNodeClass(Item, LeftPtr, RightPtr, BalanceValue);
+    NodePtr = new AVLNode(data, LeftPtr, RightPtr, BalanceValue);
     if (NodePtr == NULL)
     {
 	cerr << "Memory allocation error!" << endl;
@@ -33,7 +35,7 @@ AVLNodePtr AVLClass::GetNode(const ItemType & Item,
    Task:   To reclaim the space used by this node.
    Return: Nothing directly, but the implicit object is modified.
 */
-void AVLClass::FreeNode(AVLNodePtr NodePtr)
+void AVLClass::FreeNode(AVLNode * NodePtr)
 {
     delete NodePtr;
 }
@@ -57,7 +59,7 @@ AVLClass::~AVLClass(void)
 */
 void AVLClass::ClearTree(void)
 {
-    ClearSubtree(reinterpret_cast <AVLNodePtr> (Root));
+    ClearSubtree(reinterpret_cast <AVLNode *> (Root));
     Root = NULL;
     Count = 0;
 }
@@ -67,13 +69,13 @@ void AVLClass::ClearTree(void)
    Task:   To wipe out all nodes of this subtree.
    Return: Nothing directly, but the implicit AVLClass object is modified.
 */
-void AVLClass::ClearSubtree(AVLNodePtr Current)
+void AVLClass::ClearSubtree(AVLNode * Current)
 {
     //  Use a postorder traversal:
     if (Current != NULL)
     {
-	ClearSubtree(reinterpret_cast <AVLNodePtr> (Current->Left));
-	ClearSubtree(reinterpret_cast <AVLNodePtr> (Current->Right));
+	ClearSubtree(reinterpret_cast <AVLNode *> (Current->Left));
+	ClearSubtree(reinterpret_cast <AVLNode *> (Current->Right));
 	FreeNode(Current);
     }
 }
@@ -89,7 +91,7 @@ void AVLClass::CopyTree(const AVLClass & Tree)
     cout << "DEBUG: AVLClass CopyTree called" << endl;
 #endif
 
-    Root = CopySubtree(reinterpret_cast <AVLNodePtr> (Tree.Root));
+    Root = CopySubtree(reinterpret_cast <AVLNode *> (Tree.Root));
     Count = Tree.Count;
 }
 
@@ -98,9 +100,9 @@ void AVLClass::CopyTree(const AVLClass & Tree)
    Task:   To make a copy of the subtree starting at node Current.
    Return: A pointer to the root node of this copy.
 */
-AVLNodePtr AVLClass::CopySubtree(const AVLNodePtr Current)
+AVLNode * AVLClass::CopySubtree(const AVLNode * Current)
 {
-    AVLNodePtr NewLeftPtr, NewRightPtr, NewParentPtr;
+    AVLNode * NewLeftPtr, *NewRightPtr, *NewParentPtr;
     // Once this section works, leave this out as it gives too much output:
     //#ifdef DEBUG
     // cout << "DEBUG: AVLClass CopySubtree called" << endl;
@@ -112,14 +114,14 @@ AVLNodePtr AVLClass::CopySubtree(const AVLNodePtr Current)
     if (Current->Left == NULL)
 	NewLeftPtr = NULL;
     else
-	NewLeftPtr = CopySubtree(reinterpret_cast <AVLNodePtr> (Current->Left));
+	NewLeftPtr = CopySubtree(reinterpret_cast <AVLNode *> (Current->Left));
 
     if (Current->Right == NULL)
 	NewRightPtr = NULL;
     else
-	NewRightPtr = CopySubtree(reinterpret_cast <AVLNodePtr> (Current->Right));
+	NewRightPtr = CopySubtree(reinterpret_cast <AVLNode *> (Current->Right));
 
-    NewParentPtr = GetNode(Current->Info, NewLeftPtr, NewRightPtr,
+    NewParentPtr = GetNode(Current->data, NewLeftPtr, NewRightPtr,
 			   Current->Balance);
 
     return NewParentPtr;
@@ -132,15 +134,15 @@ AVLNodePtr AVLClass::CopySubtree(const AVLNodePtr Current)
    Return: ParentPtr   Points to the new root node of the rotated subtree.
    Note that the implicit AVL tree is modified.
 */
-void AVLClass::SingleRotateLeft(AVLNodePtr & ParentPtr)
+void AVLClass::SingleRotateLeft(AVLNode * & ParentPtr)
 {
-    AVLNodePtr RightChildPtr;
+    AVLNode * RightChildPtr;
 
 #ifdef DEBUG
-    cout << "DEBUG: single rotate left at " << ParentPtr->Info << endl;
+    cout << "DEBUG: single rotate left at " << ParentPtr->data << endl;
 #endif
 
-    RightChildPtr = reinterpret_cast <AVLNodePtr> (ParentPtr->Right);
+    RightChildPtr = reinterpret_cast <AVLNode *> (ParentPtr->Right);
     ParentPtr->Balance = Balanced;
     RightChildPtr->Balance = Balanced;
     ParentPtr->Right = RightChildPtr->Left;
@@ -155,15 +157,15 @@ void AVLClass::SingleRotateLeft(AVLNodePtr & ParentPtr)
    Return: ParentPtr   Points to the new root node of the rotated subtree.
    Note that the implicit AVL tree is modified.
 */
-void AVLClass::SingleRotateRight(AVLNodePtr & ParentPtr)
+void AVLClass::SingleRotateRight(AVLNode * & ParentPtr)
 {
-    AVLNodePtr LeftChildPtr;
+    AVLNode * LeftChildPtr;
 
 #ifdef DEBUG
-    cout << "DEBUG: single rotate right at " << ParentPtr->Info << endl;
+    cout << "DEBUG: single rotate right at " << ParentPtr->data << endl;
 #endif
 
-    LeftChildPtr = reinterpret_cast <AVLNodePtr> (ParentPtr->Left);
+    LeftChildPtr = reinterpret_cast <AVLNode *> (ParentPtr->Left);
     ParentPtr->Balance = Balanced;
     LeftChildPtr->Balance = Balanced;
     ParentPtr->Left = LeftChildPtr->Right;
@@ -178,16 +180,16 @@ void AVLClass::SingleRotateRight(AVLNodePtr & ParentPtr)
    Return: ParentPtr   Points to the new root node of the rotated subtree.
    Note that the implicit AVL tree is modified.
 */
-void AVLClass::DoubleRotateLeft(AVLNodePtr & ParentPtr)
+void AVLClass::DoubleRotateLeft(AVLNode * & ParentPtr)
 {
-    AVLNodePtr RightChildPtr, NewParentPtr;
+    AVLNode * RightChildPtr, *NewParentPtr;
 
 #ifdef DEBUG
-    cout << "DEBUG: double rotate left at " << ParentPtr->Info << endl;
+    cout << "DEBUG: double rotate left at " << ParentPtr->data << endl;
 #endif
 
-    RightChildPtr = reinterpret_cast <AVLNodePtr> (ParentPtr->Right);
-    NewParentPtr = reinterpret_cast <AVLNodePtr> (RightChildPtr->Left);
+    RightChildPtr = reinterpret_cast <AVLNode *> (ParentPtr->Right);
+    NewParentPtr = reinterpret_cast <AVLNode *> (RightChildPtr->Left);
 
     if (NewParentPtr->Balance == LeftHeavy)
     {
@@ -220,16 +222,16 @@ void AVLClass::DoubleRotateLeft(AVLNodePtr & ParentPtr)
    Return: ParentPtr   Points to the new root node of the rotated subtree.
    Note that the implicit AVL tree is modified.
 */
-void AVLClass::DoubleRotateRight(AVLNodePtr & ParentPtr)
+void AVLClass::DoubleRotateRight(AVLNode * & ParentPtr)
 {
-    AVLNodePtr LeftChildPtr, NewParentPtr;
+    AVLNode * LeftChildPtr, *NewParentPtr;
 
 #ifdef DEBUG
-    cout << "DEBUG: double rotate right at " << ParentPtr->Info << endl;
+    cout << "DEBUG: double rotate right at " << ParentPtr->data << endl;
 #endif
 
-    LeftChildPtr = reinterpret_cast <AVLNodePtr> (ParentPtr->Left);
-    NewParentPtr = reinterpret_cast <AVLNodePtr> (LeftChildPtr->Right);
+    LeftChildPtr = reinterpret_cast <AVLNode *> (ParentPtr->Left);
+    NewParentPtr = reinterpret_cast <AVLNode *> (LeftChildPtr->Right);
 
     if (NewParentPtr->Balance == RightHeavy)
     {
@@ -265,15 +267,15 @@ void AVLClass::DoubleRotateRight(AVLNodePtr & ParentPtr)
    ReviseBalance  Indicates if we need to revise balances.
    Note that the implicit AVL tree is modified.
 */
-void AVLClass::UpdateLeftTree(AVLNodePtr & ParentPtr, bool & ReviseBalance)
+void AVLClass::UpdateLeftTree(AVLNode * & ParentPtr, bool & ReviseBalance)
 {
-    AVLNodePtr LeftChildPtr;
+    AVLNode * LeftChildPtr;
 
 #ifdef DEBUG
-    cout << "DEBUG: UpdateLeftTree called at " << ParentPtr->Info << endl;
+    cout << "DEBUG: UpdateLeftTree called at " << ParentPtr->data << endl;
 #endif
 
-    LeftChildPtr = reinterpret_cast <AVLNodePtr> (ParentPtr->Left);
+    LeftChildPtr = reinterpret_cast <AVLNode *> (ParentPtr->Left);
     if (LeftChildPtr->Balance == LeftHeavy)
     {   // left subtree is also left heavy
 	SingleRotateRight(ParentPtr);
@@ -296,15 +298,15 @@ void AVLClass::UpdateLeftTree(AVLNodePtr & ParentPtr, bool & ReviseBalance)
    ReviseBalance  Indicates if we need to revise balances.
    Note that the implicit AVL tree is modified.
 */
-void AVLClass::UpdateRightTree(AVLNodePtr & ParentPtr, bool & ReviseBalance)
+void AVLClass::UpdateRightTree(AVLNode * & ParentPtr, bool & ReviseBalance)
 {
-    AVLNodePtr RightChildPtr;
+    AVLNode * RightChildPtr;
 
 #ifdef DEBUG
-    cout << "DEBUG: UpdateRightTree called at " << ParentPtr->Info << endl;
+    cout << "DEBUG: UpdateRightTree called at " << ParentPtr->data << endl;
 #endif
 
-    RightChildPtr = reinterpret_cast <AVLNodePtr> (ParentPtr->Right);
+    RightChildPtr = reinterpret_cast <AVLNode *> (ParentPtr->Right);
     if (RightChildPtr->Balance == RightHeavy)
     {   // right subtree is also right heavy
 	SingleRotateLeft(ParentPtr);
@@ -330,7 +332,7 @@ void AVLClass::UpdateRightTree(AVLNodePtr & ParentPtr, bool & ReviseBalance)
    
    Note that the implicit AVL tree object is modified.
 */
-void AVLClass::AVLInsert(AVLNodePtr & Tree, AVLNodePtr NewNodePtr,
+void AVLClass::AVLInsert(AVLNode * & Tree, AVLNode * NewNodePtr,
 			 bool & ReviseBalance)
 {
     bool RebalanceCurrentNode;
@@ -338,11 +340,11 @@ void AVLClass::AVLInsert(AVLNodePtr & Tree, AVLNodePtr NewNodePtr,
 #ifdef DEBUG
     if (Tree == NULL) {
 	cout << "DEBUG: AVLInsert called at empty subtree to insert "
-	     << NewNodePtr->Info << endl;
+	     << NewNodePtr->data << endl;
     }
     else {
-	cout << "DEBUG: AVLInsert called at " << Tree->Info << " to insert "
-	     << NewNodePtr->Info << endl;
+	cout << "DEBUG: AVLInsert called at " << Tree->data << " to insert "
+	     << NewNodePtr->data << endl;
     }
 #endif
 
@@ -353,9 +355,9 @@ void AVLClass::AVLInsert(AVLNodePtr & Tree, AVLNodePtr NewNodePtr,
 	ReviseBalance = true;  // tell others to check balances due to new node
 	
     }
-    else if (NewNodePtr->Info < Tree->Info)
+    else if (NewNodePtr->data->compare(Tree->data) < 0)
     {
-	AVLInsert(reinterpret_cast <AVLNodePtr &> (Tree->Left), NewNodePtr,
+	AVLInsert(reinterpret_cast <AVLNode * &> (Tree->Left), NewNodePtr,
 		  RebalanceCurrentNode);
 	if (RebalanceCurrentNode)
 	{
@@ -377,7 +379,7 @@ void AVLClass::AVLInsert(AVLNodePtr & Tree, AVLNodePtr NewNodePtr,
     }
     else
     {
-	AVLInsert(reinterpret_cast <AVLNodePtr &> (Tree->Right), NewNodePtr,
+	AVLInsert(reinterpret_cast <AVLNode * &> (Tree->Right), NewNodePtr,
 		  RebalanceCurrentNode);
 	if (RebalanceCurrentNode)
 	{
@@ -454,17 +456,17 @@ AVLClass & AVLClass::operator=(const AVLClass & Tree)
    Task:   To insert Item (in a new node) in the AVL tree.
    Return: Nothing directly, but the implicit AVL tree object is modified.
 */
-void AVLClass::Insert(const ItemType & Item)
+void AVLClass::Insert(const NodeData * data)
 {
-    AVLNodePtr NewNodePtr;
+    AVLNode * NewNodePtr;
     bool ReviseBalance = false;
 
 #ifdef DEBUG
-    cout << "DEBUG: AVLClass Insert called for inserting " << Item << endl;
+    cout << "DEBUG: AVLClass Insert called for inserting " << data->stringify() << endl;
 #endif
 
-    NewNodePtr = GetNode(Item);
-    AVLInsert(reinterpret_cast <AVLNodePtr &> (Root), NewNodePtr,
+    NewNodePtr = GetNode(data);
+    AVLInsert(reinterpret_cast <AVLNode * &> (Root), NewNodePtr,
 	      ReviseBalance);
     Count++;
 }
