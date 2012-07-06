@@ -32,6 +32,7 @@ struct tree_node
 		right.clear();
 	}
 
+	//Returns true if node's right map contains key (only at non-leaf nodes)
 	bool key_in_map(EncT key){
 	    // FL: EncT is being used as a primitive, so this is fine.
 		typename boost::unordered_map<EncT, tree_node *>::iterator it;
@@ -41,6 +42,7 @@ struct tree_node
 		return false;
 	}
 
+	//Recursively calculate height of node in tree
 	int height(){
 		typename boost::unordered_map<EncT, tree_node *>::iterator it;
 		int max_child_height=0;
@@ -55,6 +57,7 @@ struct tree_node
 
 	}
 
+	//Recursively calculate number of keys at node and subtree nodes
 	int len(){
 		int len = keys.size();
 		typename boost::unordered_map<EncT, tree_node *>::iterator it;
@@ -161,9 +164,11 @@ tree<EncT>::rebalance(tree_node<EncT>* node){
 	node->right = tmp_node->right;
 	delete tmp_node;
 
+	//Make sure OPE table is updated and correct
 	update_ope_table(node, base);
 }
 
+//Used to delete all subtrees of node
 template<class EncT>
 void 
 tree<EncT>::delete_nodes(tree_node<EncT>* node){
@@ -178,6 +183,7 @@ tree<EncT>::delete_nodes(tree_node<EncT>* node){
 
 /****************************/
 
+//Ensure table is correct
 template<class EncT>
 void
 tree<EncT>::update_ope_table(tree_node<EncT> *node, table_storage base){
@@ -411,8 +417,113 @@ tree<EncT>::lookup(EncT xct){
     return negative;
 }
 
+template<class EncT>
+bool
+tree<EncT>::test_tree(tree_node<EncT>* cur_node){
+	if(test_node(cur_node)!=true) return false;
+
+	typename boost::unordered_map<EncT, tree_node<EncT> *>::iterator it;
+
+	//Recursively check tree at this node and all subtrees
+	for(it=cur_node->right.begin(); it!=cur_node->right.end(); it++){
+	    if(!test_tree(it->second)) {
+		return false;
+	    }
+	}
+	return true;
+
+
+}
+
+template<class EncT>
+bool
+tree<EncT>::test_node(tree_node<EncT>* cur_node){
+	vector<EncT> sorted_keys = cur_node->keys;
+	//Make sure num of keys is b/w 0 and N exclusive 
+	//(no node should have no keys)
+	if(sorted_keys.size()==0) {
+		cout<<"Node with no keys"<<endl;
+		return false;
+	}
+	if(sorted_keys.size()>N-1) {
+		cout<<"Node with too many keys"<<endl;
+		return false;
+	}
+
+	//Check that node's keys are sorted
+	std::sort(sorted_keys.begin(), sorted_keys.end());
+	if(sorted_keys!=cur_node->keys){
+		cout<<"Node keys in wrong order"<<endl;
+	}
+
+	//If num of keys < N-1, then node is a leaf node. 
+	//Right map should have no entries.
+	if(sorted_keys.size()<N-1){
+		if(cur_node->key_in_map(NULL)) return false;
+		for(int i=0; i<sorted_keys.size(); i++){
+			if(cur_node->key_in_map(sorted_keys[i])) return false;
+		}
+	}
+
+	//Test that all subtree nodes have keys with values in the correct range
+	int low = 0;
+	int high = sorted_keys[0];
+	int i=0;
+	if(cur_node->key_in_map(NULL)){
+		if(test_vals(cur_node->right[NULL], low, high)!=true) return false;
+	}
+
+	for(int j=1; j<N-1; j++){
+		if(sorted_keys.size()>j){
+			i++;
+			low = high;
+			high = sorted_keys[j];
+			if(cur_node->key_in_map(sorted_keys[j-1])){
+				if(test_vals(cur_node->right[sorted_keys[j-1]], low, high)!=true) return false;
+			}
+
+		}
+
+	}
+	
+	low = high;
+	high = RAND_MAX; //Note this is 2147483647
+
+	if(cur_node->key_in_map(sorted_keys[i])){
+		if(test_vals(cur_node->right[sorted_keys[i]], low, high)!=true) return false;
+	}
+
+	for(int x=0; x<sorted_keys.size()-1; x++){
+		if(sorted_keys[x]==sorted_keys[x+1]) return false;
+	}
+
+	return true;
+
+}
+
+//Input: Node, and low and high end of range to test key values at
+template<class EncT>
+bool
+tree<EncT>::test_vals(tree_node<EncT>* cur_node, EncT low, EncT high){
+	//Make sure all keys at node are in proper range
+	for(int i=0; i<cur_node->keys.size(); i++){
+		EncT this_key = cur_node->keys[i];
+		if(this_key<=low || this_key>=high){
+			cout<<"Values off "<<this_key<<": "<<low<<", "<<high<<endl;
+			return false;
+		}
+	}
+
+	typename boost::unordered_map<EncT, tree_node<EncT> *>::iterator it;
+
+	for(it=cur_node->right.begin(); it!=cur_node->right.end(); it++){
+		if(test_vals(it->second, low, high)!=true) return false;
+	}
+	return true;
+}
+
 /*
- * Explicitly instantiate the ope_server template for various ciphertext types.
+ * Explicitly instantiate the tree template for various ciphertext types.
  */
 template class tree<uint64_t>;
 template class tree<uint32_t>;
@@ -423,73 +534,112 @@ void handle_client(void* lp, tree<EncT>* s){
         int *csock = (int*) lp;
 
         std::cout<<"Call to function!"<<std::endl;
+
+        //Buffer to handle all messages received
         char buffer[1024];
         while(true){
-                memset(buffer, 0, 1024);
-                recv(*csock, buffer, 1024, 0);
+        	//Clear buffer
+            memset(buffer, 0, 1024);
 
-                int func_d;
-                std::istringstream iss(buffer);
-                iss>>func_d;
-                std::cout<<"See value func_d: "<<func_d<<std::endl;
+            //Receive message to process
+            recv(*csock, buffer, 1024, 0);
 
-                std::ostringstream o;
-                std::string rtn_str;
-                if(func_d==0){
-                         break;
-                }else if(func_d==1) {
-                        uint64_t blk_encrypt_pt;
-                        iss>>blk_encrypt_pt;
-                        std::cout<<"Blk_encrypt_pt: "<<blk_encrypt_pt<<std::endl;
-                        table_storage table_rslt = s->lookup((uint64_t) blk_encrypt_pt);
-                        std::cout<<"Rtn b/f ostringstream: "<<table_rslt.v<<" : "<<table_rslt.pathlen<<" : "<<table_rslt.index<<std::endl;
-                        o<<table_rslt.v<<" "<<table_rslt.pathlen<<" "<<table_rslt.index;
-                        rtn_str=o.str();
-                        std::cout<<"Rtn_str: "<<rtn_str<<std::endl;
-                        send(*csock, rtn_str.c_str(), rtn_str.size(),0);
-                }else if(func_d==2){
-                        uint64_t v, nbits;
-                        iss>>v;
-                        iss>>nbits;
-                        std::cout<<"Trying lookup("<<v<<", "<<nbits<<")"<<std::endl;
-                        vector<EncT> xct_vec;
-                        try{
-                                xct_vec = s->lookup(v, nbits);
-                        }catch(ope_lookup_failure&){
-                                std::cout<<"Lookup fail, need to insert!"<<std::endl;
-                                const char* ope_fail = "ope_fail";
-                                send(*csock, ope_fail, strlen(ope_fail),0);
-                                continue;
-                        }
-                        for(int i=0; i<xct_vec.size(); i++){
-                        	o<<xct_vec[i];
-                        	o<<" ";
-                        }
-                        rtn_str=o.str();
-                        std::cout<<"Rtn_str: "<<rtn_str<<std::endl;
-                        send(*csock, rtn_str.c_str(), rtn_str.size(),0);
-                }else if(func_d==3){
-                        uint64_t v, nbits, blk_encrypt_pt;
-                        iss>>v;
-                        iss>>nbits;
-                        iss>>blk_encrypt_pt;
-                        std::cout<<"Trying insert("<<v<<", "<<nbits<<", "<<blk_encrypt_pt<<")"<<std::endl;
-                        s->insert(v, nbits, blk_encrypt_pt);
-                }else{
-                        std::cout<<"Something's wrong!: "<<buffer<<std::endl;
-                        break;
+            //Find protocol code:
+		    /*Server protocol code:
+			 * lookup(encrypted_plaintext) = 1
+			 * lookup(v, nbits) = 2
+			 * insert(v, nbits, encrypted_laintext) = 3
+			*/            
+            int func_d;
+            std::istringstream iss(buffer);
+            iss>>func_d;
+            if(DEBUG_COMM) std::cout<<"See value func_d: "<<func_d<<std::endl;
+
+            std::ostringstream o;
+            std::string rtn_str;
+            if(func_d==0){
+            	//Kill server
+                break;
+            }else if(func_d==1) {
+            	//Lookup using OPE table
+                uint64_t blk_encrypt_pt;
+                iss>>blk_encrypt_pt;
+                if(DEBUG_COMM) std::cout<<"Blk_encrypt_pt: "<<blk_encrypt_pt<<std::endl;
+                //Do tree lookup
+                table_storage table_rslt = s->lookup((uint64_t) blk_encrypt_pt);
+                if(DEBUG_COMM) std::cout<<"Rtn b/f ostringstream: "<<table_rslt.v<<" : "<<table_rslt.pathlen<<" : "<<table_rslt.index<<std::endl;
+                //Construct response
+                o<<table_rslt.v<<" "<<table_rslt.pathlen<<" "<<table_rslt.index;
+                rtn_str=o.str();
+                if(DEBUG_COMM) std::cout<<"Rtn_str: "<<rtn_str<<std::endl;
+                send(*csock, rtn_str.c_str(), rtn_str.size(),0);
+            }else if(func_d==2){
+            	//Lookup w/o table, using v and nbits
+                uint64_t v, nbits;
+                iss>>v;
+                iss>>nbits;
+                if(DEBUG_COMM) std::cout<<"Trying lookup("<<v<<", "<<nbits<<")"<<std::endl;
+                vector<EncT> xct_vec;
+                //Do tree lookup
+                try{
+                        xct_vec = s->lookup(v, nbits);
+                }catch(ope_lookup_failure&){
+                        if(DEBUG_COMM) std::cout<<"Lookup fail, need to insert!"<<std::endl;
+                        const char* ope_fail = "ope_fail";
+                        send(*csock, ope_fail, strlen(ope_fail),0);
+                        continue;
                 }
+                //Construct response out of vector xct_vec
+                for(int i=0; i<xct_vec.size(); i++){
+                	o<<xct_vec[i];
+                	o<<" ";
+                }
+                rtn_str=o.str();
+                if(DEBUG_COMM) std::cout<<"Rtn_str: "<<rtn_str<<std::endl;
+                send(*csock, rtn_str.c_str(), rtn_str.size(),0);
+            }else if(func_d==3){
+            	//Insert using v and nbits
+                uint64_t v, nbits, blk_encrypt_pt;
+                iss>>v;
+                iss>>nbits;
+                iss>>blk_encrypt_pt;
+                //Insert...need not send response
+                if(DEBUG_COMM) std::cout<<"Trying insert("<<v<<", "<<nbits<<", "<<blk_encrypt_pt<<")"<<std::endl;
+                s->insert(v, nbits, blk_encrypt_pt);
+            }else{
+            	//Uh oh!
+                std::cout<<"Something's wrong!: "<<buffer<<std::endl;
+                break;
+            }
+            //TEST CODE (comment out in release version)
+			if(s->root!=NULL){
+				//After every message, check tree is still really a tree,
+				//and that it maintains approx. alpha height balance
+				if(s->test_tree(s->root)!=1){
+					std::cout<<"No test_tree pass"<<std::endl;
+					return;
+				} 
+				if(s->num_nodes>1){
+					if((s->root->height()< log(s->num_nodes)/log(((double)1.0)/alpha)+1)!=1) {
+						std::cout<<"Height wrong "<<std::endl;
+						return;
+					}
+				}				
+			}
+
         }
         free(csock);
 }
 
 
 int main(){
-
+	//Build mask based on N
 	mask = make_mask();
 
+	//Construct new server with new tree
 	tree<uint64_t>* server = new tree<uint64_t>();
 
+	//Socket connection
 	int host_port = 1111;
     int hsock = socket(AF_INET, SOCK_STREAM, 0);
     if(hsock ==-1){
@@ -502,10 +652,12 @@ int main(){
     memset(&(my_addr.sin_zero), 0, 8);
     my_addr.sin_addr.s_addr = INADDR_ANY;
 
+    //Bind to socket
     int bind_rtn =bind(hsock, (struct sockaddr*) &my_addr, sizeof(my_addr));
     if(bind_rtn<0){
             std::cout<<"Error binding to socket"<<std::endl;
     }
+    //Start listening
     int listen_rtn = listen(hsock, 10);
     if(listen_rtn<0){
             std::cout<<"Error listening to socket"<<std::endl;
@@ -514,15 +666,17 @@ int main(){
     socklen_t addr_size=sizeof(sockaddr_in);
     int* csock;
     struct sockaddr_in sadr;
-    int i=2;
+    int i=1;
+    //Handle 1 client b/f quiting (can remove later)
     while(i>0){
             std::cout<<"Listening..."<<std::endl;
             csock = (int*) malloc(sizeof(int));
             if((*csock = accept(hsock, (struct sockaddr*) &sadr, &addr_size))!=-1){
-                    handle_client((void*)csock,server);
+            	//Pass connection and messages received to handle_client
+                handle_client((void*)csock,server);
             }
             else{
-                    std::cout<<"Error accepting!"<<std::endl;
+                std::cout<<"Error accepting!"<<std::endl;
             }
             i--;
     }

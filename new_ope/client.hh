@@ -20,6 +20,7 @@
 
 //Whether to print debugging output or not
 #define DEBUG 0
+#define DEBUG_COMM 0
 
 using namespace std;
 
@@ -127,13 +128,14 @@ class ope_client {
 	    o.str("");
 	    o<<"2 "<<path<<" "<<(nbits-num_bits);
 	    string msg = o.str();
-	    cout<<"Sending decrypt msg: "<<msg<<endl;
+	    if(DEBUG_COMM) cout<<"Sending decrypt msg: "<<msg<<endl;
 	    send(hsock, msg.c_str(), msg.size(),0);
 		recv(hsock, buffer, 1024, 0);
 
 		istringstream iss_tmp(buffer);
 		vector<V> xct_vec;
 		V xct, last;
+		last=NULL;
 		while(true){
 			iss_tmp >> xct;
 			if(last==xct) break;
@@ -154,7 +156,7 @@ class ope_client {
 	    o.str("");
 	    o<<"3 "<<v<<" "<<nbits<<" "<<pt;
 	    string msg = o.str();
-	    cout<<"Sending msg: "<<msg<<endl;
+	    if(DEBUG_COMM) cout<<"Sending msg: "<<msg<<endl;
 	    send(hsock, msg.c_str(), msg.size(),0);
 
 	    //relabeling may have been triggered so we need to lookup value again
@@ -185,7 +187,7 @@ class ope_client {
     	o<<"1 "<<pt;
 
     	string msg = o.str();
-    	cout<<"Sending init msg: "<<msg<<endl;
+    	if(DEBUG_COMM) cout<<"Sending init msg: "<<msg<<endl;
 
     	send(hsock, msg.c_str(), msg.size(), 0);
     	recv(hsock, buffer, 1024, 0);
@@ -196,13 +198,13 @@ class ope_client {
     	iss>>early_pathlen;
     	iss>>early_index;
 
-    	cout<<"Received early: "<<early_v<<" : "<<early_pathlen<<" : "<<early_index<<endl;
+    	if(DEBUG_COMM) cout<<"Received early: "<<early_v<<" : "<<early_pathlen<<" : "<<early_index<<endl;
     	if(early_v!=(uint64_t)-1 && early_pathlen!=(uint64_t)-1 && early_index!=(uint64_t)-1){
-    		cout<<"Found match from table early!"<<endl;
+    		if(DEBUG_COMM) cout<<"Found match from table early!"<<endl;
 
     		v = early_v;
     		nbits = early_pathlen+num_bits;
-    		cout<<"Found "<<pt<<" in table w/ v="<<v<<" nbits="<<nbits<<" index="<<early_index<<endl;
+    		if(DEBUG_COMM) cout<<"Found "<<pt<<" in table w/ v="<<v<<" nbits="<<nbits<<" index="<<early_index<<endl;
     		v = (v<<num_bits) | early_index;  
     		return (v<<(64-nbits)) | (mask<<(64-num_bits-nbits));  		
     	}
@@ -212,11 +214,11 @@ class ope_client {
         	o.str("");
         	o<<"2 "<<v<<" "<<nbits;
         	msg = o.str();
-        	cout<<"Sending msg: "<<msg<<endl;
+        	if(DEBUG_COMM) cout<<"Sending msg: "<<msg<<endl;
 			send(hsock, msg.c_str(), msg.size(), 0);
 			memset(buffer, 0, 1024);
 			recv(hsock, buffer, 1024, 0);
-			cout<<"Received during iterative lookup: "<<buffer<<endl;
+			if(DEBUG_COMM) cout<<"Received during iterative lookup: "<<buffer<<endl;
 			string check(buffer);        	
 
 			if(check=="ope_fail"){

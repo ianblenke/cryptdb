@@ -7,6 +7,7 @@
 
 //Whether to print debugging output or not
 #define DEBUG 0
+#define DEBUG_COMM 0
 
 using namespace std;
 
@@ -76,6 +77,13 @@ public:
 		delete_nodes(root);
 		delete root;
 	}
+
+
+	bool test_tree(tree_node<EncT>* cur_node);
+
+	bool test_node(tree_node<EncT>* cur_node);
+
+	bool test_vals(tree_node<EncT>* cur_node, EncT low, EncT high);
 
 };
 
