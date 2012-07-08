@@ -37,9 +37,9 @@ install: install_opsserver
 
 .PHONY: install_opsserver
 install_opsserver: $(OBJDIR)/new_ope/exampleserver \
-		   $(OBJDIR)/new_ope/ope_client
+		   $(OBJDIR)/new_ope/client
 	install -m 555 -g mysql -o mysql $(OBJDIR)/new_ope/exampleserver $(MYSQL_PLUGIN_DIR); \
-	install -m 555 -g mysql -o mysql $(OBJDIR)/new_ope/ope_server $(MYSQL_PLUGIN_DIR); 
+	install -m 555 -g mysql -o mysql $(OBJDIR)/new_ope/server $(MYSQL_PLUGIN_DIR); 
 
 			
 # vim: set noexpandtab:

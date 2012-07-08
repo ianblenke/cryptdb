@@ -124,6 +124,7 @@ int main(){
     mask=make_mask();
     
     dbconnect =new Connect( "localhost", "frank", "passwd","cryptdb", 3306);
+    dbconnect->execute("select CREATE_OPS_SERVER()");
 /*        DBResult * result;
     dbconnect->execute("select get_ope_server()", result);
     ResType rt = result->unpack();

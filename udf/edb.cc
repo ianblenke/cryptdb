@@ -39,12 +39,12 @@ getui(UDF_ARGS * args, int i)
     return (uint64_t) (*((ulonglong *) args->args[i]));
 }
 */
-static string
+/*static string
 getstring(UDF_ARGS * args, int i)
 {
     return string(args->args[i], args->lengths[i]);
 }
-
+*/
 extern "C" {
     
 my_bool
@@ -58,14 +58,14 @@ create_ops_server(UDF_INIT *initid, UDF_ARGS *args, char *is_null,
 			    char *error) {
 
     // get arguments from the SQL query
-    string arg0 = getstring(args, 0); // a string, logfile path
+/*    string arg0 = getstring(args, 0); // a string, logfile path
     string arg1 = getstring(args, 1); 
     string arg2 = getstring(args, 2); 
 
     cerr << "arg0 is <" << arg0 << "> arg1 is <" << arg1
-	 << "> arg2 is <" << arg2 << ">\n";
+	 << "> arg2 is <" << arg2 << ">\n";*/
 
-    string command = "/usr/lib/mysql/plugin/exampleserver";
+    string command = "/usr/lib/mysql/plugin/server";
     
     pid_t pid = fork();
 
@@ -76,10 +76,10 @@ create_ops_server(UDF_INIT *initid, UDF_ARGS *args, char *is_null,
 	// ope server. 
 	errno = 0;
 	execl(command.c_str(),
-	      "exampleserver",
-	      arg0.c_str(), 
+	      "server",
+/*	      arg0.c_str(), 
 	      arg1.c_str(),
-	      arg2.c_str(),
+	      arg2.c_str(),*/
 	      (char *) 0);
 	//error, execl should not return
 	cerr << "child failed to execute " << strerror(errno) << errno << " \n";
