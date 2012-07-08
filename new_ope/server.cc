@@ -214,7 +214,7 @@ tree<EncT>::update_db(table_storage old_entry, table_storage new_entry){
 					new_ope_str+
 					", version="+new_version_str+" where ope_enc="+
 					old_ope_str+
-					", version="+old_version_str;
+					" and version="+old_version_str;
 	if(DEBUG_COMM) cout<<"Query: "<<query<<endl;
 	dbconnect->execute(query);
 
@@ -365,6 +365,8 @@ tree<EncT>::tree_insert(tree_node<EncT>* node, uint64_t v, uint64_t nbits, EncT 
 			num_nodes++;
 			rtn_path.push_back(node);
 
+			global_version++;
+
 			table_storage new_entry;
 			new_entry.v = v;
 			new_entry.pathlen = pathlen;
@@ -372,8 +374,14 @@ tree<EncT>::tree_insert(tree_node<EncT>* node, uint64_t v, uint64_t nbits, EncT 
 			new_entry.version = global_version;
 			ope_table[encval] = new_entry;
 
+			global_version++;
+
 			for(int i=0; i< (int) node->keys.size(); i++){
+				table_storage old_entry = ope_table[node->keys[i]];
 				ope_table[node->keys[i]].index = i;
+				ope_table[node->keys[i]].version=global_version;
+				table_storage update_entry = ope_table[node->keys[i]];
+				update_db(old_entry, update_entry);
 			}
 			
 		}
