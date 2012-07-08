@@ -1,11 +1,7 @@
 #include "server.hh"
-#include <boost/unordered_map.hpp>
-#include <vector>
 #include <algorithm>
 #include <exception>
-#include <cmath>
 #include <utility>
-#include <time.h>
 #include <stdlib.h>
 #include <sstream>
 #include <stdio.h>
@@ -16,8 +12,6 @@
 #include <unistd.h>
 #include <resolv.h>
 #include <sys/types.h>
-
-//using namespace std;
 
 template<class EncT>
 struct tree_node
@@ -86,7 +80,7 @@ tree<EncT>::flatten(tree_node<EncT>* node){
 
 	for(it=node->right.begin(); it!=node->right.end(); it++){
 		child_keys = flatten(it->second);
-		for(int i=0; i<child_keys.size(); i++){
+		for(int i=0; i<(int) child_keys.size(); i++){
 			rtn_keys.push_back(child_keys[i]);
 		}
 	}	
@@ -103,7 +97,7 @@ tree<EncT>::rebuild(vector<EncT> key_list){
 
 	tree_node<EncT>* rtn_node = new tree_node<EncT>();
 
-	if(key_list.size()<N){
+	if((int) key_list.size()<N){
 		//Remaining keys fit in one node, return that node
 		rtn_node->keys=key_list;
 	}else{
@@ -132,11 +126,11 @@ tree<EncT>::rebuild(vector<EncT> key_list){
 		}
 		tree_node<EncT>* tmp_child = rebuild(subvector);
 		if(tmp_child!=NULL){
-			rtn_node->right[NULL]=tmp_child;
+			rtn_node->right[(EncT) NULL]=tmp_child;
 		}	
 		subvector.clear();
 		//Last subvector rebuilding special case
-		for(int j=floor((N-1)*base)+1; j<key_list.size(); j++){
+		for(int j=floor((N-1)*base)+1; j< (int) key_list.size(); j++){
 			subvector.push_back(key_list[j]);
 		}
 		tmp_child = rebuild(subvector);
@@ -152,17 +146,19 @@ tree<EncT>::rebuild(vector<EncT> key_list){
 template<class EncT>
 void 
 tree<EncT>::rebalance(tree_node<EncT>* node){
-	if(DEBUG) std::cout<<"Rebalance"<<std::endl;
+	if(DEBUG) cout<<"Rebalance"<<endl;
 
 	table_storage base = ope_table[node->keys[0]];
 
 	vector<EncT> key_list = flatten(node);
-	std::sort(key_list.begin(), key_list.end());
+	sort(key_list.begin(), key_list.end());
 	tree_node<EncT>* tmp_node = rebuild(key_list);
 	delete_nodes(node);
 	node->keys = tmp_node->keys;
 	node->right = tmp_node->right;
 	delete tmp_node;
+
+	global_version++;
 
 	//Make sure OPE table is updated and correct
 	update_ope_table(node, base);
@@ -182,24 +178,72 @@ tree<EncT>::delete_nodes(tree_node<EncT>* node){
 }
 
 /****************************/
+template<class EncT>
+void 
+tree<EncT>::update_db(table_storage old_entry, table_storage new_entry){
+	uint64_t old_v, old_nbits, old_version;
+	uint64_t new_v, new_nbits, new_version;
+
+	old_v=(old_entry.v << num_bits) | old_entry.index;
+	old_nbits=old_entry.pathlen+num_bits;
+	old_version=old_entry.version;
+
+	new_v=(new_entry.v << num_bits) | new_entry.index;
+	new_nbits=new_entry.pathlen+num_bits;
+	new_version=new_entry.version;	
+
+	uint64_t old_ope = (old_v<<(64-old_nbits)) | (mask<<(64-num_bits-old_nbits));
+	uint64_t new_ope = (new_v<<(64-new_nbits)) | (mask<<(64-num_bits-new_nbits));
+
+	ostringstream o;
+	o.str("");
+	o<<old_ope;
+	string old_ope_str = o.str();
+	o.str("");
+	o<<old_version;
+	string old_version_str = o.str();
+
+	o.str("");
+	o<<new_ope;
+	string new_ope_str = o.str();
+	o.str("");
+	o<<new_version;
+	string new_version_str = o.str();	
+
+	string query="UPDATE emp SET ope_enc="+
+					new_ope_str+
+					", version="+new_version_str+" where ope_enc="+
+					old_ope_str+
+					", version="+old_version_str;
+	if(DEBUG_COMM) cout<<"Query: "<<query<<endl;
+	dbconnect->execute(query);
+
+}
 
 //Ensure table is correct
 template<class EncT>
 void
 tree<EncT>::update_ope_table(tree_node<EncT> *node, table_storage base){
-	for(int i=0; i<node->keys.size(); i++){
+
+	table_storage old_table_entry;
+	for(int i=0; i< (int) node->keys.size(); i++){
 		table_storage tmp = base;
 		tmp.index=i;
+		tmp.version=global_version;
+
+		old_table_entry=ope_table[node->keys[i]];
+
 		ope_table[node->keys[i]] = tmp;
+		update_db(old_table_entry, tmp);
 	}
-	if(node->key_in_map(NULL)){
+	if(node->key_in_map( (EncT) NULL)){
 		table_storage tmp = base;
 		tmp.v = tmp.v<<num_bits;
 		tmp.pathlen+=num_bits;
 		tmp.index=0;
-		update_ope_table(node->right[NULL], tmp);
+		update_ope_table(node->right[(EncT) NULL], tmp);
 	}
-	for(int i=0; i<node->keys.size(); i++){
+	for(int i=0; i< (int) node->keys.size(); i++){
 		if(node->key_in_map(node->keys[i])){
 			table_storage tmp = base;
 			tmp.v = tmp.v<<num_bits | (i+1);
@@ -214,29 +258,28 @@ tree<EncT>::update_ope_table(tree_node<EncT> *node, table_storage base){
 template<class EncT>
 void 
 tree<EncT>::print_tree(){
-	bool last_was_null = false;
 	vector<tree_node<EncT>* > queue;
 	queue.push_back(root);
 	while(queue.size()!=0){
 		tree_node<EncT>* cur_node = queue[0];
 		if(cur_node==NULL){
 			queue.erase(queue.begin());
-			std::cout<<std::endl;
+			cout<<endl;
 			continue;
 		}
-		std::cout<<cur_node->height()<<": ";
-		if(cur_node->key_in_map(NULL)){
-			queue.push_back(cur_node->right[NULL]);
+		cout<<cur_node->height()<<": ";
+		if(cur_node->key_in_map( (EncT)NULL)){
+			queue.push_back(cur_node->right[ (EncT)NULL]);
 		}	
-		for(int i=0; i<cur_node->keys.size(); i++){
+		for(int i=0; i< (int) cur_node->keys.size(); i++){
 			EncT key = cur_node->keys[i];
-			std::cout<<key<<", ";
+			cout<<key<<", ";
 			if(cur_node->key_in_map(key)){
 				queue.push_back(cur_node->right[key]);
 			}
 		}	
-		std::cout<<std::endl;
-		queue.push_back(NULL);
+		cout<<endl;
+		queue.push_back((EncT) NULL);
 		queue.erase(queue.begin());
 	}
 
@@ -253,7 +296,7 @@ tree<EncT>::findScapegoat( vector<tree_node<EncT>* > path ){
 	vector<int> childSizes;
 
 	//Move along path until you find the scapegoat node
-	for(int i=0; i<path.size(); i++){
+	for(int i=0; i< (int) path.size(); i++){
 		tree_node<EncT>* cur_node = path[i];
 
 		int tmp_sum=0;
@@ -271,13 +314,15 @@ tree<EncT>::findScapegoat( vector<tree_node<EncT>* > path ){
 		tmp_size = tmp_sum + cur_node->keys.size();
 		last = cur_node;
 
-		for(int i=0; i<childSizes.size(); i++){
+		for(int i=0; i< (int) childSizes.size(); i++){
 			if(childSizes[i] > alpha*tmp_size) return cur_node;
 		}
 
 		childSizes.clear();
 
 	}
+
+	return root;
 
 }
 
@@ -286,7 +331,7 @@ void
 tree<EncT>::insert(uint64_t v, uint64_t nbits, EncT encval){
 	//If root doesn't exsit yet, create it, then continue insertion
 	if(!root){
-		if(DEBUG) std::cout<<"Inserting root"<<std::endl;
+		if(DEBUG) cout<<"Inserting root"<<endl;
 		root=new tree_node<EncT>();
 	}
 	vector<tree_node<EncT> * > path=tree_insert(root, v, nbits, encval, nbits);
@@ -312,11 +357,11 @@ tree<EncT>::tree_insert(tree_node<EncT>* node, uint64_t v, uint64_t nbits, EncT 
 	//End of the insert line, check if you can insert
 	//Assumes v and nbits were from a lookup of an insertable node
 	if(nbits==0){
-		if(node->keys.size()>N-2) std::cout<<"Insert fail, found full node"<<std::endl;
+		if(node->keys.size()>N-2) cout<<"Insert fail, found full node"<<endl;
 		else{
-			if(DEBUG) std::cout<<"Found node, inserting"<<std::endl;
+			if(DEBUG) cout<<"Found node, inserting"<<endl;
 			node->keys.push_back(encval);
-			std::sort(node->keys.begin(), node->keys.end());
+			sort(node->keys.begin(), node->keys.end());
 			num_nodes++;
 			rtn_path.push_back(node);
 
@@ -324,9 +369,10 @@ tree<EncT>::tree_insert(tree_node<EncT>* node, uint64_t v, uint64_t nbits, EncT 
 			new_entry.v = v;
 			new_entry.pathlen = pathlen;
 			new_entry.index = 0;
+			new_entry.version = global_version;
 			ope_table[encval] = new_entry;
 
-			for(int i=0; i<node->keys.size(); i++){
+			for(int i=0; i< (int) node->keys.size(); i++){
 				ope_table[node->keys[i]].index = i;
 			}
 			
@@ -340,18 +386,18 @@ tree<EncT>::tree_insert(tree_node<EncT>* node, uint64_t v, uint64_t nbits, EncT 
 
     //Protocol set: index 0 is NULL (branch to node with lesser elements)
     //Else, index is 1+(key's index in node's key-vector)
-    if(key_index==0) key=NULL;
+    if(key_index==0) key= (EncT) NULL;
 	else if(key_index<N) key = node->keys[key_index-1];
-	else std::cout<<"Insert fail, key_index not legal"<<std::endl;
+	else cout<<"Insert fail, key_index not legal"<<endl;
 
-	//std::cout<<"Key: "<<key<<std::endl;
+	//cout<<"Key: "<<key<<endl;
 
 	//See if pointer to next node to be checked 
     if(!node->key_in_map(key)){
-	    if (nbits == num_bits && node->keys.size()==N-1) {
-	    	if(DEBUG) std::cout<<"Creating new node"<<std::endl;
+	    if (nbits == (uint64_t) num_bits && ((int) node->keys.size())==N-1) {
+	    	if(DEBUG) cout<<"Creating new node"<<endl;
 	    	node->right[key] = new tree_node<EncT>();
-	    }else std::cout<<"Insert fail, wrong condition to create new node child"<<std::endl;
+	    }else cout<<"Insert fail, wrong condition to create new node child"<<endl;
     }
     rtn_path = tree_insert(node->right[key], v, nbits-num_bits, encval, pathlen);
     rtn_path.push_back(node);
@@ -371,12 +417,12 @@ tree<EncT>::tree_lookup(tree_node<EncT> *node, uint64_t v, uint64_t nbits) const
 
     EncT key;
 
-    if(key_index==0) key=NULL;
+    if(key_index==0) key=(EncT) NULL;
 	else if(key_index<N) key = node->keys[key_index-1];
 	else return 0;
 
     if(!node->key_in_map(key)){
-    	if(DEBUG) std::cout<<"Key not in map"<<std::endl;
+    	if(DEBUG) cout<<"Key not in map"<<endl;
     	return 0;
     }
     return tree_lookup(node->right[key], v, nbits-num_bits);
@@ -389,14 +435,14 @@ tree<EncT>::lookup(uint64_t v, uint64_t nbits) const
 	tree_node<EncT>* n;
 	//Handle if root doesn't exist yet
 	if(!root){
-		if(DEBUG) std::cout<<"First lookup no root"<<std::endl;
+		if(DEBUG) cout<<"First lookup no root"<<endl;
 		n=0;
 	}else{
 		n  = tree_lookup(root, v, nbits);
 	}
 
     if(n==0){
-    	if(DEBUG) std::cout<<"NOPE! "<<v<<": "<<nbits<<std::endl;    	
+    	if(DEBUG) cout<<"NOPE! "<<v<<": "<<nbits<<endl;    	
     	throw ope_lookup_failure();
     }
     return n->keys;
@@ -407,13 +453,14 @@ template<class EncT>
 table_storage
 tree<EncT>::lookup(EncT xct){
     if(ope_table.find(xct)!=ope_table.end()){
-        if(DEBUG) std::cout <<"Found "<<xct<<" in table with v="<<ope_table[xct].v<<" nbits="<<ope_table[xct].pathlen<<" index="<<ope_table[xct].index<<std::endl;
+        if(DEBUG) cout <<"Found "<<xct<<" in table with v="<<ope_table[xct].v<<" nbits="<<ope_table[xct].pathlen<<" index="<<ope_table[xct].index<<endl;
         return ope_table[xct];
     }
     table_storage negative;
     negative.v=-1;
     negative.pathlen=-1;
     negative.index=-1;
+    negative.version=global_version;
     return negative;
 }
 
@@ -451,7 +498,7 @@ tree<EncT>::test_node(tree_node<EncT>* cur_node){
 	}
 
 	//Check that node's keys are sorted
-	std::sort(sorted_keys.begin(), sorted_keys.end());
+	sort(sorted_keys.begin(), sorted_keys.end());
 	if(sorted_keys!=cur_node->keys){
 		cout<<"Node keys in wrong order"<<endl;
 	}
@@ -459,8 +506,8 @@ tree<EncT>::test_node(tree_node<EncT>* cur_node){
 	//If num of keys < N-1, then node is a leaf node. 
 	//Right map should have no entries.
 	if(sorted_keys.size()<N-1){
-		if(cur_node->key_in_map(NULL)) return false;
-		for(int i=0; i<sorted_keys.size(); i++){
+		if(cur_node->key_in_map( (EncT) NULL)) return false;
+		for(int i=0; i< (int) sorted_keys.size(); i++){
 			if(cur_node->key_in_map(sorted_keys[i])) return false;
 		}
 	}
@@ -469,12 +516,12 @@ tree<EncT>::test_node(tree_node<EncT>* cur_node){
 	int low = 0;
 	int high = sorted_keys[0];
 	int i=0;
-	if(cur_node->key_in_map(NULL)){
-		if(test_vals(cur_node->right[NULL], low, high)!=true) return false;
+	if(cur_node->key_in_map((EncT) NULL)){
+		if(test_vals(cur_node->right[(EncT) NULL], low, high)!=true) return false;
 	}
 
 	for(int j=1; j<N-1; j++){
-		if(sorted_keys.size()>j){
+		if((int) sorted_keys.size()>j){
 			i++;
 			low = high;
 			high = sorted_keys[j];
@@ -493,7 +540,7 @@ tree<EncT>::test_node(tree_node<EncT>* cur_node){
 		if(test_vals(cur_node->right[sorted_keys[i]], low, high)!=true) return false;
 	}
 
-	for(int x=0; x<sorted_keys.size()-1; x++){
+	for(int x=0; x< (int) sorted_keys.size()-1; x++){
 		if(sorted_keys[x]==sorted_keys[x+1]) return false;
 	}
 
@@ -506,7 +553,7 @@ template<class EncT>
 bool
 tree<EncT>::test_vals(tree_node<EncT>* cur_node, EncT low, EncT high){
 	//Make sure all keys at node are in proper range
-	for(int i=0; i<cur_node->keys.size(); i++){
+	for(int i=0; i< (int) cur_node->keys.size(); i++){
 		EncT this_key = cur_node->keys[i];
 		if(this_key<=low || this_key>=high){
 			cout<<"Values off "<<this_key<<": "<<low<<", "<<high<<endl;
@@ -533,7 +580,7 @@ template<class EncT>
 void handle_client(void* lp, tree<EncT>* s){
         int *csock = (int*) lp;
 
-        std::cout<<"Call to function!"<<std::endl;
+        cout<<"Call to function!"<<endl;
 
         //Buffer to handle all messages received
         char buffer[1024];
@@ -551,12 +598,12 @@ void handle_client(void* lp, tree<EncT>* s){
 			 * insert(v, nbits, encrypted_laintext) = 3
 			*/            
             int func_d;
-            std::istringstream iss(buffer);
+            istringstream iss(buffer);
             iss>>func_d;
-            if(DEBUG_COMM) std::cout<<"See value func_d: "<<func_d<<std::endl;
+            if(DEBUG_COMM) cout<<"See value func_d: "<<func_d<<endl;
 
-            std::ostringstream o;
-            std::string rtn_str;
+            ostringstream o;
+            string rtn_str;
             if(func_d==0){
             	//Kill server
                 break;
@@ -564,38 +611,38 @@ void handle_client(void* lp, tree<EncT>* s){
             	//Lookup using OPE table
                 uint64_t blk_encrypt_pt;
                 iss>>blk_encrypt_pt;
-                if(DEBUG_COMM) std::cout<<"Blk_encrypt_pt: "<<blk_encrypt_pt<<std::endl;
+                if(DEBUG_COMM) cout<<"Blk_encrypt_pt: "<<blk_encrypt_pt<<endl;
                 //Do tree lookup
                 table_storage table_rslt = s->lookup((uint64_t) blk_encrypt_pt);
-                if(DEBUG_COMM) std::cout<<"Rtn b/f ostringstream: "<<table_rslt.v<<" : "<<table_rslt.pathlen<<" : "<<table_rslt.index<<std::endl;
+                if(DEBUG_COMM) cout<<"Rtn b/f ostringstream: "<<table_rslt.v<<" : "<<table_rslt.pathlen<<" : "<<table_rslt.index<<" : "<<table_rslt.version<<endl;
                 //Construct response
-                o<<table_rslt.v<<" "<<table_rslt.pathlen<<" "<<table_rslt.index;
+                o<<table_rslt.v<<" "<<table_rslt.pathlen<<" "<<table_rslt.index<<" "<<table_rslt.version;
                 rtn_str=o.str();
-                if(DEBUG_COMM) std::cout<<"Rtn_str: "<<rtn_str<<std::endl;
+                if(DEBUG_COMM) cout<<"Rtn_str: "<<rtn_str<<endl;
                 send(*csock, rtn_str.c_str(), rtn_str.size(),0);
             }else if(func_d==2){
             	//Lookup w/o table, using v and nbits
                 uint64_t v, nbits;
                 iss>>v;
                 iss>>nbits;
-                if(DEBUG_COMM) std::cout<<"Trying lookup("<<v<<", "<<nbits<<")"<<std::endl;
+                if(DEBUG_COMM) cout<<"Trying lookup("<<v<<", "<<nbits<<")"<<endl;
                 vector<EncT> xct_vec;
                 //Do tree lookup
                 try{
                         xct_vec = s->lookup(v, nbits);
                 }catch(ope_lookup_failure&){
-                        if(DEBUG_COMM) std::cout<<"Lookup fail, need to insert!"<<std::endl;
+                        if(DEBUG_COMM) cout<<"Lookup fail, need to insert!"<<endl;
                         const char* ope_fail = "ope_fail";
                         send(*csock, ope_fail, strlen(ope_fail),0);
                         continue;
                 }
                 //Construct response out of vector xct_vec
-                for(int i=0; i<xct_vec.size(); i++){
+                for(int i=0; i< (int) xct_vec.size(); i++){
                 	o<<xct_vec[i];
                 	o<<" ";
                 }
                 rtn_str=o.str();
-                if(DEBUG_COMM) std::cout<<"Rtn_str: "<<rtn_str<<std::endl;
+                if(DEBUG_COMM) cout<<"Rtn_str: "<<rtn_str<<endl;
                 send(*csock, rtn_str.c_str(), rtn_str.size(),0);
             }else if(func_d==3){
             	//Insert using v and nbits
@@ -604,11 +651,11 @@ void handle_client(void* lp, tree<EncT>* s){
                 iss>>nbits;
                 iss>>blk_encrypt_pt;
                 //Insert...need not send response
-                if(DEBUG_COMM) std::cout<<"Trying insert("<<v<<", "<<nbits<<", "<<blk_encrypt_pt<<")"<<std::endl;
+                if(DEBUG_COMM) cout<<"Trying insert("<<v<<", "<<nbits<<", "<<blk_encrypt_pt<<")"<<endl;
                 s->insert(v, nbits, blk_encrypt_pt);
             }else{
             	//Uh oh!
-                std::cout<<"Something's wrong!: "<<buffer<<std::endl;
+                cout<<"Something's wrong!: "<<buffer<<endl;
                 break;
             }
             //TEST CODE (comment out in release version)
@@ -616,12 +663,12 @@ void handle_client(void* lp, tree<EncT>* s){
 				//After every message, check tree is still really a tree,
 				//and that it maintains approx. alpha height balance
 				if(s->test_tree(s->root)!=1){
-					std::cout<<"No test_tree pass"<<std::endl;
+					cout<<"No test_tree pass"<<endl;
 					return;
 				} 
 				if(s->num_nodes>1){
 					if((s->root->height()< log(s->num_nodes)/log(((double)1.0)/alpha)+1)!=1) {
-						std::cout<<"Height wrong "<<std::endl;
+						cout<<"Height wrong "<<endl;
 						return;
 					}
 				}				
@@ -643,7 +690,7 @@ int main(){
 	int host_port = 1111;
     int hsock = socket(AF_INET, SOCK_STREAM, 0);
     if(hsock ==-1){
-            std::cout<<"Error initializing socket"<<std::endl;
+            cout<<"Error initializing socket"<<endl;
     }
 
     struct sockaddr_in my_addr;
@@ -653,14 +700,14 @@ int main(){
     my_addr.sin_addr.s_addr = INADDR_ANY;
 
     //Bind to socket
-    int bind_rtn =bind(hsock, (struct sockaddr*) &my_addr, sizeof(my_addr));
+    int bind_rtn = bind(hsock, (struct sockaddr*) &my_addr, sizeof(my_addr));
     if(bind_rtn<0){
-            std::cout<<"Error binding to socket"<<std::endl;
+            cout<<"Error binding to socket"<<endl;
     }
     //Start listening
     int listen_rtn = listen(hsock, 10);
     if(listen_rtn<0){
-            std::cout<<"Error listening to socket"<<std::endl;
+            cout<<"Error listening to socket"<<endl;
     }
 
     socklen_t addr_size=sizeof(sockaddr_in);
@@ -669,14 +716,14 @@ int main(){
     int i=1;
     //Handle 1 client b/f quiting (can remove later)
     while(i>0){
-            std::cout<<"Listening..."<<std::endl;
+            cout<<"Listening..."<<endl;
             csock = (int*) malloc(sizeof(int));
             if((*csock = accept(hsock, (struct sockaddr*) &sadr, &addr_size))!=-1){
             	//Pass connection and messages received to handle_client
                 handle_client((void*)csock,server);
             }
             else{
-                std::cout<<"Error accepting!"<<std::endl;
+                cout<<"Error accepting!"<<endl;
             }
             i--;
     }

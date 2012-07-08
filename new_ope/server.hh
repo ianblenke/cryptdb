@@ -2,14 +2,21 @@
 #include <cmath>
 #include <stdint.h>
 #include <iostream>
-#include <assert.h>
 #include <boost/unordered_map.hpp>
+#include <edb/Connect.hh>
 
 //Whether to print debugging output or not
 #define DEBUG 0
 #define DEBUG_COMM 0
 
-using namespace std;
+using std::cout;
+using std::endl;
+using std::string;
+using std::ostringstream;
+using std::istringstream;
+using std::ceil;
+using std::sort;
+using std::vector;
 
 const int N = 4;
 const double alpha = 0.3;
@@ -21,6 +28,7 @@ const int num_bits = (int) ceil(log2(N+1.0));
 
 uint64_t mask;
 
+uint64_t make_mask();
 
 //Make mask of num_bits 1's
 uint64_t make_mask(){
@@ -35,6 +43,7 @@ struct table_storage{
 	uint64_t v;
 	uint64_t pathlen;
 	uint64_t index;
+	int version;
 };
 
 class ope_lookup_failure {};
@@ -46,8 +55,10 @@ template<class EncT>
 class tree {
 
 public:
-	tree_node<EncT> *root; 
+	tree_node<EncT> *root;
 	unsigned int num_nodes;
+	Connect * dbconnect;
+	int global_version;
 
 	void insert(uint64_t v, uint64_t nbits, EncT encval);
 	vector<tree_node<EncT>* > tree_insert(tree_node<EncT>* node, uint64_t v, uint64_t nbits, EncT encval, uint64_t pathlen);
@@ -62,6 +73,7 @@ public:
 
 	boost::unordered_map<EncT, table_storage > ope_table;
 	void update_ope_table(tree_node<EncT>* node, table_storage base);
+	void update_db(table_storage old_entry, table_storage new_entry);
 
 	vector<EncT> flatten(tree_node<EncT>* node);
 	tree_node<EncT>* rebuild(vector<EncT> key_list);
@@ -71,6 +83,8 @@ public:
 	tree(){
 		num_nodes=0;
 		root = NULL;
+		global_version=0;
+		dbconnect =new Connect( "localhost", "frank", "passwd","cryptdb", 3306);
 	}
 
 	~tree(){

@@ -2,7 +2,6 @@
 #include <cmath>
 #include <stdint.h>
 #include <iostream>
-#include <assert.h>
 #include <exception>
 #include <boost/unordered_map.hpp>
 #include <utility>
@@ -34,6 +33,8 @@ const int num_bits = (int) ceil(log2(N+1.0));
 
 uint64_t mask;
 
+uint64_t make_mask();
+bool test_order(int num_vals, int sorted);
 
 //Make mask of num_bits 1's
 uint64_t make_mask(){
@@ -95,10 +96,10 @@ class ope_client {
      * in the vector (1 is added due to my protocol, where 0 represents null)
     */
     static int predIndex(vector<V> vec, V pt){
-		V tmp_index = 0;
+		int tmp_index = 0;
 		V tmp_pred_key =0;
 		bool pred_found=false;
-		for (int i = 0; i<vec.size(); i++)
+		for (int i = 0; i< (int) vec.size(); i++)
 		{
 			if(vec[i]==pt) return -1;
 			if (vec[i] < pt && vec[i] > tmp_pred_key)
@@ -135,7 +136,7 @@ class ope_client {
 		istringstream iss_tmp(buffer);
 		vector<V> xct_vec;
 		V xct, last;
-		last=NULL;
+		last= (V) NULL;
 		while(true){
 			iss_tmp >> xct;
 			if(last==xct) break;
@@ -148,7 +149,7 @@ class ope_client {
     }
 
     //Function to tell tree server to insert plaintext pt w/ v, nbits
-    uint64_t insert(uint64_t v, uint64_t nbits, V pt) const{
+    pair<uint64_t, int> insert(uint64_t v, uint64_t nbits, V pt) const{
 		if(DEBUG) cout<<pt<<"  not in tree. "<<nbits<<": "<<" v: "<<v<<endl;
 		
 		//s->insert(v, nbits, pt);
@@ -174,7 +175,7 @@ class ope_client {
 	 * lookup(v, nbits) = 2
 	 * insert(v, nbits, encrypted_laintext) = 3
 	*/
-    uint64_t encrypt(V pt) const{
+    pair<uint64_t, int> encrypt(V pt) const{
 
         uint64_t v = 0;
         uint64_t nbits = 0;
@@ -191,12 +192,13 @@ class ope_client {
 
     	send(hsock, msg.c_str(), msg.size(), 0);
     	recv(hsock, buffer, 1024, 0);
-    	uint64_t early_v, early_pathlen, early_index;
+    	uint64_t early_v, early_pathlen, early_index, early_version;
 
     	istringstream iss(buffer);
     	iss>>early_v;
     	iss>>early_pathlen;
     	iss>>early_index;
+    	iss>>early_version;
 
     	if(DEBUG_COMM) cout<<"Received early: "<<early_v<<" : "<<early_pathlen<<" : "<<early_index<<endl;
     	if(early_v!=(uint64_t)-1 && early_pathlen!=(uint64_t)-1 && early_index!=(uint64_t)-1){
@@ -206,7 +208,8 @@ class ope_client {
     		nbits = early_pathlen+num_bits;
     		if(DEBUG_COMM) cout<<"Found "<<pt<<" in table w/ v="<<v<<" nbits="<<nbits<<" index="<<early_index<<endl;
     		v = (v<<num_bits) | early_index;  
-    		return (v<<(64-nbits)) | (mask<<(64-num_bits-nbits));  		
+    		return make_pair((v<<(64-nbits)) | (mask<<(64-num_bits-nbits)),
+    			early_version);
     	}
         for (;;) {
         	if(DEBUG) cout<<"Do lookup for "<<pt<<" with v: "<<v<<" nbits: "<<nbits<<endl;
@@ -229,6 +232,7 @@ class ope_client {
 			istringstream iss_tmp(buffer);
 			vector<V> xct_vec;
 			V xct, last;
+			last = (V) NULL;
 			while(true){
 				iss_tmp >> xct;
 				if(last==xct) break;
@@ -249,7 +253,7 @@ class ope_client {
 	        if (pi==-1) {
 	        	//pt already exists at node
 	        	int index;
-	        	for(index=0; index<xct_vec.size(); index++){
+	        	for(index=0; index< (int) xct_vec.size(); index++){
 	        		//Last num_bits are set to represent index of pt at node
 	        		if(xct_vec[index]==pt) v = (v<<num_bits) | index;
 	        	}
@@ -257,15 +261,20 @@ class ope_client {
 			}else {
 	            v = (v<<num_bits) | pi;
 			}
+	        //Check that we don't run out of bits!
+	        if(nbits > 63) {
+	        	cout<<"nbits larger than 64 bits!!!!"<<endl;
+	        }			
 	    }
-        
-        //Check that we don't run out of bits!
-        if(nbits > 63) {
-        	cout<<"nbits larger than 64 bits!!!!"<<endl;
-        }
+	    /*If value was inserted previously, then should get result
+		 *from server ope_table. If not, then it will insert. So never
+		 *should reach this point (which means no ope_table result or insertion)
+		 */
+        cout<<"SHOULD NEVER REACH HERE!"<<endl;
+        return make_pair(0,0);
 		//FL todo: s->update_table(block_encrypt(pt),v,nbits);
-		if(DEBUG) cout<<"Encryption of "<<pt<<" has v="<< v<<" nbits="<<nbits<<endl;
-        return (v<<(64-nbits)) | (mask<<(64-num_bits-nbits));
+/*		if(DEBUG) cout<<"Encryption of "<<pt<<" has v="<< v<<" nbits="<<nbits<<endl;
+        return (v<<(64-nbits)) | (mask<<(64-num_bits-nbits));*/
     }
     
 };

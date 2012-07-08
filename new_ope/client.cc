@@ -1,9 +1,6 @@
-#include <iostream>
 #include "client.hh"
-#include <sstream>
-#include <utility>
 #include <time.h>
-#include <stdlib.h>
+#include <edb/Connect.hh>
 
 using namespace std;
 
@@ -35,7 +32,8 @@ bool test_order(int num_vals, int sorted){
         for(int i=0; i<num_vals; i++){
                 uint64_t val = inserted_vals[i];
                 tmp_vals.push_back(val);
-                uint64_t enc_val = my_client->encrypt(val);
+                pair<uint64_t,int> enc_pair= my_client->encrypt(val);
+                uint64_t enc_val = enc_pair.first;
 
                 //Check that the enc_val can be decrypted back to val
                 if(val!=my_client->decrypt(enc_val)) {
@@ -51,9 +49,9 @@ bool test_order(int num_vals, int sorted){
                 uint64_t last_enc = 0;
                 uint64_t cur_val = 0;
                 uint64_t cur_enc = 0;
-                for(int j=0; j<tmp_vals.size(); j++){
+                for(int j=0; j<(int) tmp_vals.size(); j++){
                         cur_val = tmp_vals[j];
-                        cur_enc = my_client->encrypt(cur_val);          
+                        cur_enc = my_client->encrypt(cur_val).first;          
                         if(cur_val>=last_val && cur_enc>=last_enc){
                                 last_val = cur_val;
                                 last_enc = cur_enc;
@@ -81,26 +79,56 @@ bool test_order(int num_vals, int sorted){
 }
 
 int main(){
-        //Build mask based on N
-        mask=make_mask();
-        cout<<"Test result: "<<test_order(213,0);
-/*        ope_client<uint64_t>* client = new ope_client<uint64_t>();
+    //Build mask based on N
+    mask=make_mask();
+    
+    Connect* dbconnect =new Connect( "localhost", "frank", "passwd","cryptdb", 3306);
+/*        DBResult * result;
+    dbconnect->execute("select get_ope_server()", result);
+    ResType rt = result->unpack();
+    if(rt.ok){
+    cout<<ItemToString(rt.rows[0][0])<<endl;
+    }
+*/
+    cout<<"Connected to database"<<endl;
+    ope_client<uint64_t>* my_client = new ope_client<uint64_t>();
 
-       int val;
-        while(true){
-                cout<<"Enter value: ";
-                cin>>val;
-                if(val==-1){
-                        send(client->hsock, "0",1,0);
-                        close(client->hsock);
-                        break;
-                }else{
-                        uint64_t enc_val = client->encrypt((uint64_t) val);
-                        cout<<"Encrypting "<<val<<" to "<<enc_val<<endl;
-                        cout<<"Decrypting "<<enc_val<<" to "<<client->decrypt(enc_val)<<endl;
-                }
+    int salary;
+    string name;
+    ostringstream o;
+    while(true){
+        cout<<"Enter an employee name: ";
+        cin>>name;
+        cout<<"Enter salary: ";
+        cin>>salary;
+        if(salary==-1){
+            send(my_client->hsock, "0",1,0);
+            close(my_client->hsock);
+            break;
+        }else{
 
-        }*/
+            pair<uint64_t,int> enc_pair = my_client->encrypt(salary);
+            if(enc_pair.first==0 && enc_pair.second==0){
+                cout<<"Error in encryption, received 0,0 pair"<<endl;
+                break;
+            }
+            cout<<"Encrypting "<<salary<<" to "<<enc_pair.first<<endl;
+            o.str("");
+            o<<enc_pair.first;
+            string ope = o.str();
+
+            o.str("");
+            o<<enc_pair.second;
+            string version = o.str();
+
+
+            bool success = dbconnect->execute("INSERT INTO emp VALUES ('"+name+"', "+ope+", "+version+")");
+            if(success) cout<<"Inserted data!"<<endl;
+            else cout<<"Data insertion failed!"<<endl;
+
+        }
+
+    }
 
 }
 

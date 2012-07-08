@@ -169,7 +169,9 @@ ope_server<EncT>::update_ope_table(tree_node<EncT> *n){
         o << n->left->enc_val;
         std::string det_enc = o.str();
 
-        std::string s0 = "UPDATE emp SET ope_enc='", s1 = "' where det_enc='", s2 = "'";
+        std::string s0 = "UPDATE emp SET ope_enc='", 
+            s1 = "' where det_enc='", 
+            s2 = "'";
         std::string query="";
         query+=s0;
         query+=new_ct_string;
