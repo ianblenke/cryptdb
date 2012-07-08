@@ -1,6 +1,5 @@
 #include "client.hh"
 #include <time.h>
-#include <edb/Connect.hh>
 
 using namespace std;
 
@@ -33,6 +32,10 @@ bool test_order(int num_vals, int sorted){
                 uint64_t val = inserted_vals[i];
                 tmp_vals.push_back(val);
                 pair<uint64_t,int> enc_pair= my_client->encrypt(val);
+                if(enc_pair.first==0 && enc_pair.second==0){
+                    cout<<"Error in encryption, received 0,0 pair"<<endl;
+                    return false;
+                }                
                 uint64_t enc_val = enc_pair.first;
 
                 //Check that the enc_val can be decrypted back to val
@@ -41,6 +44,44 @@ bool test_order(int num_vals, int sorted){
                         return false;
                 }                       
                 if(DEBUG) cout<<"Enc complete for "<<val<<" with enc="<<enc_val<<endl;
+                ostringstream o;
+                o.str("");
+                o<<enc_pair.first;
+                string ope = o.str();
+
+                o.str("");
+                o<<enc_pair.second;
+                string version = o.str();
+
+                o.str("");
+                o<<val;
+                string name=o.str();
+                dbconnect->execute("INSERT INTO emp VALUES ("+name+", "+ope+", "+version+")");
+
+                int do_repeat = rand()%10+1;
+                if(do_repeat<5){
+                    int rep_index = rand()%(tmp_vals.size());
+                    int rep_val = tmp_vals[rep_index];
+                    pair<uint64_t,int> rep_pair= my_client->encrypt(rep_val);
+                    if(rep_pair.first==0 && rep_pair.second==0){
+                        cout<<"Error in rep_pair encryption, received 0,0 pair"<<endl;
+                        return false;
+                    }                
+
+                    o.str("");
+                    o<<rep_pair.first;
+                    string rep_ope = o.str();
+
+                    o.str("");
+                    o<<rep_pair.second;
+                    string rep_version = o.str();
+
+                    o.str("");
+                    o<<rep_val;
+                    string rep_name=o.str();
+                    dbconnect->execute("INSERT INTO emp VALUES ("+rep_name+", "+rep_ope+", "+rep_version+")");
+
+                }
 
                 //Check that all enc vals follow OPE properties
                 //So if val1<val2, enc(val1)<enc(val2)
@@ -82,7 +123,7 @@ int main(){
     //Build mask based on N
     mask=make_mask();
     
-    Connect* dbconnect =new Connect( "localhost", "frank", "passwd","cryptdb", 3306);
+    dbconnect =new Connect( "localhost", "frank", "passwd","cryptdb", 3306);
 /*        DBResult * result;
     dbconnect->execute("select get_ope_server()", result);
     ResType rt = result->unpack();
@@ -91,6 +132,9 @@ int main(){
     }
 */
     cout<<"Connected to database"<<endl;
+
+    test_order(137,0);
+    /*
     ope_client<uint64_t>* my_client = new ope_client<uint64_t>();
 
     int salary;
@@ -129,6 +173,6 @@ int main(){
         }
 
     }
-
+*/
 }
 

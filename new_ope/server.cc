@@ -158,7 +158,12 @@ tree<EncT>::rebalance(tree_node<EncT>* node){
 	node->right = tmp_node->right;
 	delete tmp_node;
 
+	num_rebalances++;
+
+	//Make sure new fresh global_version number to use as versions for
+	//newly updated (no longer stale) db values
 	global_version++;
+
 
 	//Make sure OPE table is updated and correct
 	update_ope_table(node, base);
@@ -178,9 +183,13 @@ tree<EncT>::delete_nodes(tree_node<EncT>* node){
 }
 
 /****************************/
+
+//Update now-stale values in db
 template<class EncT>
 void 
 tree<EncT>::update_db(table_storage old_entry, table_storage new_entry){
+	//Takes old ope_table entry and new ope_table entry and calculates
+	//corresponding db values, and updates db old vals to new vals
 	uint64_t old_v, old_nbits, old_version;
 	uint64_t new_v, new_nbits, new_version;
 
@@ -365,8 +374,6 @@ tree<EncT>::tree_insert(tree_node<EncT>* node, uint64_t v, uint64_t nbits, EncT 
 			num_nodes++;
 			rtn_path.push_back(node);
 
-			global_version++;
-
 			table_storage new_entry;
 			new_entry.v = v;
 			new_entry.pathlen = pathlen;
@@ -374,6 +381,7 @@ tree<EncT>::tree_insert(tree_node<EncT>* node, uint64_t v, uint64_t nbits, EncT 
 			new_entry.version = global_version;
 			ope_table[encval] = new_entry;
 
+			//Incr puts new entry in ope table at unique version #.
 			global_version++;
 
 			for(int i=0; i< (int) node->keys.size(); i++){
@@ -381,7 +389,9 @@ tree<EncT>::tree_insert(tree_node<EncT>* node, uint64_t v, uint64_t nbits, EncT 
 				ope_table[node->keys[i]].index = i;
 				ope_table[node->keys[i]].version=global_version;
 				table_storage update_entry = ope_table[node->keys[i]];
-				update_db(old_entry, update_entry);
+				//Newly inserted val isn't even in db yet, no need to update,
+				//really shouldn't actually update
+				if(node->keys[i]!=encval) update_db(old_entry, update_entry);
 			}
 			
 		}
@@ -675,8 +685,8 @@ void handle_client(void* lp, tree<EncT>* s){
 					return;
 				} 
 				if(s->num_nodes>1){
-					if((s->root->height()< log(s->num_nodes)/log(((double)1.0)/alpha)+1)!=1) {
-						cout<<"Height wrong "<<endl;
+					if((s->root->height()<= log(s->num_nodes)/log(((double)1.0)/alpha)+1)!=1) {
+						cout<<"Height wrong "<<s->root->height()<<" : "<<log(s->num_nodes)/log(((double)1.0)/alpha)+1<<endl;
 						return;
 					}
 				}				
@@ -737,5 +747,5 @@ int main(){
     }
 
     close(hsock);
-
+    cout<<"Rebalances: "<<server->num_rebalances<<endl;
 }

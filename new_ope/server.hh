@@ -59,6 +59,7 @@ public:
 	unsigned int num_nodes;
 	Connect * dbconnect;
 	int global_version;
+	int num_rebalances;
 
 	void insert(uint64_t v, uint64_t nbits, EncT encval);
 	vector<tree_node<EncT>* > tree_insert(tree_node<EncT>* node, uint64_t v, uint64_t nbits, EncT encval, uint64_t pathlen);
@@ -84,6 +85,7 @@ public:
 		num_nodes=0;
 		root = NULL;
 		global_version=0;
+		num_rebalances=0;
 		dbconnect =new Connect( "localhost", "frank", "passwd","cryptdb", 3306);
 	}
 

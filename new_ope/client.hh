@@ -16,6 +16,7 @@
 #include <unistd.h>
 #include <resolv.h>
 #include <sys/types.h>
+#include <edb/Connect.hh>
 
 //Whether to print debugging output or not
 #define DEBUG 0
@@ -26,6 +27,7 @@ using namespace std;
 const int N = 4;
 const double alpha = 0.3;
 
+Connect* dbconnect;
 
 // for N not a power of two, we want ceil(log_2(N))
 // for N power of two we want log_2(N) + 1
