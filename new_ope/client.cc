@@ -1,5 +1,6 @@
 #include "client.hh"
 #include <time.h>
+#include <unistd.h>
 
 using namespace std;
 
@@ -124,7 +125,7 @@ int main(){
     mask=make_mask();
     
     dbconnect =new Connect( "localhost", "frank", "passwd","cryptdb", 3306);
-    dbconnect->execute("select CREATE_OPS_SERVER()");
+    dbconnect->execute("select create_ops_server()");
 /*        DBResult * result;
     dbconnect->execute("select get_ope_server()", result);
     ResType rt = result->unpack();
@@ -133,6 +134,8 @@ int main(){
     }
 */
     cout<<"Connected to database"<<endl;
+
+    usleep(1000000);
 
     test_order(137,0);
     /*

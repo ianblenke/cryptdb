@@ -43,8 +43,8 @@ getui(UDF_ARGS * args, int i)
 getstring(UDF_ARGS * args, int i)
 {
     return string(args->args[i], args->lengths[i]);
-}
-*/
+}*/
+
 extern "C" {
     
 my_bool
@@ -57,13 +57,7 @@ ulonglong
 create_ops_server(UDF_INIT *initid, UDF_ARGS *args, char *is_null,
 			    char *error) {
 
-    // get arguments from the SQL query
-/*    string arg0 = getstring(args, 0); // a string, logfile path
-    string arg1 = getstring(args, 1); 
-    string arg2 = getstring(args, 2); 
-
-    cerr << "arg0 is <" << arg0 << "> arg1 is <" << arg1
-	 << "> arg2 is <" << arg2 << ">\n";*/
+    cerr<<"Calling create_ops_server function\n";
 
     string command = "/usr/lib/mysql/plugin/server";
     
@@ -71,7 +65,7 @@ create_ops_server(UDF_INIT *initid, UDF_ARGS *args, char *is_null,
 
     if (pid == 0) {
 	// child
-
+    cerr<<"In child now \n";
 	// Frank, below replace exampleserver with the name of the
 	// ope server. 
 	errno = 0;
@@ -93,7 +87,7 @@ create_ops_server(UDF_INIT *initid, UDF_ARGS *args, char *is_null,
 	cerr << "failed to fork ops server \n";
 	return -1;
     } else {
-	cout << "forked ops server; pid: " << pid << " \n";
+	cerr << "forked ops server; pid: " << pid << " \n";
 	return 0;
     }
 }

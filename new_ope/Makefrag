@@ -36,9 +36,7 @@ $(OBJDIR)/new_ope/exampleserver: $(OBJDIR)/new_ope/exampleserver.o $(OBJDIR)/lib
 install: install_opsserver
 
 .PHONY: install_opsserver
-install_opsserver: $(OBJDIR)/new_ope/exampleserver \
-		   $(OBJDIR)/new_ope/client
-	install -m 555 -g mysql -o mysql $(OBJDIR)/new_ope/exampleserver $(MYSQL_PLUGIN_DIR); \
+install_opsserver: $(OBJDIR)/new_ope/client $(OBJDIR)/new_ope/server
 	install -m 555 -g mysql -o mysql $(OBJDIR)/new_ope/server $(MYSQL_PLUGIN_DIR); 
 
 			

@@ -697,36 +697,42 @@ void handle_client(void* lp, tree<EncT>* s){
 }
 
 
-int main(){
+int main(int argc, char **argv){
 	//Build mask based on N
 	mask = make_mask();
+
+	cerr<<"Starting tree server \n";
 
 	//Construct new server with new tree
 	tree<uint64_t>* server = new tree<uint64_t>();
 
+	cerr<<"Made a server \n";
 	//Socket connection
 	int host_port = 1111;
     int hsock = socket(AF_INET, SOCK_STREAM, 0);
     if(hsock ==-1){
             cout<<"Error initializing socket"<<endl;
     }
-
+    cerr<<"Init socket \n";
     struct sockaddr_in my_addr;
     my_addr.sin_family = AF_INET;
     my_addr.sin_port = htons(host_port);
     memset(&(my_addr.sin_zero), 0, 8);
     my_addr.sin_addr.s_addr = INADDR_ANY;
 
+    cerr<<"Sockaddr \n";
     //Bind to socket
     int bind_rtn = bind(hsock, (struct sockaddr*) &my_addr, sizeof(my_addr));
     if(bind_rtn<0){
-            cout<<"Error binding to socket"<<endl;
+            cerr<<"Error binding to socket"<<endl;
     }
+    cerr<<"Bind \n";
     //Start listening
     int listen_rtn = listen(hsock, 10);
     if(listen_rtn<0){
-            cout<<"Error listening to socket"<<endl;
+            cerr<<"Error listening to socket"<<endl;
     }
+    cerr<<"Listening \n";
 
     socklen_t addr_size=sizeof(sockaddr_in);
     int* csock;
@@ -734,7 +740,7 @@ int main(){
     int i=1;
     //Handle 1 client b/f quiting (can remove later)
     while(i>0){
-            cout<<"Listening..."<<endl;
+            cerr<<"Listening..."<<endl;
             csock = (int*) malloc(sizeof(int));
             if((*csock = accept(hsock, (struct sockaddr*) &sadr, &addr_size))!=-1){
             	//Pass connection and messages received to handle_client
@@ -745,7 +751,6 @@ int main(){
             }
             i--;
     }
-
+    cerr<<"Done with server, closing now\n";
     close(hsock);
-    cout<<"Rebalances: "<<server->num_rebalances<<endl;
 }

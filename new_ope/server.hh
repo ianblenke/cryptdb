@@ -17,6 +17,7 @@ using std::istringstream;
 using std::ceil;
 using std::sort;
 using std::vector;
+using std::cerr;
 
 const int N = 4;
 const double alpha = 0.3;
