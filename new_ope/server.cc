@@ -154,11 +154,11 @@ tree<EncT>::rebalance(tree_node<EncT>* node){
 	table_storage base = ope_table[node->keys[0]];
 
 	vector<EncT> key_list = flatten(node);
-	if(DEBUG){
+/*	if(DEBUG){
 		vector<EncT> tmp_list = key_list;
 		sort(key_list.begin(), key_list.end());
 		if(key_list!=tmp_list) cout<<"Flatten isn't sorted!"<<endl;		
-	}
+	}*/
 
 	tree_node<EncT>* tmp_node = rebuild(key_list);
 	delete_nodes(node);
@@ -356,12 +356,12 @@ tree<EncT>::insert(uint64_t v, uint64_t nbits, uint64_t index, EncT encval){
 
 	if (height==0) return;
 
-	if(DEBUG) print_tree();
+	//if(DEBUG) print_tree();
 
 	if(height> log(num_nodes)/log(((double)1.0)/alpha)+1 ){
 		tree_node<EncT>* scapegoat = findScapegoat(path);
 		rebalance(scapegoat);
-		if(DEBUG) print_tree();
+		//if(DEBUG) print_tree();
 	}
 }
 
@@ -526,11 +526,11 @@ tree<EncT>::test_node(tree_node<EncT>* cur_node){
 		return false;
 	}
 
-	//Check that node's keys are sorted
-	sort(sorted_keys.begin(), sorted_keys.end());
+	//Check that node's keys are sorted <- No longer true with DET enc
+/*	sort(sorted_keys.begin(), sorted_keys.end());
 	if(sorted_keys!=cur_node->keys){
 		cout<<"Node keys in wrong order"<<endl;
-	}
+	}*/
 
 	//If num of keys < N-1, then node is a leaf node. 
 	//Right map should have no entries.
@@ -542,7 +542,8 @@ tree<EncT>::test_node(tree_node<EncT>* cur_node){
 	}
 
 	//Test that all subtree nodes have keys with values in the correct range
-	int low = 0;
+	//No longer true with DET enc
+	/*int low = 0;
 	int high = sorted_keys[0];
 	int i=0;
 	if(cur_node->key_in_map((EncT) NULL)){
@@ -571,7 +572,7 @@ tree<EncT>::test_node(tree_node<EncT>* cur_node){
 
 	for(int x=0; x< (int) sorted_keys.size()-1; x++){
 		if(sorted_keys[x]==sorted_keys[x+1]) return false;
-	}
+	}*/
 
 	return true;
 

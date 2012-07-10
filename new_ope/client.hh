@@ -17,6 +17,8 @@
 #include <resolv.h>
 #include <sys/types.h>
 #include <edb/Connect.hh>
+#include <crypto/blowfish.hh>
+#include <util/static_assert.hh>
 
 //Whether to print debugging output or not
 #define DEBUG 0
@@ -62,13 +64,14 @@ ffsl(uint64_t ct)
 class ope_lookup_failure {};
 
 
-template<class V>
+template<class V, class BlockCipher>
 class ope_client {
  public:
 	int hsock;
 	struct sockaddr_in my_addr;
 
-    ope_client() {
+    ope_client(BlockCipher *bc): b(bc) {
+    	_static_assert(BlockCipher::blocksize == sizeof(V));
 
 		int host_port = 1111;
 		string host_name = "127.0.0.1";
@@ -98,6 +101,7 @@ class ope_client {
      * in the vector (1 is added due to my protocol, where 0 represents null)
     */
     static int predIndex(vector<V> vec, V pt){
+    	//Assumes vec is filled with decrypted non-DET values (original pt values)
 		int tmp_index = 0;
 		V tmp_pred_key =0;
 		bool pred_found=false;
@@ -146,18 +150,18 @@ class ope_client {
 
 			xct_vec.push_back(xct);
 		}        
-        return xct_vec[index];
+        return block_decrypt(xct_vec[index]);
 	
     }
 
     //Function to tell tree server to insert plaintext pt w/ v, nbits
-    pair<uint64_t, int> insert(uint64_t v, uint64_t nbits, uint64_t index, V pt) const{
-		if(DEBUG) cout<<pt<<"  not in tree. "<<nbits<<": "<<" v: "<<v<<endl;
+    pair<uint64_t, int> insert(uint64_t v, uint64_t nbits, uint64_t index, V pt, V det) const{
+		if(DEBUG) cout<<"pt: "<<pt<<" det: "<<det<<"  not in tree. "<<nbits<<": "<<" v: "<<v<<endl;
 		
 		//s->insert(v, nbits, index, pt);
     	ostringstream o;
 	    o.str("");
-	    o<<"3 "<<v<<" "<<nbits<<" "<<index<<" "<<pt;
+	    o<<"3 "<<v<<" "<<nbits<<" "<<index<<" "<<det;
 	    string msg = o.str();
 	    if(DEBUG_COMM) cout<<"Sending msg: "<<msg<<endl;
 	    send(hsock, msg.c_str(), msg.size(),0);
@@ -182,12 +186,16 @@ class ope_client {
         uint64_t v = 0;
         uint64_t nbits = 0;
 
+        V det = block_encrypt(pt);
+
+        if(DEBUG) cout<<"Pt: "<<pt<<" det: "<<det<<endl;
+
     	char buffer[1024];
     	memset(buffer, '\0', 1024);
 
     	//table_storage test = s->lookup(pt);
     	ostringstream o;
-    	o<<"1 "<<pt;
+    	o<<"1 "<<det;
 
     	string msg = o.str();
     	if(DEBUG_COMM) cout<<"Sending init msg: "<<msg<<endl;
@@ -208,13 +216,13 @@ class ope_client {
 
     		v = early_v;
     		nbits = early_pathlen+num_bits;
-    		if(DEBUG_COMM) cout<<"Found "<<pt<<" in table w/ v="<<v<<" nbits="<<nbits<<" index="<<early_index<<endl;
+    		if(DEBUG_COMM) cout<<"Found "<<pt<<" with det="<<det<<" in table w/ v="<<v<<" nbits="<<nbits<<" index="<<early_index<<endl;
     		v = (v<<num_bits) | early_index;  
     		return make_pair((v<<(64-nbits)) | (mask<<(64-num_bits-nbits)),
     			early_version);
     	}
         for (;;) {
-        	if(DEBUG) cout<<"Do lookup for "<<pt<<" with v: "<<v<<" nbits: "<<nbits<<endl;
+        	if(DEBUG) cout<<"Do lookup for "<<pt<<" with det: "<<det<<" v: "<<v<<" nbits: "<<nbits<<endl;
 			//vector<V> xct = s->lookup(v, nbits);
         	o.str("");
         	o<<"2 "<<v<<" "<<nbits;
@@ -227,7 +235,7 @@ class ope_client {
 			string check(buffer);        	
 
 			if(check=="ope_fail"){
-				return insert(v, nbits, 0, pt);
+				return insert(v, nbits, 0, pt, det);
 
 			}				
 
@@ -239,8 +247,8 @@ class ope_client {
 				iss_tmp >> xct;
 				if(last==xct) break;
 				last = xct;
-
-				xct_vec.push_back(xct);
+				//predIndex later assumes vector is of original plaintext vals
+				xct_vec.push_back(block_decrypt(xct));
 			}
 
 
@@ -253,7 +261,7 @@ class ope_client {
 				for(index=0; index<(int) xct_vec.size(); index++){
 					if(pt<xct_vec[index]) break;
 				}
-				return insert(v, nbits, index, pt);
+				return insert(v, nbits, index, pt, det);
 			}
 			nbits+=num_bits;
 	        if (pi==-1) {
@@ -282,5 +290,20 @@ class ope_client {
 /*		if(DEBUG) cout<<"Encryption of "<<pt<<" has v="<< v<<" nbits="<<nbits<<endl;
         return (v<<(64-nbits)) | (mask<<(64-num_bits-nbits));*/
     }
+
+private:
+    V block_decrypt(V ct) const {
+        V pt;
+        b->block_decrypt((const uint8_t *) &ct, (uint8_t *) &pt);
+        return pt;
+    }
+
+    V block_encrypt(V pt) const {
+        V ct;
+        b->block_encrypt((const uint8_t *) &pt, (uint8_t *) &ct);
+        return ct;
+    }
+
+    BlockCipher *b;
     
 };
