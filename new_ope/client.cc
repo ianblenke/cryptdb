@@ -137,7 +137,7 @@ int main(){
 
     usleep(1000000);
 
-    test_order(137,0);
+    test_order(153,2);
     /*
     ope_client<uint64_t>* my_client = new ope_client<uint64_t>();
 

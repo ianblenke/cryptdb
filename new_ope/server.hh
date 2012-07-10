@@ -22,7 +22,6 @@ using std::cerr;
 const int N = 4;
 const double alpha = 0.3;
 
-
 // for N not a power of two, we want ceil(log_2(N))
 // for N power of two we want log_2(N) + 1
 const int num_bits = (int) ceil(log2(N+1.0));
@@ -62,8 +61,10 @@ public:
 	int global_version;
 	int num_rebalances;
 
-	void insert(uint64_t v, uint64_t nbits, EncT encval);
-	vector<tree_node<EncT>* > tree_insert(tree_node<EncT>* node, uint64_t v, uint64_t nbits, EncT encval, uint64_t pathlen);
+
+/////////TO DOOOOO: Switch index to int, no need for uint64_t
+	void insert(uint64_t v, uint64_t nbits, uint64_t index, EncT encval);
+	vector<tree_node<EncT>* > tree_insert(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint64_t index, EncT encval, uint64_t pathlen);
 
 	tree_node<EncT>* findScapegoat( vector<tree_node<EncT>* > path );
 

@@ -72,18 +72,21 @@ struct tree_node
 template<class EncT>
 vector<EncT> 
 tree<EncT>::flatten(tree_node<EncT>* node){
-	vector<EncT> rtn_keys = node->keys;
+	vector<EncT> rtn_keys;
 
-	typename boost::unordered_map<EncT, tree_node<EncT> *>::iterator it;
-
-	vector<EncT> child_keys;
-
-	for(it=node->right.begin(); it!=node->right.end(); it++){
-		child_keys = flatten(it->second);
-		for(int i=0; i<(int) child_keys.size(); i++){
-			rtn_keys.push_back(child_keys[i]);
+	vector<EncT> tmp;
+	if(node->key_in_map( (EncT) NULL)){
+		tmp=flatten(node->right[(EncT) NULL]);
+		rtn_keys.insert(rtn_keys.end(), tmp.begin(), tmp.end());
+	}
+	for(int i=0; i<(int) node->keys.size(); i++){
+		EncT tmp_key = node->keys[i];
+		rtn_keys.push_back(tmp_key);
+		if(node->key_in_map(tmp_key)){
+			tmp = flatten(node->right[tmp_key]);
+			rtn_keys.insert(rtn_keys.end(), tmp.begin(), tmp.end() );
 		}
-	}	
+	}
 
 	return rtn_keys;			
 
@@ -151,7 +154,12 @@ tree<EncT>::rebalance(tree_node<EncT>* node){
 	table_storage base = ope_table[node->keys[0]];
 
 	vector<EncT> key_list = flatten(node);
-	sort(key_list.begin(), key_list.end());
+	if(DEBUG){
+		vector<EncT> tmp_list = key_list;
+		sort(key_list.begin(), key_list.end());
+		if(key_list!=tmp_list) cout<<"Flatten isn't sorted!"<<endl;		
+	}
+
 	tree_node<EncT>* tmp_node = rebuild(key_list);
 	delete_nodes(node);
 	node->keys = tmp_node->keys;
@@ -337,13 +345,13 @@ tree<EncT>::findScapegoat( vector<tree_node<EncT>* > path ){
 
 template<class EncT>
 void
-tree<EncT>::insert(uint64_t v, uint64_t nbits, EncT encval){
-	//If root doesn't exsit yet, create it, then continue insertion
+tree<EncT>::insert(uint64_t v, uint64_t nbits, uint64_t index, EncT encval){
+	//If root doesn't exist yet, create it, then continue insertion
 	if(!root){
 		if(DEBUG) cout<<"Inserting root"<<endl;
 		root=new tree_node<EncT>();
 	}
-	vector<tree_node<EncT> * > path=tree_insert(root, v, nbits, encval, nbits);
+	vector<tree_node<EncT> * > path=tree_insert(root, v, nbits, index, encval, nbits);
 	double height= (double) path.size();
 
 	if (height==0) return;
@@ -359,7 +367,7 @@ tree<EncT>::insert(uint64_t v, uint64_t nbits, EncT encval){
 
 template<class EncT>
 vector<tree_node<EncT>* >
-tree<EncT>::tree_insert(tree_node<EncT>* node, uint64_t v, uint64_t nbits, EncT encval, uint64_t pathlen){
+tree<EncT>::tree_insert(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint64_t index, EncT encval, uint64_t pathlen){
 
 	vector<tree_node<EncT>* > rtn_path;
 
@@ -368,30 +376,33 @@ tree<EncT>::tree_insert(tree_node<EncT>* node, uint64_t v, uint64_t nbits, EncT 
 	if(nbits==0){
 		if(node->keys.size()>N-2) cout<<"Insert fail, found full node"<<endl;
 		else{
-			if(DEBUG) cout<<"Found node, inserting"<<endl;
-			node->keys.push_back(encval);
-			sort(node->keys.begin(), node->keys.end());
+			if(DEBUG) cout<<"Found node, inserting into index "<<index<<endl;
+			typename vector<EncT>::iterator it;
+			it=node->keys.begin();
+
+			node->keys.insert(it+index, encval);
+			//sort(node->keys.begin(), node->keys.end());
 			num_nodes++;
 			rtn_path.push_back(node);
 
 			table_storage new_entry;
 			new_entry.v = v;
 			new_entry.pathlen = pathlen;
-			new_entry.index = 0;
+			new_entry.index = index;
 			new_entry.version = global_version;
 			ope_table[encval] = new_entry;
 
 			//Incr puts new entry in ope table at unique version #.
 			global_version++;
 
-			for(int i=0; i< (int) node->keys.size(); i++){
+			for(int i=(int)index+1; i< (int) node->keys.size(); i++){
 				table_storage old_entry = ope_table[node->keys[i]];
 				ope_table[node->keys[i]].index = i;
 				ope_table[node->keys[i]].version=global_version;
 				table_storage update_entry = ope_table[node->keys[i]];
-				//Newly inserted val isn't even in db yet, no need to update,
-				//really shouldn't actually update
-				if(node->keys[i]!=encval) update_db(old_entry, update_entry);
+				//Only keys after newly inserted one need updating
+				update_db(old_entry, update_entry);
+
 			}
 			
 		}
@@ -417,7 +428,7 @@ tree<EncT>::tree_insert(tree_node<EncT>* node, uint64_t v, uint64_t nbits, EncT 
 	    	node->right[key] = new tree_node<EncT>();
 	    }else cout<<"Insert fail, wrong condition to create new node child"<<endl;
     }
-    rtn_path = tree_insert(node->right[key], v, nbits-num_bits, encval, pathlen);
+    rtn_path = tree_insert(node->right[key], v, nbits-num_bits, index, encval, pathlen);
     rtn_path.push_back(node);
     return rtn_path;
 }
@@ -492,7 +503,7 @@ tree<EncT>::test_tree(tree_node<EncT>* cur_node){
 	//Recursively check tree at this node and all subtrees
 	for(it=cur_node->right.begin(); it!=cur_node->right.end(); it++){
 	    if(!test_tree(it->second)) {
-		return false;
+			return false;
 	    }
 	}
 	return true;
@@ -613,7 +624,7 @@ void handle_client(void* lp, tree<EncT>* s){
 		    /*Server protocol code:
 			 * lookup(encrypted_plaintext) = 1
 			 * lookup(v, nbits) = 2
-			 * insert(v, nbits, encrypted_laintext) = 3
+			 * insert(v, nbits, index, encrypted_laintext) = 3
 			*/            
             int func_d;
             istringstream iss(buffer);
@@ -664,13 +675,14 @@ void handle_client(void* lp, tree<EncT>* s){
                 send(*csock, rtn_str.c_str(), rtn_str.size(),0);
             }else if(func_d==3){
             	//Insert using v and nbits
-                uint64_t v, nbits, blk_encrypt_pt;
+                uint64_t v, nbits, index, blk_encrypt_pt;
                 iss>>v;
                 iss>>nbits;
+                iss>>index;
                 iss>>blk_encrypt_pt;
                 //Insert...need not send response
-                if(DEBUG_COMM) cout<<"Trying insert("<<v<<", "<<nbits<<", "<<blk_encrypt_pt<<")"<<endl;
-                s->insert(v, nbits, blk_encrypt_pt);
+                if(DEBUG_COMM) cout<<"Trying insert("<<v<<", "<<nbits<<", "<<index<<", "<<blk_encrypt_pt<<")"<<endl;
+                s->insert(v, nbits, index, blk_encrypt_pt);
             }else{
             	//Uh oh!
                 cout<<"Something's wrong!: "<<buffer<<endl;

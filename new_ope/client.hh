@@ -151,13 +151,13 @@ class ope_client {
     }
 
     //Function to tell tree server to insert plaintext pt w/ v, nbits
-    pair<uint64_t, int> insert(uint64_t v, uint64_t nbits, V pt) const{
+    pair<uint64_t, int> insert(uint64_t v, uint64_t nbits, uint64_t index, V pt) const{
 		if(DEBUG) cout<<pt<<"  not in tree. "<<nbits<<": "<<" v: "<<v<<endl;
 		
-		//s->insert(v, nbits, pt);
+		//s->insert(v, nbits, index, pt);
     	ostringstream o;
 	    o.str("");
-	    o<<"3 "<<v<<" "<<nbits<<" "<<pt;
+	    o<<"3 "<<v<<" "<<nbits<<" "<<index<<" "<<pt;
 	    string msg = o.str();
 	    if(DEBUG_COMM) cout<<"Sending msg: "<<msg<<endl;
 	    send(hsock, msg.c_str(), msg.size(),0);
@@ -175,7 +175,7 @@ class ope_client {
     /*Server protocol code:
 	 * lookup(encrypted_plaintext) = 1
 	 * lookup(v, nbits) = 2
-	 * insert(v, nbits, encrypted_laintext) = 3
+	 * insert(v, nbits, index, encrypted_laintext) = 3
 	*/
     pair<uint64_t, int> encrypt(V pt) const{
 
@@ -227,7 +227,7 @@ class ope_client {
 			string check(buffer);        	
 
 			if(check=="ope_fail"){
-				return insert(v, nbits, pt);
+				return insert(v, nbits, 0, pt);
 
 			}				
 
@@ -249,7 +249,11 @@ class ope_client {
 			try{
 				pi = predIndex(xct_vec, pt);
 			}catch(ope_lookup_failure&){
-				return insert(v, nbits, pt);
+				int index;
+				for(index=0; index<(int) xct_vec.size(); index++){
+					if(pt<xct_vec[index]) break;
+				}
+				return insert(v, nbits, index, pt);
 			}
 			nbits+=num_bits;
 	        if (pi==-1) {
