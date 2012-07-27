@@ -3,6 +3,7 @@
 #include <vector>
 #include <stdint.h>
 #include <openssl/blowfish.h>
+#include <string>
 
 class blowfish {
  public:

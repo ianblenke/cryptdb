@@ -1,4 +1,4 @@
-#include <crypto-old/CryptoManager.hh> /* various functions for EDB */
+
 #include <crypto/blowfish.hh>
 #include <util/params.hh>
 #include <string.h>
