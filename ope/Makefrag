@@ -1,5 +1,5 @@
 OBJDIRS     += ope
-OPESRC  := btree.cc
+OPESRC  := btree.cc 
 
 
 all:    $(OBJDIR)/libope.so $(OBJDIR)/libcryptdb.so
@@ -12,9 +12,9 @@ $(OBJDIR)/ope/client: $(OBJDIR)/ope/client.o $(OBJDIR)/libcryptdb.so $(OBJDIR)/l
 	$(CXX) $< -o $@ $(LDFLAGS) -ledbutil -lope -lcryptdb
 
 	
-all:	$(OBJDIR)/ope/avltest
-$(OBJDIR)/ope/avltest: $(OBJDIR)/ope/avltest.o $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbutil.so $(OBJDIR)/libope.so
-	$(CXX) $< -o $@ $(LDFLAGS) -ledbutil -lope -lcryptdb
+#all:	$(OBJDIR)/ope/avltest
+#$(OBJDIR)/ope/avltest: $(OBJDIR)/ope/avltest.o $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbutil#.so $(OBJDIR)/libope.so
+#	$(CXX) $< -o $@ $(LDFLAGS) -ledbutil -lope -lcryptdb
 
 all:	$(OBJDIR)/ope/server
 $(OBJDIR)/ope/server: $(OBJDIR)/ope/server.o $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbutil.so $(OBJDIR)/libope.so

@@ -344,16 +344,17 @@ void Node::dump (){
 
         cout << "parent=" << mp_parent << " count=" << m_count << endl;
 
-        for (int i=0; i<m_count; i++)
+        for (unsigned int i=0; i<m_count; i++) {
 
             m_vector[i].dump();
+	}
 
-        for (int i=0; i<m_count; i++)
+        for (unsigned int i=0; i<m_count; i++) {
 
             if (m_vector[i].mp_subtree)
 
                 m_vector[i].mp_subtree->dump();
-
+	}
         cout << endl;
 
 } //________________________________________________________________________
@@ -412,7 +413,7 @@ int Node::delete_all_subtrees () {
 
     int count_deleted = 0;
 
-    for (int i=0; i< m_count; i++) {
+    for (unsigned int i=0; i< m_count; i++) {
 
         if (!m_vector[i].mp_subtree)
 
@@ -534,10 +535,10 @@ bool Node::vector_delete (Elem& target) {
 
     // elements in positions greater than target_pos.
 
-    for (int i=target_pos; i<m_count; i++)
+    for (unsigned int i=target_pos; i< m_count; i++) {
 
         m_vector[i] = m_vector[i+1];
-
+    }
    
 
     m_count--;
@@ -556,7 +557,7 @@ bool Node::vector_delete (int target_pos) {
 
  
 
-    if (target_pos<0 || target_pos>=m_count)
+    if (target_pos<0 || target_pos>=(int)m_count)
 
         return false;
 
@@ -568,7 +569,7 @@ bool Node::vector_delete (int target_pos) {
 
     // elements in positions greater than target_pos.
 
-    for (int i=target_pos; i<m_count; i++)
+    for (unsigned int i= (unsigned int)target_pos; i<m_count; i++)
 
         m_vector[i] = m_vector[i+1];
 
@@ -636,7 +637,7 @@ bool Node::split_insert (Elem& element) {
 
     vector_insert_for_split (element);
 
-    int split_point = m_count/2;
+    unsigned int split_point = m_count/2;
 
     if (2*split_point < m_count)  // perform the "ceiling function"
 
@@ -654,7 +655,7 @@ bool Node::split_insert (Elem& element) {
 
     // element that gets added to the parent of this node
 
-    for (int i=1; i<m_count-split_point; i++)
+    for (int i=1; i< (int)(m_count-split_point); i++)
 
         new_node->vector_insert(m_vector[split_point+i]);
 
@@ -918,9 +919,10 @@ Node* Node::merge_right (int parent_index_this) {
 
     vector_insert (parent_elem);
 
-    for (int i=1; i<right_sib->m_count; i++)
+    for (unsigned int i=1; i<right_sib->m_count; i++) {
 
         vector_insert ((*right_sib)[i]);
+    }
 
     mp_parent->vector_delete (parent_index_this+1);
 
@@ -970,7 +972,7 @@ Node* Node::merge_left (int parent_index_this) {
 
     left_sib->vector_insert (parent_elem);
 
-    for (int i=1; i<m_count; i++)
+    for (unsigned int i=1; i<m_count; i++)
 
         left_sib->vector_insert (m_vector[i]);
 
@@ -1024,7 +1026,7 @@ Node* Node::right_sibling (int& parent_index_this) {
 
     // now mp_parent is known not to be null
 
-    if (parent_index_this >= mp_parent->m_count-1)
+    if (parent_index_this >= (int) (mp_parent->m_count-1))
 
         return 0;  // no right sibling
 
@@ -1070,7 +1072,7 @@ int Node::index_has_subtree () {
 
         int mid = first+(last-first)/2;
 
-        Elem& smallest = smallest_key();
+        smallest_key();
 
         if (smallest_key()>=mp_parent->m_vector[mid])
 
@@ -1205,7 +1207,7 @@ Elem Node::m_failure = Elem();
  
  
 
-int _tmain(int argc, _TCHAR* argv[])
+int main(int argc, char** argv)
 
 {
 
