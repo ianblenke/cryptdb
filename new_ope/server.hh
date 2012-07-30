@@ -1,8 +1,9 @@
+#include <algorithm>
 #include <vector>
 #include <cmath>
 #include <stdint.h>
 #include <iostream>
-#include <boost/unordered_map.hpp>
+#include <map>
 #include <edb/Connect.hh>
 
 //Whether to print debugging output or not
@@ -18,6 +19,7 @@ using std::ceil;
 using std::sort;
 using std::vector;
 using std::cerr;
+using std::map;
 
 const int N = 4;
 const double alpha = 0.3;
@@ -74,7 +76,7 @@ public:
 	vector<EncT> lookup(uint64_t v, uint64_t nbits) const;
 	table_storage lookup(EncT xct);
 
-	boost::unordered_map<EncT, table_storage > ope_table;
+	map<EncT, table_storage > ope_table;
 	void update_ope_table(tree_node<EncT>* node, table_storage base);
 	void update_db(table_storage old_entry, table_storage new_entry);
 

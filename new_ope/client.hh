@@ -1,9 +1,9 @@
+#include <algorithm>
 #include <vector>
 #include <cmath>
 #include <stdint.h>
 #include <iostream>
 #include <exception>
-#include <boost/unordered_map.hpp>
 #include <utility>
 #include <time.h>
 #include <stdlib.h>

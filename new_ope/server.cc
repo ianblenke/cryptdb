@@ -1,5 +1,4 @@
 #include "server.hh"
-#include <algorithm>
 #include <exception>
 #include <utility>
 #include <stdlib.h>
@@ -17,7 +16,7 @@ template<class EncT>
 struct tree_node
 {
 	vector<EncT> keys;
-	boost::unordered_map<EncT, tree_node *> right;
+	map<EncT, tree_node *> right;
 
 	tree_node(){}
 
@@ -29,7 +28,7 @@ struct tree_node
 	//Returns true if node's right map contains key (only at non-leaf nodes)
 	bool key_in_map(EncT key){
 	    // FL: EncT is being used as a primitive, so this is fine.
-		typename boost::unordered_map<EncT, tree_node *>::iterator it;
+		typename map<EncT, tree_node *>::iterator it;
 		for(it=right.begin(); it!=right.end(); it++){
 			if(it->first==key) return true;
 		}
@@ -38,7 +37,7 @@ struct tree_node
 
 	//Recursively calculate height of node in tree
 	int height(){
-		typename boost::unordered_map<EncT, tree_node *>::iterator it;
+		typename map<EncT, tree_node *>::iterator it;
 		int max_child_height=0;
 		int tmp_height=0;
 
@@ -54,7 +53,7 @@ struct tree_node
 	//Recursively calculate number of keys at node and subtree nodes
 	int len(){
 		int len = keys.size();
-		typename boost::unordered_map<EncT, tree_node *>::iterator it;
+		typename map<EncT, tree_node *>::iterator it;
 
 		for(it=right.begin(); it!=right.end(); it++){
 			len+=it->second->len();
@@ -181,7 +180,7 @@ tree<EncT>::rebalance(tree_node<EncT>* node){
 template<class EncT>
 void 
 tree<EncT>::delete_nodes(tree_node<EncT>* node){
-	typename boost::unordered_map<EncT, tree_node<EncT> *>::iterator it;
+	typename map<EncT, tree_node<EncT> *>::iterator it;
 
 	for(it=node->right.begin(); it!=node->right.end(); it++){
 		delete_nodes(it->second);
@@ -307,7 +306,7 @@ tree_node<EncT>*
 tree<EncT>::findScapegoat( vector<tree_node<EncT>* > path ){
 	int tmp_size = 0;
 	tree_node<EncT>* last = NULL;
-	typename boost::unordered_map<EncT, tree_node<EncT> *>::iterator it;
+	typename map<EncT, tree_node<EncT> *>::iterator it;
 
 	int childSize=0;
 	vector<int> childSizes;
@@ -498,7 +497,7 @@ bool
 tree<EncT>::test_tree(tree_node<EncT>* cur_node){
 	if(test_node(cur_node)!=true) return false;
 
-	typename boost::unordered_map<EncT, tree_node<EncT> *>::iterator it;
+	typename map<EncT, tree_node<EncT> *>::iterator it;
 
 	//Recursively check tree at this node and all subtrees
 	for(it=cur_node->right.begin(); it!=cur_node->right.end(); it++){
@@ -591,7 +590,7 @@ tree<EncT>::test_vals(tree_node<EncT>* cur_node, EncT low, EncT high){
 		}
 	}
 
-	typename boost::unordered_map<EncT, tree_node<EncT> *>::iterator it;
+	typename map<EncT, tree_node<EncT> *>::iterator it;
 
 	for(it=cur_node->right.begin(); it!=cur_node->right.end(); it++){
 		if(test_vals(it->second, low, high)!=true) return false;
