@@ -1,6 +1,6 @@
 OBJDIRS	+= edb
 
-CRYPTDB_SRCS := sql_utils.cc Translator.cc Connect.cc MultiPrinc.cc AccessManager.cc mysqld-filler.cc Annotation.cc schema.cc
+CRYPTDB_SRCS := sql_utils.cc  Connect.cc mysqld-filler.cc 
 
 all:	$(OBJDIR)/libcryptdb.so
 

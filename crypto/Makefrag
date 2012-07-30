@@ -1,10 +1,10 @@
 OBJDIRS     += crypto
-CRYPTO2SRC  := paillier.cc urandom.cc arc4.cc hgd.cc pbkdf2.cc \
+CRYPTOSRC  := paillier.cc urandom.cc arc4.cc hgd.cc pbkdf2.cc \
 	       ecjoin.cc search.cc skip32.cc ffx.cc online_ope.cc mont.cc \
 	       prng.cc ope.cc 
 
-all:    $(OBJDIR)/libedbcrypto2.so
-$(OBJDIR)/libedbcrypto2.so: $(patsubst %.cc,$(OBJDIR)/crypto/%.o,$(CRYPTO2SRC))
+all:    $(OBJDIR)/libedbcrypto.so
+$(OBJDIR)/libedbcrypto.so: $(patsubst %.cc,$(OBJDIR)/crypto/%.o,$(CRYPTOSRC))
 	$(CXX) -shared -o $@ $^ $(LDFLAGS)
 
 #all:	$(OBJDIR)/crypto/x
