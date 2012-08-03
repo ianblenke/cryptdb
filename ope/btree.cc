@@ -112,7 +112,7 @@ void Node::dump(){
 Node::Node(RootTracker& root_track)  : m_root(root_track) {
 
 // limit the size of the vector to 4 kilobytes max and 200 entries max.
-
+// TODO: sizeof(Elem) does not compute the size correctly because string contains pointer
     int num_elements = max_elements*sizeof(Elem)<=max_array_bytes ?	
 	max_elements : max_array_bytes/sizeof(Elem);
     
@@ -399,12 +399,8 @@ bool Node::split_insert (Elem& element) {
         new_root->mp_parent = 0;
 
     }
-
     return true;
-
-   
-
-}//__________________________________________________________________
+}
 
 void Node::update_Merkle() {
     uint blocksize = sha::hashsize + node_key::keysize;
@@ -453,17 +449,19 @@ bool Node::delete_element (Elem& target) {
 
     int parent_index_this = invalid_index;
 
-    Elem& found = search (target, node);
+    Elem& found = search(target, node);
 
     if (!found.valid()) {
         return false;
     }
  
     if (node->is_leaf() && node->key_count() > node->minimum_keys()) {
-        return node->vector_delete (target);
+        bool r = node->vector_delete(target);
+	node->update_Merkle_upwards();
+	return r;
     }
     else if (node->is_leaf()) {
-        node->vector_delete (target);
+        node->vector_delete(target);
 
         // loop invariant: if _node_ is not null_ptr, it points to a node
         // that has lost an element and needs to import one from a sibling
@@ -490,19 +488,21 @@ bool Node::delete_element (Elem& target) {
 
             Node* right = node->right_sibling(parent_index_this);
 
-            if (right && right->key_count() > right->minimum_keys())
+            if (right && right->key_count() > right->minimum_keys()) {
 
                 node = node->rotate_from_right(parent_index_this);
 
+	    }
+	    
             else {
 
                 // is an extra element available from the left sibling (if any)
 
                 Node* left = node->left_sibling(parent_index_this);
 
-                if (left && left->key_count() > left->minimum_keys())
+                if (left && left->key_count() > left->minimum_keys()) {
                     node = node->rotate_from_left(parent_index_this);
-
+		}
                 else if (right) {
                     node = node->merge_right(parent_index_this);
 		}
@@ -516,7 +516,7 @@ bool Node::delete_element (Elem& target) {
 
     }
 
-    else {
+    else { // node is not leaf
 
         Elem& smallest_in_subtree = found.mp_subtree->smallest_key_in_subtree();
 
@@ -562,8 +562,14 @@ Node* Node::rotate_from_right(int parent_index_this) {
 
     (*right_sib)[0].m_payload = "";
 
-    return null_ptr; // parent node still has same element count
+     // parent node still has same element count
 
+    //need to update this and its right sibling's Merkle hash as well as all
+    // the way up
+    right_sib->update_Merkle();
+    this->update_Merkle_upward();
+
+    return null_ptr;
 } //_______________________________________________________________________
 
  
@@ -598,7 +604,14 @@ Node* Node::rotate_from_left(int parent_index_this) {
 
     left_sib->vector_delete(left_sib->m_count-1);
 
-    return null_ptr; // parent node still has same element count
+    // parent node still has same element count
+
+    // need to update Merkle hash of left sibling and this and upward to the
+    // root
+    right_sib->update_Merkle();
+    this->update_Merkle_upward();
+
+    return null_ptr;
 
 } //_______________________________________________________________________
 
@@ -631,6 +644,8 @@ Node* Node::merge_right (int parent_index_this) {
 
     delete right_sib;
 
+    this->update_Merkle();
+    
     if (mp_parent==find_root() && !mp_parent->key_count()) {
 
         m_root.set_root(m_root.get_root(), this);
@@ -683,6 +698,8 @@ Node* Node::merge_left (int parent_index_this) {
 
     Node* parent_node = mp_parent;  // copy before deleting this node
 
+    left_sib->update_Merkle();
+    
     if (mp_parent==find_root() && !mp_parent->key_count()) {
 
         m_root.set_root(m_root.get_root(), left_sib);
@@ -691,6 +708,7 @@ Node* Node::merge_left (int parent_index_this) {
 
         left_sib->mp_parent = null_ptr;
 
+	
         delete this;
 
         return null_ptr;

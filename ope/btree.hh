@@ -106,7 +106,7 @@ const unsigned int max_elements = 200;  // max elements in a node
 // at 800 bytes.
 const unsigned int max_array_bytes = 800; 
 
-class tree_key {
+class node_key {
 public:
     // det enc of a node
     std::string key;
@@ -129,7 +129,7 @@ public:
 template<class payload> class Element {
 
 public:
-    tree_key m_key;
+    node_key m_key;
     payload m_payload;
     Node* mp_subtree;
 
