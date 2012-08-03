@@ -6,19 +6,15 @@ B-tree implementation, adapted from toucan@textelectric.net, 2003
 
 */
 
+#include "btree.hh"
 
 #include <iostream>
-
 #include <string>
-
 #include <vector>
 
 
 using namespace std;
 
- 
-
-class Node;
 
 Node* invalid_ptr = reinterpret_cast<Node*> (-1);
 
@@ -29,41 +25,28 @@ const int invalid_index = -1;
 const unsigned int max_elements = 200;  // max elements in a node
 
 // size limit for the array in a vector object.  best performance was
-
 // at 800 bytes.
-
 const unsigned int max_array_bytes = 800; 
-
- 
 
 template<class key, class payload> class Element {
 
 // contains a key value, a payload, and a pointer toward the subtree
-
 // containing key values greater than this->m_key but lower than the
-
 // key value of the next element to the right
 
- 
 
 public:
 
     key m_key;
-
     payload m_payload;
-
     Node* mp_subtree;
 
 public:
 
     bool operator>   (Element& other) const { return m_key >  other.m_key; }
-
     bool operator<   (Element& other) const { return m_key <  other.m_key; }
-
     bool operator>=  (Element& other) const { return m_key >= other.m_key; }
-
     bool operator<=  (Element& other) const { return m_key <= other.m_key; }
-
     bool operator==  (Element& other) const { return m_key == other.m_key; }
 
     bool valid () const { return mp_subtree != invalid_ptr; }
@@ -73,198 +56,27 @@ public:
     Element& operator= (const Element& other) {
 
         m_key = other.m_key;
-
         m_payload = other.m_payload;
-
         mp_subtree = other.mp_subtree;
 
         return *this;
-
     }
 
     Element () { mp_subtree = null_ptr; }
 
     void dump (); 
 
-}; //______________________________________________________________________
+}; 
 
  
-
 template<class key, class payload> void Element<key, payload>::dump () {
-
     cout << "key=" << m_key << "sub=" << mp_subtree << ' ';
-
-} //_______________________________________________________________________
+} 
 
  
-
 typedef Element<string, string> Elem;
 
- 
-
-class RootTracker;
-
- 
-
-class Node {
-
-protected:
-
-    // locality of reference, beneficial to effective cache utilization,
-
-    // is provided by a "vector" container rather than a "list"
-
-    vector<Elem> m_vector;
-
-    // number of elements currently in m_vector, including the zeroth element
-
-    // which has only a subtree, no key value or payload.
-
-    unsigned int m_count;
-
-    Node* mp_parent;
-
-    bool is_leaf();
-
-    bool vector_insert (Elem& element);
-
-    bool vector_insert_for_split (Elem& element);
-
-    bool split_insert (Elem& element);
-
-    bool vector_delete (Elem& target);
-
-    bool vector_delete (int target_pos);
-
-    void insert_zeroth_subtree (Node* subtree);
-
-    void set_debug();
-
-    int key_count () { return m_count-1; }
-
-    Elem& largest_key () { return m_vector[m_count-1]; }
-
-    Elem& smallest_key () { return m_vector[1]; }
-
-    Elem& smallest_key_in_subtree();
-
-    int index_has_subtree ();
-
-    Node* right_sibling (int& parent_index_this);
-
-    Node* left_sibling (int& parent_index_this);
-
-    Node* rotate_from_left(int parent_index_this);
-
-    Node* rotate_from_right(int parent_index_this);
-
-    Node* merge_right (int parent_index_this);
-
-    Node* merge_left (int parent_index_this);
-
-    bool merge_into_root ();
-
-    int minimum_keys ();
-
-#ifdef _DEBUG
-
-    Elem debug[8];
-
-#endif
-
-public:
-
-    Elem& search (Elem& desired, Node*& last_visited); 
-
-    bool tree_insert (Elem& element);
-
-    bool delete_element (Elem& target);
-
-    int delete_all_subtrees ();
-
-    Node* find_root();
-
-    // to return a reference when a search fails.
-
-    static Elem m_failure;
-
-    // the root of the tree may change.  this attribute keeps it accessible.
-
-    RootTracker& m_root;
-
-    Elem& operator[] (int i) { return m_vector[i]; }
-
-    // node cannot be instantiated without a root tracker
-
-    Node (RootTracker& root_track);
-
-    void dump ();
-
-   
-
-}; //______________________________________________________________________
-
- 
-
-class RootTracker {
-
-// all the node instances that belong to a given tree have a reference to one
-
-// instance of RootTracker.  as the Node instance that is the root may change
-
-// or the original root may be deleted, Node instances must access the root
-
-// of the tree through this tracker, and update the root pointer when they
-
-// perform insertions or deletions.  using a static attribute in the Node
-
-// class to hold the root pointer would limit a program to just one B-tree.
-
-protected:
-
-    Node* mp_root;
-
-public:
-
-    RootTracker() { mp_root = null_ptr; }
-
-    void set_root (Node* old_root, Node* new_root) {
-
-        // ensure that the root is only being changed by a node belonging to the
-
-        // same tree as the current root
-
-        if (old_root != mp_root)
-
-            throw "wrong old_root in RootTracker::set_root";
-
-        else
-
-            mp_root = new_root;
-
-    }
-
-    Node* get_root () { return mp_root; }
-
- 
-
-    ~RootTracker () {
-
-        // safety measure
-
-        if (mp_root) {
-
-            mp_root->delete_all_subtrees();
-
-            delete mp_root;
-
-        }
-
-    }
-
-}; //_______________________________________________________________________
-
- 
+  
 
 int Node::minimum_keys () {
 
@@ -280,7 +92,7 @@ int Node::minimum_keys () {
 
     return ceiling_func-1;  // for clarity, may increment then decrement
 
-} //________________________________________________________________________
+} 
 
  
 
@@ -310,7 +122,7 @@ inline void Node::set_debug() {
 
 #endif
 
-} //________________________________________________________________________
+} 
 
  
 
@@ -326,14 +138,13 @@ void Node::insert_zeroth_subtree (Node* subtree) {
 
         subtree->mp_parent = this;
 
-} //_________________________________________________________________________
+} 
 
  
 
 void Node::dump (){
 
 // write out the keys in this node and all its subtrees, along with
-
 // node adresses, for debugging purposes
 
         if (this == m_root.get_root())
@@ -357,7 +168,7 @@ void Node::dump (){
 	}
         cout << endl;
 
-} //________________________________________________________________________
+} 
 
  
 
@@ -381,8 +192,7 @@ Node::Node (RootTracker& root_track)  : m_root(root_track) {
 
         insert_zeroth_subtree (0);
 
-} //________________________________________________________________________
-
+} 
  
 
 Node* Node::find_root () {
@@ -395,7 +205,7 @@ Node* Node::find_root () {
 
     return current;
 
-} //__________________________________________________________________________
+} 
 
  
 
@@ -403,8 +213,7 @@ bool Node::is_leaf () {
 
     return m_vector[0].mp_subtree==0;
 
-} //________________________________________________________________________
-
+} 
  
 
 int Node::delete_all_subtrees () {
@@ -435,27 +244,20 @@ int Node::delete_all_subtrees () {
 
     return count_deleted;
 
-} //_______________________________________________________________________
+} 
 
  
 
 bool Node::vector_insert (Elem& element) {
 
 // this method merely tries to insert the argument into the current node.
-
 // it does not concern itself with the entire tree.
-
 // if the element can fit into m_vector, slide all the elements
-
 // greater than the argument forward one position and copy the argument
-
 // into the newly vacated slot, then return true.  otherwise return false.
-
 // note: the tree_insert method will already have verified that the key
-
 // value of the argument element is not present in the tree.
 
-   
 
     if (m_count >= m_vector.size()-1) // leave an extra slot for split_insert
 
@@ -463,8 +265,7 @@ bool Node::vector_insert (Elem& element) {
 
     int i = m_count;
 
-   
-
+  
     while (i>0 && m_vector[i-1]>element) {
 
         m_vector[i] = m_vector[i-1];
@@ -483,17 +284,14 @@ bool Node::vector_insert (Elem& element) {
 
     return true;
 
-} //__________________________________________________________________
+} 
 
  
 
 bool Node::vector_delete (Elem& target) {
 
 // delete a single element in the vector belonging to *this node.
-
 // if the target is not found, do not look in subtrees, just return false.
-
- 
 
     int target_pos = -1;
 
@@ -502,7 +300,6 @@ bool Node::vector_delete (Elem& target) {
     int last = m_count-1;
 
     // perform binary search
-
     while (last-first > 1) {
 
         int mid = first+(last-first)/2;
@@ -530,11 +327,8 @@ bool Node::vector_delete (Elem& target) {
         return false;
 
     // the element's subtree, if it exists, is to be deleted or re-attached
-
     // in a different function.  not a concern here.  just shift all the
-
     // elements in positions greater than target_pos.
-
     for (unsigned int i=target_pos; i< m_count; i++) {
 
         m_vector[i] = m_vector[i+1];
@@ -545,17 +339,12 @@ bool Node::vector_delete (Elem& target) {
 
     return true;
 
-} //____________________________________________________________________
-
- 
+}  
 
 bool Node::vector_delete (int target_pos) {
 
 // delete a single element in the vector belonging to *this node.
-
 // the element is identified by position, not value.
-
- 
 
     if (target_pos<0 || target_pos>=(int)m_count)
 
@@ -564,11 +353,8 @@ bool Node::vector_delete (int target_pos) {
   
 
     // the element's subtree, if it exists, is to be deleted or re-attached
-
     // in a different function.  not a concern here.  just shift all the
-
     // elements in positions greater than target_pos.
-
     for (unsigned int i= (unsigned int)target_pos; i<m_count; i++)
 
         m_vector[i] = m_vector[i+1];
@@ -579,19 +365,14 @@ bool Node::vector_delete (int target_pos) {
 
     return true;
 
-} //____________________________________________________________________
+} 
 
  
-
 bool Node::vector_insert_for_split (Elem& element) {
 
 // this method insert an element that is in excess of the nominal capacity of
-
 // the node, using the extra slot that always remains unused during normal
-
 // insertions.  this method should only be called from split_insert()
-
- 
 
     if (m_count >= m_vector.size()) // error
 
@@ -619,13 +400,12 @@ bool Node::vector_insert_for_split (Elem& element) {
 
     return true;
 
-} //__________________________________________________________________
+}
 
  
 
 bool Node::split_insert (Elem& element) {
 
- 
 
     // split_insert should only be called if node is full
 
@@ -1208,20 +988,16 @@ Elem Node::m_failure = Elem();
  
 
 int main(int argc, char** argv)
-
 {
 
-// the main function is just some code to test the b-tree.  it inserts 100,000 elements,
-
+// test the b-tree. it inserts 100,000 elements,
 // then searches for each of them, then deletes them in reverse order (also tested in
-
-// forward order) and searches for all 100,000 elements after each deletion to ensure that
-
-// all remaining elements remain accessible.
+// forward order) and searches for all 100,000 elements after each deletion to
+// ensure that all remaining elements remain accessible.
 
  
 
-/*    __int64 frequency, start, end, total;
+    __int64 frequency, start, end, total;
 
     QueryPerformanceFrequency( (LARGE_INTEGER *)&frequency );
 
@@ -1254,9 +1030,7 @@ int main(int argc, char** argv)
     for (int i=0; i<100000; i++) {
 
         strstream stm;
-
         stm << i;
-
         stm >> search_vect[search_count++];
 
     }
@@ -1268,11 +1042,8 @@ int main(int argc, char** argv)
     QueryPerformanceCounter ( (LARGE_INTEGER *)&start);
 
     for (i=0; i<100000; i++) {
-
         elem.m_key = search_vect[i];
-
         elem.m_payload = search_vect[i]+" hi you";
-
         tracker.get_root()->tree_insert(elem);
 
     }
@@ -1282,11 +1053,8 @@ int main(int argc, char** argv)
     Node * last;
 
     for (i=0; i<100000; i++) {
-
         Elem desired;
-
         desired.m_key = search_vect[i];
-
         Elem& result = tracker.get_root()->search (desired, last);
 
     }
@@ -1296,9 +1064,7 @@ int main(int argc, char** argv)
     for (i=99999; i>=0; i--) {
 
         Elem target;
-
         target.m_key = search_vect[i];
-
         tracker.get_root()->delete_element (target);
 
         Node * last;
@@ -1306,7 +1072,6 @@ int main(int argc, char** argv)
     }
 
  
-
     QueryPerformanceCounter ( (LARGE_INTEGER *)&end);
 
     total = (end-start)/(frequency/1000);
@@ -1320,8 +1085,8 @@ int main(int argc, char** argv)
     tracker.get_root()->dump();
 
     getchar();
-*/
-    return 0;
+
+
 
 }
 
