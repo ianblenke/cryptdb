@@ -1,82 +1,19 @@
-
-
 /*
 
-B-tree implementation, adapted from toucan@textelectric.net, 2003
+  B-tree implementation, adapted from toucan@textelectric.net, 2003
 
 */
 
 #include "btree.hh"
 
-#include <iostream>
-#include <string>
-#include <vector>
-
 
 using namespace std;
 
 
-Node* invalid_ptr = reinterpret_cast<Node*> (-1);
-
-Node* null_ptr = reinterpret_cast<Node*> (0);
-
-const int invalid_index = -1;
-
-const unsigned int max_elements = 200;  // max elements in a node
-
-// size limit for the array in a vector object.  best performance was
-// at 800 bytes.
-const unsigned int max_array_bytes = 800; 
-
-template<class key, class payload> class Element {
-
-// contains a key value, a payload, and a pointer toward the subtree
-// containing key values greater than this->m_key but lower than the
-// key value of the next element to the right
-
-
-public:
-
-    key m_key;
-    payload m_payload;
-    Node* mp_subtree;
-
-public:
-
-    bool operator>   (Element& other) const { return m_key >  other.m_key; }
-    bool operator<   (Element& other) const { return m_key <  other.m_key; }
-    bool operator>=  (Element& other) const { return m_key >= other.m_key; }
-    bool operator<=  (Element& other) const { return m_key <= other.m_key; }
-    bool operator==  (Element& other) const { return m_key == other.m_key; }
-
-    bool valid () const { return mp_subtree != invalid_ptr; }
-
-    void invalidate () { mp_subtree = invalid_ptr; }
-
-    Element& operator= (const Element& other) {
-
-        m_key = other.m_key;
-        m_payload = other.m_payload;
-        mp_subtree = other.mp_subtree;
-
-        return *this;
-    }
-
-    Element () { mp_subtree = null_ptr; }
-
-    void dump (); 
-
-}; 
-
  
 template<class key, class payload> void Element<key, payload>::dump () {
-    cout << "key=" << m_key << "sub=" << mp_subtree << ' ';
+    std::cout << "key=" << m_key << "sub=" << mp_subtree << ' ';
 } 
-
- 
-typedef Element<string, string> Elem;
-
-  
 
 int Node::minimum_keys () {
 
@@ -142,31 +79,33 @@ void Node::insert_zeroth_subtree (Node* subtree) {
 
  
 
-void Node::dump (){
+void Node::dump(){
 
 // write out the keys in this node and all its subtrees, along with
 // node adresses, for debugging purposes
 
-        if (this == m_root.get_root())
-
+    if (this == m_root.get_root()) {
             cout << "ROOT\n";
+    }
 
-        cout << "\nthis=" << this << endl;
+    //cout << "\nthis=" << this << endl;
 
-        cout << "parent=" << mp_parent << " count=" << m_count << endl;
+    //cout << "parent=" << mp_parent << " count=" << m_count << endl;
 
-        for (unsigned int i=0; i<m_count; i++) {
+    cout << "keys at node: ";
+    for (unsigned int i=0; i<m_count; i++) {
+	cout << m_vector[i].m_key << " ";
+    }
 
-            m_vector[i].dump();
+    cout << "\n";
+    
+    for (unsigned int i=0; i<m_count; i++) {
+	cout << "Back to parent " << m_vector[i].m_key << "\n";
+	if (m_vector[i].mp_subtree) {	    
+	    m_vector[i].mp_subtree->dump();
 	}
-
-        for (unsigned int i=0; i<m_count; i++) {
-
-            if (m_vector[i].mp_subtree)
-
-                m_vector[i].mp_subtree->dump();
-	}
-        cout << endl;
+    }
+    cout << endl;
 
 } 
 
@@ -968,128 +907,14 @@ Elem& Node::search (Elem& desired, Node*& last_visited_ptr) {
 
     }
 
- 
-
     return m_failure;
 
- 
+} 
 
-} //_____________________________________________________________________
-
- 
-
- 
 
 // initialize static data at file scope
 
 Elem Node::m_failure = Elem();
-
- 
- 
-
-int main(int argc, char** argv)
-{
-
-// test the b-tree. it inserts 100,000 elements,
-// then searches for each of them, then deletes them in reverse order (also tested in
-// forward order) and searches for all 100,000 elements after each deletion to
-// ensure that all remaining elements remain accessible.
-
- 
-
-    __int64 frequency, start, end, total;
-
-    QueryPerformanceFrequency( (LARGE_INTEGER *)&frequency );
-
- 
-
-    Node::m_failure.invalidate();
-
-    Node::m_failure.m_key = "";
-
-    Elem elem;
-
- 
-
-    RootTracker tracker;  // maintains a pointer to the current root of the b-tree
-
-    Node* root_ptr = new Node(tracker);
-
-    tracker.set_root (null_ptr, root_ptr);
-
-   
-
-    vector<string> search_vect;
-
-    // prepare the key strings
-
-    search_vect.resize (100000);
-
-    int search_count = 0;
-
-    for (int i=0; i<100000; i++) {
-
-        strstream stm;
-        stm << i;
-        stm >> search_vect[search_count++];
-
-    }
-
-    string s;
-
-    cout << "finished preparing key strings\n";
-
-    QueryPerformanceCounter ( (LARGE_INTEGER *)&start);
-
-    for (i=0; i<100000; i++) {
-        elem.m_key = search_vect[i];
-        elem.m_payload = search_vect[i]+" hi you";
-        tracker.get_root()->tree_insert(elem);
-
-    }
-
-    cout << "finished inserting elements\n";
-
-    Node * last;
-
-    for (i=0; i<100000; i++) {
-        Elem desired;
-        desired.m_key = search_vect[i];
-        Elem& result = tracker.get_root()->search (desired, last);
-
-    }
-
-    cout << "finished searching for elements\n";
-
-    for (i=99999; i>=0; i--) {
-
-        Elem target;
-        target.m_key = search_vect[i];
-        tracker.get_root()->delete_element (target);
-
-        Node * last;
-
-    }
-
- 
-    QueryPerformanceCounter ( (LARGE_INTEGER *)&end);
-
-    total = (end-start)/(frequency/1000);
-
-    cout << "total millisec for 100000 elements: " << (int)total << endl;
-
- 
-
-    cout << "after deletion" << endl;
-
-    tracker.get_root()->dump();
-
-    getchar();
-
-
-
-}
-
  
 
  
