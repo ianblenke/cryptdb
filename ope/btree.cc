@@ -61,7 +61,6 @@ inline void Node::set_debug() {
 
 } 
 
- 
 
 void Node::insert_zeroth_subtree (Node* subtree) {
 
@@ -109,28 +108,27 @@ void Node::dump(){
 
 } 
 
- 
 
-Node::Node (RootTracker& root_track)  : m_root(root_track) {
+Node::Node(RootTracker& root_track)  : m_root(root_track) {
 
 // limit the size of the vector to 4 kilobytes max and 200 entries max.
 
-        int num_elements = max_elements*sizeof(Elem)<=max_array_bytes ?
+    int num_elements = max_elements*sizeof(Elem)<=max_array_bytes ?	
+	max_elements : max_array_bytes/sizeof(Elem);
+    
+    if (num_elements < 6) { // in case key or payload is really huge
+	num_elements = 6;
+    }
+    
+    m_vector.resize(num_elements);
+    
+    m_count = 0;
+    
+    mp_parent = 0;
 
-                           max_elements : max_array_bytes/sizeof(Elem);
-
-        if (num_elements < 6)  // in case key or payload is really huge
-
-            num_elements = 6;
-
-        m_vector.resize (num_elements);
-
-        m_count = 0;
-
-        mp_parent = 0;
-
-        insert_zeroth_subtree (0);
-
+    merkle_hash = string(sha::hashsize, 0);
+    
+    insert_zeroth_subtree (0);
 } 
  
 
@@ -244,36 +242,30 @@ bool Node::vector_delete (Elem& target) {
         int mid = first+(last-first)/2;
 
         if (target>=m_vector[mid])
-
             first = mid;
-
         else
-
             last = mid;
-
     }
 
-    if (m_vector[first]==target)
-
+    if (m_vector[first]==target) {
         target_pos = first;
+    }
 
-    else if (m_vector[last]==target)
-
+    else if (m_vector[last]==target) {
         target_pos = last;
+    }
 
-    else
-
+    else {
         return false;
-
+    }
+    
     // the element's subtree, if it exists, is to be deleted or re-attached
     // in a different function.  not a concern here.  just shift all the
     // elements in positions greater than target_pos.
-    for (unsigned int i=target_pos; i< m_count; i++) {
-
+    for (unsigned int i= target_pos; i < m_count; i++) {
         m_vector[i] = m_vector[i+1];
     }
    
-
     m_count--;
 
     return true;
@@ -343,27 +335,22 @@ bool Node::vector_insert_for_split (Elem& element) {
 
  
 
+/* split_insert should only be called if node is full */
 bool Node::split_insert (Elem& element) {
 
-
-    // split_insert should only be called if node is full
-
-    if (m_count != m_vector.size()-1)
-
+    if (m_count != m_vector.size()-1) {
         throw "bad m_count in split_insert";
-
+    }
  
-
-    vector_insert_for_split (element);
+    vector_insert_for_split(element);
 
     unsigned int split_point = m_count/2;
 
-    if (2*split_point < m_count)  // perform the "ceiling function"
-
+    if (2*split_point < m_count) { // perform the "ceiling function"
         split_point++;
+    }
 
     // new node receives the rightmost half of elements in *this node
-
     Node* new_node = new Node(m_root);
 
     Elem upward_element = m_vector[split_point];
@@ -373,31 +360,30 @@ bool Node::split_insert (Elem& element) {
     upward_element.mp_subtree = new_node;
 
     // element that gets added to the parent of this node
-
-    for (int i=1; i< (int)(m_count-split_point); i++)
-
+    for (int i=1; i< (int)(m_count-split_point); i++) {
         new_node->vector_insert(m_vector[split_point+i]);
-
+    }
+    
     new_node->m_count = m_count-split_point;
 
     m_count = split_point;
 
     new_node->mp_parent = mp_parent;
 
- 
-
+    new_node->update_Merkle();
+    this->update_Merkle();
+    
     // now insert the new node into the parent, splitting it if necessary
 
-    if (mp_parent && mp_parent->vector_insert(upward_element))
-
-        return true;
+    if (mp_parent && mp_parent->vector_insert(upward_element)) {
+	mp_parent->update_Merkle();
+	return true;
+    }
 
     else if (mp_parent && mp_parent->split_insert(upward_element))
-
         return true;
 
     else if (!mp_parent) { // this node was the root
-
         Node* new_root = new Node(m_root);
 
         new_root->insert_zeroth_subtree(this);
@@ -420,20 +406,36 @@ bool Node::split_insert (Elem& element) {
 
 }//__________________________________________________________________
 
+void Node::update_Merkle() {
+    uint blocksize = sha::hashsize + node_key::keysize;
+
+    string hashes_concat = string(m_count * blocksize, 0);
+
+    for (uint i = 0 ; i < m_count ; i++) {
+	Elem e = m_vector[i];
+	hashes_concat.replace(i*blocksize, e.key.size(), e.key);
+	string hash = e->mp_subtree->merkle_hash;
+	hashes_concat.replace(i*blocksize + node_key.keysize, hash.size(), hash);
+    }
+
+    merkle_hash = sha::hash(hashes_concat);
+}
  
 
 bool Node::tree_insert (Elem& element) {
 
     Node* last_visited_ptr = this;
 
-    if (search(element, last_visited_ptr).valid())  // element already in tree
-
+    if (search(element, last_visited_ptr).valid()) { // element already in tree
         return false;
+    }
 
-    if (last_visited_ptr->vector_insert(element))
-
+    // insert the element in last_visited_ptr if this node is not full
+    if (last_visited_ptr->vector_insert(element)) {
         return true;
+    }
 
+    //last_visited_ptr node is full so we will need to split
     return last_visited_ptr->split_insert(element);
 
 } //__________________________________________________________________
@@ -443,12 +445,7 @@ bool Node::tree_insert (Elem& element) {
 bool Node::delete_element (Elem& target) {
 
 // target is just a package for the key value.  the reference does not
-
 // provide the address of the Elem instance to be deleted.
-
- 
-
- 
 
     // first find the node contain the Elem instance with the given key
 
@@ -458,43 +455,32 @@ bool Node::delete_element (Elem& target) {
 
     Elem& found = search (target, node);
 
-    if (!found.valid())
-
+    if (!found.valid()) {
         return false;
-
+    }
  
-
-    if (node->is_leaf() && node->key_count() > node->minimum_keys())
-
+    if (node->is_leaf() && node->key_count() > node->minimum_keys()) {
         return node->vector_delete (target);
-
+    }
     else if (node->is_leaf()) {
-
         node->vector_delete (target);
 
         // loop invariant: if _node_ is not null_ptr, it points to a node
-
         // that has lost an element and needs to import one from a sibling
-
         // or merge with a sibling and import one from its parent.
-
         // after an iteration of the loop, _node_ may become null or
-
         // it may point to its parent if an element was imported from the
-
         // parent and this caused the parent to fall below the minimum
-
         // element count.
 
         while (node) {
 
             // NOTE: the "this" pointer may no longer be valid after the first
-
             // iteration of this loop!!!
 
-            if (node==node->find_root() && node->is_leaf())
-
+            if (node==node->find_root() && node->is_leaf()) {
                 break;
+	    }
 
             if (node==node->find_root() && !node->is_leaf()) // sanity check
 
@@ -515,16 +501,14 @@ bool Node::delete_element (Elem& target) {
                 Node* left = node->left_sibling(parent_index_this);
 
                 if (left && left->key_count() > left->minimum_keys())
-
                     node = node->rotate_from_left(parent_index_this);
 
-                else if (right)
-
+                else if (right) {
                     node = node->merge_right(parent_index_this);
-
-                else if (left)
-
+		}
+                else if (left) {
                     node = node->merge_left(parent_index_this);
+		}
 
             }
 
@@ -836,15 +820,12 @@ Elem& Node::smallest_key_in_subtree () {
 Elem& Node::search (Elem& desired, Node*& last_visited_ptr) {
 
     // the zeroth element of the vector is a special case (no key value or
-
     // payload, just a subtree).  the seach starts at the *this node, not
-
     // at the root of the b-tree.
 
     Node* current = this;
 
     if (!key_count())
-
         current = 0;
 
     while (current) {
