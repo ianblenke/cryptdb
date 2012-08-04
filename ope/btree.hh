@@ -4,8 +4,8 @@
 #include <util/util.hh>
 #include <crypto/sha.hh>
 
-template<class key, class payload> class Element;
-typedef Element<std::string, std::string> Elem;
+template<class payload> class Element;
+typedef Element<std::string> Elem;
 
 class RootTracker;
 
@@ -56,7 +56,7 @@ protected:
     bool merge_into_root ();
 
     int minimum_keys ();
-
+      
 #ifdef _DEBUG
 
     Elem debug[8];
@@ -71,16 +71,22 @@ public:
 
     bool delete_element (Elem& target);
 
-    int delete_all_subtrees ();
+    //cleaning up
+    int delete_all_subtrees();
 
     Node* find_root();
 
     // to return a reference when a search fails.
     static Elem m_failure;
 
-    string merkle_hash;
+    std::string merkle_hash;
 
+    //recomputes Merkle hash of the current node
     void update_Merkle();
+
+    //recomputes Merkle hash of all the nodes from this up to the root
+    void update_Merkle_upward();
+  
     
     // the root of the tree may change.  this attribute keeps it accessible.
     RootTracker& m_root;
@@ -105,21 +111,7 @@ const unsigned int max_elements = 200;  // max elements in a node
 // size limit for the array in a vector object.  best performance was
 // at 800 bytes.
 const unsigned int max_array_bytes = 800; 
-
-class node_key {
-public:
-    // det enc of a node
-    std::string key;
-
-    bool operator>   (Element& other) const { return key.compare(other.key) > 0; }
-    bool operator<   (Element& other) const { return key.compare(other.key) < 0; }
-    bool operator>=  (Element& other) const { return key.compare(other.key) >= 0; }
-    bool operator<=  (Element& other) const { return key.compare(other.key) <= 0; }
-    bool operator==  (Element& other) const { return key == other.key; }
-
-    static const int keysize = 16;
-}
-
+static const int nodekeysize = 16;
 	
 /*
  * contains a key value, a payload, and a pointer toward the subtree
@@ -129,16 +121,17 @@ public:
 template<class payload> class Element {
 
 public:
-    node_key m_key;
+
+    std::string m_key;
     payload m_payload;
     Node* mp_subtree;
 
 public:
-    bool operator>   (Element& other) const { return m_key >  other.m_key; }
-    bool operator<   (Element& other) const { return m_key <  other.m_key; }
-    bool operator>=  (Element& other) const { return m_key >= other.m_key; }
-    bool operator<=  (Element& other) const { return m_key <= other.m_key; }
-    bool operator==  (Element& other) const { return m_key == other.m_key; }
+    bool operator>   (Element& other) const { return m_key.compare(other.m_key) > 0; }
+    bool operator<   (Element& other) const { return m_key.compare(other.m_key) < 0; }
+    bool operator>=  (Element& other) const { return m_key.compare(other.m_key) >= 0; }
+    bool operator<=  (Element& other) const { return m_key.compare(other.m_key) <= 0; }
+    bool operator==  (Element& other) const { return m_key.compare(other.m_key) == 0; }
 
     bool valid () const { return mp_subtree != invalid_ptr; }
 

@@ -11,7 +11,7 @@ using namespace std;
 
 
  
-template<class key, class payload> void Element<key, payload>::dump () {
+template<class payload> void Element<payload>::dump () {
     std::cout << "key=" << m_key << "sub=" << mp_subtree << ' ';
 } 
 
@@ -126,10 +126,11 @@ Node::Node(RootTracker& root_track)  : m_root(root_track) {
     
     mp_parent = 0;
 
-    merkle_hash = string(sha::hashsize, 0);
+    merkle_hash = string(sha256::hashsize, (char)'\0');
     
     insert_zeroth_subtree (0);
-} 
+}
+
  
 
 Node* Node::find_root () {
@@ -403,22 +404,30 @@ bool Node::split_insert (Elem& element) {
 }
 
 void Node::update_Merkle() {
-    uint blocksize = sha::hashsize + node_key::keysize;
+    uint blocksize = sha256::hashsize + nodekeysize;
 
     string hashes_concat = string(m_count * blocksize, 0);
 
     for (uint i = 0 ; i < m_count ; i++) {
 	Elem e = m_vector[i];
-	hashes_concat.replace(i*blocksize, e.key.size(), e.key);
-	string hash = e->mp_subtree->merkle_hash;
-	hashes_concat.replace(i*blocksize + node_key.keysize, hash.size(), hash);
+	hashes_concat.replace(i*blocksize, e.m_key.size(), e.m_key);
+	string hash = e.mp_subtree->merkle_hash;
+	hashes_concat.replace(i*blocksize + nodekeysize, hash.size(), hash);
     }
 
-    merkle_hash = sha::hash(hashes_concat);
+    merkle_hash = sha256::hash(hashes_concat);
+}
+
+void Node::update_Merkle_upward() {
+    update_Merkle();
+    
+    if (this != find_root()) {
+	mp_parent->update_Merkle_upward();
+    }
 }
  
 
-bool Node::tree_insert (Elem& element) {
+bool Node::tree_insert(Elem& element) {
 
     Node* last_visited_ptr = this;
 
@@ -457,7 +466,7 @@ bool Node::delete_element (Elem& target) {
  
     if (node->is_leaf() && node->key_count() > node->minimum_keys()) {
         bool r = node->vector_delete(target);
-	node->update_Merkle_upwards();
+	node->update_Merkle_upward();
 	return r;
     }
     else if (node->is_leaf()) {
@@ -554,7 +563,7 @@ Node* Node::rotate_from_right(int parent_index_this) {
 
     (*mp_parent)[parent_index_this+1].mp_subtree = right_sib;
 
-    vector_insert (underflow_filler);
+    vector_insert(underflow_filler);
 
     right_sib->vector_delete(0);
 
@@ -608,7 +617,7 @@ Node* Node::rotate_from_left(int parent_index_this) {
 
     // need to update Merkle hash of left sibling and this and upward to the
     // root
-    right_sib->update_Merkle();
+    left_sib->update_Merkle();
     this->update_Merkle_upward();
 
     return null_ptr;
