@@ -1,5 +1,4 @@
 #include "nwaytree.hh"
-#include <boost/unordered_map.hpp>
 #include <vector>
 #include <algorithm>
 #include <exception>

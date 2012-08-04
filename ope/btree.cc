@@ -403,7 +403,8 @@ bool Node::split_insert (Elem& element) {
     return true;
 }
 
-void Node::update_Merkle() {
+string
+Node::Merkle_hash(){
     uint blocksize = sha256::hashsize + nodekeysize;
 
     string hashes_concat = string(m_count * blocksize, 0);
@@ -415,7 +416,12 @@ void Node::update_Merkle() {
 	hashes_concat.replace(i*blocksize + nodekeysize, hash.size(), hash);
     }
 
-    merkle_hash = sha256::hash(hashes_concat);
+    return sha256::hash(hashes_concat);
+ 
+}
+
+void Node::update_Merkle() {
+    merkle_hash = Merkle_hash();
 }
 
 void Node::update_Merkle_upward() {
@@ -871,44 +877,31 @@ Elem& Node::search (Elem& desired, Node*& last_visited_ptr) {
 
             current = current->m_vector[current->m_count-1].mp_subtree;
 
- 
-
         else {
 
             // binary search of the node
-
             int first = 1;
 
             int last = current->m_count-1;
 
             while (last-first > 1) {
-
                 int mid = first+(last-first)/2;
 
                 if (desired>=current->m_vector[mid])
-
                     first = mid;
-
                 else
-
                     last = mid;
-
             }
 
             if (current->m_vector[first]==desired)
-
                 return current->m_vector[first];
 
             if (current->m_vector[last]==desired)
-
                 return current->m_vector[last];
 
             else if (current->m_vector[last]>desired)
-
                 current = current->m_vector[first].mp_subtree;
-
             else
-
                 current = current->m_vector[last].mp_subtree;
 
         }
@@ -924,7 +917,41 @@ Elem& Node::search (Elem& desired, Node*& last_visited_ptr) {
 
 Elem Node::m_failure = Elem();
  
+void Node::check_Merkle_tree() {
+    string hash = Merkle_hash();
+    assert_s(hash == merkle_hash, "merkle hash does not verify");
+    for (uint i = 0; i < m_count; i++) {
+	if (m_vector[i].mp_subtree) {
+	    m_vector[i].mp_subtree->check_Merkle_tree();
+	}
+    }
+}
 
- 
+void Node::max_height_help(uint height, uint & max_height) {
+    if (height > max_height) {
+	max_height = height;
+    }
+    for (uint i = 0; i < m_count; i++) {
+	if (m_vector[i].mp_subtree) {
+	    max_height_help(height + 1, max_height);
+	}
+    }
+}
 
- 
+uint Node::max_height() {
+    uint max_height = 0;
+    
+    max_height_help(0, max_height);
+
+    return max_height;
+}
+
+void
+Node::in_order_traverse(list<string> & result) {
+    for (unsigned int i=0; i<m_count; i++) {
+	if (m_vector[i].mp_subtree) {	    
+	    m_vector[i].mp_subtree->in_order_traverse(result);
+	}
+	result.push_back(m_vector[i].m_key);
+    }
+}

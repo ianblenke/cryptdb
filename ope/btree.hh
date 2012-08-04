@@ -56,6 +56,10 @@ protected:
     bool merge_into_root ();
 
     int minimum_keys ();
+
+    std::string Merkle_hash();
+    
+    void max_height_help(uint height, uint & max_height);
       
 #ifdef _DEBUG
 
@@ -87,6 +91,10 @@ public:
     //recomputes Merkle hash of all the nodes from this up to the root
     void update_Merkle_upward();
   
+    // for testing
+    void check_Merkle_tree();
+
+    uint max_height();
     
     // the root of the tree may change.  this attribute keeps it accessible.
     RootTracker& m_root;
@@ -97,6 +105,7 @@ public:
     Node (RootTracker& root_track);
 
     void dump();
+    void in_order_traverse(std::list<std::string> & res);
 
 }; 
 
