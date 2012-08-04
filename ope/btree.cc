@@ -12,7 +12,12 @@ using namespace std;
 
  
 template<class payload> void Element<payload>::dump () {
-    std::cout << "key=" << m_key << "sub=" << mp_subtree << ' ';
+    std::cout << " (key = " << m_key << " mhash = ";
+    if (has_subtree()) {
+	cout << mp_subtree->merkle_hash << ") "; 
+    } else {
+	cout << "NO SUBTREE) ";
+    }
 } 
 
 int Node::minimum_keys () {
@@ -38,9 +43,7 @@ inline void Node::set_debug() {
 #ifdef _DEBUG
 
 // the contents of an STL vector are not visible in the visual C++ debugger,
-
 // so this function copies up to eight elements from the STL vector into
-
 // a simple C++ array.
 
     for (int i=0; i<m_count && i<8; i++) {
@@ -74,33 +77,37 @@ void Node::insert_zeroth_subtree (Node* subtree) {
 
         subtree->mp_parent = this;
 
-} 
-
+}
  
 
-void Node::dump(){
+void Node::dump(bool recursive){
 
 // write out the keys in this node and all its subtrees, along with
 // node adresses, for debugging purposes
 
+    cout << "[";
     if (this == m_root.get_root()) {
-            cout << "ROOT\n";
+            cout << "ROOT ";
     }
 
     //cout << "\nthis=" << this << endl;
 
     //cout << "parent=" << mp_parent << " count=" << m_count << endl;
 
+    cout << "mhash = " << merkle_hash << " ";
     cout << "keys at node: ";
     for (unsigned int i=0; i<m_count; i++) {
-	cout << m_vector[i].m_key << " ";
+	m_vector[i].dump();
     }
 
-    cout << "\n";
+    cout << "] \n";
+
+    if (!recursive) {
+	return;
+    }
     
     for (unsigned int i=0; i<m_count; i++) {
-	cout << "Back to parent " << m_vector[i].m_key << "\n";
-	if (m_vector[i].mp_subtree) {	    
+	if (m_vector[i].has_subtree()) {	    
 	    m_vector[i].mp_subtree->dump();
 	}
     }
@@ -126,7 +133,7 @@ Node::Node(RootTracker& root_track)  : m_root(root_track) {
     
     mp_parent = 0;
 
-    merkle_hash = string(sha256::hashsize, (char)'\0');
+    merkle_hash = "0"; 
     
     insert_zeroth_subtree (0);
 }
@@ -412,7 +419,14 @@ Node::Merkle_hash(){
     for (uint i = 0 ; i < m_count ; i++) {
 	Elem e = m_vector[i];
 	hashes_concat.replace(i*blocksize, e.m_key.size(), e.m_key);
-	string hash = e.mp_subtree->merkle_hash;
+
+	string hash = "0";
+	if (e.has_subtree()) {
+	    cerr << "the merkle hash we want to assign is ";
+	    cerr << e.mp_subtree->merkle_hash << "\n";
+	    cerr << "has size " << e.mp_subtree->merkle_hash.size() << "\n";
+	    hash = e.mp_subtree->merkle_hash;
+	}
 	hashes_concat.replace(i*blocksize + nodekeysize, hash.size(), hash);
     }
 
@@ -443,6 +457,7 @@ bool Node::tree_insert(Elem& element) {
 
     // insert the element in last_visited_ptr if this node is not full
     if (last_visited_ptr->vector_insert(element)) {
+	last_visited_ptr->update_Merkle_upward();
         return true;
     }
 
@@ -919,12 +934,33 @@ Elem Node::m_failure = Elem();
  
 void Node::check_Merkle_tree() {
     string hash = Merkle_hash();
-    assert_s(hash == merkle_hash, "merkle hash does not verify");
+    
+    if (hash != merkle_hash) {
+	cerr << "Merkle hash does not match at node ";dump(false); cerr << "\n";
+	cerr << "here is the subtree \n";
+	dump();
+	cerr << "here is the recomputed Merkle subtree ";
+	recompute_Merkle_subtree();
+	dump();
+        assert_s(false, "Merkle hash not verified");
+    }
+    
     for (uint i = 0; i < m_count; i++) {
-	if (m_vector[i].mp_subtree) {
+	if (m_vector[i].has_subtree()) {
 	    m_vector[i].mp_subtree->check_Merkle_tree();
 	}
     }
+    
+}
+
+void Node::recompute_Merkle_subtree() {
+    // recompute for children first
+    for (uint i = 0; i < m_count; i++) {
+	if (m_vector[i].has_subtree()) {
+	    m_vector[i].mp_subtree->check_Merkle_tree();
+	}
+    }
+    merkle_hash = Merkle_hash();
 }
 
 void Node::max_height_help(uint height, uint & max_height) {
@@ -932,7 +968,7 @@ void Node::max_height_help(uint height, uint & max_height) {
 	max_height = height;
     }
     for (uint i = 0; i < m_count; i++) {
-	if (m_vector[i].mp_subtree) {
+	if (m_vector[i].has_subtree()) {
 	    max_height_help(height + 1, max_height);
 	}
     }
@@ -949,7 +985,7 @@ uint Node::max_height() {
 void
 Node::in_order_traverse(list<string> & result) {
     for (unsigned int i=0; i<m_count; i++) {
-	if (m_vector[i].mp_subtree) {	    
+	if (m_vector[i].has_subtree()) {	    
 	    m_vector[i].mp_subtree->in_order_traverse(result);
 	}
 	result.push_back(m_vector[i].m_key);

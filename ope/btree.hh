@@ -93,7 +93,7 @@ public:
   
     // for testing
     void check_Merkle_tree();
-
+    void recompute_Merkle_subtree();
     uint max_height();
     
     // the root of the tree may change.  this attribute keeps it accessible.
@@ -104,7 +104,7 @@ public:
 
     Node (RootTracker& root_track);
 
-    void dump();
+    void dump(bool recursive = true);
     void in_order_traverse(std::list<std::string> & res);
 
 }; 
@@ -144,6 +144,8 @@ public:
 
     bool valid () const { return mp_subtree != invalid_ptr; }
 
+    bool has_subtree() const {return valid() && (mp_subtree != null_ptr) && mp_subtree; }
+
     void invalidate () { mp_subtree = invalid_ptr; }
 
     Element& operator= (const Element& other) {
@@ -157,7 +159,7 @@ public:
 
     Element () { mp_subtree = null_ptr; }
 
-    void dump (); 
+    void dump(); 
 
 }; 
 

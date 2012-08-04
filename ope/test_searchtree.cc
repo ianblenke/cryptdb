@@ -23,29 +23,9 @@ test_help(vector<uint64_t> & vals, uint no_test_vals, uint test_freq) {
 }
 */
 
-
-static void
-check_is_ordered(list<string> & vals, uint size) {
-    assert_s(vals.size() == size, "no of values in tree is not no of values inserted");
-
-    string prev;
-    bool first = true;
-    for (auto it : vals) {
-	if (!first) {
-	    assert_s(it >= prev, "values in tree are not ordered properly");
-	}
-	first = false;
-	prev = it;
-    }
-}
-
-static void
-check_good_height(uint maxheight, uint no_elems, uint breadth) {
-    assert_s(maxheight <= (log(no_elems*1.0)/log(breadth*1.0)) + 1, "tree is too high");
-}
-
+template<class T>
 static bool
-contains(vector<string> & vals, string test_val) {
+mcontains(const T & vals, const string & test_val) {
     for (auto it : vals) {
 	if (it == test_val) {
 	    return true;
@@ -55,13 +35,44 @@ contains(vector<string> & vals, string test_val) {
     return false;
 }
 
+
+static void
+check_order(list<string> & vals) {
+    string prev;
+    bool first = true;
+    for (auto it : vals) {
+	if (!first) {
+	    assert_s(it >= prev, "values in tree are not ordered properly");
+	}
+	first = false;
+	prev = it;
+    }   
+}
+
+static void
+check_order_and_values(vector<string> & input_vals,
+		       list<string> & tree_vals) {
+
+    for (string input_val: input_vals) {
+	assert_s(mcontains(tree_vals, input_val), "val " + input_val + " not found in tree");
+    }
+
+    // check tree vals are in order
+    check_order(tree_vals);
+}
+
+static void
+check_good_height(uint maxheight, uint no_elems, uint breadth) {
+    assert_s(maxheight <= (log(no_elems*1.0)/log(breadth*1.0)) + 1, "tree is too high");
+}
+
 static void
 test_help(vector<string> & vals, uint no_elems) {
     
     uint no_inserted_checks = no_elems/10;
     uint no_not_in_tree = no_inserted_checks;
     uint no_deletes = no_inserted_checks;
-    uint freq_Merkle_check = no_inserted_checks / 3;
+    uint freq_Merkle_check = no_inserted_checks / 3 + 1;
 
     Node::m_failure.invalidate();
 
@@ -90,7 +101,7 @@ test_help(vector<string> & vals, uint no_elems) {
     //check tree structure is correct
     list<string> treeorder;
     tracker.get_root()->in_order_traverse(treeorder); 
-    check_is_ordered(treeorder, vals.size());
+    check_order_and_values(vals, treeorder);
     check_good_height(tracker.get_root()->max_height(), no_elems, max_elements);
 
     //check if no_inserted random elements are indeed in the tree
@@ -111,7 +122,7 @@ test_help(vector<string> & vals, uint no_elems) {
 	    stringstream s;
 	    s << rand();
 	    test_val =  s.str();
-	    if (!contains(vals, test_val)) {
+	    if (!mcontains(vals, test_val)) {
 		break;
 	    }
 	    counter--;
@@ -153,7 +164,7 @@ test_help(vector<string> & vals, uint no_elems) {
     //check tree structure is correct after deletion
     treeorder.clear();
     tracker.get_root()->in_order_traverse(treeorder); 
-    check_is_ordered(treeorder, vals.size());
+    check_order(treeorder);
     check_good_height(tracker.get_root()->max_height(), no_elems, max_elements);
 
 
@@ -169,7 +180,7 @@ test_help(vector<string> & vals, uint no_elems) {
 static void
 testBMerkleTree() {
     
-   uint no_elems = 200;
+   uint no_elems = 20;
 
    vector<string> vals;
    srand( time(NULL));
