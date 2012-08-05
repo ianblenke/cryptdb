@@ -120,7 +120,7 @@ const unsigned int max_elements = 200;  // max elements in a node
 // size limit for the array in a vector object.  best performance was
 // at 800 bytes.
 const unsigned int max_array_bytes = 800; 
-static const int nodekeysize = 16;
+static const uint nodekeysize = 16;
 	
 /*
  * contains a key value, a payload, and a pointer toward the subtree

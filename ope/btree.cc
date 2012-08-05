@@ -12,12 +12,17 @@ using namespace std;
 
  
 template<class payload> void Element<payload>::dump () {
-    std::cout << " (key = " << m_key << " mhash = ";
+    std::cout << " (key = " <<  m_key << "\n";
+/*
+	      <<
+
+	" mhash = ";
     if (has_subtree()) {
 	cout << mp_subtree->merkle_hash << ") "; 
     } else {
 	cout << "NO SUBTREE) ";
     }
+*/
 } 
 
 int Node::minimum_keys () {
@@ -94,8 +99,8 @@ void Node::dump(bool recursive){
 
     //cout << "parent=" << mp_parent << " count=" << m_count << endl;
 
-    cout << "mhash = " << merkle_hash << " ";
-    cout << "keys at node: ";
+    cout << "m_count " << m_count << " mhash = " << merkle_hash << " ";
+    cout << "keys at node: \n";
     for (unsigned int i=0; i<m_count; i++) {
 	m_vector[i].dump();
     }
@@ -205,22 +210,16 @@ bool Node::vector_insert (Elem& element) {
 
 
     if (m_count >= m_vector.size()-1) // leave an extra slot for split_insert
-
         return false;
 
     int i = m_count;
 
-  
     while (i>0 && m_vector[i-1]>element) {
-
         m_vector[i] = m_vector[i-1];
-
         i--;
-
     }
 
     if (element.mp_subtree)
-
         element.mp_subtree->mp_parent = this;
 
     m_vector[i] = element;
@@ -239,14 +238,11 @@ bool Node::vector_delete (Elem& target) {
 // if the target is not found, do not look in subtrees, just return false.
 
     int target_pos = -1;
-
     int first = 1;
-
     int last = m_count-1;
 
     // perform binary search
     while (last-first > 1) {
-
         int mid = first+(last-first)/2;
 
         if (target>=m_vector[mid])
@@ -378,13 +374,12 @@ bool Node::split_insert (Elem& element) {
 
     new_node->mp_parent = mp_parent;
 
-    new_node->update_Merkle();
     this->update_Merkle();
+    new_node->update_Merkle();
     
-    // now insert the new node into the parent, splitting it if necessary
-
+    // now insert the upward_element into the parent, splitting it if necessary
     if (mp_parent && mp_parent->vector_insert(upward_element)) {
-	mp_parent->update_Merkle();
+	mp_parent->update_Merkle_upward();
 	return true;
     }
 
@@ -406,30 +401,33 @@ bool Node::split_insert (Elem& element) {
 
         new_root->mp_parent = 0;
 
+	//update Merkle hash of the root
+	new_root->update_Merkle();
+
     }
     return true;
 }
 
 string
 Node::Merkle_hash(){
-    uint blocksize = sha256::hashsize + nodekeysize;
+    uint blocksize = sha256::hashsize + nodekeysize ;
 
     string hashes_concat = string(m_count * blocksize, 0);
 
     for (uint i = 0 ; i < m_count ; i++) {
 	Elem e = m_vector[i];
-	hashes_concat.replace(i*blocksize, e.m_key.size(), e.m_key);
+	assert_s(e.m_key.size() <= nodekeysize, "size of key is larger than max allowed");
+	string mkey = e.m_key;
+	hashes_concat.replace(i*blocksize, mkey.size(), mkey);
 
 	string hash = "0";
 	if (e.has_subtree()) {
-	    cerr << "the merkle hash we want to assign is ";
-	    cerr << e.mp_subtree->merkle_hash << "\n";
-	    cerr << "has size " << e.mp_subtree->merkle_hash.size() << "\n";
 	    hash = e.mp_subtree->merkle_hash;
 	}
+	assert_s(hash.size() <= sha256::hashsize, "size of hash is larger than sha256::hashsize");
 	hashes_concat.replace(i*blocksize + nodekeysize, hash.size(), hash);
     }
-
+    
     return sha256::hash(hashes_concat);
  
 }
@@ -502,7 +500,7 @@ bool Node::delete_element (Elem& target) {
         // element count.
 
         while (node) {
-
+	    node->update_Merkle();
             // NOTE: the "this" pointer may no longer be valid after the first
             // iteration of this loop!!!
 
@@ -511,51 +509,41 @@ bool Node::delete_element (Elem& target) {
 	    }
 
             if (node==node->find_root() && !node->is_leaf()) // sanity check
-
                 throw "node should not be root in delete_element loop";
 
-            // is an extra element available from the right sibling (if any)
-
-            Node* right = node->right_sibling(parent_index_this);
-
+	    Node* right = node->right_sibling(parent_index_this);
+	    Node* left = node->left_sibling(parent_index_this);
+   
+            // is an extra element available from the right sibling (if any)         
             if (right && right->key_count() > right->minimum_keys()) {
-
-                node = node->rotate_from_right(parent_index_this);
-
+		node = node->rotate_from_right(parent_index_this);
+	    }
+            else if (left && left->key_count() > left->minimum_keys()) {
+		// check if an extra element is available from the left sibling (if any)
+		node = node->rotate_from_left(parent_index_this);
+	    }
+	    else if (right) {
+		node = node->merge_right(parent_index_this);
+	    }
+	    else if (left) {
+		node = node->merge_left(parent_index_this);
 	    }
 	    
-            else {
-
-                // is an extra element available from the left sibling (if any)
-
-                Node* left = node->left_sibling(parent_index_this);
-
-                if (left && left->key_count() > left->minimum_keys()) {
-                    node = node->rotate_from_left(parent_index_this);
-		}
-                else if (right) {
-                    node = node->merge_right(parent_index_this);
-		}
-                else if (left) {
-                    node = node->merge_left(parent_index_this);
-		}
-
-            }
-
+           
         }
 
     }
 
     else { // node is not leaf
 
-        Elem& smallest_in_subtree = found.mp_subtree->smallest_key_in_subtree();
+	Elem& smallest_in_subtree = found.mp_subtree->smallest_key_in_subtree();
 
         found.m_key = smallest_in_subtree.m_key;
 
         found.m_payload = smallest_in_subtree.m_payload;
-
+	
         found.mp_subtree->delete_element (smallest_in_subtree);
-
+	
     }
 
     return true;
@@ -567,7 +555,6 @@ bool Node::delete_element (Elem& target) {
 Node* Node::rotate_from_right(int parent_index_this) {
 
     // new element to be added to this node
-
     Elem underflow_filler = (*mp_parent)[parent_index_this+1];
 
     // right sibling of this node
@@ -648,14 +635,10 @@ Node* Node::rotate_from_left(int parent_index_this) {
  
 
 Node* Node::merge_right (int parent_index_this) {
-
 // copy elements from the right sibling into this node, along with the
-
 // element in the parent node vector that has the right sibling as it subtree.
-
 // the right sibling and that parent element are then deleted
 
- 
 
     Elem parent_elem = (*mp_parent)[parent_index_this+1];
 
@@ -666,11 +649,10 @@ Node* Node::merge_right (int parent_index_this) {
     vector_insert (parent_elem);
 
     for (unsigned int i=1; i<right_sib->m_count; i++) {
-
         vector_insert ((*right_sib)[i]);
     }
 
-    mp_parent->vector_delete (parent_index_this+1);
+    mp_parent->vector_delete(parent_index_this+1);
 
     delete right_sib;
 
@@ -681,20 +663,20 @@ Node* Node::merge_right (int parent_index_this) {
         m_root.set_root(m_root.get_root(), this);
 
         delete mp_parent;
-
         mp_parent = 0;
 
         return null_ptr;
-
     }
 
-    else if (mp_parent==find_root() && mp_parent->key_count())
-
+    else if (mp_parent==find_root() && mp_parent->key_count()) {
+	mp_parent->update_Merkle_upward();
         return null_ptr;
+    }
 
-    if (mp_parent&& mp_parent->key_count() >= mp_parent->minimum_keys())
-
+    if (mp_parent && (mp_parent->key_count() >= mp_parent->minimum_keys())) {
+	mp_parent->update_Merkle_upward();
         return null_ptr; // no need for parent to import an element
+    }
 
     return mp_parent; // parent must import an element
 
@@ -705,12 +687,8 @@ Node* Node::merge_right (int parent_index_this) {
 Node* Node::merge_left (int parent_index_this) {
 
 // copy all elements from this node into the left sibling, along with the
-
 // element in the parent node vector that has this node as its subtree.
-
 // this node and its parent element are then deleted.
-
- 
 
     Elem parent_elem = (*mp_parent)[parent_index_this];
 
@@ -718,13 +696,13 @@ Node* Node::merge_left (int parent_index_this) {
 
     Node* left_sib = (*mp_parent)[parent_index_this-1].mp_subtree;
 
-    left_sib->vector_insert (parent_elem);
+    left_sib->vector_insert(parent_elem);
 
-    for (unsigned int i=1; i<m_count; i++)
-
-        left_sib->vector_insert (m_vector[i]);
-
-    mp_parent->vector_delete (parent_index_this);
+    for (unsigned int i=1; i<m_count; i++) {
+        left_sib->vector_insert(m_vector[i]);
+    }
+    
+    mp_parent->vector_delete(parent_index_this);
 
     Node* parent_node = mp_parent;  // copy before deleting this node
 
@@ -737,28 +715,28 @@ Node* Node::merge_left (int parent_index_this) {
         delete mp_parent;
 
         left_sib->mp_parent = null_ptr;
-
 	
         delete this;
 
         return null_ptr;
 
-    }
-
+    } 
     else if (mp_parent==find_root() && mp_parent->key_count()) {
 
         delete this;
-
+	mp_parent->update_Merkle_upward();
         return null_ptr;
 
     }
 
+    //mp_parent not root
     delete this;
 
-    if (parent_node->key_count() >= parent_node->minimum_keys())
-
+    if (parent_node->key_count() >= parent_node->minimum_keys()) {
+	parent_node->update_Merkle_upward();
         return null_ptr; // no need for parent to import an element
-
+    }
+    
     return parent_node; // parent must import an element
 
  
@@ -933,30 +911,33 @@ Elem& Node::search (Elem& desired, Node*& last_visited_ptr) {
 Elem Node::m_failure = Elem();
  
 void Node::check_Merkle_tree() {
-    string hash = Merkle_hash();
     
-    if (hash != merkle_hash) {
-	cerr << "Merkle hash does not match at node ";dump(false); cerr << "\n";
-	cerr << "here is the subtree \n";
-	dump();
-	cerr << "here is the recomputed Merkle subtree ";
-	recompute_Merkle_subtree();
-	dump();
-        assert_s(false, "Merkle hash not verified");
-    }
-    
-    for (uint i = 0; i < m_count; i++) {
+   for (uint i = 0; i < m_count; i++) {
 	if (m_vector[i].has_subtree()) {
 	    m_vector[i].mp_subtree->check_Merkle_tree();
 	}
     }
-    
+ 
+    string hash = Merkle_hash();
+   
+    if (hash != merkle_hash) {
+	cerr << "Merkle hash does not match at node "; dump(false); cerr << "\n";
+//	cerr << "here is the subtree \n";
+//	dump();
+	cerr << "here is the recomputed Merkle node \n";
+	recompute_Merkle_subtree();
+	dump(false);
+	
+        assert_s(false, "Merkle hash not verified");
+    }
+        
 }
 
 void Node::recompute_Merkle_subtree() {
     // recompute for children first
     for (uint i = 0; i < m_count; i++) {
 	if (m_vector[i].has_subtree()) {
+	    cerr << "recompute merkle: has subtree\n";
 	    m_vector[i].mp_subtree->check_Merkle_tree();
 	}
     }
@@ -968,8 +949,9 @@ void Node::max_height_help(uint height, uint & max_height) {
 	max_height = height;
     }
     for (uint i = 0; i < m_count; i++) {
-	if (m_vector[i].has_subtree()) {
-	    max_height_help(height + 1, max_height);
+	Elem e = m_vector[i];
+	if (e.has_subtree()) {
+	    e.mp_subtree->max_height_help(height + 1, max_height);
 	}
     }
 }
@@ -985,9 +967,11 @@ uint Node::max_height() {
 void
 Node::in_order_traverse(list<string> & result) {
     for (unsigned int i=0; i<m_count; i++) {
+	if (m_vector[i].m_key != "") {
+	    result.push_back(m_vector[i].m_key);
+	}
 	if (m_vector[i].has_subtree()) {	    
 	    m_vector[i].mp_subtree->in_order_traverse(result);
 	}
-	result.push_back(m_vector[i].m_key);
     }
 }
