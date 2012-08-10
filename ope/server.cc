@@ -343,6 +343,194 @@ tree<EncT>::findScapegoat( vector<tree_node<EncT>* > path ){
 }
 
 template<class EncT>
+struct successor{
+	uint64_t succ_v;
+	uint64_t succ_nbits;
+	tree_node<EncT>* succ_node;
+};
+
+template<class EncT>
+successor<EncT>
+tree<EncT>::find_succ(tree_node<EncT>* node, uint64_t v, uint64_t nbits){
+	if(node->key_in_map((EncT) NULL)){
+		return find_succ(node->right[(EncT) NULL], (v<<num_bits), nbits+num_bits);
+	}else{
+		successor<EncT> succ;
+		succ.succ_v = v;
+		succ.succ_nbits = nbits;
+		succ.succ_node = node;
+		return succ;
+	}
+}
+
+template<class EncT>
+struct predecessor{
+	uint64_t pred_v;
+	uint64_t pred_nbits;
+	uint64_t pred_index;
+	tree_node<EncT>* pred_node;
+};
+
+template<class EncT>
+predecessor<EncT>
+tree<EncT>::find_pred(tree_node<EncT>* node, uint64_t v, uint64_t nbits){
+	int max_index = node->keys.size()-1;
+	if(node->key_in_map(node->keys[max_index])){
+		if(max_index!=N-1) cout<<"Error in pred, max_index not N-1"<<endl;
+		return find_pred(node->right[node->keys[max_index]], (v<<num_bits | (max_index+1)), nbits+num_bits);
+	}else{
+		predecessor<EncT> pred;
+		pred.pred_v = v;
+		pred.pred_nbits = nbits;
+		pred.pred_index = max_index;
+		pred.pred_node = node;
+		return pred;
+	}
+}
+
+//v should just be path to node, not including index. swap indicates whether val being deleted was swapped, should be false for top-lvl call
+template<class EncT>
+void
+tree<EncT>::tree_delete(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint64_t index, uint64_t pathlen, bool swap, bool same_lvl){
+
+	if(nbits==0){
+		EncT del_val = node->keys[index];
+		if(node->right.empty()){
+			//Value is being deleted from a leaf node
+			typename vector<EncT>::iterator it;
+			node->keys.erase(it+index);
+			if(!swap) ope_table.erase(del_val); //TODO: Need to delete value in db????
+			//NEED TO UPDATE OPE TABLE/DATABASE
+
+			//Incr puts new entry in ope table at unique version #.
+			global_version++;
+
+			for(int i=(int)index; i< (int) node->keys.size(); i++){
+				table_storage old_entry = ope_table[node->keys[i]];
+				ope_table[node->keys[i]].index = i;
+				ope_table[node->keys[i]].version=global_version;
+				table_storage update_entry = ope_table[node->keys[i]];
+				//Only keys after deleted one need updating
+				update_db(old_entry, update_entry);
+			}
+
+		}else if(node->key_in_map(del_val)){
+			//Find node w/ succ, swap succ_val with curr_val, then delete succ_val
+			successor<EncT> succ = find_succ(node->right[del_val], (v<<num_bits | (index+1)), pathlen+num_bits);
+			node->keys[index]=succ.succ_node->keys[0]; //swap
+			//Fixing right map
+			node->right[node->keys[index]]=node->right[del_val];
+			if(!same_lvl) node->right.erase(del_val);
+
+			//NEED TO UPDATE OPE TABLE/DATABASE
+			//Only need to update the new value being swapped in.
+			global_version++;
+			if(!swap) ope_table.erase(del_val);
+			table_storage old_entry = ope_table[node->keys[index]];
+			ope_table[node->keys[index]].v = v;
+			ope_table[node->keys[index]].pathlen=pathlen;
+			ope_table[node->keys[index]].index=index;
+			ope_table[node->keys[index]].version=global_version;
+			table_storage update_entry = ope_table[node->keys[index]];
+			update_db(old_entry, update_entry);
+
+			tree_delete(node, succ.succ_v, succ.succ_nbits-nbits, 0, succ.succ_nbits, true, false); //TODO: Could optimize by just calling delete on next right node?
+
+
+
+		}else{
+			//This case means node->right has no entry for del_val
+			bool has_succ = false;
+			for(int i=(int) index+1; i<N-1; i++){
+				if(node->key_in_map(node->keys[i])) {has_succ=true; break;}
+			}
+			if(has_succ){
+				node->keys[index]= node->keys[index+1];
+				//NEED TO UPDATE OPE TABLE/DATABASE
+				global_version++;
+				if(!swap) ope_table.erase(del_val);
+				table_storage old_entry = ope_table[node->keys[index]];
+				ope_table[node->keys[index]].index=index;
+				ope_table[node->keys[index]].version=global_version;
+				table_storage update_entry = ope_table[node->keys[index]];
+				update_db(old_entry, update_entry);
+
+
+				tree_delete(node, v, nbits, index+1, pathlen, true, true);
+			}else{
+				//Must find pred
+				EncT right_parent;
+				if(index==0){
+					if(!node->key_in_map((EncT) NULL)) cout<<"Error in delete, child is truly leaf"<<endl;
+					right_parent = (EncT) NULL;
+				}else{
+					right_parent = node->keys[index-1];
+				}
+
+				if(node->key_in_map(right_parent)){
+					predecessor<EncT> pred = find_pred(node->right[right_parent], (v<<num_bits | index), pathlen+num_bits);
+					node->keys[index]=pred.pred_node->keys[pred.pred_index];
+
+					//NEED TO UPDATE OPE TABLE/DATABASE	
+					//Only need to update the new value being swapped in.
+					//No need to change right. del_val had no mapping in right anyways.
+					global_version++;
+					if(!swap) ope_table.erase(del_val);
+					table_storage old_entry = ope_table[node->keys[index]];
+					ope_table[node->keys[index]].v = v;
+					ope_table[node->keys[index]].pathlen=pathlen;
+					ope_table[node->keys[index]].index=index;
+					ope_table[node->keys[index]].version=global_version;
+					table_storage update_entry = ope_table[node->keys[index]];
+					update_db(old_entry, update_entry);
+
+
+					tree_delete(node, pred.pred_v, pred.pred_nbits-nbits, pred.pred_index, pred.pred_nbits, true, false); //TODO: Could optimize by just calling delete on next right node?
+				
+				}else{
+					if(index==0) cout<<"Error in delete, child should be leaf!"<<endl;
+					node->keys[index]=node->keys[index-1];
+
+					//NEED TO UPDATE OPE TABLE/DATABASE
+					global_version++;
+					if(!swap) ope_table.erase(del_val);
+					table_storage old_entry = ope_table[node->keys[index]];
+					ope_table[node->keys[index]].index=index;
+					ope_table[node->keys[index]].version=global_version;
+					table_storage update_entry = ope_table[node->keys[index]];
+					update_db(old_entry, update_entry);		
+								
+					tree_delete(node, v, nbits, index-1, pathlen, true, true);
+			
+				}
+
+				
+			}
+		}
+		
+		return;
+	}
+
+    int key_index = (int) (v&(mask<<(nbits-num_bits)))>>(nbits-num_bits);
+
+    EncT key;
+
+    //Protocol set: index 0 is NULL (branch to node with lesser elements)
+    //Else, index is 1+(key's index in node's key-vector)
+    if(key_index==0) key= (EncT) NULL;
+	else if(key_index<N) key = node->keys[key_index-1];
+	else{cout<<"Delete fail, key_index not legal"<<endl; exit(1);}
+
+	//cout<<"Key: "<<key<<endl;
+
+	//See if pointer to next node to be checked 
+    if(!node->key_in_map(key)){
+	    cout<<"Delete fail, wrong condition to traverse to new node"<<endl;
+    }
+    tree_delete(node->right[key], v, nbits-num_bits, index, pathlen, swap, same_lvl);
+}
+
+template<class EncT>
 void
 tree<EncT>::insert(uint64_t v, uint64_t nbits, uint64_t index, EncT encval){
 	//If root doesn't exist yet, create it, then continue insertion
@@ -416,7 +604,7 @@ tree<EncT>::tree_insert(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint6
     //Else, index is 1+(key's index in node's key-vector)
     if(key_index==0) key= (EncT) NULL;
 	else if(key_index<N) key = node->keys[key_index-1];
-	else cout<<"Insert fail, key_index not legal"<<endl;
+	else{ cout<<"Insert fail, key_index not legal"<<endl;exit(1);}
 
 	//cout<<"Key: "<<key<<endl;
 

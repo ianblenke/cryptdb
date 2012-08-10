@@ -154,6 +154,8 @@ class ope_client {
 	
     }
 
+//    bool delete(uint64_t v, uint64_t nbits, uint64_t index)
+
     //Function to tell tree server to insert plaintext pt w/ v, nbits
     pair<uint64_t, int> insert(uint64_t v, uint64_t nbits, uint64_t index, V pt, V det) const{
 		if(DEBUG) cout<<"pt: "<<pt<<" det: "<<det<<"  not in tree. "<<nbits<<": "<<" v: "<<v<<endl;

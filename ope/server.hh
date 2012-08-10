@@ -54,6 +54,12 @@ template<class EncT>
 struct tree_node;
 
 template<class EncT>
+struct predecessor;
+
+template<class EncT>
+struct successor;
+
+template<class EncT>
 class tree {
 
 public:
@@ -84,6 +90,10 @@ public:
 	tree_node<EncT>* rebuild(vector<EncT> key_list);
 	void rebalance(tree_node<EncT>* node);
 	void delete_nodes(tree_node<EncT>* node);
+
+	successor<EncT> find_succ(tree_node<EncT>* node, uint64_t v, uint64_t nbits);
+	predecessor<EncT> find_pred(tree_node<EncT>* node, uint64_t v, uint64_t nbits);
+	void tree_delete(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint64_t index, uint64_t pathlen, bool swap, bool same_lvl);
 
 	tree(){
 		num_nodes=0;
