@@ -129,7 +129,7 @@ int main(){
     mask=make_mask();
     
     dbconnect =new Connect( "localhost", "frank", "passwd","cryptdb", 3306);
-    dbconnect->execute("select create_ops_server()");
+    //dbconnect->execute("select create_ops_server()");
 /*        DBResult * result;
     dbconnect->execute("select get_ope_server()", result);
     ResType rt = result->unpack();
@@ -141,47 +141,54 @@ int main(){
 
     usleep(1000000);
 
-    test_order(239,0);
-    /*
+//    test_order(239,0);
+    
     blowfish* bc = new blowfish("frankli714");
     ope_client<uint64_t, blowfish>* my_client = new ope_client<uint64_t, blowfish>(bc);
 
-    int salary;
-    string name;
+    uint64_t name;
+    bool do_enc;
     ostringstream o;
     while(true){
-        cout<<"Enter an employee name: ";
+        cout<<"Enter plaintext val: ";
         cin>>name;
-        cout<<"Enter salary: ";
-        cin>>salary;
-        if(salary==-1){
+        cout<<"Encrypt (1) or delete (0)?";
+        cin>>do_enc;
+        if(name== (uint64_t) -1){
             send(my_client->hsock, "0",1,0);
             close(my_client->hsock);
             break;
         }else{
+            if(do_enc){
+                pair<uint64_t,int> enc_pair = my_client->encrypt(name);
+                if(enc_pair.first==0 && enc_pair.second==0){
+                    cout<<"Error in encryption, received 0,0 pair"<<endl;
+                    break;
+                }
+                cout<<"Encrypting "<<name<<" to "<<enc_pair.first<<endl;
+                o.str("");
+                o<<name;
+                string name_str = o.str();
 
-            pair<uint64_t,int> enc_pair = my_client->encrypt(salary);
-            if(enc_pair.first==0 && enc_pair.second==0){
-                cout<<"Error in encryption, received 0,0 pair"<<endl;
-                break;
+                o.str("");
+                o<<enc_pair.first;
+                string ope = o.str();
+
+                o.str("");
+                o<<enc_pair.second;
+                string version = o.str();
+
+
+                bool success = dbconnect->execute("INSERT INTO emp VALUES ("+name_str+", "+ope+", "+version+")");
+                if(success) cout<<"Inserted data!"<<endl;
+                else cout<<"Data insertion failed!"<<endl;                
+            }else{
+                my_client->delete_value(name);
             }
-            cout<<"Encrypting "<<salary<<" to "<<enc_pair.first<<endl;
-            o.str("");
-            o<<enc_pair.first;
-            string ope = o.str();
-
-            o.str("");
-            o<<enc_pair.second;
-            string version = o.str();
-
-
-            bool success = dbconnect->execute("INSERT INTO emp VALUES ('"+name+"', "+ope+", "+version+")");
-            if(success) cout<<"Inserted data!"<<endl;
-            else cout<<"Data insertion failed!"<<endl;
 
         }
 
     }
-*/
+
 }
 

@@ -85,6 +85,7 @@ public:
 	map<EncT, table_storage > ope_table;
 	void update_ope_table(tree_node<EncT>* node, table_storage base);
 	void update_db(table_storage old_entry, table_storage new_entry);
+	void delete_db(table_storage del_entry);
 
 	vector<EncT> flatten(tree_node<EncT>* node);
 	tree_node<EncT>* rebuild(vector<EncT> key_list);
@@ -93,7 +94,8 @@ public:
 
 	successor<EncT> find_succ(tree_node<EncT>* node, uint64_t v, uint64_t nbits);
 	predecessor<EncT> find_pred(tree_node<EncT>* node, uint64_t v, uint64_t nbits);
-	void tree_delete(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint64_t index, uint64_t pathlen, bool swap, bool same_lvl);
+	void tree_delete(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint64_t index, uint64_t pathlen, bool swap);
+	void delete_index(uint64_t v, uint64_t nbits, uint64_t index);
 
 	tree(){
 		num_nodes=0;

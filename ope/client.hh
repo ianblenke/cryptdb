@@ -154,7 +154,23 @@ class ope_client {
 	
     }
 
-//    bool delete(uint64_t v, uint64_t nbits, uint64_t index)
+    void delete_value(V pt){
+    	pair<uint64_t, int> enc = encrypt(pt);
+    	uint64_t ct = enc.first;
+
+		uint64_t nbits = 64 - ffsl((uint64_t)ct);
+		uint64_t v= ct>>(64-nbits); //Orig v
+		uint64_t path = v>>num_bits; //Path part of v
+		int index = (int) v & mask; //Index (last num_bits) of v
+
+		ostringstream o;
+		o.str("");
+		o<<"4 "<<path<<" "<<nbits-num_bits<<" "<<index;
+		string msg = o.str();
+		send(hsock, msg.c_str(), msg.size(), 0);
+
+    }
+
 
     //Function to tell tree server to insert plaintext pt w/ v, nbits
     pair<uint64_t, int> insert(uint64_t v, uint64_t nbits, uint64_t index, V pt, V det) const{
@@ -182,6 +198,7 @@ class ope_client {
 	 * lookup(encrypted_plaintext) = 1
 	 * lookup(v, nbits) = 2
 	 * insert(v, nbits, index, encrypted_laintext) = 3
+	 * delete(v, nbits, index) = 4
 	*/
     pair<uint64_t, int> encrypt(V pt) const{
 
@@ -190,7 +207,7 @@ class ope_client {
 
         V det = block_encrypt(pt);
 
-        if(DEBUG) cout<<"Pt: "<<pt<<" det: "<<det<<endl;
+        cout<<"Pt: "<<pt<<" det: "<<det<<endl;
 
     	char buffer[1024];
     	memset(buffer, '\0', 1024);
