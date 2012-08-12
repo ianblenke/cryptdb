@@ -38,7 +38,7 @@ const int num_bits = (int) ceil(log2(N+1.0));
 uint64_t mask;
 
 uint64_t make_mask();
-bool test_order(int num_vals, int sorted);
+bool test_order(int num_vals, int sorted, bool deletes);
 
 //Make mask of num_bits 1's
 uint64_t make_mask(){
@@ -167,7 +167,9 @@ class ope_client {
 		o.str("");
 		o<<"4 "<<path<<" "<<nbits-num_bits<<" "<<index;
 		string msg = o.str();
+		if(DEBUG) cout<<"Deleting pt="<<pt<<" with msg "<<msg<<endl;
 		send(hsock, msg.c_str(), msg.size(), 0);
+		usleep(100000);
 
     }
 
@@ -207,7 +209,7 @@ class ope_client {
 
         V det = block_encrypt(pt);
 
-        cout<<"Pt: "<<pt<<" det: "<<det<<endl;
+        if(DEBUG_COMM) cout<<"Encrypting pt: "<<pt<<" det: "<<det<<endl;
 
     	char buffer[1024];
     	memset(buffer, '\0', 1024);
@@ -304,6 +306,7 @@ class ope_client {
 		 *should reach this point (which means no ope_table result or insertion)
 		 */
         cout<<"SHOULD NEVER REACH HERE!"<<endl;
+        exit(1);
         return make_pair(0,0);
 		//FL todo: s->update_table(block_encrypt(pt),v,nbits);
 /*		if(DEBUG) cout<<"Encryption of "<<pt<<" has v="<< v<<" nbits="<<nbits<<endl;

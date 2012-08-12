@@ -400,7 +400,10 @@ predecessor<EncT>
 tree<EncT>::find_pred(tree_node<EncT>* node, uint64_t v, uint64_t nbits){
 	int max_index = node->keys.size()-1;
 	if(node->key_in_map(node->keys[max_index])){
-		if(max_index!=N-1) cout<<"Error in pred, max_index not N-1"<<endl;
+		if(max_index!=N-1) {
+			cout<<"Error in pred, max_index not N-1"<<endl;
+			exit(1);
+		}
 		return find_pred(node->right[node->keys[max_index]], (v<<num_bits | (max_index+1)), nbits+num_bits);
 	}else{
 		predecessor<EncT> pred;
@@ -415,19 +418,26 @@ tree<EncT>::find_pred(tree_node<EncT>* node, uint64_t v, uint64_t nbits){
 template<class EncT>
 void
 tree<EncT>::delete_index(uint64_t v, uint64_t nbits, uint64_t index){
-	cout<<"Deleting index at v="<<v<<" nbits="<<nbits<<" index="<<index<<endl;
+	if(DEBUG) cout<<"Deleting index at v="<<v<<" nbits="<<nbits<<" index="<<index<<endl;
 	tree_delete(root, v, nbits, index, nbits, false);
+	num_nodes--;
+	//if(num_nodes<alpha*max_size){
+	if(root->height()> log(num_nodes)/log(((double)1.0)/alpha)+1 ){
+		rebalance(root);
+		max_size=num_nodes;
+	}
 }
 
 //v should just be path to node, not including index. swap indicates whether val being deleted was swapped, should be false for top-lvl call
 template<class EncT>
 void
 tree<EncT>::tree_delete(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint64_t index, uint64_t pathlen, bool swap){
-
+	if(DEBUG) cout<<"Calling tree_delete with "<<v<< " "<<nbits<<" "<<index<<endl;
 	if(nbits==0){
 		EncT del_val = node->keys[index];
 		if(node->right.empty()){
 			//Value is being deleted from a leaf node
+			if(DEBUG) cout<<"Deleting leaf node val"<<endl;
 			typename vector<EncT>::iterator it;
 			it=node->keys.begin();
 			node->keys.erase(it+index);
@@ -454,6 +464,7 @@ tree<EncT>::tree_delete(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint6
 			}
 
 		}else if(node->key_in_map(del_val)){
+			if(DEBUG) cout<<"Deleting val by swapping with succ"<<endl;
 			//Find node w/ succ, swap succ_val with curr_val, then delete succ_val
 			successor<EncT> succ = find_succ(node->right[del_val], (v<<num_bits | (index+1)), pathlen+num_bits);
 			node->keys[index]=succ.succ_node->keys[0]; //swap
@@ -476,7 +487,7 @@ tree<EncT>::tree_delete(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint6
 			table_storage update_entry = ope_table[node->keys[index]];
 			update_db(old_entry, update_entry);
 
-			tree_delete(node, succ.succ_v, succ.succ_nbits-nbits, 0, succ.succ_nbits, true); //TODO: Could optimize by just calling delete on next right node?
+			tree_delete(node, succ.succ_v, succ.succ_nbits-pathlen, 0, succ.succ_nbits, true); //TODO: Could optimize by just calling delete on next right node?
 
 
 
@@ -487,6 +498,7 @@ tree<EncT>::tree_delete(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint6
 				if(node->key_in_map(node->keys[i])) {has_succ=true; break;}
 			}
 			if(has_succ){
+				if(DEBUG) cout<<"Deleting val by shifting towards succ"<<endl;
 				node->keys[index]= node->keys[index+1];
 				//NEED TO UPDATE OPE TABLE/DATABASE
 				global_version++;
@@ -507,13 +519,14 @@ tree<EncT>::tree_delete(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint6
 				//Must find pred
 				EncT right_parent;
 				if(index==0){
-					if(!node->key_in_map((EncT) NULL)) cout<<"Error in delete, child is truly leaf"<<endl;
+					if(!node->key_in_map((EncT) NULL)){cout<<"Error in delete, child is truly leaf"<<endl; exit(1);}
 					right_parent = (EncT) NULL;
 				}else{
 					right_parent = node->keys[index-1];
 				}
 
 				if(node->key_in_map(right_parent)){
+					if(DEBUG) cout<<"Deleting val by swapping with pred"<<endl;
 					predecessor<EncT> pred = find_pred(node->right[right_parent], (v<<num_bits | index), pathlen+num_bits);
 					node->keys[index]=pred.pred_node->keys[pred.pred_index];
 
@@ -534,10 +547,14 @@ tree<EncT>::tree_delete(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint6
 					update_db(old_entry, update_entry);
 
 
-					tree_delete(node, pred.pred_v, pred.pred_nbits-nbits, pred.pred_index, pred.pred_nbits, true); //TODO: Could optimize by just calling delete on next right node?
+					tree_delete(node, pred.pred_v, pred.pred_nbits-pathlen, pred.pred_index, pred.pred_nbits, true); //TODO: Could optimize by just calling delete on next right node?
 				
 				}else{
-					if(index==0) cout<<"Error in delete, child should be leaf!"<<endl;
+					if(DEBUG) cout<<"Deleting val by shifting towards pred"<<endl;
+					if(index==0) {
+						cout<<"Error in delete, child should be leaf!"<<endl;
+						exit(1);
+					}
 					node->keys[index]=node->keys[index-1];
 
 					//NEED TO UPDATE OPE TABLE/DATABASE
@@ -559,7 +576,7 @@ tree<EncT>::tree_delete(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint6
 				
 			}
 		}
-		
+		if(DEBUG) print_tree();
 		return;
 	}
 
@@ -571,17 +588,23 @@ tree<EncT>::tree_delete(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint6
     //Else, index is 1+(key's index in node's key-vector)
     if(key_index==0) key= (EncT) NULL;
 	else if(key_index<N) key = node->keys[key_index-1];
-	else{cout<<"Delete fail, key_index not legal"<<endl; exit(1);}
+	else{cout<<"Delete fail, key_index not legal "<<key_index<<endl; exit(1);}
 
 	//cout<<"Key: "<<key<<endl;
 
 	//See if pointer to next node to be checked 
     if(!node->key_in_map(key)){
 	    cout<<"Delete fail, wrong condition to traverse to new node"<<endl;
+	    cout<<"v: "<<v<<" nbits:"<<nbits<<" index:"<<index<<" pathlen:"<<pathlen<<endl;
+	    exit(1);
     }
     tree_node<EncT>* next_node = node->right[key];
 	if(nbits== (uint64_t) num_bits && next_node->keys.size()==(uint64_t) 1){
-		if(index!=0) cout<<"Deleting last val at node but index!=0??"<<endl;
+		if(index!=0) {
+			cout<<"Deleting last val at node but index!=0??"<<index<<endl;
+			cout<<v<< " "<<nbits<<" "<<index<<endl;
+			exit(1);
+		}
 		node->right.erase(key);    			
 	}    
     tree_delete(next_node, v, nbits-num_bits, index, pathlen, swap);
@@ -605,6 +628,7 @@ tree<EncT>::insert(uint64_t v, uint64_t nbits, uint64_t index, EncT encval){
 	if(height> log(num_nodes)/log(((double)1.0)/alpha)+1 ){
 		tree_node<EncT>* scapegoat = findScapegoat(path);
 		rebalance(scapegoat);
+		if(scapegoat==root) max_size=num_nodes;
 		//if(DEBUG) print_tree();
 	}
 }
@@ -618,8 +642,10 @@ tree<EncT>::tree_insert(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint6
 	//End of the insert line, check if you can insert
 	//Assumes v and nbits were from a lookup of an insertable node
 	if(nbits==0){
-		if(node->keys.size()>N-2) cout<<"Insert fail, found full node"<<endl;
-		else{
+		if(node->keys.size()>N-2) {
+			cout<<"Insert fail, found full node"<<endl;
+			exit(1);
+		}else{
 			if(DEBUG) cout<<"Found node, inserting into index "<<index<<endl;
 			typename vector<EncT>::iterator it;
 			it=node->keys.begin();
@@ -627,6 +653,7 @@ tree<EncT>::tree_insert(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint6
 			node->keys.insert(it+index, encval);
 			//sort(node->keys.begin(), node->keys.end());
 			num_nodes++;
+			max_size=max(num_nodes, max_size);
 			rtn_path.push_back(node);
 
 			table_storage new_entry;
@@ -670,7 +697,7 @@ tree<EncT>::tree_insert(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint6
 	    if (nbits == (uint64_t) num_bits && ((int) node->keys.size())==N-1) {
 	    	if(DEBUG) cout<<"Creating new node"<<endl;
 	    	node->right[key] = new tree_node<EncT>();
-	    }else cout<<"Insert fail, wrong condition to create new node child"<<endl;
+	    }else{cout<<"Insert fail, wrong condition to create new node child"<<endl; exit(1);}
     }
     rtn_path = tree_insert(node->right[key], v, nbits-num_bits, index, encval, pathlen);
     rtn_path.push_back(node);
@@ -855,7 +882,7 @@ void handle_client(void* lp, tree<EncT>* s){
         int *csock = (int*) lp;
 
         cout<<"Call to function!"<<endl;
-
+        bool deletion_mode = false;
         //Buffer to handle all messages received
         char buffer[1024];
         while(true){
@@ -864,7 +891,7 @@ void handle_client(void* lp, tree<EncT>* s){
 
             //Receive message to process
             recv(*csock, buffer, 1024, 0);
-
+            if(DEBUG_COMM) cout<<"Received msg "<<buffer<<endl;
             //Find protocol code:
 		    /*Server protocol code:
 			 * lookup(encrypted_plaintext) = 1
@@ -919,6 +946,7 @@ void handle_client(void* lp, tree<EncT>* s){
                 if(DEBUG_COMM) cout<<"Rtn_str: "<<rtn_str<<endl;
                 send(*csock, rtn_str.c_str(), rtn_str.size(),0);
             }else if(func_d==3){
+            	deletion_mode=false;
             	//Insert using v and nbits
                 uint64_t v, nbits, index, blk_encrypt_pt;
                 iss>>v;
@@ -929,6 +957,7 @@ void handle_client(void* lp, tree<EncT>* s){
                 if(DEBUG_COMM) cout<<"Trying insert("<<v<<", "<<nbits<<", "<<index<<", "<<blk_encrypt_pt<<")"<<endl;
                 s->insert(v, nbits, index, blk_encrypt_pt);
             }else if(func_d==4){
+            	deletion_mode=true;
             	uint64_t v, nbits, index;
             	iss>>v;
             	iss>>nbits;
@@ -943,17 +972,18 @@ void handle_client(void* lp, tree<EncT>* s){
 			if(s->root!=NULL){
 				//After every message, check tree is still really a tree,
 				//and that it maintains approx. alpha height balance
+				if(DEBUG) s->print_tree();			
 				if(s->test_tree(s->root)!=1){
 					cout<<"No test_tree pass"<<endl;
 					//return;
 				} 
-				if(s->num_nodes>1){
+				if(s->num_nodes>1 && !deletion_mode){
 					if((s->root->height()<= log(s->num_nodes)/log(((double)1.0)/alpha)+1)!=1) {
 						cout<<"Height wrong "<<s->root->height()<<" : "<<log(s->num_nodes)/log(((double)1.0)/alpha)+1<<endl;
+						cout<<"Max size: "<<s->max_size<<" num_nodes: "<<s->num_nodes<<endl;
 						return;
 					}
 				}	
-				s->print_tree();			
 			}
 
         }

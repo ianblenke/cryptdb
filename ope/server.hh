@@ -20,6 +20,7 @@ using std::sort;
 using std::vector;
 using std::cerr;
 using std::map;
+using std::max;
 
 const int N = 4;
 const double alpha = 0.3;
@@ -65,6 +66,7 @@ class tree {
 public:
 	tree_node<EncT> *root;
 	unsigned int num_nodes;
+	unsigned int max_size;
 	Connect * dbconnect;
 	int global_version;
 	int num_rebalances;
@@ -99,6 +101,7 @@ public:
 
 	tree(){
 		num_nodes=0;
+		max_size=0;
 		root = NULL;
 		global_version=0;
 		num_rebalances=0;

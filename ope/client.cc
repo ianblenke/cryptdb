@@ -7,14 +7,19 @@ using namespace std;
 //0 == random
 //1 == sorted incr
 //2 == sorted decr
-bool test_order(int num_vals, int sorted){
+bool test_order(int num_vals, int sorted, bool deletes){
 
     blowfish* bc = new blowfish("frankli714");
 
     ope_client<uint64_t, blowfish>* my_client = new ope_client<uint64_t, blowfish>(bc);
 
     vector<uint64_t> inserted_vals;
-    srand( time(NULL));
+    
+    time_t seed;
+    seed = time(NULL);
+    cout<<"Seed is "<<seed<<endl;
+    srand( seed);
+
     //srand(0);
 
     //Build vector of all inserted values
@@ -46,7 +51,7 @@ bool test_order(int num_vals, int sorted){
                     cout<<"Decryption wrong! "<<val<<" : "<<enc_val<<endl;
                     return false;
             }                       
-            if(DEBUG) cout<<"Enc complete for "<<val<<" with enc="<<enc_val<<endl;
+            if(DEBUG) {cout<<"Enc complete for "<<val<<" with enc="<<enc_val<<endl;cout<<endl;}
             ostringstream o;
             o.str("");
             o<<enc_pair.first;
@@ -87,6 +92,22 @@ bool test_order(int num_vals, int sorted){
 
             }
 
+            if(deletes){
+                int do_delete = rand()%10+1;
+                if(do_delete<2){
+                    if(DEBUG) cout<<"Starting deletion"<<endl;
+                    int num_dels = rand()%(tmp_vals.size());
+                    for(int d=0;d<num_dels; d++){
+                        int del_index = rand()%(tmp_vals.size());
+                        int del_val = tmp_vals[del_index];
+                        my_client->delete_value(del_val);   
+                        tmp_vals.erase(tmp_vals.begin()+del_index);                     
+                    }
+                    if(DEBUG) cout<<"Ending deletion\n"<<endl;
+
+                }
+            }
+
             //Check that all enc vals follow OPE properties
             //So if val1<val2, enc(val1)<enc(val2)
             sort(tmp_vals.begin(), tmp_vals.end());
@@ -94,6 +115,7 @@ bool test_order(int num_vals, int sorted){
             uint64_t last_enc = 0;
             uint64_t cur_val = 0;
             uint64_t cur_enc = 0;
+            if(DEBUG) cout<<"Starting ope testing"<<endl;
             for(int j=0; j<(int) tmp_vals.size(); j++){
                     cur_val = tmp_vals[j];
                     cur_enc = my_client->encrypt(cur_val).first;          
@@ -110,6 +132,7 @@ bool test_order(int num_vals, int sorted){
                             return false;
                     }
             }               
+            if(DEBUG) cout<<"Done with ope testing\n"<<endl;
     }
 
     cout<<"Sorted order "<<sorted<<" passes test"<<endl;
@@ -141,25 +164,25 @@ int main(){
 
     usleep(1000000);
 
-//    test_order(239,0);
+    test_order(269,0, true);
     
-    blowfish* bc = new blowfish("frankli714");
+ /*   blowfish* bc = new blowfish("frankli714");
     ope_client<uint64_t, blowfish>* my_client = new ope_client<uint64_t, blowfish>(bc);
 
     uint64_t name;
-    bool do_enc;
+    int do_enc;
     ostringstream o;
     while(true){
         cout<<"Enter plaintext val: ";
         cin>>name;
-        cout<<"Encrypt (1) or delete (0)?";
+        cout<<"Encrypt (1), decrypt (2) or delete (0)?";
         cin>>do_enc;
         if(name== (uint64_t) -1){
             send(my_client->hsock, "0",1,0);
             close(my_client->hsock);
             break;
         }else{
-            if(do_enc){
+            if(do_enc==1){
                 pair<uint64_t,int> enc_pair = my_client->encrypt(name);
                 if(enc_pair.first==0 && enc_pair.second==0){
                     cout<<"Error in encryption, received 0,0 pair"<<endl;
@@ -182,13 +205,22 @@ int main(){
                 bool success = dbconnect->execute("INSERT INTO emp VALUES ("+name_str+", "+ope+", "+version+")");
                 if(success) cout<<"Inserted data!"<<endl;
                 else cout<<"Data insertion failed!"<<endl;                
-            }else{
+            }else if(do_enc==0){
                 my_client->delete_value(name);
+            }else if(do_enc==2){
+                pair<uint64_t,int> enc_pair = my_client->encrypt(name);
+                if(enc_pair.first==0 && enc_pair.second==0){
+                    cout<<"Error in encryption, received 0,0 pair"<<endl;
+                    break;
+                }
+                cout<<"Name is "<<name<<" decrypts to "<<my_client->decrypt(enc_pair.first)<<endl;
+            }else{
+                cout<<"Not a valid operation code, please retry"<<endl;
             }
 
         }
 
-    }
+    }*/
 
 }
 
