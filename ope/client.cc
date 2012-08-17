@@ -36,6 +36,8 @@ bool test_order(int num_vals, int sorted, bool deletes){
     //Vector to hold already inserted values
     vector<uint64_t> tmp_vals;
 
+    int delete_delay=0;
+
     for(int i=0; i<num_vals; i++){
             uint64_t val = inserted_vals[i];
             tmp_vals.push_back(val);
@@ -93,19 +95,25 @@ bool test_order(int num_vals, int sorted, bool deletes){
             }
 
             if(deletes){
-                int do_delete = rand()%10+1;
-                if(do_delete<2){
-                    if(DEBUG) cout<<"Starting deletion"<<endl;
-                    int num_dels = rand()%(tmp_vals.size());
-                    for(int d=0;d<num_dels; d++){
-                        int del_index = rand()%(tmp_vals.size());
-                        int del_val = tmp_vals[del_index];
-                        my_client->delete_value(del_val);   
-                        tmp_vals.erase(tmp_vals.begin()+del_index);                     
-                    }
-                    if(DEBUG) cout<<"Ending deletion\n"<<endl;
+                if(delete_delay==0){
+                    int do_delete = rand()%10+1;
+                    if(do_delete<2){
+                        delete_delay = rand()%(num_vals/2);
+                        int num_dels = rand()%(tmp_vals.size()+1);
+                        cout<<"Starting deletion "<<num_dels<<" of "<<tmp_vals.size()<<endl;
+                        for(int d=0;d<num_dels; d++){
+                            int del_index = rand()%(tmp_vals.size());
+                            int del_val = tmp_vals[del_index];
+                            my_client->delete_value(del_val);   
+                            tmp_vals.erase(tmp_vals.begin()+del_index);                     
+                        }
+                        if(DEBUG) cout<<"Ending deletion\n"<<endl;
 
+                    }                    
+                }else{
+                    delete_delay--;
                 }
+    
             }
 
             //Check that all enc vals follow OPE properties
@@ -134,6 +142,13 @@ bool test_order(int num_vals, int sorted, bool deletes){
             }               
             if(DEBUG) cout<<"Done with ope testing\n"<<endl;
     }
+    if(DEBUG){
+        for(uint64_t i=0; i<tmp_vals.size(); i++){
+            cout<<tmp_vals[i]<<" ";
+        }
+        cout<<endl;        
+    }
+
 
     cout<<"Sorted order "<<sorted<<" passes test"<<endl;
 

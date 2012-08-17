@@ -422,6 +422,7 @@ tree<EncT>::delete_index(uint64_t v, uint64_t nbits, uint64_t index){
 	tree_delete(root, v, nbits, index, nbits, false);
 	num_nodes--;
 	//if(num_nodes<alpha*max_size){
+	if(root==NULL) return;
 	if(root->height()> log(num_nodes)/log(((double)1.0)/alpha)+1 ){
 		rebalance(root);
 		max_size=num_nodes;
@@ -446,8 +447,14 @@ tree<EncT>::tree_delete(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint6
 				ope_table.erase(del_val);
 			}
 			if(node->keys.size()==0){
+				if(node==root) {
+					if(DEBUG) cout<<"Deleting root!"<<endl;
+					root=NULL;
+					if(DEBUG) cout<<"Root reset to null"<<endl;
+				}
 				delete node;
 				return;
+
 			}
 			//NEED TO UPDATE OPE TABLE/DATABASE
 
@@ -968,8 +975,10 @@ void handle_client(void* lp, tree<EncT>* s){
                 cout<<"Something's wrong!: "<<buffer<<endl;
                 break;
             }
+            if(DEBUG) cout<<"Message "<<func_d<<" processed"<<endl;
             //TEST CODE (comment out in release version)
 			if(s->root!=NULL){
+				if(DEBUG) cout<<"Testing tree"<<endl;
 				//After every message, check tree is still really a tree,
 				//and that it maintains approx. alpha height balance
 				if(DEBUG) s->print_tree();			
