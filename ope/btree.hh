@@ -9,6 +9,29 @@ typedef Element<std::string> Elem;
 
 class RootTracker;
 
+// The Merkle information at a node N
+// needed for Merkle checks
+typdef struct NodeMerkleInfo {
+
+    // The list of all children of node N
+    // for each child, key and merkle_hash
+    std::list<pair<std::string, std::string>> children;
+
+    // The position in the vector of children of the node
+    // to check by recomputing the hash;
+    // the node from which the Merkle computation starts
+    // upwards will have a pos_of_child_to_check of -1
+    int pos_of_child_to_check;
+};
+
+// Contains Merkle information for each node on the path from a specific node
+// to the root 
+// Each element of the list is the NodeMerkleInfo for one level
+// starting with the originating node and ending with the root
+typdef struct MerkleProof {
+    std::list<NodeMerkleInfo> path;
+};
+
 class Node {
 
 protected:
@@ -57,9 +80,19 @@ protected:
 
     int minimum_keys ();
 
-    std::string Merkle_hash();
-    
     void max_height_help(uint height, uint & max_height);
+
+    /* Merkle related functions */
+
+    // computes the hash of the current node
+    std::string hash_node();
+    
+    //recomputes Merkle hash of the current node
+    void update_Merkle();
+
+    //recomputes Merkle hash of all the nodes from this up to the root
+    void update_Merkle_upward();
+   
       
 #ifdef _DEBUG
 
@@ -83,18 +116,25 @@ public:
     // to return a reference when a search fails.
     static Elem m_failure;
 
+    /** Merkle related **/
+    
+    // the merkle hash of this node
     std::string merkle_hash;
 
-    //recomputes Merkle hash of the current node
-    void update_Merkle();
+    // returns the information needed to check the validity of the current
+    // node with respect to the overall merkle hash
+    merkleProof get_merkle_proof();
 
-    //recomputes Merkle hash of all the nodes from this up to the root
-    void update_Merkle_upward();
+    // checks that the merkle information corresponding to a node matches the
+    // overall root merkle hash
+    bool check_merkle_proof(const merkleInfo & mi, const std::string & root_hash);
   
-    // for testing
-    void check_Merkle_tree();
-    void recompute_Merkle_subtree();
+    // testing functions
+    void check_merkle_tree(); //checks merkle tree was computed correctly
+    void recompute_merkle_subtree();
     uint max_height();
+
+    /********************/
     
     // the root of the tree may change.  this attribute keeps it accessible.
     RootTracker& m_root;

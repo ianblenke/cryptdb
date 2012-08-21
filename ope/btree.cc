@@ -374,12 +374,12 @@ bool Node::split_insert (Elem& element) {
 
     new_node->mp_parent = mp_parent;
 
-    this->update_Merkle();
-    new_node->update_Merkle();
+    this->update_merkle();
+    new_node->update_merkle();
     
     // now insert the upward_element into the parent, splitting it if necessary
     if (mp_parent && mp_parent->vector_insert(upward_element)) {
-	mp_parent->update_Merkle_upward();
+	mp_parent->update_merkle_upward();
 	return true;
     }
 
@@ -401,15 +401,64 @@ bool Node::split_insert (Elem& element) {
 
         new_root->mp_parent = 0;
 
-	//update Merkle hash of the root
-	new_root->update_Merkle();
+	//update merkle hash of the root
+	new_root->update_merkle();
 
     }
     return true;
 }
 
+string Elem::get_subtree_merkle() {
+    if (has_subtree()) {
+	return mp_subtree->merkle_hash;
+    } else {
+	return "0";
+    }
+}
+
+merkleInfoForLevel& extract_node_merkle_info(int pos) {
+    merkleInfoForLevel mil = merkleInfoForLevel();
+    mil.children.resize(m_vector.size());
+    mil.pos = pos;
+    uint ind = 0;
+    for (Elem e : m_vector) {
+	mil.children[ind] = make_pair<string, string>(e.m_key,
+						      e.get_subtree_merkle());
+    }
+    return mil;
+}
+
+merkleInfo Node::merkle_info_for_check() {
+    Node * curr_node = this;
+
+    merkleInfo mi = merkleInfo();
+
+    // TODO: is find_root efficient?, should be constant workmak
+    
+    while (true) {
+
+	if (curr_node->find_root() == curr_node) {
+	    int pos = 
+	    mil.push_back(extract_node_merkle_info(-1));
+	    break;
+	} else {
+	    mil.push_back(extract_node_merkle_info(node_pos()));
+	    curr_node = curr_node->mp_parent;
+	}
+    }
+
+    return mi;
+}
+
+bool check_merkle_info(const merkleInfo & mi, const string & root_hash) {
+    string hash = "";
+    for (merkleInfoForLevel mil : mi) {
+	clean up node hash and merkle hash and all these hashes, also in interface
+    }
+}
+
 string
-Node::Merkle_hash(){
+Node::hash_node(){
     uint blocksize = sha256::hashsize + nodekeysize ;
 
     string hashes_concat = string(m_count * blocksize, 0);
@@ -420,10 +469,7 @@ Node::Merkle_hash(){
 	string mkey = e.m_key;
 	hashes_concat.replace(i*blocksize, mkey.size(), mkey);
 
-	string hash = "0";
-	if (e.has_subtree()) {
-	    hash = e.mp_subtree->merkle_hash;
-	}
+	string hash = e.get_subtree_merkle();
 	assert_s(hash.size() <= sha256::hashsize, "size of hash is larger than sha256::hashsize");
 	hashes_concat.replace(i*blocksize + nodekeysize, hash.size(), hash);
     }
@@ -432,15 +478,15 @@ Node::Merkle_hash(){
  
 }
 
-void Node::update_Merkle() {
-    merkle_hash = Merkle_hash();
+void Node::update_merkle() {
+    merkle_hash = hash_node();
 }
 
-void Node::update_Merkle_upward() {
-    update_Merkle();
+void Node::update_merkle_upward() {
+    update_merkle();
     
     if (this != find_root()) {
-	mp_parent->update_Merkle_upward();
+	mp_parent->update_merkle_upward();
     }
 }
  
@@ -455,7 +501,7 @@ bool Node::tree_insert(Elem& element) {
 
     // insert the element in last_visited_ptr if this node is not full
     if (last_visited_ptr->vector_insert(element)) {
-	last_visited_ptr->update_Merkle_upward();
+	last_visited_ptr->update_merkle_upward();
         return true;
     }
 
@@ -485,7 +531,7 @@ bool Node::delete_element (Elem& target) {
  
     if (node->is_leaf() && node->key_count() > node->minimum_keys()) {
         bool r = node->vector_delete(target);
-	node->update_Merkle_upward();
+	node->update_merkle_upward();
 	return r;
     }
     else if (node->is_leaf()) {
@@ -500,7 +546,7 @@ bool Node::delete_element (Elem& target) {
         // element count.
 
         while (node) {
-	    node->update_Merkle();
+	    node->update_merkle();
             // NOTE: the "this" pointer may no longer be valid after the first
             // iteration of this loop!!!
 
@@ -581,10 +627,10 @@ Node* Node::rotate_from_right(int parent_index_this) {
 
      // parent node still has same element count
 
-    //need to update this and its right sibling's Merkle hash as well as all
+    //need to update this and its right sibling's merkle hash as well as all
     // the way up
-    right_sib->update_Merkle();
-    this->update_Merkle_upward();
+    right_sib->update_merkle();
+    this->update_merkle_upward();
 
     return null_ptr;
 } //_______________________________________________________________________
@@ -623,10 +669,10 @@ Node* Node::rotate_from_left(int parent_index_this) {
 
     // parent node still has same element count
 
-    // need to update Merkle hash of left sibling and this and upward to the
+    // need to update merkle hash of left sibling and this and upward to the
     // root
-    left_sib->update_Merkle();
-    this->update_Merkle_upward();
+    left_sib->update_merkle();
+    this->update_merkle_upward();
 
     return null_ptr;
 
@@ -656,7 +702,7 @@ Node* Node::merge_right (int parent_index_this) {
 
     delete right_sib;
 
-    this->update_Merkle();
+    this->update_merkle();
     
     if (mp_parent==find_root() && !mp_parent->key_count()) {
 
@@ -669,12 +715,12 @@ Node* Node::merge_right (int parent_index_this) {
     }
 
     else if (mp_parent==find_root() && mp_parent->key_count()) {
-	mp_parent->update_Merkle_upward();
+	mp_parent->update_merkle_upward();
         return null_ptr;
     }
 
     if (mp_parent && (mp_parent->key_count() >= mp_parent->minimum_keys())) {
-	mp_parent->update_Merkle_upward();
+	mp_parent->update_merkle_upward();
         return null_ptr; // no need for parent to import an element
     }
 
@@ -706,7 +752,7 @@ Node* Node::merge_left (int parent_index_this) {
 
     Node* parent_node = mp_parent;  // copy before deleting this node
 
-    left_sib->update_Merkle();
+    left_sib->update_merkle();
     
     if (mp_parent==find_root() && !mp_parent->key_count()) {
 
@@ -724,7 +770,7 @@ Node* Node::merge_left (int parent_index_this) {
     else if (mp_parent==find_root() && mp_parent->key_count()) {
 
         delete this;
-	mp_parent->update_Merkle_upward();
+	mp_parent->update_merkle_upward();
         return null_ptr;
 
     }
@@ -733,7 +779,7 @@ Node* Node::merge_left (int parent_index_this) {
     delete this;
 
     if (parent_node->key_count() >= parent_node->minimum_keys()) {
-	parent_node->update_Merkle_upward();
+	parent_node->update_merkle_upward();
         return null_ptr; // no need for parent to import an element
     }
     
@@ -902,7 +948,6 @@ Elem& Node::search (Elem& desired, Node*& last_visited_ptr) {
     }
 
     return m_failure;
-
 } 
 
 
@@ -910,38 +955,38 @@ Elem& Node::search (Elem& desired, Node*& last_visited_ptr) {
 
 Elem Node::m_failure = Elem();
  
-void Node::check_Merkle_tree() {
+void Node::check_merkle_tree() {
     
    for (uint i = 0; i < m_count; i++) {
 	if (m_vector[i].has_subtree()) {
-	    m_vector[i].mp_subtree->check_Merkle_tree();
+	    m_vector[i].mp_subtree->check_merkle_tree();
 	}
     }
  
-    string hash = Merkle_hash();
+    string hash = hash_node();
    
     if (hash != merkle_hash) {
-	cerr << "Merkle hash does not match at node "; dump(false); cerr << "\n";
+	cerr << "merkle hash does not match at node "; dump(false); cerr << "\n";
 //	cerr << "here is the subtree \n";
 //	dump();
-	cerr << "here is the recomputed Merkle node \n";
-	recompute_Merkle_subtree();
+	cerr << "here is the recomputed merkle node \n";
+	recompute_merkle_subtree();
 	dump(false);
 	
-        assert_s(false, "Merkle hash not verified");
+        assert_s(false, "merkle hash not verified");
     }
         
 }
 
-void Node::recompute_Merkle_subtree() {
+void Node::recompute_merkle_subtree() {
     // recompute for children first
     for (uint i = 0; i < m_count; i++) {
 	if (m_vector[i].has_subtree()) {
 	    cerr << "recompute merkle: has subtree\n";
-	    m_vector[i].mp_subtree->check_Merkle_tree();
+	    m_vector[i].mp_subtree->check_merkle_tree();
 	}
     }
-    merkle_hash = Merkle_hash();
+    merkle_hash = hash_node();
 }
 
 void Node::max_height_help(uint height, uint & max_height) {
