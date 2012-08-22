@@ -32,19 +32,22 @@ typedef struct NodeMerkleInfo {
 
 std::ostream& operator<<(std::ostream &out, const NodeMerkleInfo & mi);
 
+
 // Contains Merkle information for each node on the path from a specific node
 // to the root 
 // Each element of the list is the NodeMerkleInfo for one level
 // starting with the originating node and ending with the root
 typedef struct MerkleProof {
     std::list<NodeMerkleInfo> path;
+    
 } MerkleProof;
+
+
 
 class Node {
 
     
 public:
-
 
     Elem& search (Elem& desired, Node*& last_visited);
     
@@ -64,15 +67,7 @@ public:
     
     // the merkle hash of this node
     std::string merkle_hash;
-
-    // returns the information needed to check the validity of the current
-    // node with respect to the overall merkle hash
-    MerkleProof get_merkle_proof();
-
-    // verifies that the merkle information corresponding to a node matches the
-    // overall root merkle hash
-    static bool verify_merkle_proof(const MerkleProof & proof, const std::string & merkle_root);
-  
+ 
     // Functions for testing
     void check_merkle_tree(); //checks merkle tree was computed correctly
     void recompute_merkle_subtree();
@@ -166,13 +161,30 @@ protected:
     
 
     /****************************/
+
+    // Friends
+    friend class Test;
+    friend MerkleProof get_merkle_proof(Node * n);
+    friend bool verify_merkle_proof(const MerkleProof & proof, const std::string & merkle_root);
+
 #ifdef _DEBUG
 
     Elem debug[8];
 
 #endif
     
-}; 
+};
+
+// returns the information needed to check the validity of the current
+// node with respect to the overall merkle hash
+MerkleProof
+get_merkle_proof(Node * n);
+
+// verifies that the merkle information corresponding to a node matches the
+// overall root merkle hash
+bool
+verify_merkle_proof(const MerkleProof & proof, const std::string & merkle_root);
+ 
 
 Node* invalid_ptr = reinterpret_cast<Node*> (-1);
 

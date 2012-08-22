@@ -1,6 +1,7 @@
 /*
 
-  B-tree implementation, adapted from toucan@textelectric.net, 2003
+  B-tree + Merkle tree implementation,
+  The initial B-tree was adapted from toucan@textelectric.net, 2003
 
 */
 
@@ -17,7 +18,7 @@ const string hash_empty_node = "0";
 static string
 format_concat(const string & m_key, uint key_size, const string & hash, uint repr_size) {
     string repr = string(repr_size, 0);
-    
+
     assert_s(m_key.size() != key_size, "size of key is larger than max allowed");
 
     repr.replace(0, m_key.size(), m_key);
@@ -440,11 +441,12 @@ Element<payload>::get_subtree_merkle() {
 
 NodeMerkleInfo Node::extract_NodeMerkleInfo(int pos) {
     NodeMerkleInfo mi = NodeMerkleInfo();
-    mi.childr.resize(m_vector.size());
+    mi.childr.resize(m_count);
     mi.pos_of_child_to_check = pos;
-    uint ind = 0;
-    for (Elem e : m_vector) {
-	mi.childr[ind++] = make_pair(e.m_key, e.get_subtree_merkle());
+
+    for (uint i = 0; i < m_count; i++) {
+	Elem e = m_vector[i];
+	mi.childr[i] = make_pair(e.m_key, e.get_subtree_merkle());
     }
     return mi;
 }
@@ -461,21 +463,21 @@ Node::index_in_parent() {
 }
 
 MerkleProof
-Node::get_merkle_proof() {
-    Node * curr_node = this;
+get_merkle_proof(Node * curr_node) {
 
     MerkleProof proof = MerkleProof();
 
     // TODO: is find_root efficient?, should be constant work
 
     int pos = -1;
-    
+
     while (true) {
 	proof.path.push_back(curr_node->extract_NodeMerkleInfo(pos));
-	pos = index_in_parent();
-	if (curr_node == find_root()) {
+
+	if (curr_node == curr_node->find_root()) {
 	    break;
 	}
+	pos = curr_node->index_in_parent();
 	curr_node = curr_node->mp_parent;
     }
 
@@ -494,6 +496,8 @@ operator<<(std::ostream &out, const NodeMerkleInfo & mi) {
     return out;
 }
 
+
+
 string
 NodeMerkleInfo::hash() {
     string concat = string(childr.size() * Elem::repr_size, 0);
@@ -509,22 +513,25 @@ NodeMerkleInfo::hash() {
 
 
 bool
-Node::verify_merkle_proof(const MerkleProof & proof, const string & merkle_root) {
+verify_merkle_proof(const MerkleProof & proof, const string & merkle_root) {
 
     assert_s(proof.path.begin() != proof.path.end(), "proof is empty");
     
     NodeMerkleInfo origin_node = *(proof.path.begin());
 
-    string hash = origin_node.hash();
+    string hash = "";
 
-    for (NodeMerkleInfo mi : proof.path) {
-	// check that hash at pos_of_child_to_check corresponds to the one calc
-	// so far
-	if (mi.childr.at(mi.pos_of_child_to_check).second != hash) {
-	    cerr << " for node " << mi
-		 << " hash at pos of child does not match has so far \n";
-	    return false;
-	} 
+    for (auto mi : proof.path) {
+
+	if (mi.pos_of_child_to_check >= 0) {
+	    assert_s(hash.size() > 0, "position of child to check is >= 0 for origin node");
+            // check that hash at pos_of_child_to_check corresponds to the one calc
+	    // so far
+	    if (mi.childr.at(mi.pos_of_child_to_check).second != hash) {
+		cerr << " hash at pos of child does not match has so far \n";
+		return false;
+	    }
+	}
 
 	// compute parent's hash
 	hash = mi.hash();
@@ -541,13 +548,11 @@ Node::verify_merkle_proof(const MerkleProof & proof, const string & merkle_root)
 
 string
 Node::hash_node(){
-    uint blocksize = sha256::hashsize + Elem::key_size ;
-
-    string hashes_concat = string(m_count * blocksize, 0);
+    string hashes_concat = string(m_count * Elem::repr_size, 0);
 
     for (uint i = 0 ; i < m_count ; i++) {
 	Elem e = m_vector[i];
-	hashes_concat.replace(i*blocksize, Elem::repr_size, e.repr());
+	hashes_concat.replace(i*Elem::repr_size, Elem::repr_size, e.repr());
     }
     
     return sha256::hash(hashes_concat);
