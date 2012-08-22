@@ -138,7 +138,7 @@ Node::Node(RootTracker& root_track)  : m_root(root_track) {
     
     mp_parent = 0;
 
-    merkle_hash = "0"; 
+    merkle_hash = hash_empty_node; 
     
     insert_zeroth_subtree (0);
 }
@@ -412,14 +412,14 @@ string Elem::get_subtree_merkle() {
     if (has_subtree()) {
 	return mp_subtree->merkle_hash;
     } else {
-	return "0";
+	return hash_empty_node;
     }
 }
 
-merkleInfoForLevel& extract_node_merkle_info(int pos) {
-    merkleInfoForLevel mil = merkleInfoForLevel();
-    mil.children.resize(m_vector.size());
-    mil.pos = pos;
+NodeMerkleInfo& Node::extract_NodeMerkleInfo(int pos) {
+    NodeMerkleInfo mi = NodeMerkleInfo();
+    mi.childr.resize(m_vector.size());
+    mi.pos = pos;
     uint ind = 0;
     for (Elem e : m_vector) {
 	mil.children[ind] = make_pair<string, string>(e.m_key,
@@ -428,33 +428,78 @@ merkleInfoForLevel& extract_node_merkle_info(int pos) {
     return mil;
 }
 
-merkleInfo Node::merkle_info_for_check() {
-    Node * curr_node = this;
-
-    merkleInfo mi = merkleInfo();
-
-    // TODO: is find_root efficient?, should be constant workmak
-    
-    while (true) {
-
-	if (curr_node->find_root() == curr_node) {
-	    int pos = 
-	    mil.push_back(extract_node_merkle_info(-1));
-	    break;
-	} else {
-	    mil.push_back(extract_node_merkle_info(node_pos()));
-	    curr_node = curr_node->mp_parent;
-	}
+// returns the index of this node in its parent vector
+// or negative if this does not have a parent (is root)
+static uint
+index_in_parent(Node * n) {
+    if (n == n->find_root()) {
+	    return -1;
+    } else {
+	return n->mp_parent->index_of_child(n);
     }
-
-    return mi;
 }
 
-bool check_merkle_info(const merkleInfo & mi, const string & root_hash) {
-    string hash = "";
-    for (merkleInfoForLevel mil : mi) {
-	clean up node hash and merkle hash and all these hashes, also in interface
+MerkleInfo Node::get_merkle_proof() {
+    Node * curr_node = this;
+
+    MerkleProof proof = MerkleProof();
+
+    // TODO: is find_root efficient?, should be constant work
+
+    int pos = -1;
+    
+    while (true) {
+	proof.path.push_back(curr_node->extract_NodeMerkleInfo(pos));
+	pos = index_in_parent();
+	if (curr_node == find_root()) {
+	    break;
+	}
+	curr_node = curr_node->mp_parent;
     }
+
+    return proof;
+}
+
+
+string
+NodeMerkleInfo::hash() {
+    string concat = string(childr.size() * Elem::repr_size, 0);
+
+    uint count = 0;
+    for (auto p : childr) {
+	concat.replace(Elem::repr_size * (count++), Elem::repr_size, format_concat(p.first, p.second));
+    }
+
+    return sha256::hash(concat);
+}
+
+
+bool verify_merkle_proof(const MerkleProof & proof, const string & merkle_root) {
+
+    MerkleInfo origin_node = proof.path.pop_first();
+
+    string hash = origin_node->hash();
+
+    for (NodeMerkleInfo mi : proof.path) {
+	// check that hash at pos_of_child_to_check corresponds to the one calc
+	// so far
+	if (mi.childr.at(pos_of_child_to_check).second != hash) {
+	    cerr << " for node " << mi
+		 << " hash at pos of child does not match has so far \n";
+	    return false;
+	} 
+
+	// compute parent's hash
+	hash = mi->hash();
+    }
+
+    // check that the resulting hash matches the root Merkle hash
+    if (hash != merkle_root) {
+	cerr << "merkle root does not verify\n";
+	return false;
+    }
+
+    return true;
 }
 
 string
@@ -465,13 +510,7 @@ Node::hash_node(){
 
     for (uint i = 0 ; i < m_count ; i++) {
 	Elem e = m_vector[i];
-	assert_s(e.m_key.size() <= nodekeysize, "size of key is larger than max allowed");
-	string mkey = e.m_key;
-	hashes_concat.replace(i*blocksize, mkey.size(), mkey);
-
-	string hash = e.get_subtree_merkle();
-	assert_s(hash.size() <= sha256::hashsize, "size of hash is larger than sha256::hashsize");
-	hashes_concat.replace(i*blocksize + nodekeysize, hash.size(), hash);
+	hashes_concat.replace(i*blocksize, Elem::repr_size, e.to_repr());
     }
     
     return sha256::hash(hashes_concat);
@@ -1019,4 +1058,43 @@ Node::in_order_traverse(list<string> & result) {
 	    m_vector[i].mp_subtree->in_order_traverse(result);
 	}
     }
+}
+
+// concatenates the m_key of an Elem (sized to length Elem::key_size bytes)
+// with hash (sized to length sha256::hashsize)
+static string
+format_concat(const string & m_key, const string & hash) {
+    string repr = string(repr_size, 0);
+    
+    assert_s(m_key.size() != Elem::key_size, "size of key is larger than max allowed");
+
+    string len_repr = len_repr(m_key.size());
+
+    repr.replace(0, bytesoflen, len_repr);
+    repr.replace(bytesoflen, m_key.size(), m_key);
+    
+    string hash = get_subtree_merkle();
+    assert_s(hash.size() <= sha256::hashsize, "size of hash is larger than sha256::hashsize");
+
+    repr.replace(bytesoflen + keysize, hash.size(), hash);
+  
+}
+
+string
+Elem::repr() {
+    return format_concat(m_key, get_subtree_merkle());
+}
+
+// outputs the index that child has in this parent list
+// or a negative value if it does not exist  
+static int
+index_of_child(Node * parent, Node * child) {
+    for (int i = 0 ; i < m_count ; i++) {
+	Elem e = parent->m_vector[i];
+	if (e.has_subtree() && child == e.mp_subtree) {
+	    return i;
+	}
+    }
+
+    return -1;
 }

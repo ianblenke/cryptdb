@@ -9,19 +9,23 @@ typedef Element<std::string> Elem;
 
 class RootTracker;
 
+const string hash_empty_node = "0";
+
 // The Merkle information at a node N
 // needed for Merkle checks
 typdef struct NodeMerkleInfo {
 
     // The list of all children of node N
     // for each child, key and merkle_hash
-    std::list<pair<std::string, std::string>> children;
+    std::list<pair<std::string, std::string>> childr;
 
     // The position in the vector of children of the node
     // to check by recomputing the hash;
     // the node from which the Merkle computation starts
     // upwards will have a pos_of_child_to_check of -1
     int pos_of_child_to_check;
+
+    string hash();
 };
 
 // Contains Merkle information for each node on the path from a specific node
@@ -36,16 +40,7 @@ class Node {
 
 protected:
 
-    // locality of reference, beneficial to effective cache utilization,
-    // is provided by a "vector" container rather than a "list"
-    // upon construction, m_vector is sized to max amount of elements
-    // the first element is the "zero" element, empty key and points to zeroth subtree
-    std::vector<Elem> m_vector;
-
-    // number of elements currently in m_vector, including the zeroth element
-    // which has only a subtree, no key value or payload.
-    unsigned int m_count;
-    Node* mp_parent;
+  
 
     bool is_leaf();
     
@@ -80,9 +75,12 @@ protected:
 
     int minimum_keys ();
 
-    void max_height_help(uint height, uint & max_height);
+    // outputs the index that this node has in his parent element list
+    uint index_in_parent();
 
-    /* Merkle related functions */
+
+    /***************************
+     * Merkle related functions */
 
     // computes the hash of the current node
     std::string hash_node();
@@ -92,8 +90,10 @@ protected:
 
     //recomputes Merkle hash of all the nodes from this up to the root
     void update_Merkle_upward();
-   
-      
+    
+    void max_height_help(uint height, uint & max_height);
+
+    /****************************/
 #ifdef _DEBUG
 
     Elem debug[8];
@@ -101,6 +101,17 @@ protected:
 #endif
 
 public:
+
+    // locality of reference, beneficial to effective cache utilization,
+    // is provided by a "vector" container rather than a "list"
+    // upon construction, m_vector is sized to max amount of elements
+    // the first element is the "zero" element, empty key and points to zeroth subtree
+    std::vector<Elem> m_vector;
+
+    // number of elements currently in m_vector, including the zeroth element
+    // which has only a subtree, no key value or payload.
+    unsigned int m_count;
+    Node* mp_parent;
 
     Elem& search (Elem& desired, Node*& last_visited);
     
@@ -123,13 +134,13 @@ public:
 
     // returns the information needed to check the validity of the current
     // node with respect to the overall merkle hash
-    merkleProof get_merkle_proof();
+    MerkleProof get_merkle_proof();
 
-    // checks that the merkle information corresponding to a node matches the
+    // verifies that the merkle information corresponding to a node matches the
     // overall root merkle hash
-    bool check_merkle_proof(const merkleInfo & mi, const std::string & root_hash);
+    static bool verify_merkle_proof(const MerkleProof & proof, const std::string & merkle_root);
   
-    // testing functions
+    // Functions for testing
     void check_merkle_tree(); //checks merkle tree was computed correctly
     void recompute_merkle_subtree();
     uint max_height();
@@ -172,10 +183,10 @@ template<class payload> class Element {
 public:
 
     std::string m_key;
+    const static key_size = 20; //bytes of max size of key_size
     payload m_payload;
     Node* mp_subtree;
 
-public:
     bool operator>   (Element& other) const { return m_key.compare(other.m_key) > 0; }
     bool operator<   (Element& other) const { return m_key.compare(other.m_key) < 0; }
     bool operator>=  (Element& other) const { return m_key.compare(other.m_key) >= 0; }
@@ -201,11 +212,13 @@ public:
 
     void dump(); 
 
+    /*** Merkle-related ***/
+    
+    string to_repr(); // converts to string the relevant information for Merkle
+		      // hash of this node
+    static const string repr_size = sha256:hashsize + key_size; //bytes
+
 }; 
-
-
-
-
 
 
 class RootTracker {
