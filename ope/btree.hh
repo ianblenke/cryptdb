@@ -10,7 +10,6 @@ typedef Element<std::string> Elem;
 class RootTracker;
 
 
-
 // The Merkle information at a node N
 // needed for Merkle checks
 typedef struct NodeMerkleInfo {
@@ -165,7 +164,7 @@ protected:
     // Friends
     friend class Test;
     friend MerkleProof get_merkle_proof(Node * n);
-    friend bool verify_merkle_proof(const MerkleProof & proof, const std::string & merkle_root);
+
 
 #ifdef _DEBUG
 
@@ -175,8 +174,7 @@ protected:
     
 };
 
-// returns the information needed to check the validity of the current
-// node with respect to the overall merkle hash
+// returns the information needed to check the validity of node n
 MerkleProof
 get_merkle_proof(Node * n);
 
@@ -294,7 +292,7 @@ public:
     ~RootTracker () {
 
         // safety measure
-        if (mp_root) {
+       if (mp_root) {
 
             mp_root->delete_all_subtrees();
 
