@@ -9,15 +9,15 @@ typedef Element<std::string> Elem;
 
 class RootTracker;
 
-const string hash_empty_node = "0";
+
 
 // The Merkle information at a node N
 // needed for Merkle checks
-typdef struct NodeMerkleInfo {
+typedef struct NodeMerkleInfo {
 
-    // The list of all children of node N
+    // The vector of all children of node N
     // for each child, key and merkle_hash
-    std::list<pair<std::string, std::string>> childr;
+    std::vector<std::pair<std::string, std::string>> childr;
 
     // The position in the vector of children of the node
     // to check by recomputing the hash;
@@ -25,93 +25,26 @@ typdef struct NodeMerkleInfo {
     // upwards will have a pos_of_child_to_check of -1
     int pos_of_child_to_check;
 
-    string hash();
-};
+    std::string hash();
+
+
+} NodeMerkleInfo;
+
+std::ostream& operator<<(std::ostream &out, const NodeMerkleInfo & mi);
 
 // Contains Merkle information for each node on the path from a specific node
 // to the root 
 // Each element of the list is the NodeMerkleInfo for one level
 // starting with the originating node and ending with the root
-typdef struct MerkleProof {
+typedef struct MerkleProof {
     std::list<NodeMerkleInfo> path;
-};
+} MerkleProof;
 
 class Node {
 
-protected:
-
-  
-
-    bool is_leaf();
     
-    bool vector_insert (Elem& element);
-    bool vector_insert_for_split (Elem& element);
-    bool split_insert (Elem& element);
-
-    bool vector_delete (Elem& target);
-    bool vector_delete (int target_pos);
-
-    void insert_zeroth_subtree (Node* subtree);
-
-    void set_debug();
-    int key_count () { return m_count-1; }
-
-    Elem& largest_key () { return m_vector[m_count-1]; }
-    Elem& smallest_key () { return m_vector[1]; }
-    Elem& smallest_key_in_subtree();
-
-    int index_has_subtree ();
-
-    Node* right_sibling (int& parent_index_this);
-    Node* left_sibling (int& parent_index_this);
-
-    Node* rotate_from_left(int parent_index_this);
-    Node* rotate_from_right(int parent_index_this);
-
-    Node* merge_right (int parent_index_this);
-    Node* merge_left (int parent_index_this);
-
-    bool merge_into_root ();
-
-    int minimum_keys ();
-
-    // outputs the index that this node has in his parent element list
-    uint index_in_parent();
-
-
-    /***************************
-     * Merkle related functions */
-
-    // computes the hash of the current node
-    std::string hash_node();
-    
-    //recomputes Merkle hash of the current node
-    void update_Merkle();
-
-    //recomputes Merkle hash of all the nodes from this up to the root
-    void update_Merkle_upward();
-    
-    void max_height_help(uint height, uint & max_height);
-
-    /****************************/
-#ifdef _DEBUG
-
-    Elem debug[8];
-
-#endif
-
 public:
 
-    // locality of reference, beneficial to effective cache utilization,
-    // is provided by a "vector" container rather than a "list"
-    // upon construction, m_vector is sized to max amount of elements
-    // the first element is the "zero" element, empty key and points to zeroth subtree
-    std::vector<Elem> m_vector;
-
-    // number of elements currently in m_vector, including the zeroth element
-    // which has only a subtree, no key value or payload.
-    unsigned int m_count;
-    Node* mp_parent;
 
     Elem& search (Elem& desired, Node*& last_visited);
     
@@ -158,6 +91,87 @@ public:
     void dump(bool recursive = true);
     void in_order_traverse(std::list<std::string> & res);
 
+
+protected:
+
+    // locality of reference, beneficial to effective cache utilization,
+    // is provided by a "vector" container rather than a "list"
+    // upon construction, m_vector is sized to max amount of elements
+    // the first element is the "zero" element, empty key and points to zeroth subtree
+    std::vector<Elem> m_vector;
+
+    // number of elements currently in m_vector, including the zeroth element
+    // which has only a subtree, no key value or payload.
+    unsigned int m_count;
+    Node* mp_parent;
+  
+
+    bool is_leaf();
+    
+    bool vector_insert (Elem& element);
+    bool vector_insert_for_split (Elem& element);
+    bool split_insert (Elem& element);
+
+    bool vector_delete (Elem& target);
+    bool vector_delete (int target_pos);
+
+    void insert_zeroth_subtree (Node* subtree);
+
+    void set_debug();
+    int key_count () { return m_count-1; }
+
+    Elem& largest_key () { return m_vector[m_count-1]; }
+    Elem& smallest_key () { return m_vector[1]; }
+    Elem& smallest_key_in_subtree();
+
+    int index_has_subtree ();
+
+    Node* right_sibling (int& parent_index_this);
+    Node* left_sibling (int& parent_index_this);
+
+    Node* rotate_from_left(int parent_index_this);
+    Node* rotate_from_right(int parent_index_this);
+
+    Node* merge_right (int parent_index_this);
+    Node* merge_left (int parent_index_this);
+
+    bool merge_into_root ();
+
+    int minimum_keys ();
+
+    // outputs the index that this node has in his parent element list
+    int index_in_parent();
+    
+    // outputs the index that child has in this parent list
+    // or a negative value if it does not exist  
+    int index_of_child(Node * child);
+
+
+    /***************************
+     * Merkle related functions */
+
+    // computes the hash of the current node
+    std::string hash_node();
+    
+    //recomputes Merkle hash of the current node
+    void update_merkle();
+
+    //recomputes Merkle hash of all the nodes from this up to the root
+    void update_merkle_upward();
+
+    NodeMerkleInfo extract_NodeMerkleInfo(int pos);
+
+    
+    void max_height_help(uint height, uint & max_height);
+    
+
+    /****************************/
+#ifdef _DEBUG
+
+    Elem debug[8];
+
+#endif
+    
 }; 
 
 Node* invalid_ptr = reinterpret_cast<Node*> (-1);
@@ -171,7 +185,7 @@ const unsigned int max_elements = 200;  // max elements in a node
 // size limit for the array in a vector object.  best performance was
 // at 800 bytes.
 const unsigned int max_array_bytes = 800; 
-static const uint nodekeysize = 16;
+
 	
 /*
  * contains a key value, a payload, and a pointer toward the subtree
@@ -182,11 +196,6 @@ template<class payload> class Element {
 
 public:
 
-    std::string m_key;
-    const static key_size = 20; //bytes of max size of key_size
-    payload m_payload;
-    Node* mp_subtree;
-
     bool operator>   (Element& other) const { return m_key.compare(other.m_key) > 0; }
     bool operator<   (Element& other) const { return m_key.compare(other.m_key) < 0; }
     bool operator>=  (Element& other) const { return m_key.compare(other.m_key) >= 0; }
@@ -195,8 +204,7 @@ public:
 
     bool valid () const { return mp_subtree != invalid_ptr; }
 
-    bool has_subtree() const {return valid() && (mp_subtree != null_ptr) && mp_subtree; }
-
+ 
     void invalidate () { mp_subtree = invalid_ptr; }
 
     Element& operator= (const Element& other) {
@@ -212,11 +220,30 @@ public:
 
     void dump(); 
 
-    /*** Merkle-related ***/
+
+private:
+    friend class Node;
+    friend class NodeMerkleInfo;
+    friend class Test;
     
-    string to_repr(); // converts to string the relevant information for Merkle
+    std::string m_key;
+    static const uint key_size = 20; //bytes of max size of key_size
+    payload m_payload;
+    Node* mp_subtree;
+    bool has_subtree() const {return valid() && (mp_subtree != null_ptr) && mp_subtree; }
+
+    /***********************
+     **** Merkle-related ***/
+
+    // returns a hash of the subtree of this element,
+    // even if the subtree is empty
+    std::string get_subtree_merkle();
+    
+    std::string repr(); // converts to string the relevant information for Merkle
 		      // hash of this node
-    static const string repr_size = sha256:hashsize + key_size; //bytes
+    static const uint repr_size = sha256::hashsize + key_size; //bytes
+
+    /*********************/
 
 }; 
 

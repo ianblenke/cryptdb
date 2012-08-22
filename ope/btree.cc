@@ -9,9 +9,29 @@
 
 using namespace std;
 
+const string hash_empty_node = "0";
 
- 
-template<class payload> void Element<payload>::dump () {
+
+// concatenates the m_key of an Elem (sized to length Elem::key_size bytes)
+// with hash (sized to length sha256::hashsize)
+static string
+format_concat(const string & m_key, uint key_size, const string & hash, uint repr_size) {
+    string repr = string(repr_size, 0);
+    
+    assert_s(m_key.size() != key_size, "size of key is larger than max allowed");
+
+    repr.replace(0, m_key.size(), m_key);
+    
+    assert_s(hash.size() <= sha256::hashsize, "size of hash is larger than sha256::hashsize");
+
+    repr.replace(key_size, hash.size(), hash);
+
+    return repr;
+}
+
+
+template<class payload>
+void Element<payload>::dump () {
     std::cout << " (key = " <<  m_key << "\n";
 /*
 	      <<
@@ -408,7 +428,9 @@ bool Node::split_insert (Elem& element) {
     return true;
 }
 
-string Elem::get_subtree_merkle() {
+template<class payload>
+string
+Element<payload>::get_subtree_merkle() {
     if (has_subtree()) {
 	return mp_subtree->merkle_hash;
     } else {
@@ -416,30 +438,30 @@ string Elem::get_subtree_merkle() {
     }
 }
 
-NodeMerkleInfo& Node::extract_NodeMerkleInfo(int pos) {
+NodeMerkleInfo Node::extract_NodeMerkleInfo(int pos) {
     NodeMerkleInfo mi = NodeMerkleInfo();
     mi.childr.resize(m_vector.size());
-    mi.pos = pos;
+    mi.pos_of_child_to_check = pos;
     uint ind = 0;
     for (Elem e : m_vector) {
-	mil.children[ind] = make_pair<string, string>(e.m_key,
-						      e.get_subtree_merkle());
+	mi.childr[ind++] = make_pair(e.m_key, e.get_subtree_merkle());
     }
-    return mil;
+    return mi;
 }
 
 // returns the index of this node in its parent vector
 // or negative if this does not have a parent (is root)
-static uint
-index_in_parent(Node * n) {
-    if (n == n->find_root()) {
+int
+Node::index_in_parent() {
+    if (this == find_root()) {
 	    return -1;
     } else {
-	return n->mp_parent->index_of_child(n);
+	return mp_parent->index_of_child(this);
     }
 }
 
-MerkleInfo Node::get_merkle_proof() {
+MerkleProof
+Node::get_merkle_proof() {
     Node * curr_node = this;
 
     MerkleProof proof = MerkleProof();
@@ -460,6 +482,17 @@ MerkleInfo Node::get_merkle_proof() {
     return proof;
 }
 
+std::ostream&
+operator<<(std::ostream &out, const NodeMerkleInfo & mi) {
+    out << " children: (";
+    for (auto c : mi.childr) {
+	out << c.first << " " << c.second << "; ";
+    }
+    out << "\n";
+    out << "pos of child to check " << mi.pos_of_child_to_check << "\n";
+
+    return out;
+}
 
 string
 NodeMerkleInfo::hash() {
@@ -467,30 +500,34 @@ NodeMerkleInfo::hash() {
 
     uint count = 0;
     for (auto p : childr) {
-	concat.replace(Elem::repr_size * (count++), Elem::repr_size, format_concat(p.first, p.second));
+	concat.replace(Elem::repr_size * (count++), Elem::repr_size,
+		       format_concat(p.first, Elem::key_size, p.second, Elem::repr_size));
     }
 
     return sha256::hash(concat);
 }
 
 
-bool verify_merkle_proof(const MerkleProof & proof, const string & merkle_root) {
+bool
+Node::verify_merkle_proof(const MerkleProof & proof, const string & merkle_root) {
 
-    MerkleInfo origin_node = proof.path.pop_first();
+    assert_s(proof.path.begin() != proof.path.end(), "proof is empty");
+    
+    NodeMerkleInfo origin_node = *(proof.path.begin());
 
-    string hash = origin_node->hash();
+    string hash = origin_node.hash();
 
     for (NodeMerkleInfo mi : proof.path) {
 	// check that hash at pos_of_child_to_check corresponds to the one calc
 	// so far
-	if (mi.childr.at(pos_of_child_to_check).second != hash) {
+	if (mi.childr.at(mi.pos_of_child_to_check).second != hash) {
 	    cerr << " for node " << mi
 		 << " hash at pos of child does not match has so far \n";
 	    return false;
 	} 
 
 	// compute parent's hash
-	hash = mi->hash();
+	hash = mi.hash();
     }
 
     // check that the resulting hash matches the root Merkle hash
@@ -504,13 +541,13 @@ bool verify_merkle_proof(const MerkleProof & proof, const string & merkle_root) 
 
 string
 Node::hash_node(){
-    uint blocksize = sha256::hashsize + nodekeysize ;
+    uint blocksize = sha256::hashsize + Elem::key_size ;
 
     string hashes_concat = string(m_count * blocksize, 0);
 
     for (uint i = 0 ; i < m_count ; i++) {
 	Elem e = m_vector[i];
-	hashes_concat.replace(i*blocksize, Elem::repr_size, e.to_repr());
+	hashes_concat.replace(i*blocksize, Elem::repr_size, e.repr());
     }
     
     return sha256::hash(hashes_concat);
@@ -1060,37 +1097,16 @@ Node::in_order_traverse(list<string> & result) {
     }
 }
 
-// concatenates the m_key of an Elem (sized to length Elem::key_size bytes)
-// with hash (sized to length sha256::hashsize)
-static string
-format_concat(const string & m_key, const string & hash) {
-    string repr = string(repr_size, 0);
-    
-    assert_s(m_key.size() != Elem::key_size, "size of key is larger than max allowed");
-
-    string len_repr = len_repr(m_key.size());
-
-    repr.replace(0, bytesoflen, len_repr);
-    repr.replace(bytesoflen, m_key.size(), m_key);
-    
-    string hash = get_subtree_merkle();
-    assert_s(hash.size() <= sha256::hashsize, "size of hash is larger than sha256::hashsize");
-
-    repr.replace(bytesoflen + keysize, hash.size(), hash);
-  
-}
-
+template<class payload>
 string
-Elem::repr() {
-    return format_concat(m_key, get_subtree_merkle());
+Element<payload>::repr() {
+    return format_concat(m_key, key_size, get_subtree_merkle(), repr_size);
 }
 
-// outputs the index that child has in this parent list
-// or a negative value if it does not exist  
-static int
-index_of_child(Node * parent, Node * child) {
-    for (int i = 0 ; i < m_count ; i++) {
-	Elem e = parent->m_vector[i];
+int
+Node::index_of_child(Node * child) {
+    for (uint i = 0 ; i < m_count ; i++) {
+	Elem e = m_vector[i];
 	if (e.has_subtree() && child == e.mp_subtree) {
 	    return i;
 	}

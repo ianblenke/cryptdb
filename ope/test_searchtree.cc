@@ -75,6 +75,10 @@ progress_info(string mess, uint total, uint i) {
     }
     }*/
 
+class Test {
+
+public:
+
 static void
 test_help(vector<string> & vals, uint no_elems) {
     
@@ -103,7 +107,7 @@ test_help(vector<string> & vals, uint no_elems) {
 	// check Merkle hash tree integrity
 	if (i % period_Merkle_check == 0) {
 	    //cerr << "checking Merkle for tree so far \n";
-	    tracker.get_root()->check_Merkle_tree();
+	    tracker.get_root()->check_merkle_tree();
 	    //cerr << "passed check\n";
 	}
     }
@@ -118,7 +122,7 @@ test_help(vector<string> & vals, uint no_elems) {
     cout << " -- max height of tree is " << max_height << " fanout " << max_elements << "\n";
     check_good_height(max_height, no_elems, max_elements);
 
-    tracker.get_root()->check_Merkle_tree();
+    tracker.get_root()->check_merkle_tree();
 
 
 //check if no_inserted random elements are indeed in the tree
@@ -172,7 +176,7 @@ test_help(vector<string> & vals, uint no_elems) {
 	// check Merkle hash tree integrity
 	if (i % period_Merkle_check == 0) {
 	    //cerr << "check Merkle \n";
-	    tracker.get_root()->check_Merkle_tree();
+	    tracker.get_root()->check_merkle_tree();
 	    //cerr << "check success\n";
 	}
 
@@ -185,6 +189,8 @@ test_help(vector<string> & vals, uint no_elems) {
     check_good_height(tracker.get_root()->max_height(), no_elems, max_elements);
 
 }
+    
+}; // end of class Test
 
 // test the b-tree.
 // -- inserts many elements in random order, increasing order, decreasing order,
@@ -195,7 +201,7 @@ test_help(vector<string> & vals, uint no_elems) {
 static void
 testBMerkleTree() {
     
-   uint no_elems = 1000;
+   uint no_elems = 10000;
 
    vector<string> vals;
    srand( time(NULL));
@@ -207,17 +213,17 @@ testBMerkleTree() {
        s << rand();
        vals.push_back(s.str());
    }
-   test_help(vals, no_elems); 
+   Test::test_help(vals, no_elems); 
    
    // test on values in increasing order
    sort(vals.begin(), vals.end());
    cerr << "- " << no_elems << " values in increasing order: \n";
-   test_help(vals, no_elems); 
+   Test::test_help(vals, no_elems); 
    
    // test on values in decreasing order
    reverse(vals.begin(), vals.end());
    cerr << "- " << no_elems << " values in decreasing order: \n";
-   test_help(vals, no_elems);
+   Test::test_help(vals, no_elems);
 
    cerr << "test B + Merkle tree OK.\n";
    
