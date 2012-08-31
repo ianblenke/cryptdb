@@ -163,11 +163,15 @@ public:
 
 	//check deletion
 	for (uint i = 0 ; i < no_deletes; i++) {
+
+	    string old_merkle_hash = tracker.get_root()->merkle_hash;
+	    
 	    string test_val = vals[rand() % no_elems];
 	    Elem desired;
 	    desired.m_key = test_val;
 	    //delete it
-	    tracker.get_root()->delete_element(desired);
+	    DelMerkleProof delproof;
+	    bool deleted = tracker.get_root()->tree_delete(desired, delproof);
 
 	    Node * last;
 	    Elem result = tracker.get_root()->search(desired, last);
@@ -177,7 +181,16 @@ public:
 	    if (i % period_Merkle_check == 0) {
 		//cerr << "check Merkle \n";
 		tracker.get_root()->check_merkle_tree();
-		//cerr << "check success\n";
+
+		//check deletion proof only if deleted
+		if (deleted) {
+		    string new_merkle_root;
+		    bool r = verify_del_merkle_proof(delproof, old_merkle_hash, new_merkle_root);
+		    assert_s(r, "deletion proof does not verify");
+		    assert_s(new_merkle_root == tracker.get_root()->merkle_hash,
+			 "verify_del gives incorrect new merkle root");
+		    //cerr << "check success\n";
+		}
 	    }
 
 	}

@@ -24,7 +24,7 @@ typedef struct NodeMerkleInfo {
     // upwards will have a pos_of_child_to_check of -1
     int pos_of_child_to_check;
 
-    std::string hash();
+    std::string hash() const;
 
 
 } NodeMerkleInfo;
@@ -41,7 +41,56 @@ typedef struct MerkleProof {
     
 } MerkleProof;
 
+// Merkle proof that a certain item was deleted
+typedef struct DelMerkleProof {
+    // Delete changes at most the nodes on a path from a node up to the root and
+    // one additional node, sibling of one node on this path
 
+    MerkleProof oldproof, newproof; // proofs for the lowest node changed, and
+				      // if two nodes are changed on the same
+				      // level, for the leftmost changed
+
+    bool new_tree_empty;
+    
+    // information for extra sibling
+    bool is_sib;  // whether there is an extra sibling
+    bool sib_was_deleted;
+    NodeMerkleInfo  oldsib, newsib; //the extra sibling to check
+    int pos_of_sib_in_parent;
+
+
+    bool non_leaf;
+    uint index_in_path; //index of non_leaf node on path
+    NodeMerkleInfo  non_leaf_old,  non_leaf_new;
+
+    
+    DelMerkleProof() { //default values
+
+	new_tree_empty =  false;
+	is_sib = false;
+	sib_was_deleted = false;
+        non_leaf = false;
+	
+    }
+
+} DelMerkleProof;
+
+class Node;
+
+typedef struct DelProofMeta {
+    DelMerkleProof dproof;
+    Node * start_node;
+    Node * non_leaf;
+    bool is_sib;
+    bool sib_was_deleted;
+    Node * sibl;
+    Node * sibl_of;
+    uint pos_of_sib_in_parent;
+    DelProofMeta() {
+	is_sib = sib_was_deleted = false;
+	non_leaf = sibl = sibl_of = 0;
+    }
+} DelProofMeta;
 
 class Node {
 
@@ -52,7 +101,7 @@ public:
     
     bool tree_insert (Elem& element);
 
-    bool delete_element (Elem& target);
+    bool tree_delete(Elem & target, DelMerkleProof & m);
 
     //cleaning up
     int delete_all_subtrees();
@@ -62,16 +111,9 @@ public:
     // to return a reference when a search fails.
     static Elem m_failure;
 
-    /** Merkle related **/
-    
     // the merkle hash of this node
     std::string merkle_hash;
  
-    // Functions for testing
-    void check_merkle_tree(); //checks merkle tree was computed correctly
-    void recompute_merkle_subtree();
-    uint max_height();
-
     /********************/
     
     // the root of the tree may change.  this attribute keeps it accessible.
@@ -98,7 +140,7 @@ protected:
     // which has only a subtree, no key value or payload.
     unsigned int m_count;
     Node* mp_parent;
-  
+
 
     bool is_leaf();
     
@@ -117,17 +159,18 @@ protected:
     Elem& largest_key () { return m_vector[m_count-1]; }
     Elem& smallest_key () { return m_vector[1]; }
     Elem& smallest_key_in_subtree();
-
     int index_has_subtree ();
 
     Node* right_sibling (int& parent_index_this);
     Node* left_sibling (int& parent_index_this);
 
-    Node* rotate_from_left(int parent_index_this);
-    Node* rotate_from_right(int parent_index_this);
+    bool delete_element (Elem& target, DelProofMeta & m);
+    
+    Node* rotate_from_left(int parent_index_this, DelProofMeta & m);
+    Node* rotate_from_right(int parent_index_this, DelProofMeta & m);
 
-    Node* merge_right (int parent_index_this);
-    Node* merge_left (int parent_index_this);
+    Node* merge_right (int parent_index_this, DelProofMeta & m);
+    Node* merge_left (int parent_index_this, DelProofMeta & m);
 
     bool merge_into_root ();
 
@@ -155,8 +198,17 @@ protected:
 
     NodeMerkleInfo extract_NodeMerkleInfo(int pos);
 
-    
+    // Functions for testing
+    void check_merkle_tree(); //checks merkle tree was computed correctly
+    void recompute_merkle_subtree();
+    uint max_height();    
     void max_height_help(uint height, uint & max_height);
+
+    // gets the merkle information of the tree after a delete that needs to be
+    // checked against the old information
+    void get_merkle_info_after_del(DelProofMeta & m, 
+				   int pos);
+	
     
 
     /****************************/
@@ -174,6 +226,7 @@ protected:
     
 };
 
+
 // returns the information needed to check the validity of node n
 MerkleProof
 get_merkle_proof(Node * n);
@@ -182,7 +235,14 @@ get_merkle_proof(Node * n);
 // overall root merkle hash
 bool
 verify_merkle_proof(const MerkleProof & proof, const std::string & merkle_root);
- 
+
+//verifies the merkle proof for deletion and returns true if it holds, and it
+//also sets new_merkle_root accordingly
+bool
+verify_del_merkle_proof(const DelMerkleProof & p,
+			const std::string & merkle_root,
+			std::string & new_merkle_root);
+
 
 Node* invalid_ptr = reinterpret_cast<Node*> (-1);
 
