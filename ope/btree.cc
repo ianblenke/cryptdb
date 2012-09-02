@@ -557,7 +557,14 @@ verify_merkle_proof(const MerkleProof & proof, const string & merkle_root) {
     return true;
 }
 
-bool verify_del_merkle_proof(const DelMerkleProof & p, const string & old_merkle_root, string & new_merkle_root) {
+bool
+verify_ins_merkle_proof(const InsMerkleProof & p, const string & old_merkle_root, string & new_merkle_root) {
+    //TODO
+    
+    return true;
+}
+bool
+verify_del_merkle_proof(const DelMerkleProof & p, const string & old_merkle_root, string & new_merkle_root) {
 /*
     if (p.new_tree_empty) {
 	new_merkle_root = "";
@@ -610,7 +617,7 @@ void Node::update_merkle_upward() {
 }
  
 
-bool Node::tree_insert(Elem& element) {
+bool Node::tree_insert(Elem& element, InsMerkleProof & p) {
 
     Node* last_visited_ptr = this;
 

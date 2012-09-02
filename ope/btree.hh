@@ -92,6 +92,10 @@ typedef struct DelProofMeta {
     }
 } DelProofMeta;
 
+typedef struct InsMerkleProof {
+    MerkleProof oldproof, newproof;
+} InsMerkleProof;
+
 class Node {
 
     
@@ -99,7 +103,7 @@ public:
 
     Elem& search (Elem& desired, Node*& last_visited);
     
-    bool tree_insert (Elem& element);
+    bool tree_insert (Elem& element, InsMerkleProof & p);
 
     bool tree_delete(Elem & target, DelMerkleProof & m);
 
@@ -243,6 +247,11 @@ verify_del_merkle_proof(const DelMerkleProof & p,
 			const std::string & merkle_root,
 			std::string & new_merkle_root);
 
+
+bool
+verify_ins_merkle_proof(const InsMerkleProof & p,
+			const std::string & merkle_root,
+			std::string & new_merkle_root);
 
 Node* invalid_ptr = reinterpret_cast<Node*> (-1);
 
