@@ -30,6 +30,7 @@ typedef struct NodeMerkleInfo {
 } NodeMerkleInfo;
 
 std::ostream& operator<<(std::ostream &out, const NodeMerkleInfo & mi);
+std::istream& operator>>(std::istream &is, NodeMerkleInfo & mi);
 
 
 // Contains Merkle information for each node on the path from a specific node
@@ -40,6 +41,9 @@ typedef struct MerkleProof {
     std::list<NodeMerkleInfo> path;
     
 } MerkleProof;
+
+std::ostream& operator<<(std::ostream &out, const MerkleProof & mp);
+std::istream& operator>>(std::istream &is, MerkleProof & mp);
 
 // Merkle proof that a certain item was deleted
 typedef struct DelMerkleProof {
@@ -75,6 +79,9 @@ typedef struct DelMerkleProof {
 
 } DelMerkleProof;
 
+std::ostream& operator<<(std::ostream &out, const DelMerkleProof & dmp);
+std::istream& operator>>(std::istream &is, DelMerkleProof & dmp);
+
 class Node;
 
 typedef struct DelProofMeta {
@@ -95,6 +102,9 @@ typedef struct DelProofMeta {
 typedef struct InsMerkleProof {
     MerkleProof oldproof, newproof;
 } InsMerkleProof;
+
+std::ostream& operator<<(std::ostream &out, const InsMerkleProof & imp);
+std::istream& operator>>(std::istream &is, InsMerkleProof & imp);
 
 class Node {
 
@@ -299,13 +309,15 @@ public:
 
     void dump(); 
 
+    std::string m_key;
 
 private:
     friend class Node;
     friend class NodeMerkleInfo;
     friend class Test;
+    template<class EncT> friend class tree;
     
-    std::string m_key;
+    //std::string m_key;
     static const uint key_size = 20; //bytes of max size of key_size
     payload m_payload;
     Node* mp_subtree;

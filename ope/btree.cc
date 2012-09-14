@@ -19,7 +19,7 @@ static string
 format_concat(const string & m_key, uint key_size, const string & hash, uint repr_size) {
     string repr = string(repr_size, 0);
 
-    assert_s(m_key.size() != key_size, "size of key is larger than max allowed");
+    assert_s(m_key.size() <= key_size, "size of key is larger than max allowed");
 
     repr.replace(0, m_key.size(), m_key);
     
@@ -486,17 +486,183 @@ get_merkle_proof(Node * curr_node) {
 
 std::ostream&
 operator<<(std::ostream &out, const NodeMerkleInfo & mi) {
-    out << " children: (";
-    for (auto c : mi.childr) {
-	out << c.first << " " << c.second << "; ";
+    out << " children( ";
+    for (int i=0; i<(int) mi.childr.size(); i++) {
+    std::pair<std::string,std::string> c = mi.childr[i];
+    if(c.first=="") c.first="null_key";
+    if(c.second=="") c.second="null_key";
+    out << c.first << " " << c.second << " ";
     }
-    out << "\n";
-    out << "pos of child to check " << mi.pos_of_child_to_check << "\n";
+    out << "; ";
+    out << mi.pos_of_child_to_check;
 
     return out;
 }
 
+std::istream&
+operator>>(std::istream &is, NodeMerkleInfo & mi) {
+    std::string a;   
+    std::string b;
+    bool flag=false;
+    is>>a;
+    while(!is.eof()){
+        is>>a;
+        //cout<<a<<endl;
+        if(a==";") {
+            flag=true;
+            continue;
+        }
+        if(!flag){
+            is>>b;
+            if(a=="null_key") a="";
+            if(b=="null_key") b="";
+            //cout<<b<<endl;
+            mi.childr.push_back(make_pair(a,b));
+        }else{
+            mi.pos_of_child_to_check=atoi(a.c_str());
+            break;
+        }
 
+    }
+    return is;
+}
+
+std::ostream&
+operator<<(std::ostream &out, const MerkleProof & mp){
+    std::list<NodeMerkleInfo>::const_iterator it;
+    for(it=mp.path.begin() ; it!=mp.path.end(); it++){
+        NodeMerkleInfo nmi = *it;
+        out<<nmi<<" | ";
+    }
+    out<<"endmp";
+    return out;
+
+}
+
+std::istream&
+operator>>(std::istream &is, MerkleProof & mp){
+    std::stringstream s;
+    std::string a;   
+    while(!is.eof()){
+        is>>a;
+        if(a=="endmp"){
+            break;
+        }else if(a=="|") {
+            NodeMerkleInfo nmi;
+            s>>nmi;
+            mp.path.push_back(nmi);
+            s.str("");
+            s.clear();
+        }else{
+            s<<a+" ";
+        }
+
+    }   
+    return is;
+}
+
+std::ostream&
+operator<<(std::ostream &out, const DelMerkleProof & dmp){
+    out<<dmp.oldproof<<" "<<dmp.newproof<<" ";
+    out<<dmp.new_tree_empty<< " "<<dmp.is_sib<<" "<<dmp.sib_was_deleted<<" "<<dmp.pos_of_sib_in_parent<<" ";
+    out<<dmp.non_leaf<<" "<<dmp.index_in_path<<" ";
+    out<<dmp.oldsib<<" | "<<dmp.newsib<<" | "<<dmp.non_leaf_old<<" | "<<dmp.non_leaf_new<<" |";
+
+    return out;
+
+}
+
+std::istream&
+operator>>(std::istream &is, DelMerkleProof & dmp){
+    std::stringstream s;
+    std::string a;   
+    int state=0;
+    while(true){
+        is>>a;
+        if(a=="endmp") {
+            MerkleProof mp;
+            s<<a;
+            s>>mp;
+            if(state==0){
+                dmp.oldproof=mp;
+                //cout<<"setting oldproof"<<endl;
+                state++;
+                s.str("");
+                s.clear();
+            }else if(state==1){
+                dmp.newproof=mp;
+                //cout<<"setting newproof "<<dmp.newproof<<endl;
+                s.str("");  
+                s.clear();          
+                break;
+            }
+        }else{
+            s<<a+" ";
+            //cout<<a<<": "<<s.str()<<endl;
+        }
+    }
+    is>>dmp.new_tree_empty>>dmp.is_sib>>dmp.sib_was_deleted>>dmp.pos_of_sib_in_parent;
+    is>>dmp.non_leaf>>dmp.index_in_path;
+
+    state=0;
+    while(!is.eof()){
+        is>>a;
+        if(a=="|"){
+            NodeMerkleInfo nmi;
+            s>>nmi;
+            switch(state){
+                case 0: dmp.oldsib=nmi; break;
+                case 1: dmp.newsib=nmi; break;
+                case 2: dmp.non_leaf_old =nmi; break;
+                case 3: dmp.non_leaf_new=nmi; break;
+            }
+            state++;
+            s.str("");
+            s.clear();
+        }else{
+            s<<a+" ";
+        }
+    }
+    return is;
+}
+
+std::ostream&
+operator<<(std::ostream &out, const InsMerkleProof & imp){
+    out<<imp.oldproof<<" "<<imp.newproof;
+    return out;
+}
+
+std::istream&
+operator>>(std::istream &is, InsMerkleProof & imp){
+    std::stringstream s;
+    std::string a;   
+    int state=0;
+    while(true){
+        is>>a;
+        if(a=="endmp") {
+            MerkleProof mp;
+            s<<a;
+            s>>mp;
+            if(state==0){
+                imp.oldproof=mp;
+                //cout<<"setting oldproof"<<endl;
+                state++;
+                s.str("");
+                s.clear();
+            }else if(state==1){
+                imp.newproof=mp;
+                //cout<<"setting newproof "<<dmp.newproof<<endl;
+                s.str("");  
+                s.clear();          
+                break;
+            }
+        }else{
+            s<<a+" ";
+            //cout<<a<<": "<<s.str()<<endl;
+        }
+    }
+    return is;
+}
 
 string
 NodeMerkleInfo::hash() const {

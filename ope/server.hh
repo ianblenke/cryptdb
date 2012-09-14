@@ -5,16 +5,19 @@
 #include <iostream>
 #include <map>
 #include <edb/Connect.hh>
+#include "btree.hh"
 
 //Whether to print debugging output or not
 #define DEBUG 0
-#define DEBUG_COMM 0
+#define DEBUG_COMM 1
+#define DEBUG_BTREE 1
 
 using std::cout;
 using std::endl;
 using std::string;
 using std::ostringstream;
 using std::istringstream;
+using std::stringstream;
 using std::ceil;
 using std::sort;
 using std::vector;
@@ -71,9 +74,11 @@ public:
 	int global_version;
 	int num_rebalances;
 
+	RootTracker tracker;
+
 
 /////////TO DOOOOO: Switch index to int, no need for uint64_t
-	void insert(uint64_t v, uint64_t nbits, uint64_t index, EncT encval);
+	string insert(uint64_t v, uint64_t nbits, uint64_t index, EncT encval);
 	vector<tree_node<EncT>* > tree_insert(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint64_t index, EncT encval, uint64_t pathlen);
 
 	tree_node<EncT>* findScapegoat( vector<tree_node<EncT>* > path );
@@ -96,8 +101,8 @@ public:
 
 	successor<EncT> find_succ(tree_node<EncT>* node, uint64_t v, uint64_t nbits);
 	predecessor<EncT> find_pred(tree_node<EncT>* node, uint64_t v, uint64_t nbits);
-	void tree_delete(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint64_t index, uint64_t pathlen, bool swap);
-	void delete_index(uint64_t v, uint64_t nbits, uint64_t index);
+	EncT tree_delete(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint64_t index, uint64_t pathlen, bool swap);
+	string delete_index(uint64_t v, uint64_t nbits, uint64_t index);
 
 	tree(){
 		num_nodes=0;
@@ -105,6 +110,16 @@ public:
 		root = NULL;
 		global_version=0;
 		num_rebalances=0;
+
+	    Node::m_failure.invalidate();
+
+	    Node::m_failure.m_key = "";
+
+	    //tracker=RootTracker();
+
+		Node* root_ptr = new Node(tracker);
+		tracker.set_root(null_ptr, root_ptr);
+
 		dbconnect =new Connect( "localhost", "frank", "passwd","cryptdb", 3306);
 	}
 

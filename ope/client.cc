@@ -18,9 +18,9 @@ bool test_order(int num_vals, int sorted, bool deletes){
     time_t seed;
     seed = time(NULL);
     cout<<"Seed is "<<seed<<endl;
-    srand( seed);
+    //srand( seed);
 
-    //srand(0);
+    srand(0);
 
     //Build vector of all inserted values
     for(int i=0; i<num_vals; i++){
@@ -56,14 +56,17 @@ bool test_order(int num_vals, int sorted, bool deletes){
             if(DEBUG) {cout<<"Enc complete for "<<val<<" with enc="<<enc_val<<endl;cout<<endl;}
             ostringstream o;
             o.str("");
+            o.clear();
             o<<enc_pair.first;
             string ope = o.str();
 
             o.str("");
+            o.clear();
             o<<enc_pair.second;
             string version = o.str();
 
             o.str("");
+            o.clear();
             o<<val;
             string name=o.str();
 
@@ -80,14 +83,17 @@ bool test_order(int num_vals, int sorted, bool deletes){
                 }                
 
                 o.str("");
+                o.clear();
                 o<<rep_pair.first;
                 string rep_ope = o.str();
 
                 o.str("");
+                o.clear();
                 o<<rep_pair.second;
                 string rep_version = o.str();
 
                 o.str("");
+                o.clear();
                 o<<rep_val;
                 string rep_name=o.str();
                 dbconnect->execute("INSERT INTO emp VALUES ("+rep_name+", "+rep_ope+", "+rep_version+")");
@@ -105,9 +111,9 @@ bool test_order(int num_vals, int sorted, bool deletes){
                             int del_index = rand()%(tmp_vals.size());
                             int del_val = tmp_vals[del_index];
                             my_client->delete_value(del_val);   
-                            tmp_vals.erase(tmp_vals.begin()+del_index);                     
+                            tmp_vals.erase(tmp_vals.begin()+del_index);        
                         }
-                        if(DEBUG) cout<<"Ending deletion\n"<<endl;
+                        cout<<"Ending deletion"<<endl;
 
                     }                    
                 }else{
@@ -179,7 +185,7 @@ int main(){
 
     usleep(1000000);
 
-    test_order(269,0, true);
+    test_order(5,0, true);
     
  /*   blowfish* bc = new blowfish("frankli714");
     ope_client<uint64_t, blowfish>* my_client = new ope_client<uint64_t, blowfish>(bc);

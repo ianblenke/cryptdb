@@ -19,10 +19,12 @@
 #include <edb/Connect.hh>
 #include <crypto/blowfish.hh>
 #include <util/static_assert.hh>
+#include "btree.hh"
 
 //Whether to print debugging output or not
 #define DEBUG 0
-#define DEBUG_COMM 0
+#define DEBUG_COMM 1
+#define DEBUG_BTREE 1
 
 using namespace std;
 
@@ -63,12 +65,14 @@ ffsl(uint64_t ct)
 
 class ope_lookup_failure {};
 
+string cur_merkle_hash;
 
 template<class V, class BlockCipher>
 class ope_client {
  public:
 	int hsock;
 	struct sockaddr_in my_addr;
+	
 
     ope_client(BlockCipher *bc): b(bc) {
     	_static_assert(BlockCipher::blocksize == sizeof(V));
@@ -88,6 +92,7 @@ class ope_client {
 		if(connect(hsock, (struct sockaddr*) &my_addr, sizeof(my_addr))<0){
 			cout<<"Connect Failed!"<<endl;
 		}
+		cur_merkle_hash="";
 
     }
 
@@ -133,20 +138,26 @@ class ope_client {
 
    		ostringstream o;
 	    o.str("");
+	    o.clear();
 	    o<<"2 "<<path<<" "<<(nbits-num_bits);
 	    string msg = o.str();
 	    if(DEBUG_COMM) cout<<"Sending decrypt msg: "<<msg<<endl;
 	    send(hsock, msg.c_str(), msg.size(),0);
 		recv(hsock, buffer, 1024, 0);
 
+		if(DEBUG_BTREE) cout<<"Decrypt recv="<<buffer<<endl;
 		istringstream iss_tmp(buffer);
 		vector<V> xct_vec;
-		V xct, last;
-		last= (V) NULL;
+		V xct;
+		string checker="";
 		while(true){
-			iss_tmp >> xct;
-			if(last==xct) break;
-			last = xct;
+			iss_tmp >> checker;
+			if(checker==";") break;
+			stringstream tmpss;
+			tmpss<<checker;	
+			tmpss>>xct;
+			if(DEBUG_BTREE) cout<<"decrypt xct: "<<tmpss.str()<<endl;		
+			
 
 			xct_vec.push_back(xct);
 		}        
@@ -165,11 +176,44 @@ class ope_client {
 
 		ostringstream o;
 		o.str("");
+		o.clear();
 		o<<"4 "<<path<<" "<<nbits-num_bits<<" "<<index;
 		string msg = o.str();
 		if(DEBUG) cout<<"Deleting pt="<<pt<<" with msg "<<msg<<endl;
+
+		char buffer[1024];
+	    memset(buffer, '\0', 1024);
+
 		send(hsock, msg.c_str(), msg.size(), 0);
-		usleep(100000);
+		recv(hsock, buffer, 1024, 0);
+
+		if(DEBUG_BTREE){
+			cout<<"Delete_value buffer recv: "<<buffer<<endl;
+		}
+	    const string tmp_merkle_hash = cur_merkle_hash;
+	    string new_merkle_hash;
+	    DelMerkleProof dmp;
+	    stringstream iss(buffer);
+	    iss>>new_merkle_hash;
+	    char tmp_hash[1024];
+	    strcpy(tmp_hash, buffer);
+	    char * space = strchr(tmp_hash, ' ');
+	    *space='\0';
+	    string tmp_hash_str (tmp_hash);
+	    cur_merkle_hash=tmp_hash_str;	    
+   	    //cur_merkle_hash=new_merkle_hash;
+
+	    iss>>dmp;	
+
+	    if(DEBUG_BTREE){
+	    	cout<<"Delete_value new mh="<<cur_merkle_hash<<endl;
+	    	cout<<"DMP="<<dmp<<endl;
+	    }
+	    if(!verify_del_merkle_proof(dmp, tmp_merkle_hash, new_merkle_hash)){
+	    	cout<<"Deletion merkle proof failed!"<<endl;
+	    	exit(-1);
+	    }
+	    if(DEBUG_BTREE) cout<<"Deletion merkle proof succeeded"<<endl;
 
     }
 
@@ -181,11 +225,39 @@ class ope_client {
 		//s->insert(v, nbits, index, pt);
     	ostringstream o;
 	    o.str("");
+	    o.clear();
 	    o<<"3 "<<v<<" "<<nbits<<" "<<index<<" "<<det;
 	    string msg = o.str();
 	    if(DEBUG_COMM) cout<<"Sending msg: "<<msg<<endl;
-	    send(hsock, msg.c_str(), msg.size(),0);
 
+	    char buffer[1024];
+	    memset(buffer, '\0', 1024);
+	    send(hsock, msg.c_str(), msg.size(),0);
+	    recv(hsock, buffer, 1024, 0);
+
+	    if(DEBUG_BTREE) cout<<"Insert buffer="<<buffer<<endl;
+	    const string tmp_merkle_hash = cur_merkle_hash;
+	    string new_merkle_hash;
+	    InsMerkleProof imp;
+	    stringstream iss(buffer);
+	    iss>>new_merkle_hash;
+	    char tmp_hash[1024];
+	    strcpy(tmp_hash, buffer);
+	    char* space = strchr(tmp_hash,' ');
+	    *space='\0';
+	    string tmp_hash_str (tmp_hash);
+	    cur_merkle_hash=tmp_hash_str;
+	    iss>>imp;
+	    
+	    if(DEBUG_BTREE){
+	    	cout<<"Insert New mh="<<cur_merkle_hash<<endl;
+	    	cout<<"Insert proof="<<imp<<endl;
+	    }
+	    if(!verify_ins_merkle_proof(imp, tmp_merkle_hash, new_merkle_hash)){
+	    	cout<<"Insertion merkle proof failed!"<<endl;
+	    	exit(-1);
+	    }
+	    if(DEBUG_BTREE) cout<<"Insert mp succeeded"<<endl;
 	    //relabeling may have been triggered so we need to lookup value again
 	    //todo: optimize by avoiding extra tree lookup
 	    return encrypt(pt);
@@ -246,13 +318,14 @@ class ope_client {
         	if(DEBUG) cout<<"Do lookup for "<<pt<<" with det: "<<det<<" v: "<<v<<" nbits: "<<nbits<<endl;
 			//vector<V> xct = s->lookup(v, nbits);
         	o.str("");
+        	o.clear();
         	o<<"2 "<<v<<" "<<nbits;
         	msg = o.str();
         	if(DEBUG_COMM) cout<<"Sending msg: "<<msg<<endl;
 			send(hsock, msg.c_str(), msg.size(), 0);
 			memset(buffer, 0, 1024);
 			recv(hsock, buffer, 1024, 0);
-			if(DEBUG_COMM) cout<<"Received during iterative lookup: "<<buffer<<endl;
+			if(DEBUG_COMM || DEBUG_BTREE) cout<<"Received during iterative lookup: "<<buffer<<endl;
 			string check(buffer);        	
 
 			if(check=="ope_fail"){
@@ -260,18 +333,34 @@ class ope_client {
 
 			}				
 
-			istringstream iss_tmp(buffer);
+			stringstream iss_tmp(buffer);
 			vector<V> xct_vec;
-			V xct, last;
-			last = (V) NULL;
+			V xct;
+			string checker="";
 			while(true){
-				iss_tmp >> xct;
-				if(last==xct) break;
-				last = xct;
+				iss_tmp >> checker;
+				if(checker==";") break;
+				if(DEBUG_BTREE) cout<<"xct_vec: "<<checker<<endl;
+				stringstream tmpss;
+				tmpss<<checker;
+				tmpss>>xct;
+				
+
 				//predIndex later assumes vector is of original plaintext vals
 				xct_vec.push_back(block_decrypt(xct));
 			}
-
+			MerkleProof mp;
+			if(DEBUG_BTREE) cout<<"Remaining mp info = "<<iss_tmp.str()<<endl;
+			for(int i=0; i<(int) xct_vec.size(); i++){
+				iss_tmp >> mp;
+				if(DEBUG_BTREE) cout<<"MP "<<i<<"="<<mp<<endl;
+				const string tmp_merkle_hash = cur_merkle_hash;
+				if(!verify_merkle_proof(mp, tmp_merkle_hash)){
+					cout<<"Merkle hash during lookup didn't match!"<<endl;
+					exit(-1);
+				}
+				if(DEBUG_BTREE) cout<<"MP "<<i<<" succeeded"<<endl;
+			}
 
 			//Throws ope_lookup_failure if xct size < N, meaning can insert at node
 			int pi;
