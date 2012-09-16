@@ -451,7 +451,7 @@ tree<EncT>::delete_index(uint64_t v, uint64_t nbits, uint64_t index){
     string merkle_root = tracker.get_root()->merkle_hash;
 
     if(DEBUG_BTREE) cout<<"Delete new merkle hash="<<merkle_root<<endl;
-    s<<merkle_root+" ";
+    s<<merkle_root+" hash_end ";
     s<<dmp;
 
     if(DEBUG_BTREE) cout<<"Delete dmp="<<dmp<<endl;
@@ -689,7 +689,7 @@ tree<EncT>::insert(uint64_t v, uint64_t nbits, uint64_t index, EncT encval){
 	////
 	s.str("");
 	s.clear();
-	s<<merkle_root+" ";
+	s<<merkle_root+" hash_end ";
 	s<<imp;
 
 	if(DEBUG_BTREE) cout<<"Insert merkle hash="<<merkle_root<<endl;
@@ -1061,6 +1061,7 @@ void handle_client(void* lp, tree<EncT>* s){
                 	cout<<"Insert proof too large"<<endl;
                 	exit(-1);
                 }
+                if(DEBUG_COMM) cout<<proof<<endl;
                 send(*csock, proof.c_str(), proof.size(),0);
             }else if(func_d==4){
             	uint64_t v, nbits, index;
