@@ -202,9 +202,11 @@ tree<EncT>::delete_db(table_storage del_entry){
 
 	ostringstream o;
 	o.str("");
+	o.clear();
 	o<<del_ope;
 	string del_ope_str = o.str();
 	o.str("");
+	o.clear();
 	o<<del_version;
 	string del_version_str = o.str();
 
@@ -237,16 +239,20 @@ tree<EncT>::update_db(table_storage old_entry, table_storage new_entry){
 
 	ostringstream o;
 	o.str("");
+	o.clear();
 	o<<old_ope;
 	string old_ope_str = o.str();
 	o.str("");
+	o.clear();
 	o<<old_version;
 	string old_version_str = o.str();
 
 	o.str("");
+	o.clear();
 	o<<new_ope;
 	string new_ope_str = o.str();
 	o.str("");
+	o.clear();
 	o<<new_version;
 	string new_version_str = o.str();	
 
@@ -307,7 +313,7 @@ tree<EncT>::print_tree(){
 			cout<<endl;
 			continue;
 		}
-		cout<<cur_node->height()<<": ";
+		cout<<cur_node->height()-1<<": ";
 		if(cur_node->key_in_map( (EncT)NULL)){
 			queue.push_back(cur_node->right[ (EncT)NULL]);
 		}	
@@ -416,22 +422,53 @@ tree<EncT>::find_pred(tree_node<EncT>* node, uint64_t v, uint64_t nbits){
 }
 
 template<class EncT>
-void
+string
 tree<EncT>::delete_index(uint64_t v, uint64_t nbits, uint64_t index){
 	if(DEBUG) cout<<"Deleting index at v="<<v<<" nbits="<<nbits<<" index="<<index<<endl;
-	tree_delete(root, v, nbits, index, nbits, false);
+	EncT deleted_val = tree_delete(root, v, nbits, index, nbits, false);
 	num_nodes--;
-	//if(num_nodes<alpha*max_size){
-	if(root==NULL) return;
-	if(root->height()> log(num_nodes)/log(((double)1.0)/alpha)+1 ){
+
+	//Merkle tree delete
+	stringstream s;
+	s << deleted_val;
+	string delval_str = s.str();
+
+	Elem desired;
+	desired.m_key = delval_str;
+	DelMerkleProof dmp;
+	/*bool deleted = */tracker.get_root()->tree_delete(desired, dmp);
+
+	//Test merkle delete
+    Node * last;
+    Elem result = tracker.get_root()->search(desired, last);
+    assert_s(result == Node::m_failure, "found element that should have been deleted");		
+    /////
+    ////
+
+    s.str("");
+    s.clear();
+
+    string merkle_root = tracker.get_root()->merkle_hash;
+
+    if(DEBUG_BTREE) cout<<"Delete new merkle hash="<<merkle_root<<endl;
+    s<<merkle_root+" hash_end ";
+    s<<dmp;
+
+    if(DEBUG_BTREE) cout<<"Delete dmp="<<dmp<<endl;
+	if(root==NULL) return s.str();
+	
+	if(num_nodes<alpha*max_size){
+		if(DEBUG) cout<<"Delete rebalance"<<endl;
 		rebalance(root);
 		max_size=num_nodes;
 	}
+	if(DEBUG_BTREE) cout<<"Delete msg="<<s.str()<<endl;
+	return s.str();
 }
 
 //v should just be path to node, not including index. swap indicates whether val being deleted was swapped, should be false for top-lvl call
 template<class EncT>
-void
+EncT
 tree<EncT>::tree_delete(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint64_t index, uint64_t pathlen, bool swap){
 	if(DEBUG) cout<<"Calling tree_delete with "<<v<< " "<<nbits<<" "<<index<<endl;
 	if(nbits==0){
@@ -453,7 +490,7 @@ tree<EncT>::tree_delete(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint6
 					if(DEBUG) cout<<"Root reset to null"<<endl;
 				}
 				delete node;
-				return;
+				return del_val;
 
 			}
 			//NEED TO UPDATE OPE TABLE/DATABASE
@@ -584,7 +621,7 @@ tree<EncT>::tree_delete(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint6
 			}
 		}
 		if(DEBUG) print_tree();
-		return;
+		return del_val;
 	}
 
     int key_index = (int) (v&(mask<<(nbits-num_bits)))>>(nbits-num_bits);
@@ -614,11 +651,11 @@ tree<EncT>::tree_delete(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint6
 		}
 		node->right.erase(key);    			
 	}    
-    tree_delete(next_node, v, nbits-num_bits, index, pathlen, swap);
+    return tree_delete(next_node, v, nbits-num_bits, index, pathlen, swap);
 }
 
 template<class EncT>
-void
+string
 tree<EncT>::insert(uint64_t v, uint64_t nbits, uint64_t index, EncT encval){
 	//If root doesn't exist yet, create it, then continue insertion
 	if(!root){
@@ -626,18 +663,55 @@ tree<EncT>::insert(uint64_t v, uint64_t nbits, uint64_t index, EncT encval){
 		root=new tree_node<EncT>();
 	}
 	vector<tree_node<EncT> * > path=tree_insert(root, v, nbits, index, encval, nbits);
+
+	//Merkle tree insert
+	stringstream s;
+	s << encval;
+	string encval_str = s.str();
+
+	Elem elem;
+	elem.m_key = encval_str;
+	elem.m_payload = encval_str+" hi you";
+	InsMerkleProof imp;
+	tracker.get_root()->tree_insert(elem, imp);
+
+	//Test merkle tree
+    Elem desired;
+    desired.m_key = encval_str;
+    Node * last;
+    Elem& result = tracker.get_root()->search(desired, last);
+    assert_s(desired.m_key == result.m_key, "could not find val that should be there");	
+	
+	string merkle_root = tracker.get_root()->merkle_hash;
+	MerkleProof proof = get_search_merkle_proof(last);
+	assert_s(verify_merkle_proof(proof, merkle_root), "failed to verify merkle proof");   
+	////
+	////
+	s.str("");
+	s.clear();
+	s<<merkle_root+" hash_end ";
+	s<<imp;
+
+	if(DEBUG_BTREE) cout<<"Insert merkle hash="<<merkle_root<<endl;
+	if(DEBUG_BTREE) cout<<"Insert imp="<<imp<<endl;
+	if(DEBUG_BTREE) cout<<"Insert msg="<<s.str()<<endl;
+
 	double height= (double) path.size();
 
-	if (height==0) return;
+	if (height==0) return s.str();
 
 	//if(DEBUG) print_tree();
 
 	if(height> log(num_nodes)/log(((double)1.0)/alpha)+1 ){
 		tree_node<EncT>* scapegoat = findScapegoat(path);
 		rebalance(scapegoat);
+		if(DEBUG) cout<<"Insert rebalance "<<height<<": "<<num_nodes<<endl;
 		if(scapegoat==root) max_size=num_nodes;
 		//if(DEBUG) print_tree();
-	}
+	} 
+
+	return s.str();
+
 }
 
 template<class EncT>
@@ -889,7 +963,6 @@ void handle_client(void* lp, tree<EncT>* s){
         int *csock = (int*) lp;
 
         cout<<"Call to function!"<<endl;
-        bool deletion_mode = false;
         //Buffer to handle all messages received
         char buffer[1024];
         while(true){
@@ -926,7 +999,7 @@ void handle_client(void* lp, tree<EncT>* s){
                 //Construct response
                 o<<table_rslt.v<<" "<<table_rslt.pathlen<<" "<<table_rslt.index<<" "<<table_rslt.version;
                 rtn_str=o.str();
-                if(DEBUG_COMM) cout<<"Rtn_str: "<<rtn_str<<endl;
+                if(DEBUG_COMM) cout<<"Rtn_str : "<<rtn_str<<endl;
                 send(*csock, rtn_str.c_str(), rtn_str.size(),0);
             }else if(func_d==2){
             	//Lookup w/o table, using v and nbits
@@ -948,12 +1021,33 @@ void handle_client(void* lp, tree<EncT>* s){
                 for(int i=0; i< (int) xct_vec.size(); i++){
                 	o<<xct_vec[i];
                 	o<<" ";
+                	if(DEBUG_BTREE) cout<<"xct_vec "<<i<<"="<<xct_vec[i]<<endl;
                 }
+                o<<"; ";
+                for(int i=0; i<(int) xct_vec.size(); i++){
+                	stringstream pss;
+                	pss<<xct_vec[i];
+
+                	Elem desired;
+                	desired.m_key = pss.str();
+                	Node* last;
+                	Elem& result = s->tracker.get_root()->search(desired, last);
+	    			assert_s(desired.m_key == result.m_key, "could not find val that should be there");
+	    			MerkleProof proof = get_search_merkle_proof(last);
+	    			o<<proof<<" ";
+	    			if(DEBUG_BTREE) cout<<"2 MP "<<i<<"="<<proof<<endl;
+	    			pss.str("");
+	    			pss.clear();
+                }
+
                 rtn_str=o.str();
-                if(DEBUG_COMM) cout<<"Rtn_str: "<<rtn_str<<endl;
+                if(rtn_str.size()>1024){
+                	cout<<"Message too long!"<<endl;
+                	exit(-1);
+                }
+                if(DEBUG_COMM || DEBUG_BTREE) cout<<"Rtn_str: "<<rtn_str<<endl;
                 send(*csock, rtn_str.c_str(), rtn_str.size(),0);
             }else if(func_d==3){
-            	deletion_mode=false;
             	//Insert using v and nbits
                 uint64_t v, nbits, index, blk_encrypt_pt;
                 iss>>v;
@@ -962,14 +1056,24 @@ void handle_client(void* lp, tree<EncT>* s){
                 iss>>blk_encrypt_pt;
                 //Insert...need not send response
                 if(DEBUG_COMM) cout<<"Trying insert("<<v<<", "<<nbits<<", "<<index<<", "<<blk_encrypt_pt<<")"<<endl;
-                s->insert(v, nbits, index, blk_encrypt_pt);
+                string proof = s->insert(v, nbits, index, blk_encrypt_pt);
+                if(proof.size()>1024){
+                	cout<<"Insert proof too large"<<endl;
+                	exit(-1);
+                }
+                if(DEBUG_COMM) cout<<proof<<endl;
+                send(*csock, proof.c_str(), proof.size(),0);
             }else if(func_d==4){
-            	deletion_mode=true;
             	uint64_t v, nbits, index;
             	iss>>v;
             	iss>>nbits;
             	iss>>index;
-            	s->delete_index(v, nbits, index);
+            	string proof = s->delete_index(v, nbits, index);
+            	if(proof.size()>1024){
+            		cout<<"Delete proof too large"<<endl;
+            		exit(-1);
+            	}
+				send(*csock, proof.c_str(), proof.size(),0);
             }else{
             	//Uh oh!
                 cout<<"Something's wrong!: "<<buffer<<endl;
@@ -984,11 +1088,11 @@ void handle_client(void* lp, tree<EncT>* s){
 				if(DEBUG) s->print_tree();			
 				if(s->test_tree(s->root)!=1){
 					cout<<"No test_tree pass"<<endl;
-					//return;
+					return;
 				} 
-				if(s->num_nodes>1 && !deletion_mode){
-					if((s->root->height()<= log(s->num_nodes)/log(((double)1.0)/alpha)+1)!=1) {
-						cout<<"Height wrong "<<s->root->height()<<" : "<<log(s->num_nodes)/log(((double)1.0)/alpha)+1<<endl;
+				if(s->num_nodes>1){
+					if(((s->root->height()-1)<= log(s->num_nodes)/log(((double)1.0)/alpha)+1)!=1) {
+						cout<<func_d<<" height wrong "<<s->root->height()-1<<" : "<<log(s->num_nodes)/log(((double)1.0)/alpha)+1<<endl;
 						cout<<"Max size: "<<s->max_size<<" num_nodes: "<<s->num_nodes<<endl;
 						return;
 					}
