@@ -188,8 +188,8 @@ public:
 		    string new_merkle_root;
 		    bool r = verify_del_merkle_proof(delproof, old_merkle_hash, new_merkle_root);
 		    assert_s(r, "deletion proof does not verify");
-		    //assert_s(new_merkle_root == tracker.get_root()->merkle_hash,
-		    //	 "verify_del gives incorrect new merkle root");
+		    assert_s(new_merkle_root == tracker.get_root()->merkle_hash,
+		    	 "verify_del gives incorrect new merkle root");
 		    //cerr << "check success\n";
 		}
 	    }
@@ -301,7 +301,7 @@ public:
 	    Elem& result = tracker.get_root()->search(desired, last);
 	    assert_s(desired.m_key == result.m_key, "could not find val that should be there");
 
-	    MerkleProof proof = get_merkle_proof(last);
+	    MerkleProof proof = get_search_merkle_proof(last);
 	    assert_s(verify_merkle_proof(proof, merkle_root), "failed to verify merkle proof");
 
 	}
@@ -322,7 +322,7 @@ public:
 	    Elem& result = tracker.get_root()->search(desired, last);
 	    assert_s(desired.m_key == result.m_key, "could not find val that should be there");
 
-	    MerkleProof proof = get_merkle_proof(last);
+	    MerkleProof proof = get_search_merkle_proof(last);
 	    assert_s(!verify_merkle_proof(proof, bad_merkle_root), "verified bad merkle proof");
 
 	}
@@ -337,7 +337,7 @@ public:
 
 	    //change an element in last
 	    change(last); 
-	    MerkleProof proof = get_merkle_proof(last);
+	    MerkleProof proof = get_search_merkle_proof(last);
 	    assert_s(!verify_merkle_proof(proof, bad_merkle_root), "verified bad merkle proof");
 
 	}

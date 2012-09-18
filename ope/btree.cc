@@ -439,7 +439,8 @@ Element<payload>::get_subtree_merkle() {
     }
 }
 
-NodeMerkleInfo Node::extract_NodeMerkleInfo(int pos) {
+NodeMerkleInfo
+Node::extract_NodeMerkleInfo(int pos) {
     NodeMerkleInfo mi = NodeMerkleInfo();
     mi.childr.resize(m_count);
     mi.pos_of_child_to_check = pos;
@@ -450,6 +451,8 @@ NodeMerkleInfo Node::extract_NodeMerkleInfo(int pos) {
     }
     return mi;
 }
+
+
 
 // returns the index of this node in its parent vector
 // or negative if this does not have a parent (is root)
@@ -462,17 +465,17 @@ Node::index_in_parent() {
     }
 }
 
-MerkleProof
-get_merkle_proof(Node * curr_node) {
+MerklePath
+get_merkle_path(Node * curr_node) {
 
-    MerkleProof proof = MerkleProof();
+    MerklePath path = MerklePath();
 
     // TODO: is find_root efficient?, should be constant work
 
     int pos = -1;
 
     while (true) {
-	proof.path.push_back(curr_node->extract_NodeMerkleInfo(pos));
+	path.push_back(curr_node->extract_NodeMerkleInfo(pos));
 
 	if (curr_node == curr_node->find_root()) {
 	    break;
@@ -481,7 +484,14 @@ get_merkle_proof(Node * curr_node) {
 	curr_node = curr_node->mp_parent;
     }
 
-    return proof;
+    return path;
+}
+
+MerkleProof
+get_search_merkle_proof(Node * curr_node) {
+    MerkleProof p = MerkleProof();
+    p.path = get_merkle_path(curr_node);
+    return p;
 }
 
 std::ostream&
@@ -563,32 +573,41 @@ verify_ins_merkle_proof(const InsMerkleProof & p, const string & old_merkle_root
     
     return true;
 }
+
+
 bool
-verify_del_merkle_proof(const DelMerkleProof & p, const string & old_merkle_root, string & new_merkle_root) {
-/*
-    if (p.new_tree_empty) {
-	new_merkle_root = "";
-    }  else {
-	bool r = Merkle_path_hash(p.newproof, new_merkle_root);
-	if (!r) {
-	    cerr << "malformed new proof ";
-	    return false;
-	}
+verify_del_merkle_proof(const DelMerkleProof & proof, const string & old_merkle_root, string & new_merkle_root) {
+
+    return true; //TODO
+    if (old_merkle_root != proof.old_hash()) {
+	cerr << "merkle hash of old state does not verify \n";
+	return false;
     }
 
-    string computed_old;
-    bool r = Merkle_path_hash(p.oldproof, computed_old);
-    if (!r) {
-	cerr << "malformed old proof \n";
-	return false;  
+    if (!proof.check_change()) {
+	cerr << "the change information";
+	return false;
     }
 
-    return old_merkle_root == computed_old;
-*/
-
+    new_merkle_root = proof.new_hash();
+    
     return true;
 }
 
+string DelMerkleProof::old_hash() const {
+    //TODO
+    return "";
+}
+
+bool DelMerkleProof::check_change() const {
+    //TODO
+    return true;
+}
+
+string DelMerkleProof::new_hash() const {
+    //TODO
+    return "";
+}
 
 
 string
@@ -638,20 +657,7 @@ bool Node::tree_insert(Elem& element, InsMerkleProof & p) {
 
 
 bool
-Node::tree_delete(Elem & target, DelMerkleProof & dproof) {
-   
-    DelProofMeta proofmeta = DelProofMeta();
-    bool r = delete_element(target, proofmeta);
-    if (r) {
-	dproof = proofmeta.dproof;
-    }
-    return r;
-    
-    
-}
-
-bool
-Node::delete_element (Elem& target, DelProofMeta & proofmeta) {
+Node::tree_delete (Elem& target, DelMerkleProof & proof) {
 
 // target is just a package for the key value.  the reference does not
 // provide the address of the Elem instance to be deleted.
@@ -667,89 +673,89 @@ Node::delete_element (Elem& target, DelProofMeta & proofmeta) {
     if (!found.valid()) {
         return false;
     }
+     
+    if (node->is_leaf()) {
 
-    proofmeta.start_node = node;
-    // prepare old proof
-    if (!proofmeta.dproof.non_leaf) {
-	proofmeta.dproof.oldproof = get_merkle_proof(node);
-    }
-    
-    if (node->is_leaf() && node->key_count() > node->minimum_keys()) {
+	if (node->key_count() > node->minimum_keys()) {	
 
-	bool r = node->vector_delete(target);
-	node->update_merkle_upward();
+	    DelInfo di(target.m_key, node->extract_NodeMerkleInfo(-1));
 
-	get_merkle_info_after_del(proofmeta, -1);
-	
-	return r;
-    }
-    else if (node->is_leaf()) {
-        node->vector_delete(target);
+	    bool r = node->vector_delete(target);
+	    node->update_merkle_upward();
 
-        // loop invariant: if _node_ is not null_ptr, it points to a node
-        // that has lost an element and needs to import one from a sibling
-        // or merge with a sibling and import one from its parent.
-        // after an iteration of the loop, _node_ may become null or
-        // it may point to its parent if an element was imported from the
-        // parent and this caused the parent to fall below the minimum
-        // element count.
-
-        while (node) {
-	    node->update_merkle();
-
-	    // NOTE: the "this" pointer may no longer be valid after the first
-            // iteration of this loop!!!
-
-            if (node==node->find_root() && node->is_leaf()) {
-		//empty tree
-		proofmeta.dproof.new_tree_empty = true;
-	
-                break;
-	    }
-
-            if (node==node->find_root() && !node->is_leaf()) // sanity check
-                throw "node should not be root in delete_element loop";
-
-	    Node* right = node->right_sibling(parent_index_this);
-	    Node* left = node->left_sibling(parent_index_this);
-   
-            // is an extra element available from the right sibling (if any)         
-            if (right && right->key_count() > right->minimum_keys()) {
-		node = node->rotate_from_right(parent_index_this, proofmeta);
-	    }
-            else if (left && left->key_count() > left->minimum_keys()) {
-		// check if an extra element is available from the left sibling (if any)
-		node = node->rotate_from_left(parent_index_this, proofmeta);
-	    }
-	    else if (right) {
-		node = node->merge_right(parent_index_this, proofmeta);
-	    }
-	    else if (left) {
-		node = node->merge_left(parent_index_this, proofmeta);
-	    }
+	    di.new_node = node->extract_NodeMerkleInfo(-1);
+	    proof.levels.push_back(di);
 	    
-           
-        }
+	    return r;
+	} else {
 
+	    DelInfo di = DelInfo(target.m_key, node->extract_NodeMerkleInfo(-1));
+	    DelInfo di_parent;
+	    
+	    node->vector_delete(target);
+	    	    
+	    // loop invariant: if _node_ is not null_ptr, it points to a node
+	    // that has lost an element and needs to import one from a sibling
+	    // or merge with a sibling and import one from its parent.
+	    // after an iteration of the loop, _node_ may become null or
+	    // it may point to its parent if an element was imported from the
+	    // parent and this caused the parent to fall below the minimum
+	    // element count.
 
-    }
+	    while (node) {
+		node->update_merkle();
+		
+		// NOTE: the "this" pointer may no longer be valid after the first
+		// iteration of this loop!!!
+		
+		if (node==node->find_root() && node->is_leaf()) {
+		    //empty tree
+		    break;
+		}
+		
+		if (node==node->find_root() && !node->is_leaf()) // sanity check
+		    throw "node should not be root in delete_element loop";
+		
+		Node* right = node->right_sibling(parent_index_this);
+		Node* left = node->left_sibling(parent_index_this);
+   
+		// is an extra element available from the right sibling (if any)         
+		if (right && right->key_count() > right->minimum_keys()) {
+		    node = node->rotate_from_right(parent_index_this, di, di_parent);
+		}
+		else if (left && left->key_count() > left->minimum_keys()) {
+		    // check if an extra element is available from the left sibling (if any)
+		    node = node->rotate_from_left(parent_index_this, di, di_parent);
+		}
+		else if (right) {
+		    node = node->merge_right(parent_index_this, di, di_parent);
+		}
+		else if (left) {
+		    node = node->merge_left(parent_index_this, di, di_parent);
+		}
 
-    else { // node is not leaf
+		proof.levels.push_back(di);
+		di = di_parent;
+	    }
+
+	}
+    } else { // node is not leaf
 
 	cerr << "not leaf\n";
-	    
-	proofmeta.dproof.non_leaf  = true;
-	proofmeta.non_leaf = node;
-	proofmeta.dproof.non_leaf_old = node->extract_NodeMerkleInfo(-1);
+
+	proof.has_non_leaf = true;
+	proof.non_leaf = DelInfo(target.m_key, node->extract_NodeMerkleInfo(-1));
 	    
 	Elem& smallest_in_subtree = found.mp_subtree->smallest_key_in_subtree();
 
         found.m_key = smallest_in_subtree.m_key;
 
         found.m_payload = smallest_in_subtree.m_payload;
+
+	proof.non_leaf.new_node = node->extract_NodeMerkleInfo(-1);
 	
-        found.mp_subtree->delete_element(smallest_in_subtree, proofmeta);
-	
+        found.mp_subtree->tree_delete(smallest_in_subtree, proof);
+
     }
 
     return true;
@@ -758,7 +764,7 @@ Node::delete_element (Elem& target, DelProofMeta & proofmeta) {
 
  
 
-Node* Node::rotate_from_right(int parent_index_this, DelProofMeta & m) {
+Node* Node::rotate_from_right(int parent_index_this, DelInfo & di, DelInfo & di_parent) {
 
     // new element to be added to this node
     Elem underflow_filler = (*mp_parent)[parent_index_this+1];
@@ -767,10 +773,10 @@ Node* Node::rotate_from_right(int parent_index_this, DelProofMeta & m) {
 
     Node* right_sib = (*mp_parent)[parent_index_this+1].mp_subtree;
 
-    // Merkle old proofs
-    m.is_sib = true;
-    m.dproof.oldsib = right_sib->extract_NodeMerkleInfo(-1);
-
+    // DelInfo before rotating from sibling
+    di.is_sib = true;
+    di.pos_of_sib_in_parent = parent_index_this + 1;
+    di.old_sib = right_sib->extract_NodeMerkleInfo(-1);
     
     underflow_filler.mp_subtree = (*right_sib)[0].mp_subtree;
 
@@ -790,25 +796,24 @@ Node* Node::rotate_from_right(int parent_index_this, DelProofMeta & m) {
 
     (*right_sib)[0].m_payload = "";
 
-     // parent node still has same element count
-
+    // parent node still has same element count
+  
     //need to update this and its right sibling's merkle hash as well as all
     // the way up
     right_sib->update_merkle();
     this->update_merkle_upward();
 
-    // Merkle new proofs
-    m.dproof.newsib = right_sib->extract_NodeMerkleInfo(-1);
-    m.pos_of_sib_in_parent = parent_index_this + 1;
-    
-    
+    // DelInfo after rotating from sibling
+    di.new_node = this->extract_NodeMerkleInfo(-1);
+    di.new_sib = right_sib->extract_NodeMerkleInfo(-1);
+
     return null_ptr;
 } //_______________________________________________________________________
 
  
 
 Node*
-Node::rotate_from_left(int parent_index_this, DelProofMeta & m) {
+Node::rotate_from_left(int parent_index_this, DelInfo & di, DelInfo & di_parent) {
 
     // new element to be added to this node
 
@@ -818,8 +823,11 @@ Node::rotate_from_left(int parent_index_this, DelProofMeta & m) {
 
     Node* left_sib = (*mp_parent)[parent_index_this-1].mp_subtree;
 
-    m.is_sib = true;
-    m.dproof.oldsib = left_sib->extract_NodeMerkleInfo(-1);
+    //DelInfo before rotating about sibling
+    di.is_sib = true;
+    di.pos_of_sib_in_parent = parent_index_this - 1;
+    di.old_sib = left_sib->extract_NodeMerkleInfo(-1);
+
     
     underflow_filler.mp_subtree = (*this)[0].mp_subtree;
 
@@ -848,8 +856,10 @@ Node::rotate_from_left(int parent_index_this, DelProofMeta & m) {
     left_sib->update_merkle();
     this->update_merkle_upward();
 
-    m.dproof.newsib = left_sib->extract_NodeMerkleInfo(-1);
-    m.pos_of_sib_in_parent = parent_index_this - 1;
+    //DelInfo after rotating from sibling about this node and sibling
+    di.new_node = this->extract_NodeMerkleInfo(-1);
+    di.new_sib = left_sib->extract_NodeMerkleInfo(-1);
+
 
     return null_ptr;
 
@@ -858,7 +868,7 @@ Node::rotate_from_left(int parent_index_this, DelProofMeta & m) {
  
 
 Node*
-Node::merge_right (int parent_index_this, DelProofMeta & m) {
+Node::merge_right (int parent_index_this, DelInfo & di, DelInfo & di_parent) {
 // copy elements from the right sibling into this node, along with the
 // element in the parent node vector that has the right sibling as it subtree.
 // the right sibling and that parent element are then deleted
@@ -868,12 +878,14 @@ Node::merge_right (int parent_index_this, DelProofMeta & m) {
 
     Node* right_sib = (*mp_parent)[parent_index_this+1].mp_subtree;
 
-    // old Merkle proofs
-    m.is_sib = true;
-    m.sib_was_deleted = true;
-    m.dproof.oldsib = right_sib->extract_NodeMerkleInfo(-1);
-    m.pos_of_sib_in_parent = parent_index_this + 1;
-
+    // DelInfo about sibling before merging
+    di.is_sib = true;
+    di.pos_of_sib_in_parent = parent_index_this + 1;
+    di.old_sib = right_sib->extract_NodeMerkleInfo(-1);
+    di.sib_was_deleted = true;
+    // DelInfo about parent before changing parent
+    di_parent = DelInfo(parent_elem.m_key, mp_parent->extract_NodeMerkleInfo(-1));
+    
     parent_elem.mp_subtree = (*right_sib)[0].mp_subtree;
 
     vector_insert (parent_elem);
@@ -908,13 +920,16 @@ Node::merge_right (int parent_index_this, DelProofMeta & m) {
         return null_ptr; // no need for parent to import an element
     }
 
+    // DelInfo after merging about this node 
+    di.new_node = this->extract_NodeMerkleInfo(-1);
+
     return mp_parent; // parent must import an element
 
 } //_______________________________________________________________________
 
  
 
-Node* Node::merge_left (int parent_index_this, DelProofMeta & m) {
+Node* Node::merge_left (int parent_index_this, DelInfo & di, DelInfo & di_parent) {
 
 // copy all elements from this node into the left sibling, along with the
 // element in the parent node vector that has this node as its subtree.
@@ -926,16 +941,14 @@ Node* Node::merge_left (int parent_index_this, DelProofMeta & m) {
 
     Node* left_sib = (*mp_parent)[parent_index_this-1].mp_subtree;
 
-    // record merkle info
-    m.is_sib = true;
-    if (m.start_node == this) {
-	m.start_node = left_sib;
-    }
-    m.dproof.oldsib = extract_NodeMerkleInfo(-1);
-    m.pos_of_sib_in_parent = parent_index_this;
-    m.sib_was_deleted = true;
+    // DelInfo about sibling before merging
+    di.is_sib = true;
+    di.pos_of_sib_in_parent = parent_index_this + 1;
+    di.old_sib = left_sib->extract_NodeMerkleInfo(-1);
+    di.this_was_deleted = true;
+    // DelInfo about parent before changing parent
+    di_parent = DelInfo(parent_elem.m_key, mp_parent->extract_NodeMerkleInfo(-1));
 
-  
     left_sib->vector_insert(parent_elem);
 
     for (unsigned int i=1; i<m_count; i++) {
@@ -976,6 +989,9 @@ Node* Node::merge_left (int parent_index_this, DelProofMeta & m) {
 	parent_node->update_merkle_upward();
         return null_ptr; // no need for parent to import an element
     }
+
+    //DelInfo about sibling after merge
+    di.new_sib = left_sib->extract_NodeMerkleInfo(-1);
     
     return parent_node; // parent must import an element
 
@@ -1066,36 +1082,6 @@ int Node::index_has_subtree () {
         throw "error in index_has_subtree";
 
 } 
-
-void
-Node::get_merkle_info_after_del(DelProofMeta & m,
-				int pos) {
-
-    if (m.non_leaf == this) {
-	m.dproof.index_in_path = m.dproof.newproof.path.size();
-	m.dproof.non_leaf_new = extract_NodeMerkleInfo(-1);
-    }
-    
-    if (m.is_sib && m.sibl_of == this) {
-	m.dproof.is_sib = true;
-	if (!m.sib_was_deleted) {
-	    //sibling was not removed
-	    m.dproof.newsib = m.sibl->extract_NodeMerkleInfo(-1);
-	} else {
-	    m.dproof.sib_was_deleted = true;
-	}
-	m.dproof.pos_of_sib_in_parent = m.pos_of_sib_in_parent;
-    }
-    
-    m.dproof.newproof.path.push_back(extract_NodeMerkleInfo(pos));
-				
-    if (this == find_root()) {
-	return;
-    }
-    
-    pos = index_in_parent();
-    mp_parent->get_merkle_info_after_del(m, pos);
-}
 
 Elem& Node::smallest_key_in_subtree () {
     

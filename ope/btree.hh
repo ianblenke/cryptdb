@@ -32,68 +32,106 @@ typedef struct NodeMerkleInfo {
 std::ostream& operator<<(std::ostream &out, const NodeMerkleInfo & mi);
 
 
+
 // Contains Merkle information for each node on the path from a specific node
 // to the root 
 // Each element of the list is the NodeMerkleInfo for one level
 // starting with the originating node and ending with the root
+typedef std::list<NodeMerkleInfo>  MerklePath;
+
 typedef struct MerkleProof {
-    std::list<NodeMerkleInfo> path;
-    
+    MerklePath path;
 } MerkleProof;
+
+
+/*
+ *  Deletion Merkle Proof
+ *
+ * -  Delete changes at most the nodes on a path from a node (``deletion path'')
+ *    up to the root and one additional node, sibling of one node on this path
+ *
+ * - There are a few transformations deletion may perform on the tree and we
+ * - need to convey these in the proofs
+ */
+      
+
+// Information needed about a delete on a level
+// old: state before deletion of deleted, new: state after deletion of deleted
+typedef struct DelInfo {
+    std::string deleted;
+    NodeMerkleInfo old_node, new_node;
+    
+    bool is_sib;
+    int pos_of_sib_in_parent;
+    NodeMerkleInfo old_sib, new_sib;
+    bool sib_was_deleted;
+    bool this_was_deleted;
+    
+    //checks that the new state is a correct state
+    // after deleting ``deleted'' from old state
+    bool local_check();
+
+    DelInfo(std::string deleted_, NodeMerkleInfo nodeinfo): deleted(deleted_), old_node(nodeinfo) {	
+	DelInfo();
+    }
+
+    DelInfo() {
+	is_sib = sib_was_deleted = this_was_deleted = false;
+    }
+    
+} DelLevelInfo;
 
 // Merkle proof that a certain item was deleted
 typedef struct DelMerkleProof {
-    // Delete changes at most the nodes on a path from a node up to the root and
-    // one additional node, sibling of one node on this path
+    std::list<DelInfo> levels;
 
-    MerkleProof oldproof, newproof; // proofs for the lowest node changed, and
-				      // if two nodes are changed on the same
-				      // level, for the leftmost changed
-
-    bool new_tree_empty;
+    bool has_non_leaf;
+    DelInfo non_leaf;
     
-    // information for extra sibling
-    bool is_sib;  // whether there is an extra sibling
-    bool sib_was_deleted;
-    NodeMerkleInfo  oldsib, newsib; //the extra sibling to check
-    int pos_of_sib_in_parent;
+    std::string old_hash() const;
+    bool check_change() const;
+    std::string new_hash() const;
 
-
-    bool non_leaf;
-    uint index_in_path; //index of non_leaf node on path
-    NodeMerkleInfo  non_leaf_old,  non_leaf_new;
-
-    
-    DelMerkleProof() { //default values
-
-	new_tree_empty =  false;
-	is_sib = false;
-	sib_was_deleted = false;
-        non_leaf = false;
-	
+    DelMerkleProof() {
+	has_non_leaf = false;
     }
-
+    
 } DelMerkleProof;
 
 class Node;
 
+// Metadata helping to prepare deletion proof: DelMerkleProof
 typedef struct DelProofMeta {
-    DelMerkleProof dproof;
-    Node * start_node;
+    
+    Node * start_node; // lowest node from which deletion starts
+    MerklePath oldpath;
+
+    // Indicates if a non_leaf node was the first to delete from
+    // Null if deletion started from leaf node
     Node * non_leaf;
-    bool is_sib;
+    NodeMerkleInfo non_leaf_old;
+    
     bool sib_was_deleted;
+    // Points to a node sibling of a node on the deletion path
+    // or is null if there is no such node
     Node * sibl;
+    NodeMerkleInfo old_sib;
+    // Node on deletion path whose sibling is sibl
+    // or null if N/A
     Node * sibl_of;
     uint pos_of_sib_in_parent;
+
+    bool new_tree_empty;
+
     DelProofMeta() {
-	is_sib = sib_was_deleted = false;
-	non_leaf = sibl = sibl_of = 0;
+	sib_was_deleted = false;
+	start_node = non_leaf = sibl = sibl_of = 0;
     }
+    
 } DelProofMeta;
 
 typedef struct InsMerkleProof {
-    MerkleProof oldproof, newproof;
+    MerklePath oldproof, newproof;
 } InsMerkleProof;
 
 class Node {
@@ -168,13 +206,11 @@ protected:
     Node* right_sibling (int& parent_index_this);
     Node* left_sibling (int& parent_index_this);
 
-    bool delete_element (Elem& target, DelProofMeta & m);
-    
-    Node* rotate_from_left(int parent_index_this, DelProofMeta & m);
-    Node* rotate_from_right(int parent_index_this, DelProofMeta & m);
+    Node* rotate_from_left(int parent_index_this, DelInfo & di, DelInfo & di_parent);
+    Node* rotate_from_right(int parent_index_this, DelInfo & di, DelInfo & di_parent);
 
-    Node* merge_right (int parent_index_this, DelProofMeta & m);
-    Node* merge_left (int parent_index_this, DelProofMeta & m);
+    Node* merge_right (int parent_index_this, DelInfo & di, DelInfo & di_parent);
+    Node* merge_left (int parent_index_this, DelInfo & di, DelInfo & di_parent);
 
     bool merge_into_root ();
 
@@ -208,10 +244,6 @@ protected:
     uint max_height();    
     void max_height_help(uint height, uint & max_height);
 
-    // gets the merkle information of the tree after a delete that needs to be
-    // checked against the old information
-    void get_merkle_info_after_del(DelProofMeta & m, 
-				   int pos);
 	
     
 
@@ -219,9 +251,9 @@ protected:
 
     // Friends
     friend class Test;
-    friend MerkleProof get_merkle_proof(Node * n);
-
-
+    friend MerklePath get_merkle_path(Node * n);
+    friend MerkleProof get_search_merkle_proof(Node * n);
+ 
 #ifdef _DEBUG
 
     Elem debug[8];
@@ -230,10 +262,13 @@ protected:
     
 };
 
-
 // returns the information needed to check the validity of node n
 MerkleProof
-get_merkle_proof(Node * n);
+get_search_merkle_proof(Node * n);
+
+//returns the merkle information for a path from n to root
+MerklePath
+get_merkle_path(Node * n);
 
 // verifies that the merkle information corresponding to a node matches the
 // overall root merkle hash
