@@ -49,7 +49,7 @@ struct table_storage{
 	uint64_t v;
 	uint64_t pathlen;
 	uint64_t index;
-	int version;
+	//int version;
 };
 
 class ope_lookup_failure {};
@@ -71,7 +71,7 @@ public:
 	unsigned int num_nodes;
 	unsigned int max_size;
 	Connect * dbconnect;
-	int global_version;
+	//int global_version;
 	int num_rebalances;
 
 	RootTracker tracker;
@@ -109,7 +109,7 @@ public:
 		num_nodes=0;
 		max_size=0;
 		root = NULL;
-		global_version=0;
+		//global_version=0;
 		num_rebalances=0;
 
 	    Node::m_failure.invalidate();

@@ -31,6 +31,12 @@ void     get_ops_server_deinit(UDF_INIT *initid);
 char *   get_ops_server(UDF_INIT *initid, UDF_ARGS *args, char *result,
                           unsigned long *length, char *is_null, char *error);
 
+// UDF to request OPE encryption
+my_bool  ope_enc_init(UDF_INIT *initid, UDF_ARGS *args,
+                               char *message);
+void     ope_enc_deinit(UDF_INIT *initid);
+long long   ope_enc(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error);
+
 } /* extern C */
 /*
 static uint64_t
@@ -47,6 +53,19 @@ getstring(UDF_ARGS * args, int i)
 
 extern "C" {
     
+my_bool  ope_enc_init(UDF_INIT *initid, UDF_ARGS *args, char *message){
+    return 0;
+}
+void ope_enc_deinit(UDF_INIT *initid){
+    return;
+}
+
+long long ope_enc(UDF_INIT *initid, UDF_ARGS *args,
+    char *is_null, char *error){
+    long long int_val;
+    int_val = *((long long*) args->args[0]);
+}
+
 my_bool
 create_ops_server_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
 {
@@ -56,7 +75,6 @@ create_ops_server_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
 ulonglong
 create_ops_server(UDF_INIT *initid, UDF_ARGS *args, char *is_null,
 			    char *error) {
-
 
     cerr<<"Calling create_ops_server function\n";
 
