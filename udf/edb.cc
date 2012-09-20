@@ -64,6 +64,8 @@ long long ope_enc(UDF_INIT *initid, UDF_ARGS *args,
     char *is_null, char *error){
     long long int_val;
     int_val = *((long long*) args->args[0]);
+
+    return int_val;
 }
 
 my_bool

@@ -384,7 +384,7 @@ bool test_order(int num_vals, int sorted, bool deletes){
             o<<enc_val;
             string ope = o.str();
 
-/*            o.str("");
+            /*o.str("");
             o.clear();
             o<<enc_pair.second;
             string version = o.str();*/
@@ -411,7 +411,7 @@ bool test_order(int num_vals, int sorted, bool deletes){
                 o<<rep_enc_val;
                 string rep_ope = o.str();
 
-/*                o.str("");
+                /*o.str("");
                 o.clear();
                 o<<rep_pair.second;
                 string rep_version = o.str();*/
