@@ -26,7 +26,7 @@ ffsl(uint64_t ct)
 template<class V, class BlockCipher>
 V
 ope_client<V, BlockCipher>::decrypt(uint64_t ct) const {
-    char buffer[1024];
+    char buffer[2048];
 
     uint64_t nbits = 64 - ffsl((uint64_t)ct);
     uint64_t v= ct>>(64-nbits); //Orig v
@@ -42,7 +42,7 @@ ope_client<V, BlockCipher>::decrypt(uint64_t ct) const {
     string msg = o.str();
     if(DEBUG_COMM) cout<<"Sending decrypt msg: "<<msg<<endl;
     send(hsock, msg.c_str(), msg.size(),0);
-    recv(hsock, buffer, 1024, 0);
+    recv(hsock, buffer, 2048, 0);
 
     if(DEBUG_BTREE) cout<<"Decrypt recv="<<buffer<<endl;
     istringstream iss_tmp(buffer);
@@ -82,11 +82,11 @@ ope_client<V, BlockCipher>::delete_value(V pt){
     string msg = o.str();
     if(DEBUG) cout<<"Deleting pt="<<pt<<" with msg "<<msg<<endl;
 
-    char buffer[1024];
-    memset(buffer, '\0', 1024);
+    char buffer[2048];
+    memset(buffer, '\0', 2048);
 
     send(hsock, msg.c_str(), msg.size(), 0);
-    recv(hsock, buffer, 1024, 0);
+    recv(hsock, buffer, 2048, 0);
 
     if(DEBUG_BTREE){
         cout<<"Delete_value buffer recv: "<<buffer<<endl;
@@ -96,11 +96,11 @@ ope_client<V, BlockCipher>::delete_value(V pt){
     DelMerkleProof dmp;
     stringstream iss(buffer);
     iss>>new_merkle_hash;
-    string tmp_hash_str (buffer, 1024);
+    string tmp_hash_str (buffer, 2048);
     size_t hash_end = tmp_hash_str.find("hash_end");
     string new_hash_str (buffer, hash_end);
     cur_merkle_hash = new_hash_str;
-/*      char tmp_hash[1024];
+/*      char tmp_hash[2048];
     strcpy(tmp_hash, buffer);
     size_t end = 
     *space='\0';
@@ -136,10 +136,10 @@ ope_client<V, BlockCipher>::insert(uint64_t v, uint64_t nbits, uint64_t index, V
     string msg = o.str();
     if(DEBUG_COMM) cout<<"Sending msg: "<<msg<<endl;
 
-    char buffer[1024];
-    memset(buffer, '\0', 1024);
+    char buffer[2048];
+    memset(buffer, '\0', 2048);
     send(hsock, msg.c_str(), msg.size(),0);
-    recv(hsock, buffer, 1024, 0);
+    recv(hsock, buffer, 2048, 0);
 
     if(DEBUG_BTREE) cout<<"Insert buffer="<<buffer<<endl;
     const string tmp_merkle_hash = cur_merkle_hash;
@@ -147,11 +147,11 @@ ope_client<V, BlockCipher>::insert(uint64_t v, uint64_t nbits, uint64_t index, V
     InsMerkleProof imp;
     stringstream iss(buffer);
     iss>>new_merkle_hash;
-    string tmp_hash_str (buffer, 1024);
+    string tmp_hash_str (buffer, 2048);
     size_t hash_end = tmp_hash_str.find("hash_end");
     string new_hash_str (buffer, hash_end-1);
     cur_merkle_hash = new_hash_str;
-/*      char tmp_hash[1024];
+/*      char tmp_hash[2048];
     strcpy(tmp_hash, buffer);
     char* space = strchr(tmp_hash,' ');
     *space='\0';
@@ -196,8 +196,8 @@ ope_client<V, BlockCipher>::encrypt(V pt) const{
 
     if(DEBUG_COMM) cout<<"Encrypting pt: "<<pt<<" det: "<<det<<endl;
 
-    char buffer[1024];
-    memset(buffer, '\0', 1024);
+    char buffer[2048];
+    memset(buffer, '\0', 2048);
 
     //table_storage test = s->lookup(pt);
     ostringstream o;
@@ -207,7 +207,7 @@ ope_client<V, BlockCipher>::encrypt(V pt) const{
     if(DEBUG_COMM) cout<<"Sending init msg: "<<msg<<endl;
 
     send(hsock, msg.c_str(), msg.size(), 0);
-    recv(hsock, buffer, 1024, 0);
+    recv(hsock, buffer, 2048, 0);
     uint64_t early_v, early_pathlen, early_index, early_version;
 
     istringstream iss(buffer);
@@ -236,8 +236,8 @@ ope_client<V, BlockCipher>::encrypt(V pt) const{
         msg = o.str();
         if(DEBUG_COMM) cout<<"Sending msg: "<<msg<<endl;
         send(hsock, msg.c_str(), msg.size(), 0);
-        memset(buffer, 0, 1024);
-        recv(hsock, buffer, 1024, 0);
+        memset(buffer, 0, 2048);
+        recv(hsock, buffer, 2048, 0);
         if(DEBUG_COMM || DEBUG_BTREE) cout<<"Received during iterative lookup: "<<buffer<<endl;
         string check(buffer);           
 

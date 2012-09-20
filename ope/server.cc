@@ -451,7 +451,7 @@ tree<EncT>::delete_index(uint64_t v, uint64_t nbits, uint64_t index){
     string merkle_root = tracker.get_root()->merkle_hash;
 
     if(DEBUG_BTREE) cout<<"Delete new merkle hash="<<merkle_root<<endl;
-    s<<merkle_root+" hash_end ";
+    s<<merkle_root<<" hash_end ";
     s<<dmp;
 
     if(DEBUG_BTREE) cout<<"Delete dmp="<<dmp<<endl;
@@ -689,7 +689,7 @@ tree<EncT>::insert(uint64_t v, uint64_t nbits, uint64_t index, EncT encval){
 	////
 	s.str("");
 	s.clear();
-	s<<merkle_root+" hash_end ";
+	s<<merkle_root<<" hash_end ";
 	s<<imp;
 
 	if(DEBUG_BTREE) cout<<"Insert merkle hash="<<merkle_root<<endl;
@@ -964,13 +964,13 @@ void handle_client(void* lp, tree<EncT>* s){
 
         cout<<"Call to function!"<<endl;
         //Buffer to handle all messages received
-        char buffer[1024];
+        char buffer[2048];
         while(true){
         	//Clear buffer
-            memset(buffer, 0, 1024);
+            memset(buffer, 0, 2048);
 
             //Receive message to process
-            recv(*csock, buffer, 1024, 0);
+            recv(*csock, buffer, 2048, 0);
             if(DEBUG_COMM) cout<<"Received msg "<<buffer<<endl;
             //Find protocol code:
 		    /*Server protocol code:
@@ -1041,7 +1041,7 @@ void handle_client(void* lp, tree<EncT>* s){
                 }
 
                 rtn_str=o.str();
-                if(rtn_str.size()>1024){
+                if(rtn_str.size()>2048){
                 	cout<<"Message too long!"<<endl;
                 	exit(-1);
                 }
@@ -1057,7 +1057,7 @@ void handle_client(void* lp, tree<EncT>* s){
                 //Insert...need not send response
                 if(DEBUG_COMM) cout<<"Trying insert("<<v<<", "<<nbits<<", "<<index<<", "<<blk_encrypt_pt<<")"<<endl;
                 string proof = s->insert(v, nbits, index, blk_encrypt_pt);
-                if(proof.size()>1024){
+                if(proof.size()>2048){
                 	cout<<"Insert proof too large"<<endl;
                 	exit(-1);
                 }
@@ -1069,7 +1069,7 @@ void handle_client(void* lp, tree<EncT>* s){
             	iss>>nbits;
             	iss>>index;
             	string proof = s->delete_index(v, nbits, index);
-            	if(proof.size()>1024){
+            	if(proof.size()>2048){
             		cout<<"Delete proof too large"<<endl;
             		exit(-1);
             	}
