@@ -57,6 +57,7 @@ ulonglong
 create_ops_server(UDF_INIT *initid, UDF_ARGS *args, char *is_null,
 			    char *error) {
 
+
     cerr<<"Calling create_ops_server function\n";
 
     string command = "/usr/lib/mysql/plugin/server";
