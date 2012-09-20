@@ -972,7 +972,7 @@ template<class EncT>
 void handle_client(void* lp, tree<EncT>* s){
         int *csock = (int*) lp;
 
-        cout<<"Call to function!"<<endl;
+        cout<<"Call to handle_client!"<<endl;
         //Buffer to handle all messages received
         char buffer[10240];
         while(true){
@@ -1011,6 +1011,7 @@ void handle_client(void* lp, tree<EncT>* s){
                 rtn_str=o.str();
                 if(DEBUG_COMM) cout<<"Rtn_str : "<<rtn_str<<endl;
                 send(*csock, rtn_str.c_str(), rtn_str.size(),0);
+                break;
             }else if(func_d==2){
             	//Lookup w/o table, using v and nbits
                 uint64_t v, nbits;
@@ -1154,7 +1155,7 @@ int main(int argc, char **argv){
     socklen_t addr_size=sizeof(sockaddr_in);
     int* csock;
     struct sockaddr_in sadr;
-    int i=1;
+    int i=10;
     //Handle 1 client b/f quiting (can remove later)
     while(i>0){
             cerr<<"Listening..."<<endl;

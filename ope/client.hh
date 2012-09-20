@@ -23,10 +23,18 @@
 
 //Whether to print debugging output or not
 #define DEBUG 0
-#define DEBUG_COMM 0
+#define DEBUG_COMM 1
 #define DEBUG_BTREE 0
 
-using namespace std;
+using std::cout;
+using std::endl;
+using std::string;
+using std::ostringstream;
+using std::istringstream;
+using std::stringstream;
+using std::vector;
+using std::cerr;
+using std::max;
 
 const int N = 4;
 const double alpha = 0.3;
@@ -41,6 +49,8 @@ uint64_t mask;
 
 uint64_t make_mask();
 bool test_order(int num_vals, int sorted, bool deletes);
+
+void handle_udf(void* lp);
 
 class ope_lookup_failure {};
 
@@ -110,7 +120,7 @@ class ope_client {
     void delete_value(V pt);
 
     //Function to tell tree server to insert plaintext pt w/ v, nbits
-    uint64_t insert(uint64_t v, uint64_t nbits, uint64_t index, V pt, V det) const;
+    void insert(uint64_t v, uint64_t nbits, uint64_t index, V pt, V det) const;
 
     /* Encryption is the path bits (aka v) bitwise left shifted by num_bits
      * so that the last num_bits can indicate the index of the value pt at
@@ -123,7 +133,7 @@ class ope_client {
 	 * insert(v, nbits, index, encrypted_laintext) = 3
 	 * delete(v, nbits, index) = 4
 	*/
-    uint64_t encrypt(V pt) const;
+    void encrypt(V pt) const;
 
 private:
     V block_decrypt(V ct) const;

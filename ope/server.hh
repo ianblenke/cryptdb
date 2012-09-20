@@ -9,7 +9,7 @@
 
 //Whether to print debugging output or not
 #define DEBUG 0
-#define DEBUG_COMM 0
+#define DEBUG_COMM 1
 #define DEBUG_BTREE 0
 
 using std::cout;
