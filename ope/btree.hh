@@ -56,17 +56,45 @@ std::istream& operator>>(std::istream &is, MerkleProof & mp);
  * - There are a few transformations deletion may perform on the tree and we
  * - need to convey these in the proofs
  */
-      
+
+typedef struct ElInfo {
+    std::string key;
+    std::string hash;
+    
+    ElInfo(std::string key_, std::string hash_): key(key_), hash(hash_) {}
+    ElInfo() {}
+} ElInfo;
+
+bool operator==(const ElInfo & e1, const ElInfo & e2);
+
+std::ostream&
+operator<<(std::ostream &out, const ElInfo & ei);
+
+
+typedef struct NodeInfo {
+    std::string key;
+    int pos_in_parent;
+    
+    std::vector<ElInfo> childr;
+
+    std::string hash() const;
+    bool equals(const NodeInfo & node) const;
+
+} NodeInfo;
+
+std::ostream& operator<<(std::ostream &out, const NodeInfo & node);
 
 // Information needed about a delete on a level
 // old: state before deletion of deleted, new: state after deletion of deleted
 typedef struct DelInfo {
+ 
+    bool anything_deleted;
     std::string deleted;
-    NodeMerkleInfo old_node, new_node;
+    NodeInfo old_node, new_node;
     
     bool is_sib;
-    int pos_of_sib_in_parent;
-    NodeMerkleInfo old_sib, new_sib;
+    bool is_left_sib; 
+    NodeInfo old_sib, new_sib;
     bool sib_was_deleted;
     bool this_was_deleted;
     
@@ -74,30 +102,40 @@ typedef struct DelInfo {
     // after deleting ``deleted'' from old state
     bool local_check();
 
-    DelInfo(std::string deleted_, NodeMerkleInfo nodeinfo): deleted(deleted_), old_node(nodeinfo) {	
-	DelInfo();
-    }
+    DelInfo(std::string deleted_, NodeInfo nodeinfo):
+	deleted(deleted_),
+	old_node(nodeinfo) { DelInfo(); }
+
+    DelInfo(NodeInfo ni_old, NodeInfo ni_new) :
+	anything_deleted(false),
+	old_node(ni_old), new_node(ni_new) {}
 
     DelInfo() {
+	anything_deleted = true;
 	is_sib = sib_was_deleted = this_was_deleted = false;
     }
     
-} DelLevelInfo;
+} DelInfo;
+
+  
 
 // Merkle proof that a certain item was deleted
 typedef struct DelMerkleProof {
-    std::list<DelInfo> levels;
+    std::vector<DelInfo> levels; // from leaf to root
 
     bool has_non_leaf;
     DelInfo non_leaf;
     
     std::string old_hash() const;
-    bool check_change() const;
+    bool check_change(std::string key_to_del) const;
     std::string new_hash() const;
 
     DelMerkleProof() {
 	has_non_leaf = false;
     }
+
+    void add(DelInfo di);
+
     
 } DelMerkleProof;
 
@@ -106,35 +144,6 @@ std::istream& operator>>(std::istream &is, DelMerkleProof & dmp);
 
 class Node;
 
-// Metadata helping to prepare deletion proof: DelMerkleProof
-typedef struct DelProofMeta {
-    
-    Node * start_node; // lowest node from which deletion starts
-    MerklePath oldpath;
-
-    // Indicates if a non_leaf node was the first to delete from
-    // Null if deletion started from leaf node
-    Node * non_leaf;
-    NodeMerkleInfo non_leaf_old;
-    
-    bool sib_was_deleted;
-    // Points to a node sibling of a node on the deletion path
-    // or is null if there is no such node
-    Node * sibl;
-    NodeMerkleInfo old_sib;
-    // Node on deletion path whose sibling is sibl
-    // or null if N/A
-    Node * sibl_of;
-    uint pos_of_sib_in_parent;
-
-    bool new_tree_empty;
-
-    DelProofMeta() {
-	sib_was_deleted = false;
-	start_node = non_leaf = sibl = sibl_of = 0;
-    }
-    
-} DelProofMeta;
 
 typedef struct InsMerkleProof {
     MerklePath oldproof, newproof;
@@ -177,7 +186,8 @@ public:
 
     void dump(bool recursive = true);
     void in_order_traverse(std::list<std::string> & res);
-
+    static uint minimum_keys ();
+    
 
 protected:
 
@@ -215,15 +225,22 @@ protected:
     Node* right_sibling (int& parent_index_this);
     Node* left_sibling (int& parent_index_this);
 
-    Node* rotate_from_left(int parent_index_this, DelInfo & di, DelInfo & di_parent);
-    Node* rotate_from_right(int parent_index_this, DelInfo & di, DelInfo & di_parent);
+    Node* rotate_from_left(int parent_index_this,
+			   DelInfo & di, DelInfo & di_parent,
+			   DelMerkleProof & proof);
+    Node* rotate_from_right(int parent_index_this,
+			    DelInfo & di, DelInfo & di_parent,
+			    DelMerkleProof & proof);
 
-    Node* merge_right (int parent_index_this, DelInfo & di, DelInfo & di_parent);
-    Node* merge_left (int parent_index_this, DelInfo & di, DelInfo & di_parent);
+    Node* merge_right (int parent_index_this,
+		       DelInfo & di, DelInfo & di_parent, DelMerkleProof & proof);
+    Node* merge_left (int parent_index_this,
+		      DelInfo & di, DelInfo & di_parent, DelMerkleProof & proof);
 
     bool merge_into_root ();
 
-    int minimum_keys ();
+    static int num_elements();
+   
 
     // outputs the index that this node has in his parent element list
     int index_in_parent();
@@ -246,6 +263,9 @@ protected:
     void update_merkle_upward();
 
     NodeMerkleInfo extract_NodeMerkleInfo(int pos);
+    NodeInfo extract_NodeInfo(); //TODO reove NodeMerkleInfo
+
+    void finish_del(DelMerkleProof & proof);
 
     // Functions for testing
     void check_merkle_tree(); //checks merkle tree was computed correctly
@@ -288,6 +308,7 @@ verify_merkle_proof(const MerkleProof & proof, const std::string & merkle_root);
 //also sets new_merkle_root accordingly
 bool
 verify_del_merkle_proof(const DelMerkleProof & p,
+			std::string del_target,
 			const std::string & merkle_root,
 			std::string & new_merkle_root);
 
@@ -348,6 +369,7 @@ public:
 private:
     friend class Node;
     friend class NodeMerkleInfo;
+    friend class NodeInfo;
     friend class Test;
     template<class EncT> friend class tree;
     
