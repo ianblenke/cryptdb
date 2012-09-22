@@ -7,10 +7,13 @@ $(OBJDIR)/libope.so: $(patsubst %.cc,$(OBJDIR)/ope/%.o,$(OPESRC))
 	$(CXX) -shared -o $@ $^ $(LDFLAGS)
 
 
+all:	$(OBJDIR)/ope/user
+$(OBJDIR)/ope/user: $(OBJDIR)/ope/user.o $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbutil.so $(OBJDIR)/libope.so
+	$(CXX) $< -o $@ $(LDFLAGS) -ledbutil -lope -lcryptdb
+
 all:	$(OBJDIR)/ope/client
 $(OBJDIR)/ope/client: $(OBJDIR)/ope/client.o $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbutil.so $(OBJDIR)/libope.so
 	$(CXX) $< -o $@ $(LDFLAGS) -ledbutil -lope -lcryptdb
-
 	
 #all:	$(OBJDIR)/ope/avltest
 #$(OBJDIR)/ope/avltest: $(OBJDIR)/ope/avltest.o $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbutil#.so $(OBJDIR)/libope.so

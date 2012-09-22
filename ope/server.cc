@@ -1167,7 +1167,7 @@ int main(int argc, char **argv){
             else{
                 cout<<"Error accepting!"<<endl;
             }
-            i--;
+            //i--;
     }
     cerr<<"Done with server, closing now\n";
     close(hsock);

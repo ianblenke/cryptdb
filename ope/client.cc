@@ -185,12 +185,12 @@ ope_client<V, BlockCipher>::insert(uint64_t v, uint64_t nbits, uint64_t index, V
 
 template<class V, class BlockCipher>
 void
-ope_client<V, BlockCipher>::encrypt(V pt) const{
+ope_client<V, BlockCipher>::encrypt(V det) const{
 
     uint64_t v = 0;
     uint64_t nbits = 0;
 
-    V det = pt;
+    V pt = block_decrypt(det);
 
     if(DEBUG_COMM) cout<<"Encrypting pt: "<<pt<<" det: "<<det<<endl;
 
@@ -390,7 +390,7 @@ int main(){
             else{
                 cout<<"Error accepting!"<<endl;
             }
-            i--;
+            //i--;
     }
     cerr<<"Done with client, closing now\n";
     close(hsock);
