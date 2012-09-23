@@ -169,11 +169,12 @@ tree<EncT>::rebalance(tree_node<EncT>* node){
 
 	//Make sure new fresh global_version number to use as versions for
 	//newly updated (no longer stale) db values
-	global_version++;
+	//global_version++;
 
 
 	//Make sure OPE table is updated and correct
 	update_ope_table(node, base);
+	clear_db_version();
 }
 
 //Used to delete all subtrees of node
@@ -192,11 +193,18 @@ tree<EncT>::delete_nodes(tree_node<EncT>* node){
 /****************************/
 template<class EncT>
 void
+tree<EncT>::clear_db_version(){
+	string query="UPDATE emp SET version=0 where version=1";
+	dbconnect->execute(query);
+}
+
+template<class EncT>
+void
 tree<EncT>::delete_db(table_storage del_entry){
-	uint64_t del_v, del_nbits, del_version;
+	uint64_t del_v, del_nbits;//, del_version;
 	del_v=(del_entry.v << num_bits) | del_entry.index;
 	del_nbits=del_entry.pathlen+num_bits;
-	del_version=del_entry.version;	
+	//del_version=del_entry.version;	
 
 	uint64_t del_ope = (del_v<<(64-del_nbits)) | (mask<<(64-num_bits-del_nbits));
 
@@ -205,14 +213,14 @@ tree<EncT>::delete_db(table_storage del_entry){
 	o.clear();
 	o<<del_ope;
 	string del_ope_str = o.str();
-	o.str("");
+	/*o.str("");
 	o.clear();
 	o<<del_version;
 	string del_version_str = o.str();
-
+*/
 	string query="DELETE FROM emp WHERE ope_enc="+
-					del_ope_str+
-					" and version="+del_version_str;
+					del_ope_str;/*+
+					" and version="+del_version_str;*/
 	if(DEBUG_COMM) cout<<"Query: "<<query<<endl;
 	dbconnect->execute(query);
 }
@@ -223,16 +231,16 @@ void
 tree<EncT>::update_db(table_storage old_entry, table_storage new_entry){
 	//Takes old ope_table entry and new ope_table entry and calculates
 	//corresponding db values, and updates db old vals to new vals
-	uint64_t old_v, old_nbits, old_version;
-	uint64_t new_v, new_nbits, new_version;
+	uint64_t old_v, old_nbits;/*, old_version;*/
+	uint64_t new_v, new_nbits;/*, new_version;*/
 
 	old_v=(old_entry.v << num_bits) | old_entry.index;
 	old_nbits=old_entry.pathlen+num_bits;
-	old_version=old_entry.version;
+	//old_version=old_entry.version;
 
 	new_v=(new_entry.v << num_bits) | new_entry.index;
 	new_nbits=new_entry.pathlen+num_bits;
-	new_version=new_entry.version;	
+	//new_version=new_entry.version;	
 
 	uint64_t old_ope = (old_v<<(64-old_nbits)) | (mask<<(64-num_bits-old_nbits));
 	uint64_t new_ope = (new_v<<(64-new_nbits)) | (mask<<(64-num_bits-new_nbits));
@@ -242,25 +250,25 @@ tree<EncT>::update_db(table_storage old_entry, table_storage new_entry){
 	o.clear();
 	o<<old_ope;
 	string old_ope_str = o.str();
-	o.str("");
+	/*o.str("");
 	o.clear();
 	o<<old_version;
 	string old_version_str = o.str();
-
+*/
 	o.str("");
 	o.clear();
 	o<<new_ope;
 	string new_ope_str = o.str();
-	o.str("");
+	/*o.str("");
 	o.clear();
 	o<<new_version;
-	string new_version_str = o.str();	
+	string new_version_str = o.str();	*/
 
 	string query="UPDATE emp SET ope_enc="+
 					new_ope_str+
-					", version="+new_version_str+" where ope_enc="+
+					", version=1 where ope_enc="+
 					old_ope_str+
-					" and version="+old_version_str;
+					" and version=0";
 	if(DEBUG_COMM) cout<<"Query: "<<query<<endl;
 	dbconnect->execute(query);
 
@@ -275,7 +283,7 @@ tree<EncT>::update_ope_table(tree_node<EncT> *node, table_storage base){
 	for(int i=0; i< (int) node->keys.size(); i++){
 		table_storage tmp = base;
 		tmp.index=i;
-		tmp.version=global_version;
+		//tmp.version=global_version;
 
 		old_table_entry=ope_table[node->keys[i]];
 
@@ -406,7 +414,7 @@ predecessor<EncT>
 tree<EncT>::find_pred(tree_node<EncT>* node, uint64_t v, uint64_t nbits){
 	int max_index = node->keys.size()-1;
 	if(node->key_in_map(node->keys[max_index])){
-		if(max_index!=N-1) {
+		if(max_index!=N-2) {
 			cout<<"Error in pred, max_index not N-1"<<endl;
 			exit(1);
 		}
@@ -426,6 +434,7 @@ string
 tree<EncT>::delete_index(uint64_t v, uint64_t nbits, uint64_t index){
 	if(DEBUG) cout<<"Deleting index at v="<<v<<" nbits="<<nbits<<" index="<<index<<endl;
 	EncT deleted_val = tree_delete(root, v, nbits, index, nbits, false);
+	clear_db_version();
 	num_nodes--;
 
 	//Merkle tree delete
@@ -451,7 +460,7 @@ tree<EncT>::delete_index(uint64_t v, uint64_t nbits, uint64_t index){
     string merkle_root = tracker.get_root()->merkle_hash;
 
     if(DEBUG_BTREE) cout<<"Delete new merkle hash="<<merkle_root<<endl;
-    s<<merkle_root+" hash_end ";
+    s<<merkle_root<<" hash_end ";
     s<<dmp;
 
     if(DEBUG_BTREE) cout<<"Delete dmp="<<dmp<<endl;
@@ -496,12 +505,12 @@ tree<EncT>::tree_delete(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint6
 			//NEED TO UPDATE OPE TABLE/DATABASE
 
 			//Incr puts new entry in ope table at unique version #.
-			global_version++;
+			//global_version++;
 
 			for(int i=(int)index; i< (int) node->keys.size(); i++){
 				table_storage old_entry = ope_table[node->keys[i]];
 				ope_table[node->keys[i]].index = i;
-				ope_table[node->keys[i]].version=global_version;
+				//ope_table[node->keys[i]].version=global_version;
 				table_storage update_entry = ope_table[node->keys[i]];
 				//Only keys after deleted one need updating
 				update_db(old_entry, update_entry);
@@ -518,7 +527,7 @@ tree<EncT>::tree_delete(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint6
 
 			//NEED TO UPDATE OPE TABLE/DATABASE
 			//Only need to update the new value being swapped in.
-			global_version++;
+			//global_version++;
 			if(!swap) {
 				delete_db(ope_table[del_val]);
 				ope_table.erase(del_val);
@@ -527,7 +536,7 @@ tree<EncT>::tree_delete(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint6
 			ope_table[node->keys[index]].v = v;
 			ope_table[node->keys[index]].pathlen=pathlen;
 			ope_table[node->keys[index]].index=index;
-			ope_table[node->keys[index]].version=global_version;
+			//ope_table[node->keys[index]].version=global_version;
 			table_storage update_entry = ope_table[node->keys[index]];
 			update_db(old_entry, update_entry);
 
@@ -545,7 +554,7 @@ tree<EncT>::tree_delete(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint6
 				if(DEBUG) cout<<"Deleting val by shifting towards succ"<<endl;
 				node->keys[index]= node->keys[index+1];
 				//NEED TO UPDATE OPE TABLE/DATABASE
-				global_version++;
+				//global_version++;
 				if(!swap) {
 					delete_db(ope_table[del_val]);
 					ope_table.erase(del_val);
@@ -553,7 +562,7 @@ tree<EncT>::tree_delete(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint6
 				//Updating db entry for newly moved value
 				table_storage old_entry = ope_table[node->keys[index]];
 				ope_table[node->keys[index]].index=index;
-				ope_table[node->keys[index]].version=global_version;
+				//ope_table[node->keys[index]].version=global_version;
 				table_storage update_entry = ope_table[node->keys[index]];
 				update_db(old_entry, update_entry);
 
@@ -577,7 +586,7 @@ tree<EncT>::tree_delete(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint6
 					//NEED TO UPDATE OPE TABLE/DATABASE	
 					//Only need to update the new value being swapped in.
 					//No need to change right. del_val had no mapping in right anyways.
-					global_version++;
+					//global_version++;
 					if(!swap){
 						delete_db(ope_table[del_val]);
 						ope_table.erase(del_val);
@@ -586,7 +595,7 @@ tree<EncT>::tree_delete(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint6
 					ope_table[node->keys[index]].v = v;
 					ope_table[node->keys[index]].pathlen=pathlen;
 					ope_table[node->keys[index]].index=index;
-					ope_table[node->keys[index]].version=global_version;
+					//ope_table[node->keys[index]].version=global_version;
 					table_storage update_entry = ope_table[node->keys[index]];
 					update_db(old_entry, update_entry);
 
@@ -602,14 +611,14 @@ tree<EncT>::tree_delete(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint6
 					node->keys[index]=node->keys[index-1];
 
 					//NEED TO UPDATE OPE TABLE/DATABASE
-					global_version++;
+					//global_version++;
 					if(!swap){
 						delete_db(ope_table[del_val]);
 						ope_table.erase(del_val);
 					}
 					table_storage old_entry = ope_table[node->keys[index]];
 					ope_table[node->keys[index]].index=index;
-					ope_table[node->keys[index]].version=global_version;
+					//ope_table[node->keys[index]].version=global_version;
 					table_storage update_entry = ope_table[node->keys[index]];
 					update_db(old_entry, update_entry);		
 								
@@ -663,6 +672,7 @@ tree<EncT>::insert(uint64_t v, uint64_t nbits, uint64_t index, EncT encval){
 		root=new tree_node<EncT>();
 	}
 	vector<tree_node<EncT> * > path=tree_insert(root, v, nbits, index, encval, nbits);
+	clear_db_version();
 
 	//Merkle tree insert
 	stringstream s;
@@ -689,7 +699,7 @@ tree<EncT>::insert(uint64_t v, uint64_t nbits, uint64_t index, EncT encval){
 	////
 	s.str("");
 	s.clear();
-	s<<merkle_root+" hash_end ";
+	s<<merkle_root<<" hash_end ";
 	s<<imp;
 
 	if(DEBUG_BTREE) cout<<"Insert merkle hash="<<merkle_root<<endl;
@@ -741,16 +751,16 @@ tree<EncT>::tree_insert(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint6
 			new_entry.v = v;
 			new_entry.pathlen = pathlen;
 			new_entry.index = index;
-			new_entry.version = global_version;
+			//new_entry.version = global_version;
 			ope_table[encval] = new_entry;
 
 			//Incr puts new entry in ope table at unique version #.
-			global_version++;
+			//global_version++;
 
 			for(int i=(int)index+1; i< (int) node->keys.size(); i++){
 				table_storage old_entry = ope_table[node->keys[i]];
 				ope_table[node->keys[i]].index = i;
-				ope_table[node->keys[i]].version=global_version;
+				//ope_table[node->keys[i]].version=global_version;
 				table_storage update_entry = ope_table[node->keys[i]];
 				//Only keys after newly inserted one need updating
 				update_db(old_entry, update_entry);
@@ -841,7 +851,7 @@ tree<EncT>::lookup(EncT xct){
     negative.v=-1;
     negative.pathlen=-1;
     negative.index=-1;
-    negative.version=global_version;
+    //negative.version=global_version;
     return negative;
 }
 
@@ -962,15 +972,15 @@ template<class EncT>
 void handle_client(void* lp, tree<EncT>* s){
         int *csock = (int*) lp;
 
-        cout<<"Call to function!"<<endl;
+        cout<<"Call to handle_client!"<<endl;
         //Buffer to handle all messages received
-        char buffer[1024];
+        char buffer[10240];
         while(true){
         	//Clear buffer
-            memset(buffer, 0, 1024);
+            memset(buffer, 0, 10240);
 
             //Receive message to process
-            recv(*csock, buffer, 1024, 0);
+            recv(*csock, buffer, 10240, 0);
             if(DEBUG_COMM) cout<<"Received msg "<<buffer<<endl;
             //Find protocol code:
 		    /*Server protocol code:
@@ -995,12 +1005,13 @@ void handle_client(void* lp, tree<EncT>* s){
                 if(DEBUG_COMM) cout<<"Blk_encrypt_pt: "<<blk_encrypt_pt<<endl;
                 //Do tree lookup
                 table_storage table_rslt = s->lookup((uint64_t) blk_encrypt_pt);
-                if(DEBUG_COMM) cout<<"Rtn b/f ostringstream: "<<table_rslt.v<<" : "<<table_rslt.pathlen<<" : "<<table_rslt.index<<" : "<<table_rslt.version<<endl;
+                if(DEBUG_COMM) cout<<"Rtn b/f ostringstream: "<<table_rslt.v<<" : "<<table_rslt.pathlen<<" : "<<table_rslt.index<<endl;
                 //Construct response
-                o<<table_rslt.v<<" "<<table_rslt.pathlen<<" "<<table_rslt.index<<" "<<table_rslt.version;
+                o<<table_rslt.v<<" "<<table_rslt.pathlen<<" "<<table_rslt.index;
                 rtn_str=o.str();
                 if(DEBUG_COMM) cout<<"Rtn_str : "<<rtn_str<<endl;
                 send(*csock, rtn_str.c_str(), rtn_str.size(),0);
+                break;
             }else if(func_d==2){
             	//Lookup w/o table, using v and nbits
                 uint64_t v, nbits;
@@ -1041,7 +1052,7 @@ void handle_client(void* lp, tree<EncT>* s){
                 }
 
                 rtn_str=o.str();
-                if(rtn_str.size()>1024){
+                if(rtn_str.size()>10240){
                 	cout<<"Message too long!"<<endl;
                 	exit(-1);
                 }
@@ -1057,7 +1068,7 @@ void handle_client(void* lp, tree<EncT>* s){
                 //Insert...need not send response
                 if(DEBUG_COMM) cout<<"Trying insert("<<v<<", "<<nbits<<", "<<index<<", "<<blk_encrypt_pt<<")"<<endl;
                 string proof = s->insert(v, nbits, index, blk_encrypt_pt);
-                if(proof.size()>1024){
+                if(proof.size()>10240){
                 	cout<<"Insert proof too large"<<endl;
                 	exit(-1);
                 }
@@ -1069,7 +1080,7 @@ void handle_client(void* lp, tree<EncT>* s){
             	iss>>nbits;
             	iss>>index;
             	string proof = s->delete_index(v, nbits, index);
-            	if(proof.size()>1024){
+            	if(proof.size()>10240){
             		cout<<"Delete proof too large"<<endl;
             		exit(-1);
             	}
@@ -1144,7 +1155,7 @@ int main(int argc, char **argv){
     socklen_t addr_size=sizeof(sockaddr_in);
     int* csock;
     struct sockaddr_in sadr;
-    int i=1;
+    int i=10;
     //Handle 1 client b/f quiting (can remove later)
     while(i>0){
             cerr<<"Listening..."<<endl;
@@ -1156,7 +1167,7 @@ int main(int argc, char **argv){
             else{
                 cout<<"Error accepting!"<<endl;
             }
-            i--;
+            //i--;
     }
     cerr<<"Done with server, closing now\n";
     close(hsock);

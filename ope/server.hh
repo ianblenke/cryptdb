@@ -10,7 +10,7 @@
 //Whether to print debugging output or not
 #define DEBUG 0
 #define DEBUG_COMM 1
-#define DEBUG_BTREE 1
+#define DEBUG_BTREE 0
 
 using std::cout;
 using std::endl;
@@ -49,7 +49,7 @@ struct table_storage{
 	uint64_t v;
 	uint64_t pathlen;
 	uint64_t index;
-	int version;
+	//int version;
 };
 
 class ope_lookup_failure {};
@@ -71,7 +71,7 @@ public:
 	unsigned int num_nodes;
 	unsigned int max_size;
 	Connect * dbconnect;
-	int global_version;
+	//int global_version;
 	int num_rebalances;
 
 	RootTracker tracker;
@@ -93,6 +93,7 @@ public:
 	void update_ope_table(tree_node<EncT>* node, table_storage base);
 	void update_db(table_storage old_entry, table_storage new_entry);
 	void delete_db(table_storage del_entry);
+	void clear_db_version();
 
 	vector<EncT> flatten(tree_node<EncT>* node);
 	tree_node<EncT>* rebuild(vector<EncT> key_list);
@@ -108,7 +109,7 @@ public:
 		num_nodes=0;
 		max_size=0;
 		root = NULL;
-		global_version=0;
+		//global_version=0;
 		num_rebalances=0;
 
 	    Node::m_failure.invalidate();

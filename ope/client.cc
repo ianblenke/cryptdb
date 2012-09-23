@@ -1,6 +1,5 @@
 #include "client.hh"
 
-using namespace std;
 
 //Make mask of num_bits 1's
 uint64_t make_mask(){
@@ -26,7 +25,7 @@ ffsl(uint64_t ct)
 template<class V, class BlockCipher>
 V
 ope_client<V, BlockCipher>::decrypt(uint64_t ct) const {
-    char buffer[1024];
+    char buffer[10240];
 
     uint64_t nbits = 64 - ffsl((uint64_t)ct);
     uint64_t v= ct>>(64-nbits); //Orig v
@@ -42,7 +41,7 @@ ope_client<V, BlockCipher>::decrypt(uint64_t ct) const {
     string msg = o.str();
     if(DEBUG_COMM) cout<<"Sending decrypt msg: "<<msg<<endl;
     send(hsock, msg.c_str(), msg.size(),0);
-    recv(hsock, buffer, 1024, 0);
+    recv(hsock, buffer, 10240, 0);
 
     if(DEBUG_BTREE) cout<<"Decrypt recv="<<buffer<<endl;
     istringstream iss_tmp(buffer);
@@ -67,8 +66,8 @@ ope_client<V, BlockCipher>::decrypt(uint64_t ct) const {
 template<class V, class BlockCipher>
 void
 ope_client<V, BlockCipher>::delete_value(V pt){
-    pair<uint64_t, int> enc = encrypt(pt);
-    uint64_t ct = enc.first;
+    uint64_t ct = encrypt(pt);
+
 
     uint64_t nbits = 64 - ffsl((uint64_t)ct);
     uint64_t v= ct>>(64-nbits); //Orig v
@@ -82,13 +81,13 @@ ope_client<V, BlockCipher>::delete_value(V pt){
     string msg = o.str();
     if(DEBUG) cout<<"Deleting pt="<<pt<<" with msg "<<msg<<endl;
 
-    char buffer[1024];
-    memset(buffer, '\0', 1024);
+    char buffer[10240];
+    memset(buffer, '\0', 10240);
 
     send(hsock, msg.c_str(), msg.size(), 0);
-    recv(hsock, buffer, 1024, 0);
+    recv(hsock, buffer, 10240, 0);
 
-    if(DEBUG_BTREE){
+    /*if(DEBUG_BTREE){
         cout<<"Delete_value buffer recv: "<<buffer<<endl;
     }
     const string tmp_merkle_hash = cur_merkle_hash;
@@ -96,21 +95,20 @@ ope_client<V, BlockCipher>::delete_value(V pt){
     DelMerkleProof dmp;
     stringstream iss(buffer);
     iss>>new_merkle_hash;
-    string tmp_hash_str (buffer, 1024);
+    string tmp_hash_str (buffer, 10240);
     size_t hash_end = tmp_hash_str.find("hash_end");
     string new_hash_str (buffer, hash_end);
     cur_merkle_hash = new_hash_str;
-/*      char tmp_hash[1024];
+    iss>>dmp;*/    
+/*      char tmp_hash[10240];
     strcpy(tmp_hash, buffer);
     size_t end = 
     *space='\0';
     string tmp_hash_str (tmp_hash);
     cur_merkle_hash=tmp_hash_str;   */    
-    //cur_merkle_hash=new_merkle_hash;
+    //cur_merkle_hash=new_merkle_hash;   
 
-    iss>>dmp;   
-
-    if(DEBUG_BTREE){
+/*    if(DEBUG_BTREE){
         cout<<"Delete_value new mh="<<cur_merkle_hash<<endl;
         cout<<"DMP="<<dmp<<endl;
     }
@@ -119,12 +117,12 @@ ope_client<V, BlockCipher>::delete_value(V pt){
         exit(-1);
     }
     if(DEBUG_BTREE) cout<<"Deletion merkle proof succeeded"<<endl;
-
+*/
 }
 
 
 template<class V, class BlockCipher>
-pair<uint64_t, int>
+void
 ope_client<V, BlockCipher>::insert(uint64_t v, uint64_t nbits, uint64_t index, V pt, V det) const{
     if(DEBUG) cout<<"pt: "<<pt<<" det: "<<det<<"  not in tree. "<<nbits<<": "<<" v: "<<v<<endl;
     
@@ -136,30 +134,30 @@ ope_client<V, BlockCipher>::insert(uint64_t v, uint64_t nbits, uint64_t index, V
     string msg = o.str();
     if(DEBUG_COMM) cout<<"Sending msg: "<<msg<<endl;
 
-    char buffer[1024];
-    memset(buffer, '\0', 1024);
+    char buffer[10240];
+    memset(buffer, '\0', 10240);
     send(hsock, msg.c_str(), msg.size(),0);
-    recv(hsock, buffer, 1024, 0);
+    recv(hsock, buffer, 10240, 0);
 
-    if(DEBUG_BTREE) cout<<"Insert buffer="<<buffer<<endl;
+    /*if(DEBUG_BTREE) cout<<"Insert buffer="<<buffer<<endl;
     const string tmp_merkle_hash = cur_merkle_hash;
     string new_merkle_hash;
     InsMerkleProof imp;
     stringstream iss(buffer);
     iss>>new_merkle_hash;
-    string tmp_hash_str (buffer, 1024);
+    string tmp_hash_str (buffer, 10240);
     size_t hash_end = tmp_hash_str.find("hash_end");
     string new_hash_str (buffer, hash_end-1);
     cur_merkle_hash = new_hash_str;
-/*      char tmp_hash[1024];
+    iss>>imp;    */
+/*      char tmp_hash[10240];
     strcpy(tmp_hash, buffer);
     char* space = strchr(tmp_hash,' ');
     *space='\0';
     string tmp_hash_str (tmp_hash);
     cur_merkle_hash=tmp_hash_str;*/
-    iss>>imp;
     
-    if(DEBUG_BTREE){
+/*    if(DEBUG_BTREE){
         cout<<"Insert New mh="<<cur_merkle_hash<<endl;
         cout<<"Insert proof="<<imp<<endl;
     }
@@ -167,10 +165,10 @@ ope_client<V, BlockCipher>::insert(uint64_t v, uint64_t nbits, uint64_t index, V
         cout<<"Insertion merkle proof failed!"<<endl;
         exit(-1);
     }
-    if(DEBUG_BTREE) cout<<"Insert mp succeeded"<<endl;
+    if(DEBUG_BTREE) cout<<"Insert mp succeeded"<<endl;*/
     //relabeling may have been triggered so we need to lookup value again
     //todo: optimize by avoiding extra tree lookup
-    return encrypt(pt);
+    //return encrypt(pt);
 }
 
     /* Encryption is the path bits (aka v) bitwise left shifted by num_bits
@@ -186,47 +184,23 @@ ope_client<V, BlockCipher>::insert(uint64_t v, uint64_t nbits, uint64_t index, V
     */
 
 template<class V, class BlockCipher>
-pair<uint64_t, int>
-ope_client<V, BlockCipher>::encrypt(V pt) const{
+void
+ope_client<V, BlockCipher>::encrypt(V det) const{
 
     uint64_t v = 0;
     uint64_t nbits = 0;
 
-    V det = block_encrypt(pt);
+    V pt = block_decrypt(det);
 
     if(DEBUG_COMM) cout<<"Encrypting pt: "<<pt<<" det: "<<det<<endl;
 
-    char buffer[1024];
-    memset(buffer, '\0', 1024);
+    char buffer[10240];
+    memset(buffer, '\0', 10240);
 
     //table_storage test = s->lookup(pt);
     ostringstream o;
-    o<<"1 "<<det;
+    string msg;
 
-    string msg = o.str();
-    if(DEBUG_COMM) cout<<"Sending init msg: "<<msg<<endl;
-
-    send(hsock, msg.c_str(), msg.size(), 0);
-    recv(hsock, buffer, 1024, 0);
-    uint64_t early_v, early_pathlen, early_index, early_version;
-
-    istringstream iss(buffer);
-    iss>>early_v;
-    iss>>early_pathlen;
-    iss>>early_index;
-    iss>>early_version;
-
-    if(DEBUG_COMM) cout<<"Received early: "<<early_v<<" : "<<early_pathlen<<" : "<<early_index<<endl;
-    if(early_v!=(uint64_t)-1 && early_pathlen!=(uint64_t)-1 && early_index!=(uint64_t)-1){
-        if(DEBUG_COMM) cout<<"Found match from table early!"<<endl;
-
-        v = early_v;
-        nbits = early_pathlen+num_bits;
-        if(DEBUG_COMM) cout<<"Found "<<pt<<" with det="<<det<<" in table w/ v="<<v<<" nbits="<<nbits<<" index="<<early_index<<endl;
-        v = (v<<num_bits) | early_index;  
-        return make_pair((v<<(64-nbits)) | (mask<<(64-num_bits-nbits)),
-            early_version);
-    }
     for (;;) {
         if(DEBUG) cout<<"Do lookup for "<<pt<<" with det: "<<det<<" v: "<<v<<" nbits: "<<nbits<<endl;
         //vector<V> xct = s->lookup(v, nbits);
@@ -236,13 +210,14 @@ ope_client<V, BlockCipher>::encrypt(V pt) const{
         msg = o.str();
         if(DEBUG_COMM) cout<<"Sending msg: "<<msg<<endl;
         send(hsock, msg.c_str(), msg.size(), 0);
-        memset(buffer, 0, 1024);
-        recv(hsock, buffer, 1024, 0);
+        memset(buffer, 0, 10240);
+        recv(hsock, buffer, 10240, 0);
         if(DEBUG_COMM || DEBUG_BTREE) cout<<"Received during iterative lookup: "<<buffer<<endl;
         string check(buffer);           
 
         if(check=="ope_fail"){
-            return insert(v, nbits, 0, pt, det);
+            insert(v, nbits, 0, pt, det);
+            return;
 
         }               
 
@@ -262,7 +237,7 @@ ope_client<V, BlockCipher>::encrypt(V pt) const{
             //predIndex later assumes vector is of original plaintext vals
             xct_vec.push_back(block_decrypt(xct));
         }
-        MerkleProof mp;
+/*        MerkleProof mp;
         if(DEBUG_BTREE) cout<<"Remaining mp info = "<<iss_tmp.str()<<endl;
         for(int i=0; i<(int) xct_vec.size(); i++){
             iss_tmp >> mp;
@@ -273,7 +248,7 @@ ope_client<V, BlockCipher>::encrypt(V pt) const{
                 exit(-1);
             }
             if(DEBUG_BTREE) cout<<"MP "<<i<<" succeeded"<<endl;
-        }
+        }*/
 
         //Throws ope_lookup_failure if xct size < N, meaning can insert at node
         int pi;
@@ -284,7 +259,8 @@ ope_client<V, BlockCipher>::encrypt(V pt) const{
             for(index=0; index<(int) xct_vec.size(); index++){
                 if(pt<xct_vec[index]) break;
             }
-            return insert(v, nbits, index, pt, det);
+            insert(v, nbits, index, pt, det);
+            return;
         }
         nbits+=num_bits;
         if (pi==-1) {
@@ -309,7 +285,7 @@ ope_client<V, BlockCipher>::encrypt(V pt) const{
      */
     cout<<"SHOULD NEVER REACH HERE!"<<endl;
     exit(1);
-    return make_pair(0,0);
+    return;
     //FL todo: s->update_table(block_encrypt(pt),v,nbits);
 /*      if(DEBUG) cout<<"Encryption of "<<pt<<" has v="<< v<<" nbits="<<nbits<<endl;
     return (v<<(64-nbits)) | (mask<<(64-num_bits-nbits));*/
@@ -331,244 +307,93 @@ ope_client<V, BlockCipher>::block_encrypt(V pt) const {
     return ct;
 }
 
-//0 == random
-//1 == sorted incr
-//2 == sorted decr
-bool test_order(int num_vals, int sorted, bool deletes){
+void handle_udf(void* lp){
+    cout<<"Called handle_udf"<<endl;
+    int* csock = (int*) lp;
 
     blowfish* bc = new blowfish("frankli714");
 
-    ope_client<uint64_t, blowfish>* my_client = new ope_client<uint64_t, blowfish>(bc);
+    ope_client<uint64_t, blowfish>* my_client = new ope_client<uint64_t, blowfish>(bc);    
 
-    vector<uint64_t> inserted_vals;
-    
-    time_t seed;
-    seed = time(NULL);
-    cout<<"Seed is "<<seed<<endl;
-    srand( seed);
+    char buffer[1024];
 
-    //srand(0);
+    memset(buffer, 0, 1024);
 
-    //Build vector of all inserted values
-    for(int i=0; i<num_vals; i++){
-            inserted_vals.push_back((uint64_t) rand());
+    //Receive message to process
+    recv(*csock, buffer, 1024, 0);    
+    int func_d;
+    istringstream iss(buffer);
+    iss>>func_d;
+    cout<<"Client sees func_d="<<func_d<<" and buffer "<<buffer<<endl;
+    if(func_d==14){
+        uint64_t det_val=0;
+        iss>>det_val;
+        cout<<"Client det_val "<<det_val<<endl;
+        my_client->encrypt(det_val);
+        ostringstream o;
+        o.str("");
+        o.clear();
+        o<<"DONE";
+        string rtn_str = o.str();
+        send(*csock, rtn_str.c_str(), rtn_str.size(),0);
+        send(my_client->hsock, "0",1,0);
     }
-    if(sorted>0){
-            sort(inserted_vals.begin(), inserted_vals.end());
-    }
-    if(sorted>1){
-            reverse(inserted_vals.begin(), inserted_vals.end());
-    }
-
-    //Vector to hold already inserted values
-    vector<uint64_t> tmp_vals;
-
-    int delete_delay=0;
-
-    for(int i=0; i<num_vals; i++){
-            uint64_t val = inserted_vals[i];
-            tmp_vals.push_back(val);
-            pair<uint64_t,int> enc_pair= my_client->encrypt(val);
-            if(enc_pair.first==0 && enc_pair.second==0){
-                cout<<"Error in encryption, received 0,0 pair"<<endl;
-                return false;
-            }                
-            uint64_t enc_val = enc_pair.first;
-
-            //Check that the enc_val can be decrypted back to val
-            if(val!=my_client->decrypt(enc_val)) {
-                    cout<<"Decryption wrong! "<<val<<" : "<<enc_val<<endl;
-                    return false;
-            }                       
-            if(DEBUG) {cout<<"Enc complete for "<<val<<" with enc="<<enc_val<<endl;cout<<endl;}
-            ostringstream o;
-            o.str("");
-            o.clear();
-            o<<enc_pair.first;
-            string ope = o.str();
-
-            o.str("");
-            o.clear();
-            o<<enc_pair.second;
-            string version = o.str();
-
-            o.str("");
-            o.clear();
-            o<<val;
-            string name=o.str();
-
-            dbconnect->execute("INSERT INTO emp VALUES ("+name+", "+ope+", "+version+")");
-
-            int do_repeat = rand()%10+1;
-            if(do_repeat<3){
-                int rep_index = rand()%(tmp_vals.size());
-                int rep_val = tmp_vals[rep_index];
-                pair<uint64_t,int> rep_pair= my_client->encrypt(rep_val);
-                if(rep_pair.first==0 && rep_pair.second==0){
-                    cout<<"Error in rep_pair encryption, received 0,0 pair"<<endl;
-                    return false;
-                }                
-
-                o.str("");
-                o.clear();
-                o<<rep_pair.first;
-                string rep_ope = o.str();
-
-                o.str("");
-                o.clear();
-                o<<rep_pair.second;
-                string rep_version = o.str();
-
-                o.str("");
-                o.clear();
-                o<<rep_val;
-                string rep_name=o.str();
-                dbconnect->execute("INSERT INTO emp VALUES ("+rep_name+", "+rep_ope+", "+rep_version+")");
-
-            }
-
-            if(deletes){
-                if(delete_delay==0){
-                    int do_delete = rand()%10+1;
-                    if(do_delete<2){
-                        delete_delay = rand()%(num_vals/2);
-                        int num_dels = rand()%(tmp_vals.size()+1);
-                        cout<<"Starting deletion "<<num_dels<<" of "<<tmp_vals.size()<<endl;
-                        for(int d=0;d<num_dels; d++){
-                            int del_index = rand()%(tmp_vals.size());
-                            int del_val = tmp_vals[del_index];
-                            my_client->delete_value(del_val);   
-                            tmp_vals.erase(tmp_vals.begin()+del_index);        
-                        }
-                        cout<<"Ending deletion"<<endl;
-
-                    }                    
-                }else{
-                    delete_delay--;
-                }
-    
-            }
-
-            //Check that all enc vals follow OPE properties
-            //So if val1<val2, enc(val1)<enc(val2)
-            sort(tmp_vals.begin(), tmp_vals.end());
-            uint64_t last_val = 0;
-            uint64_t last_enc = 0;
-            uint64_t cur_val = 0;
-            uint64_t cur_enc = 0;
-            if(DEBUG) cout<<"Starting ope testing"<<endl;
-            for(int j=0; j<(int) tmp_vals.size(); j++){
-                    cur_val = tmp_vals[j];
-                    cur_enc = my_client->encrypt(cur_val).first;          
-                    if(cur_val>=last_val && cur_enc>=last_enc){
-                            last_val = cur_val;
-                            last_enc = cur_enc;
-                    }else{
-                            cout<<"j: "<<j<<" cur:"<<cur_val<<": "<<cur_enc<<" last: "<<last_val<<": "<<last_enc<<endl;
-                            return false;
-                    }
-                    if(DEBUG) cout<<"Decrypting "<<cur_enc<<endl;
-                    if(cur_val!=my_client->decrypt(cur_enc)) {
-                            cout<<"No match with "<<j<<endl;
-                            return false;
-                    }
-            }               
-            if(DEBUG) cout<<"Done with ope testing\n"<<endl;
-    }
-    if(DEBUG){
-        for(uint64_t i=0; i<tmp_vals.size(); i++){
-            cout<<tmp_vals[i]<<" ";
-        }
-        cout<<endl;        
-    }
-
-
-    cout<<"Sorted order "<<sorted<<" passes test"<<endl;
-
-    //Kill server
-    send(my_client->hsock, "0",1,0);
-    close(my_client->hsock);
+    free(csock);
     delete my_client;
-    delete bc;
-
-    return true;
-
+    delete bc;    
 }
+
 
 int main(){
     //Build mask based on N
     mask=make_mask();
-    
-    dbconnect =new Connect( "localhost", "frank", "passwd","cryptdb", 3306);
-    //dbconnect->execute("select create_ops_server()");
-/*        DBResult * result;
-    dbconnect->execute("select get_ope_server()", result);
-    ResType rt = result->unpack();
-    if(rt.ok){
-    cout<<ItemToString(rt.rows[0][0])<<endl;
+
+    //Socket connection
+    int host_port = 1112;
+    int hsock = socket(AF_INET, SOCK_STREAM, 0);
+    if(hsock ==-1){
+            cout<<"Error initializing socket"<<endl;
     }
-*/
-    cout<<"Connected to database"<<endl;
+    cerr<<"Init socket \n";
+    struct sockaddr_in my_addr;
+    my_addr.sin_family = AF_INET;
+    my_addr.sin_port = htons(host_port);
+    memset(&(my_addr.sin_zero), 0, 8);
+    my_addr.sin_addr.s_addr = INADDR_ANY;
 
-    usleep(1000000);
+    cerr<<"Sockaddr \n";
+    //Bind to socket
+    int bind_rtn = bind(hsock, (struct sockaddr*) &my_addr, sizeof(my_addr));
+    if(bind_rtn<0){
+            cerr<<"Error binding to socket"<<endl;
+    }
+    cerr<<"Bind \n";
+    //Start listening
+    int listen_rtn = listen(hsock, 10);
+    if(listen_rtn<0){
+            cerr<<"Error listening to socket"<<endl;
+    }
+    cerr<<"Listening \n";
 
-    test_order(78,0, true);
-    
- /*   blowfish* bc = new blowfish("frankli714");
-    ope_client<uint64_t, blowfish>* my_client = new ope_client<uint64_t, blowfish>(bc);
-
-    uint64_t name;
-    int do_enc;
-    ostringstream o;
-    while(true){
-        cout<<"Enter plaintext val: ";
-        cin>>name;
-        cout<<"Encrypt (1), decrypt (2) or delete (0)?";
-        cin>>do_enc;
-        if(name== (uint64_t) -1){
-            send(my_client->hsock, "0",1,0);
-            close(my_client->hsock);
-            break;
-        }else{
-            if(do_enc==1){
-                pair<uint64_t,int> enc_pair = my_client->encrypt(name);
-                if(enc_pair.first==0 && enc_pair.second==0){
-                    cout<<"Error in encryption, received 0,0 pair"<<endl;
-                    break;
-                }
-                cout<<"Encrypting "<<name<<" to "<<enc_pair.first<<endl;
-                o.str("");
-                o<<name;
-                string name_str = o.str();
-
-                o.str("");
-                o<<enc_pair.first;
-                string ope = o.str();
-
-                o.str("");
-                o<<enc_pair.second;
-                string version = o.str();
-
-
-                bool success = dbconnect->execute("INSERT INTO emp VALUES ("+name_str+", "+ope+", "+version+")");
-                if(success) cout<<"Inserted data!"<<endl;
-                else cout<<"Data insertion failed!"<<endl;                
-            }else if(do_enc==0){
-                my_client->delete_value(name);
-            }else if(do_enc==2){
-                pair<uint64_t,int> enc_pair = my_client->encrypt(name);
-                if(enc_pair.first==0 && enc_pair.second==0){
-                    cout<<"Error in encryption, received 0,0 pair"<<endl;
-                    break;
-                }
-                cout<<"Name is "<<name<<" decrypts to "<<my_client->decrypt(enc_pair.first)<<endl;
-            }else{
-                cout<<"Not a valid operation code, please retry"<<endl;
+    socklen_t addr_size=sizeof(sockaddr_in);
+    int* csock;
+    struct sockaddr_in sadr;
+    int i=5;
+    //Handle 1 client b/f quiting (can remove later)
+    while(i>0){
+            cerr<<"Listening..."<<endl;
+            csock = (int*) malloc(sizeof(int));
+            if((*csock = accept(hsock, (struct sockaddr*) &sadr, &addr_size))!=-1){
+                //Pass connection and messages received to handle_client
+                handle_udf((void*)csock);
             }
-
-        }
-
-    }*/
+            else{
+                cout<<"Error accepting!"<<endl;
+            }
+            //i--;
+    }
+    cerr<<"Done with client, closing now\n";
+    close(hsock);
 
 }
 
