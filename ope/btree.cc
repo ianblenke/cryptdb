@@ -1081,7 +1081,6 @@ merge_right(State & st, int index) {
     del_elinfo(parent_index_this+1, parent.childr);
     
     sl.right_was_del = true;
-    cerr << "after setting right was del " << sl << "\n";
 
     if (index - 1  == 0 && !parent.key_count()) {
 	sl_parent.this_was_del = true;
@@ -1243,7 +1242,6 @@ sim_delete(State & st, string del_target, int index) {
 
 		if (sl.has_right_sib) {
 		    done = merge_right(st, index);
-		    cerr << "\n\nafter merge right " << st[index] << "\n";
 		} else {
 		    assert_s(sl.has_left_sib, "incorrect state tree, must have right or left sib");
 		    done = merge_left(st, index);

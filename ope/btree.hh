@@ -10,7 +10,7 @@ typedef Element<std::string> Elem;
 class RootTracker;
 class Node;
 
-#define DEBUG_PROOF true
+#define DEBUG_PROOF false
 
 //TODO: delete and insert path should be cached because traversed four times
 

@@ -84,8 +84,8 @@ public:
     
 	uint no_inserted_checks = 100; // int(sqrt(no_elems)) + 1;
 	uint no_not_in_tree = 100; //no_inserted_checks;
-	uint no_deletes = 1000; //no_inserted_checks;
-	uint period_Merkle_check = 500; //no_inserted_checks/5 + 1;
+	uint no_deletes = 100; //no_inserted_checks;
+	uint period_Merkle_check = 100; //no_inserted_checks/5 + 1;
 	uint period_Merkle_del_check = 1;
 
 	Node::m_failure.invalidate();
@@ -217,7 +217,7 @@ public:
     static void
     testBMerkleTree() {
     
-	uint no_elems = 50000;
+	uint no_elems = 5000;
 
 	vector<string> vals;
 	srand( time(NULL));
@@ -230,7 +230,7 @@ public:
 	    vals.push_back(s.str());
 	}
 
-//	test_help(vals, no_elems);
+	test_help(vals, no_elems);
 
 	// test on values in increasing order
 	sort(vals.begin(), vals.end());
@@ -242,7 +242,6 @@ public:
 	cerr << "- " << no_elems << " values in decreasing order: \n";
 	test_help(vals, no_elems);
 
-	cerr << "uncomment ABOVE!\n";
 	cerr << "test B + Merkle tree OK.\n";
  
     }
