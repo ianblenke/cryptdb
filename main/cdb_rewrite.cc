@@ -1245,7 +1245,9 @@ static class ANON : public CItemSubtypeIT<Item_subselect, Item::Type::SUBSELECT_
     }
 } ANON;
 
+// XXX WHAT IS THIS?
 extern const char str_in_optimizer[] = "<in_optimizer>";
+
 static class ANON : public CItemSubtypeFN<Item_in_optimizer, str_in_optimizer> {
     virtual RewritePlan * do_gather_type(Item_in_optimizer *i, reason &tr, Analysis & a) const {
         LOG(cdb_v) << "CItemSubtypeFN (L1107) do_gather " << *i;

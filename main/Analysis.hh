@@ -228,6 +228,7 @@ ostream&
 operator<<(ostream &out, const RewritePlan * rp);
 
 
+// ...this should be a Class. Or at least consistently a struct. And no typedef.
 // state maintained at the proxy
 typedef struct ProxyState {
 
