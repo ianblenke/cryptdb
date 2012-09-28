@@ -8,11 +8,8 @@ template<class payload> class Element;
 typedef Element<std::string> Elem;
 
 class RootTracker;
-class Node;
 
-#define DEBUG_PROOF false
 
-//TODO: delete and insert path should be cached because traversed four times
 
 // The Merkle information at a node N
 // needed for Merkle checks
@@ -91,70 +88,78 @@ typedef struct NodeInfo {
 	childr.clear();
     }
 
-    uint key_count() {
-	assert_s(childr.size() >= 1, "invalid childr size");
-	return childr.size() - 1;
-    }
-
 } NodeInfo;
 
 std::ostream& operator<<(std::ostream &out, const NodeInfo & node);
 
+
 // Information needed about a delete on a level
+// old: state before deletion of deleted, new: state after deletion of deleted
 typedef struct DelInfo {
-    NodeInfo node;
+ 
+    std::string deleted;
+    NodeInfo old_node, new_node;
     
-    bool has_left_sib;
-    NodeInfo left_sib;
-
-    bool has_right_sib;
-    NodeInfo right_sib;
-
-    // info added by client during verification
-    bool this_was_del;
-    bool right_was_del;
+    bool is_sib;
+    bool is_left_sib; 
+    NodeInfo old_sib, new_sib;
+    bool sib_was_deleted;
+    bool this_was_deleted;
     
+    //checks that the new state is a correct state
+    // after deleting ``deleted'' from old state
+    bool local_check();
+
+    DelInfo(std::string deleted_, NodeInfo nodeinfo):
+	deleted(deleted_),
+	old_node(nodeinfo) { init(); }
+
+    DelInfo(NodeInfo ni_old, NodeInfo ni_new) :
+	old_node(ni_old), new_node(ni_new) { init(); }
+
     DelInfo() {
-	has_left_sib = false;
-	has_right_sib = false;
-	this_was_del = false;
-	right_was_del = false;
+	init();
     }
-} DelInfo;
 
-bool
-equals(const DelInfo & sim, const DelInfo & given);
+    void init() {
+	is_sib = false;
+	is_left_sib = false;
+	sib_was_deleted = false;
+	this_was_deleted = false;
+    }
+    
+} DelInfo;
 
 std::ostream&
 operator<<(std::ostream &out, const DelInfo & di);
-
-typedef std::vector<DelInfo> State;
-
-std::ostream&
-operator<<(std::ostream& out, const State & st);
-
-void
-record_state(Node * node, State & state);
 
 // Merkle proof that a certain item was deleted
 // ``old'' information in DelInfo is before delete
 // ``new'' is after delete
 typedef struct DelMerkleProof {
-    // vector is from root to leaf
-    State st_before; 
-    State st_after; 
+    std::vector<DelInfo> levels; // from leaf to root
+
+    bool has_non_leaf;
+    int non_leaf_rdepth; // the index from the bottom
+    DelInfo non_leaf;
     
     std::string old_hash() const;
     bool check_change(std::string key_to_del) const;
     std::string new_hash() const;
 
-        
+    DelMerkleProof() {
+	has_non_leaf = false;
+    }
+
+    void add(DelInfo di);
+
+    
 } DelMerkleProof;
 
 std::ostream& operator<<(std::ostream &out, const DelMerkleProof & dmp);
 std::istream& operator>>(std::istream &is, DelMerkleProof & dmp);
 
-
+class Node;
 
 
 typedef struct InsMerkleProof {
@@ -237,21 +242,21 @@ protected:
     Node* right_sibling (int& parent_index_this);
     Node* left_sibling (int& parent_index_this);
 
-    void rotate_from_left(int parent_index_this);
-			  
-    void rotate_from_right(int parent_index_this);
+    void rotate_from_left(int parent_index_this,
+			   DelInfo & di,
+			   DelMerkleProof & proof);
+    void rotate_from_right(int parent_index_this,
+			    DelInfo & di, 
+			    DelMerkleProof & proof);
 
-    Node* merge_right (int parent_index_this);
-    Node* merge_left (int parent_index_this);
+    Node* merge_right (int parent_index_this,
+		       DelInfo & di, DelInfo & di_parent, DelMerkleProof & proof);
+    Node* merge_left (int parent_index_this,
+		      DelInfo & di, DelInfo & di_parent, DelMerkleProof & proof);
 
     bool merge_into_root ();
 
     static int num_elements();
-
-    
-    bool
-    tree_delete_help (Elem& target, DelMerkleProof & proof, Node* & start_node, Node * node);
-
    
 
     // outputs the index that this node has in his parent element list
@@ -296,7 +301,6 @@ protected:
     friend MerkleProof get_search_merkle_proof(Node * n);
     friend std::ostream &
     operator<<(std::ostream & out, const Node & n);
-    friend void record_state(Node * node, State & state);
  
 #ifdef _DEBUG
 
@@ -477,3 +481,29 @@ const char *
 myprint(const Elem & v);
 const char *
 myprint(const Node & v);
+
+
+typedef struct SimLevel {
+    NodeInfo node;
+    bool is_sib;
+    bool is_left_sib;
+    NodeInfo sib;
+
+    bool sib_was_deleted;
+    bool this_was_deleted;
+
+    SimLevel() {
+	sib_was_deleted = this_was_deleted = false;
+	is_sib = false;
+    }
+
+    bool equals(const SimLevel & sl) const;
+    
+} SimLevel;
+
+typedef std::vector<SimLevel> SimTree;
+
+const char *
+myprint(const SimLevel & v);
+const char *
+myprint(const SimTree & v);

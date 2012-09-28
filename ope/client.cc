@@ -113,7 +113,7 @@ ope_client<V, BlockCipher>::delete_value(V pt){
         cout<<"Delete_value new mh="<<cur_merkle_hash<<endl;
         cout<<"DMP="<<dmp<<endl;
     }
-    if(!verify_del_merkle_proof(dmp, tmp_merkle_hash, new_merkle_hash)){
+    if(!verify_del_merkle_proof(dmp, "to_delete", tmp_merkle_hash, new_merkle_hash)){
         cout<<"Deletion merkle proof failed!"<<endl;
         exit(-1);
     }
