@@ -9,8 +9,9 @@
 
 //Whether to print debugging output or not
 #define DEBUG 0
-#define DEBUG_COMM 1
+#define DEBUG_COMM 0
 #define DEBUG_BTREE 0
+#define MALICIOUS 0
 
 using std::cout;
 using std::endl;
@@ -74,8 +75,9 @@ public:
 	//int global_version;
 	int num_rebalances;
 
+#if MALICIOUS
 	RootTracker tracker;
-
+#endif
 
 /////////TO DOOOOO: Switch index to int, no need for uint64_t
 	string insert(uint64_t v, uint64_t nbits, uint64_t index, EncT encval);
@@ -112,6 +114,7 @@ public:
 		//global_version=0;
 		num_rebalances=0;
 
+#if MALICIOUS
 	    Node::m_failure.invalidate();
 
 	    Node::m_failure.m_key = "";
@@ -120,6 +123,7 @@ public:
 
 		Node* root_ptr = new Node(tracker);
 		tracker.set_root(null_ptr, root_ptr);
+#endif
 
 		dbconnect =new Connect( "localhost", "frank", "passwd","cryptdb", 3306);
 	}

@@ -14,7 +14,7 @@ void test_order(int num_vals, int order);
 
 int main(){
 
-	test_order(25,0);
+	test_order(325,0);
 
 /*
 	blowfish* bc = new blowfish("frankli714");

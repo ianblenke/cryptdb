@@ -87,7 +87,8 @@ ope_client<V, BlockCipher>::delete_value(V pt){
     send(hsock, msg.c_str(), msg.size(), 0);
     recv(hsock, buffer, 10240, 0);
 
-    /*if(DEBUG_BTREE){
+#if MALICIOUS
+    if(DEBUG_BTREE){
         cout<<"Delete_value buffer recv: "<<buffer<<endl;
     }
     const string tmp_merkle_hash = cur_merkle_hash;
@@ -99,16 +100,16 @@ ope_client<V, BlockCipher>::delete_value(V pt){
     size_t hash_end = tmp_hash_str.find("hash_end");
     string new_hash_str (buffer, hash_end);
     cur_merkle_hash = new_hash_str;
-    iss>>dmp;*/    
-/*      char tmp_hash[10240];
+    iss>>dmp;
+      char tmp_hash[10240];
     strcpy(tmp_hash, buffer);
     size_t end = 
     *space='\0';
     string tmp_hash_str (tmp_hash);
-    cur_merkle_hash=tmp_hash_str;   */    
+    cur_merkle_hash=tmp_hash_str;  
     //cur_merkle_hash=new_merkle_hash;   
 
-/*    if(DEBUG_BTREE){
+    if(DEBUG_BTREE){
         cout<<"Delete_value new mh="<<cur_merkle_hash<<endl;
         cout<<"DMP="<<dmp<<endl;
     }
@@ -117,7 +118,8 @@ ope_client<V, BlockCipher>::delete_value(V pt){
         exit(-1);
     }
     if(DEBUG_BTREE) cout<<"Deletion merkle proof succeeded"<<endl;
-*/
+
+#endif
 }
 
 
@@ -139,7 +141,8 @@ ope_client<V, BlockCipher>::insert(uint64_t v, uint64_t nbits, uint64_t index, V
     send(hsock, msg.c_str(), msg.size(),0);
     recv(hsock, buffer, 10240, 0);
 
-    /*if(DEBUG_BTREE) cout<<"Insert buffer="<<buffer<<endl;
+#if MALICIOUS
+    if(DEBUG_BTREE) cout<<"Insert buffer="<<buffer<<endl;
     const string tmp_merkle_hash = cur_merkle_hash;
     string new_merkle_hash;
     InsMerkleProof imp;
@@ -149,15 +152,15 @@ ope_client<V, BlockCipher>::insert(uint64_t v, uint64_t nbits, uint64_t index, V
     size_t hash_end = tmp_hash_str.find("hash_end");
     string new_hash_str (buffer, hash_end-1);
     cur_merkle_hash = new_hash_str;
-    iss>>imp;    */
-/*      char tmp_hash[10240];
+    iss>>imp;
+      char tmp_hash[10240];
     strcpy(tmp_hash, buffer);
     char* space = strchr(tmp_hash,' ');
     *space='\0';
     string tmp_hash_str (tmp_hash);
-    cur_merkle_hash=tmp_hash_str;*/
+    cur_merkle_hash=tmp_hash_str;
     
-/*    if(DEBUG_BTREE){
+    if(DEBUG_BTREE){
         cout<<"Insert New mh="<<cur_merkle_hash<<endl;
         cout<<"Insert proof="<<imp<<endl;
     }
@@ -165,10 +168,11 @@ ope_client<V, BlockCipher>::insert(uint64_t v, uint64_t nbits, uint64_t index, V
         cout<<"Insertion merkle proof failed!"<<endl;
         exit(-1);
     }
-    if(DEBUG_BTREE) cout<<"Insert mp succeeded"<<endl;*/
+    if(DEBUG_BTREE) cout<<"Insert mp succeeded"<<endl;
     //relabeling may have been triggered so we need to lookup value again
     //todo: optimize by avoiding extra tree lookup
     //return encrypt(pt);
+#endif
 }
 
     /* Encryption is the path bits (aka v) bitwise left shifted by num_bits
@@ -237,7 +241,8 @@ ope_client<V, BlockCipher>::encrypt(V det) const{
             //predIndex later assumes vector is of original plaintext vals
             xct_vec.push_back(block_decrypt(xct));
         }
-/*        MerkleProof mp;
+#if MALICIOUS
+        MerkleProof mp;
         if(DEBUG_BTREE) cout<<"Remaining mp info = "<<iss_tmp.str()<<endl;
         for(int i=0; i<(int) xct_vec.size(); i++){
             iss_tmp >> mp;
@@ -248,7 +253,8 @@ ope_client<V, BlockCipher>::encrypt(V det) const{
                 exit(-1);
             }
             if(DEBUG_BTREE) cout<<"MP "<<i<<" succeeded"<<endl;
-        }*/
+        }
+#endif
 
         //Throws ope_lookup_failure if xct size < N, meaning can insert at node
         int pi;
@@ -324,11 +330,11 @@ void handle_udf(void* lp){
     int func_d;
     istringstream iss(buffer);
     iss>>func_d;
-    cout<<"Client sees func_d="<<func_d<<" and buffer "<<buffer<<endl;
+    if(DEBUG_COMM) cout<<"Client sees func_d="<<func_d<<" and buffer "<<buffer<<endl;
     if(func_d==14){
         uint64_t det_val=0;
         iss>>det_val;
-        cout<<"Client det_val "<<det_val<<endl;
+        if(DEBUG_COMM) cout<<"Client det_val "<<det_val<<endl;
         my_client->encrypt(det_val);
         ostringstream o;
         o.str("");

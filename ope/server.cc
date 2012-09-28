@@ -442,6 +442,7 @@ tree<EncT>::delete_index(uint64_t v, uint64_t nbits, uint64_t index){
 	s << deleted_val;
 	string delval_str = s.str();
 
+#if MALICIOUS
 	Elem desired;
 	desired.m_key = delval_str;
 	DelMerkleProof dmp;
@@ -464,6 +465,9 @@ tree<EncT>::delete_index(uint64_t v, uint64_t nbits, uint64_t index){
     s<<dmp;
 
     if(DEBUG_BTREE) cout<<"Delete dmp="<<dmp<<endl;
+	if(DEBUG_BTREE) cout<<"Delete msg="<<s.str()<<endl;
+#endif
+
 	if(root==NULL) return s.str();
 	
 	if(num_nodes<alpha*max_size){
@@ -471,7 +475,7 @@ tree<EncT>::delete_index(uint64_t v, uint64_t nbits, uint64_t index){
 		rebalance(root);
 		max_size=num_nodes;
 	}
-	if(DEBUG_BTREE) cout<<"Delete msg="<<s.str()<<endl;
+
 	return s.str();
 }
 
@@ -679,6 +683,7 @@ tree<EncT>::insert(uint64_t v, uint64_t nbits, uint64_t index, EncT encval){
 	s << encval;
 	string encval_str = s.str();
 
+#if MALICIOUS
 	Elem elem;
 	elem.m_key = encval_str;
 	elem.m_payload = encval_str+" hi you";
@@ -705,6 +710,7 @@ tree<EncT>::insert(uint64_t v, uint64_t nbits, uint64_t index, EncT encval){
 	if(DEBUG_BTREE) cout<<"Insert merkle hash="<<merkle_root<<endl;
 	if(DEBUG_BTREE) cout<<"Insert imp="<<imp<<endl;
 	if(DEBUG_BTREE) cout<<"Insert msg="<<s.str()<<endl;
+#endif
 
 	double height= (double) path.size();
 
@@ -1035,6 +1041,7 @@ void handle_client(void* lp, tree<EncT>* s){
                 	if(DEBUG_BTREE) cout<<"xct_vec "<<i<<"="<<xct_vec[i]<<endl;
                 }
                 o<<"; ";
+#if MALICIOUS        
                 for(int i=0; i<(int) xct_vec.size(); i++){
                 	stringstream pss;
                 	pss<<xct_vec[i];
@@ -1050,7 +1057,7 @@ void handle_client(void* lp, tree<EncT>* s){
 	    			pss.str("");
 	    			pss.clear();
                 }
-
+#endif
                 rtn_str=o.str();
                 if(rtn_str.size()>10240){
                 	cout<<"Message too long!"<<endl;

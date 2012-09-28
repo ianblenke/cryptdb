@@ -23,8 +23,9 @@
 
 //Whether to print debugging output or not
 #define DEBUG 0
-#define DEBUG_COMM 1
+#define DEBUG_COMM 0
 #define DEBUG_BTREE 0
+#define MALICIOUS 0
 
 using std::cout;
 using std::endl;
@@ -54,7 +55,9 @@ void handle_udf(void* lp);
 
 class ope_lookup_failure {};
 
-string cur_merkle_hash;
+#if MALICIOUS
+    string cur_merkle_hash;
+#endif
 
 template<class V, class BlockCipher>
 class ope_client {
@@ -81,7 +84,9 @@ class ope_client {
         if(connect(hsock, (struct sockaddr*) &my_addr, sizeof(my_addr))<0){
             cout<<"Connect Failed!"<<endl;
         }
+#if MALICIOUS        
         cur_merkle_hash="";
+#endif
 
     }
 
