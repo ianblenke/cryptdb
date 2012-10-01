@@ -92,6 +92,7 @@ public:
 	table_storage lookup(EncT xct);
 
 	map<EncT, table_storage > ope_table;
+	map<EncT, int> ref_table;
 	void update_ope_table(tree_node<EncT>* node, table_storage base);
 	void update_db(table_storage old_entry, table_storage new_entry);
 	void delete_db(table_storage del_entry);

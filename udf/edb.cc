@@ -122,7 +122,7 @@ long long ope_enc(UDF_INIT *initid, UDF_ARGS *args,
         memset(buffer, '\0', 1024);
 
         ostringstream o;
-        o<<"1 "<<det_val;
+        o<<"1 "<<imode<<" "<<det_val;
         string msg = o.str();
         send(hsock, msg.c_str(), msg.size(), 0);
         recv(hsock, buffer, 1024, 0);

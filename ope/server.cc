@@ -1006,11 +1006,19 @@ void handle_client(void* lp, tree<EncT>* s){
                 break;
             }else if(func_d==1) {
             	//Lookup using OPE table
+            	bool imode;
+            	iss>>imode;
+            	cout<<imode<<endl;
                 uint64_t blk_encrypt_pt;
                 iss>>blk_encrypt_pt;
                 if(DEBUG_COMM) cout<<"Blk_encrypt_pt: "<<blk_encrypt_pt<<endl;
                 //Do tree lookup
                 table_storage table_rslt = s->lookup((uint64_t) blk_encrypt_pt);
+
+				if(imode && table_rslt.v!=(uint64_t)-1 && table_rslt.pathlen!=(uint64_t)-1 && table_rslt.index!=(uint64_t)-1){
+					s->ref_table[blk_encrypt_pt]+=1;
+				}
+
                 if(DEBUG_COMM) cout<<"Rtn b/f ostringstream: "<<table_rslt.v<<" : "<<table_rslt.pathlen<<" : "<<table_rslt.index<<endl;
                 //Construct response
                 o<<table_rslt.v<<" "<<table_rslt.pathlen<<" "<<table_rslt.index;
@@ -1072,7 +1080,7 @@ void handle_client(void* lp, tree<EncT>* s){
                 iss>>nbits;
                 iss>>index;
                 iss>>blk_encrypt_pt;
-                //Insert...need not send response
+                
                 if(DEBUG_COMM) cout<<"Trying insert("<<v<<", "<<nbits<<", "<<index<<", "<<blk_encrypt_pt<<")"<<endl;
                 string proof = s->insert(v, nbits, index, blk_encrypt_pt);
                 if(proof.size()>10240){
@@ -1080,6 +1088,7 @@ void handle_client(void* lp, tree<EncT>* s){
                 	exit(-1);
                 }
                 if(DEBUG_COMM) cout<<proof<<endl;
+                s->ref_table[blk_encrypt_pt]=1;
                 send(*csock, proof.c_str(), proof.size(),0);
             }else if(func_d==4){
             	uint64_t v, nbits, index;
