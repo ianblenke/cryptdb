@@ -1118,7 +1118,6 @@ void handle_client(void* lp, tree<EncT>* s){
 			}
 
         }
-        free(csock);
 }
 
 
@@ -1160,20 +1159,21 @@ int main(int argc, char **argv){
     cerr<<"Listening \n";
 
     socklen_t addr_size=sizeof(sockaddr_in);
-    int* csock;
+    int csock;
     struct sockaddr_in sadr;
     int i=10;
     //Handle 1 client b/f quiting (can remove later)
     while(i>0){
             cerr<<"Listening..."<<endl;
-            csock = (int*) malloc(sizeof(int));
-            if((*csock = accept(hsock, (struct sockaddr*) &sadr, &addr_size))!=-1){
+            if((csock = accept(hsock, (struct sockaddr*) &sadr, &addr_size))!=-1){
             	//Pass connection and messages received to handle_client
-                handle_client((void*)csock,server);
+                handle_client((void*) &csock,server);
             }
             else{
                 cout<<"Error accepting!"<<endl;
+                exit(-1);
             }
+            close(csock);
             //i--;
     }
     cerr<<"Done with server, closing now\n";

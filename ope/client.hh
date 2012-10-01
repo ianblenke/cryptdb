@@ -138,7 +138,7 @@ class ope_client {
 	 * insert(v, nbits, index, encrypted_laintext) = 3
 	 * delete(v, nbits, index) = 4
 	*/
-    void encrypt(V det) const;
+    uint64_t encrypt(V det, bool imode) const;
 
 private:
     V block_decrypt(V ct) const;

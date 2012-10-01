@@ -169,10 +169,11 @@ ope_client<V, BlockCipher>::insert(uint64_t v, uint64_t nbits, uint64_t index, V
         exit(-1);
     }
     if(DEBUG_BTREE) cout<<"Insert mp succeeded"<<endl;
+#endif    
     //relabeling may have been triggered so we need to lookup value again
     //todo: optimize by avoiding extra tree lookup
     //return encrypt(pt);
-#endif
+
 }
 
     /* Encryption is the path bits (aka v) bitwise left shifted by num_bits
@@ -188,15 +189,16 @@ ope_client<V, BlockCipher>::insert(uint64_t v, uint64_t nbits, uint64_t index, V
     */
 
 template<class V, class BlockCipher>
-void
-ope_client<V, BlockCipher>::encrypt(V det) const{
+uint64_t
+ope_client<V, BlockCipher>::encrypt(V det, bool imode) const{
 
+    if(imode==false) cout<<"IMODE FALSE!"<<endl;
     uint64_t v = 0;
     uint64_t nbits = 0;
 
     V pt = block_decrypt(det);
 
-    if(DEBUG_COMM) cout<<"Encrypting pt: "<<pt<<" det: "<<det<<endl;
+    if(DEBUG_COMM || !imode) cout<<"Encrypting pt: "<<pt<<" det: "<<det<<endl;
 
     char buffer[10240];
     memset(buffer, '\0', 10240);
@@ -220,8 +222,15 @@ ope_client<V, BlockCipher>::encrypt(V det) const{
         string check(buffer);           
 
         if(check=="ope_fail"){
-            insert(v, nbits, 0, pt, det);
-            return;
+            if(imode){
+                insert(v, nbits, 0, pt, det);
+                return 0;
+            }else{
+                cout<<"n mode ope_fail"<<endl;
+                nbits+=num_bits;
+                v=(v<<num_bits) | 0;
+                return (v<<(64-nbits)) | (mask<<(64-num_bits-nbits));
+            }
 
         }               
 
@@ -265,8 +274,16 @@ ope_client<V, BlockCipher>::encrypt(V det) const{
             for(index=0; index<(int) xct_vec.size(); index++){
                 if(pt<xct_vec[index]) break;
             }
-            insert(v, nbits, index, pt, det);
-            return;
+            if(imode){
+                insert(v, nbits, index, pt, det);
+                return 0;                
+            }else{
+                cout<<"n mode inserting "<<index<<" : "<<xct_vec.size()<<endl;
+                nbits+=num_bits;
+                v = (v<<num_bits) | index;
+                return ((v<<(64-nbits)) | (mask<<(64-num_bits-nbits)));
+            }
+
         }
         nbits+=num_bits;
         if (pi==-1) {
@@ -291,7 +308,7 @@ ope_client<V, BlockCipher>::encrypt(V det) const{
      */
     cout<<"SHOULD NEVER REACH HERE!"<<endl;
     exit(1);
-    return;
+    return -1;
     //FL todo: s->update_table(block_encrypt(pt),v,nbits);
 /*      if(DEBUG) cout<<"Encryption of "<<pt<<" has v="<< v<<" nbits="<<nbits<<endl;
     return (v<<(64-nbits)) | (mask<<(64-num_bits-nbits));*/
@@ -326,20 +343,31 @@ void handle_udf(void* lp){
     memset(buffer, 0, 1024);
 
     //Receive message to process
-    recv(*csock, buffer, 1024, 0);    
+    recv(*csock, buffer, 1024, 0);
     int func_d;
     istringstream iss(buffer);
     iss>>func_d;
     if(DEBUG_COMM) cout<<"Client sees func_d="<<func_d<<" and buffer "<<buffer<<endl;
+    bool imode;
     if(func_d==14){
+        imode=true;
+    }else if(func_d==15){
+        imode=false;
+    }else{
+        cout<<"ERROR didn't receive 14 or 15"<<endl;
+        exit(-1);
+    }
+    if(func_d==14 || func_d==15){
         uint64_t det_val=0;
         iss>>det_val;
         if(DEBUG_COMM) cout<<"Client det_val "<<det_val<<endl;
-        my_client->encrypt(det_val);
+        uint64_t tmp_ope = my_client->encrypt(det_val, imode);
+        if(tmp_ope == (uint64_t)-1 ) cout<<"WTF error in encrypt"<<endl;
         ostringstream o;
         o.str("");
         o.clear();
-        o<<"DONE";
+        if(tmp_ope==0) o<<"DONE";
+        else o<<"15 "<<tmp_ope;
         string rtn_str = o.str();
         send(*csock, rtn_str.c_str(), rtn_str.size(),0);
         send(my_client->hsock, "0",1,0);

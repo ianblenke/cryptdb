@@ -84,7 +84,16 @@ long long ope_enc(UDF_INIT *initid, UDF_ARGS *args,
     char *is_null, char *error){
     long long det_val;
     det_val = *((long long*) args->args[0]);
+    char mode;
+    mode = *((char*) args->args[1]);
 
+    bool imode;
+    if(mode=='i'){
+        imode=true;
+    }else{
+        imode=false;
+    }
+    cerr<<"mode: "<<mode<<" imode: "<<imode<<endl;
     mask=make_mask();
 
     int host_port; 
@@ -105,7 +114,7 @@ long long ope_enc(UDF_INIT *initid, UDF_ARGS *args,
         my_addr.sin_addr.s_addr = inet_addr(host_name.c_str());
 
         if(connect(hsock, (struct sockaddr*) &my_addr, sizeof(my_addr))<0){
-            cerr<<"Connect Failed!"<<endl;
+            cerr<<"Connect Failed!!"<<endl;
         }
 
         char buffer[1024];
@@ -131,7 +140,8 @@ long long ope_enc(UDF_INIT *initid, UDF_ARGS *args,
             v = early_v;
             nbits = early_pathlen+num_bits;
             v = (v<<num_bits) | early_index;  
-            
+            uint64_t rtn_val = (v<<(64-nbits)) | (mask<<(64-num_bits-nbits));
+            cerr<<"Returning "<<rtn_val<<endl;
             return (v<<(64-nbits)) | (mask<<(64-num_bits-nbits));
         }else{
             cerr<<"No early return, must insert"<<endl;
@@ -148,21 +158,36 @@ long long ope_enc(UDF_INIT *initid, UDF_ARGS *args,
             my_addr.sin_addr.s_addr = inet_addr(host_name.c_str());
 
             if(connect(hsock, (struct sockaddr*) &my_addr, sizeof(my_addr))<0){
-                cout<<"Connect Failed!"<<endl;
+                cout<<"Connect failed!"<<endl;
             }
 
             memset(buffer, '\0', 1024);
 
             ostringstream o_client;
-            o_client<<"14 "<<det_val;
+            if(imode) o_client<<"14 "<<det_val;
+            else o_client<<"15 "<<det_val;
             string client_msg = o_client.str();
             send(hsock, client_msg.c_str(), client_msg.size(), 0);
             recv(hsock, buffer, 1024, 0); 
             istringstream iss(buffer);
+            cerr<<"Buffer for "<<det_val<<" is "<<buffer<<endl;
             string output;
             iss>>output;
-            if(output!="DONE") cerr<<"Received weird message "<<buffer<<endl;
-            else cerr<<"Received done!"<<endl;
+            cerr<<"Output = "<<output<<endl;
+            if(output=="DONE"){
+                if(!imode) cerr<<"Output done but imode = false"<<endl;
+                cerr<<"Received done!"<<endl;
+            }else if(output=="15"){
+                if(imode) cerr<<"Output 15 but imode = true"<<endl;
+                cerr<<"In 15 waa??"<<endl;
+                uint64_t ope_rtn;
+                iss>>ope_rtn;
+                cout<<"Return ope_rtn="<<ope_rtn<<endl;
+                close(hsock);
+                return ope_rtn;
+            }else{
+                cerr<<"Received weird string: "<<buffer<<endl;
+            }
             close(hsock);
         }        
     }
