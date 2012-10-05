@@ -1843,6 +1843,16 @@ static const vector<int> SupplierOnions = {
   ONION_DET,
 };
 
+static const vector<int> SupplierMonomiOnions = {
+  ONION_DETJOIN,
+  ONION_DET | ONION_OPE,
+  ONION_DET,
+  ONION_DETJOIN,
+  ONION_DET,
+  ONION_DET,
+  ONION_DET,
+};
+
 //----------------------------------------------------------------------------
 // nation
 
@@ -1966,7 +1976,7 @@ static map<string, table_encryptor *> EncryptorMap = {
   // -- supplier -------------------------------------------------------------
 
   {"supplier-none", new table_encryptor(SupplierSchema, SupplierOnions, false, true)},
-  {"supplier-monomi", new table_encryptor(SupplierSchema, SupplierOnions, false, true)},
+  {"supplier-monomi", new table_encryptor(SupplierSchema, SupplierMonomiOnions, false, true)},
 
   // -- nation -------------------------------------------------------------
 
