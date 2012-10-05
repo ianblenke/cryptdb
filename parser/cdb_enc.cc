@@ -26,6 +26,12 @@
 using namespace std;
 using namespace NTL;
 
+// This makes our life easier for evaluating different
+// physical DB designs- we make every column use the same
+// key, and we don't bother with DETJOIN / OPEJOIN (since
+// every column is joinable w/ every other column)
+#define ALL_SAME_KEY 1
+
 typedef enum datatypes {
     DT_INTEGER,
     DT_FLOAT,
@@ -125,6 +131,24 @@ static void do_encrypt(size_t i,
                        vector<string> &enccols,
                        crypto_manager_stub &cm_stub,
                        bool usenull = true) {
+
+#ifdef ALL_SAME_KEY
+    i = 0; // the key is now "field0" for every column
+
+    // promote DETJOIN => DET
+    if (onions & ONION_DETJOIN) {
+        assert(OnlyOneBit(onions & DET_BITMASK));
+        onions &= ~ONION_DETJOIN;
+        onions |= ONION_DET;
+    }
+
+    // promote OPEJOIN => OPE
+    if (onions & ONION_OPEJOIN) {
+        assert(OnlyOneBit(onions & OPE_BITMASK));
+        onions &= ~ONION_OPEJOIN;
+        onions |= ONION_OPE;
+    }
+#endif /* ALL_SAME_KEY */
 
     CryptoManager& cm = *cm_stub.cm;
     switch (dt) {
@@ -755,6 +779,8 @@ public:
 
       normal_vldb_col_pack_no_precomputation,
       normal_vldb_col_pack_with_precomputation,
+
+      monomi,
   };
 
   static vector<datatypes> Schema;
@@ -764,6 +790,7 @@ public:
   static vector<int> VldbCdbGreedyOnions;
 
   static vector<int> VldbPrecomputeOnions;
+  static vector<int> MonomiOnions;
 
   lineitem_encryptor(enum opt_type tpe)
     : tpe(tpe) {
@@ -792,6 +819,12 @@ public:
       case normal_vldb_greedy:
       case normal_vldb_col_pack_no_precomputation:
         onions = VldbCdbGreedyOnions;
+        usenull = false;
+        processrow = true;
+        break;
+
+      case monomi:
+        onions = MonomiOnions;
         usenull = false;
         processrow = true;
         break;
@@ -1207,6 +1240,7 @@ protected:
 
     switch (tpe) {
       case opt_type::normal:
+      case opt_type::monomi:
         {
           // l_shipdate's year
           const string& l_shipdate = tokens[lineitem::l_shipdate];
@@ -1489,6 +1523,29 @@ vector<int> lineitem_encryptor::VldbPrecomputeOnions = {
 
   ONION_DET,
   ONION_DET | ONION_OPE,
+  ONION_DET,
+};
+
+vector<int> lineitem_encryptor::MonomiOnions = {
+  ONION_DETJOIN,
+  ONION_DETJOIN,
+  ONION_DETJOIN,
+  ONION_DETJOIN,
+
+  ONION_DET | ONION_OPE,
+  ONION_DET,
+  ONION_OPE,
+  ONION_DET,
+
+  ONION_DET,
+  ONION_DET,
+
+  ONION_OPEJOIN,
+  ONION_OPEJOIN,
+  ONION_OPEJOIN,
+
+  ONION_DET,
+  ONION_DET,
   ONION_DET,
 };
 
@@ -1872,7 +1929,14 @@ static const vector<int> RegionOnions = {
 
 //----------------------------------------------------------------------------
 
+// the *-monomi versions are the final schema induced by monomi's optimal
+// physical database designer. they correspond directly to the
+// *_enc_cryptdb_opt schemas, in the vldb-exp-schemas/cryptdb-opt/*-enc.sql
+// files
 static map<string, table_encryptor *> EncryptorMap = {
+
+  // -- lineitem -------------------------------------------------------------
+
   {"lineitem-none", new lineitem_encryptor(lineitem_encryptor::none)},
   {"lineitem-normal", new lineitem_encryptor(lineitem_encryptor::normal)},
   {"lineitem-packed", new lineitem_encryptor(lineitem_encryptor::packed)},
@@ -1886,6 +1950,10 @@ static map<string, table_encryptor *> EncryptorMap = {
   {"lineitem-normal-vldb-col-pack-with-precomputation", new lineitem_encryptor(lineitem_encryptor::normal_vldb_col_pack_with_precomputation)},
   {"lineitem-normal-vldb-col-pack-no-precomputation", new lineitem_encryptor(lineitem_encryptor::normal_vldb_col_pack_no_precomputation)},
 
+  {"lineitem-monomi", new lineitem_encryptor(lineitem_encryptor::monomi)},
+
+  // -- partsupp -------------------------------------------------------------
+
   {"partsupp-none", new partsupp_encryptor(partsupp_encryptor::none)},
   {"partsupp-normal", new partsupp_encryptor(partsupp_encryptor::normal)},
   {"partsupp-normal-vldb-col-pack-with-precomputation", new partsupp_encryptor(partsupp_encryptor::normal_vldb_col_pack_with_precomputation)},
@@ -1893,17 +1961,37 @@ static map<string, table_encryptor *> EncryptorMap = {
 
   {"partsupp-row-packed-volume", new partsupp_encryptor(partsupp_encryptor::row_packed_volume)},
 
+  {"partsupp-monomi", new partsupp_encryptor(partsupp_encryptor::normal)},
+
+  // -- supplier -------------------------------------------------------------
+
   {"supplier-none", new table_encryptor(SupplierSchema, SupplierOnions, false, true)},
+  {"supplier-monomi", new table_encryptor(SupplierSchema, SupplierOnions, false, true)},
+
+  // -- nation -------------------------------------------------------------
 
   {"nation-none", new table_encryptor(NationSchema, NationOnions, false, true)},
+  {"nation-monomi", new table_encryptor(NationSchema, NationOnions, false, true)},
+
+  // -- part -------------------------------------------------------------
 
   {"part-none", new table_encryptor(PartSchema, PartOnions, false, true)},
+  {"part-monomi", new table_encryptor(PartSchema, PartOnions, false, true)},
+
+  // -- region -------------------------------------------------------------
 
   {"region-none", new table_encryptor(RegionSchema, RegionOnions, false, true)},
+  {"region-monomi", new table_encryptor(RegionSchema, RegionOnions, false, true)},
+
+  // -- orders -------------------------------------------------------------
 
   {"orders-none", new orders_encryptor(orders_encryptor::normal)},
 
   {"orders-normal-vldb-greedy", new orders_encryptor(orders_encryptor::normal_vldb_greedy)},
+
+  {"orders-monomi", new orders_encryptor(orders_encryptor::normal)},
+
+  // -- customer -------------------------------------------------------------
 
   {"customer-none", new customer_encryptor(customer_encryptor::normal)},
   {"customer-row-packed-acctbal", new customer_encryptor(customer_encryptor::row_packed_acctbal)},
@@ -1911,6 +1999,9 @@ static map<string, table_encryptor *> EncryptorMap = {
   {"customer-normal-vldb-orig", new customer_encryptor(customer_encryptor::normal_vldb_orig)},
   {"customer-normal-vldb-greedy", new customer_encryptor(customer_encryptor::normal_vldb_greedy)},
   {"customer-normal-vldb-col-pack-with-precomputation", new customer_encryptor(customer_encryptor::normal_vldb_col_pack_with_precomputation)},
+
+  {"customer-monomi", new customer_encryptor(customer_encryptor::normal)},
+
 };
 
 static inline string process_input(const string &s, crypto_manager_stub &cm, table_encryptor *tenc) {
