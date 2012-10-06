@@ -7,15 +7,15 @@
 #include <util/util.hh>
 #include <execution/commandline.hh>
 
-static std::string
-join(const std::vector<std::string>& tokens, const std::string &sep) {
-  std::ostringstream s;
-  for (size_t i = 0; i < tokens.size(); i++) {
-    s << tokens[i];
-    if (i != tokens.size() - 1) s << sep;
-  }
-  return s.str();
-}
+//static std::string
+//join(const std::vector<std::string>& tokens, const std::string &sep) {
+//  std::ostringstream s;
+//  for (size_t i = 0; i < tokens.size(); i++) {
+//    s << tokens[i];
+//    if (i != tokens.size() - 1) s << sep;
+//  }
+//  return s.str();
+//}
 
 static void query_0(ConnectNew& conn) {
   DBResultNew* dbres;
