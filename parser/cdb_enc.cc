@@ -26,12 +26,6 @@
 using namespace std;
 using namespace NTL;
 
-// This makes our life easier for evaluating different
-// physical DB designs- we make every column use the same
-// key, and we don't bother with DETJOIN / OPEJOIN (since
-// every column is joinable w/ every other column)
-#define ALL_SAME_KEY 1
-
 typedef enum datatypes {
     DT_INTEGER,
     DT_FLOAT,

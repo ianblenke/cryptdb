@@ -20,6 +20,12 @@
 
 #define NELEMS(array) (sizeof(array) / sizeof(array[0]))
 
+// This makes our life easier for evaluating different
+// physical DB designs- we make every column use the same
+// key, and we don't bother with DETJOIN / OPEJOIN (since
+// every column is joinable w/ every other column)
+#define ALL_SAME_KEY 1
+
 namespace {
 
 template <typename T>
