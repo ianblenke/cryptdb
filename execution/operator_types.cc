@@ -27,6 +27,7 @@
 
 using namespace std;
 
+// XXX: TRACE_OPERATOR() is not thread-safe
 #define TRACE_OPERATOR() \
   do { \
     static size_t _n = 0; \
@@ -131,7 +132,7 @@ remote_sql_op::open(exec_context& ctx)
     _do_cache_write_sql = buf.str();
   }
 
-  cerr << "executing sql: " << _do_cache_write_sql.substr(0, 1000) << endl;
+  cerr << "executing sql: " << _do_cache_write_sql /*.substr(0, 1000)*/ << endl;
 
   // look in query cache first
   if (ctx.cache) {
@@ -590,6 +591,18 @@ do_decrypt_db_elem_op(
 {
   SANITY(elem.get_type() != db_elem::TYPE_VECTOR);
   string s = elem.stringify();
+
+#ifdef ALL_SAME_KEY
+  size_t pos = 0;
+  SECLEVEL level =
+    (d.level == SECLEVEL::DETJOIN) ? SECLEVEL::DET :
+      ((d.level == SECLEVEL::OPEJOIN) ? SECLEVEL:: OPE :
+        d.level);
+#else
+  size_t pos     = d.pos;
+  SECLEVEL level = d.level;
+#endif /* ALL_SAME_KEY */
+
   switch (d.type) {
     case db_elem::TYPE_INT: {
 
@@ -606,20 +619,20 @@ do_decrypt_db_elem_op(
       switch (d.size) {
         case 1:
           return db_elem((int64_t)
-            (isDet ? decrypt_u8_det(ctx.crypto, s, d.pos, d.level) :
-                     decrypt_u8_ope(ctx.crypto, s, d.pos, d.level)));
+            (isDet ? decrypt_u8_det(ctx.crypto, s, pos, level) :
+                     decrypt_u8_ope(ctx.crypto, s, pos, level)));
         case 2:
           return db_elem((int64_t)
-            (isDet ? decrypt_u16_det(ctx.crypto, s, d.pos, d.level) :
-                     decrypt_u16_ope(ctx.crypto, s, d.pos, d.level)));
+            (isDet ? decrypt_u16_det(ctx.crypto, s, pos, level) :
+                     decrypt_u16_ope(ctx.crypto, s, pos, level)));
         case 4:
           return db_elem((int64_t)
-            (isDet ? decrypt_u32_det(ctx.crypto, s, d.pos, d.level) :
-                     decrypt_u32_ope(ctx.crypto, s, d.pos, d.level)));
+            (isDet ? decrypt_u32_det(ctx.crypto, s, pos, level) :
+                     decrypt_u32_ope(ctx.crypto, s, pos, level)));
         case 8:
           return db_elem((int64_t)
-            (isDet ? decrypt_u64_det(ctx.crypto, s, d.pos, d.level) :
-                     decrypt_u64_ope(ctx.crypto, s, d.pos, d.level)));
+            (isDet ? decrypt_u64_det(ctx.crypto, s, pos, level) :
+                     decrypt_u64_ope(ctx.crypto, s, pos, level)));
       }
 
       assert(false);
@@ -633,8 +646,8 @@ do_decrypt_db_elem_op(
 
       uint64_t x =
         (d.onion_type == oDET) ?
-          decrypt_u8_det(ctx.crypto, s, d.pos, d.level) :
-          decrypt_u8_ope(ctx.crypto, s, d.pos, d.level) ;
+          decrypt_u8_det(ctx.crypto, s, pos, level) :
+          decrypt_u8_ope(ctx.crypto, s, pos, level) ;
 
       SANITY( x <= numeric_limits<unsigned char>::max() );
 
@@ -654,7 +667,7 @@ do_decrypt_db_elem_op(
         case oAGG_ORIGINAL:
           return do_decrypt_hom_agg_original(ctx, s);
         default:
-          return db_elem(decrypt_string_det(ctx.crypto, s, d.pos, d.level));
+          return db_elem(decrypt_string_det(ctx.crypto, s, pos, level));
       }
     }
 
@@ -666,8 +679,8 @@ do_decrypt_db_elem_op(
              d.onion_type == oOPE);
 
       uint64_t x = (d.onion_type == oDET) ?
-        decrypt_date_det(ctx.crypto, s, d.pos, d.level) :
-        decrypt_date_ope(ctx.crypto, s, d.pos, d.level) ;
+        decrypt_date_det(ctx.crypto, s, pos, level) :
+        decrypt_date_ope(ctx.crypto, s, pos, level) ;
 
       uint32_t m, d, y;
       extract_date_from_encoding(x, m, d, y);
@@ -687,8 +700,8 @@ do_decrypt_db_elem_op(
 
       uint64_t x =
         (d.onion_type == oDET) ?
-          decrypt_decimal_15_2_det(ctx.crypto, s, d.pos, d.level) :
-          decrypt_decimal_15_2_ope(ctx.crypto, s, d.pos, d.level) ;
+          decrypt_decimal_15_2_det(ctx.crypto, s, pos, level) :
+          decrypt_decimal_15_2_ope(ctx.crypto, s, pos, level) ;
 
       return db_elem(double(x)/100.0);
     }
@@ -1114,6 +1127,18 @@ static db_elem
 do_encrypt_op(exec_context& ctx, const db_elem& elem, const db_column_desc& d)
 {
   SANITY(elem.get_type() != db_elem::TYPE_VECTOR);
+
+#ifdef ALL_SAME_KEY
+  size_t pos = 0;
+  SECLEVEL level =
+    (d.level == SECLEVEL::DETJOIN) ? SECLEVEL::DET :
+      ((d.level == SECLEVEL::OPEJOIN) ? SECLEVEL:: OPE :
+        d.level);
+#else
+  size_t pos     = d.pos;
+  SECLEVEL level = d.level;
+#endif /* ALL_SAME_KEY */
+
   switch (d.type) {
     case db_elem::TYPE_INT: {
 
@@ -1126,8 +1151,8 @@ do_encrypt_op(exec_context& ctx, const db_elem& elem, const db_column_desc& d)
              d.onion_type == oOPE);
 
       bool isDet = d.onion_type == oDET;
-      bool isJoin = (d.level == SECLEVEL::DETJOIN) ||
-                    (d.level == SECLEVEL::OPEJOIN);
+      bool isJoin = (level == SECLEVEL::DETJOIN) ||
+                    (level == SECLEVEL::OPEJOIN);
 
       // TODO: allow float w/ conversion
       SANITY(elem.get_type() == db_elem::TYPE_INT);
@@ -1136,20 +1161,20 @@ do_encrypt_op(exec_context& ctx, const db_elem& elem, const db_column_desc& d)
       switch (d.size) {
         case 1:
           return db_elem((int64_t)
-            (isDet ? encrypt_u8_det(ctx.crypto, val, d.pos, isJoin) :
-                     encrypt_u8_ope(ctx.crypto, val, d.pos, isJoin)));
+            (isDet ? encrypt_u8_det(ctx.crypto, val, pos, isJoin) :
+                     encrypt_u8_ope(ctx.crypto, val, pos, isJoin)));
         case 2:
           return db_elem((int64_t)
-            (isDet ? encrypt_u16_det(ctx.crypto, val, d.pos, isJoin) :
-                     encrypt_u16_ope(ctx.crypto, val, d.pos, isJoin)));
+            (isDet ? encrypt_u16_det(ctx.crypto, val, pos, isJoin) :
+                     encrypt_u16_ope(ctx.crypto, val, pos, isJoin)));
         case 4:
           return db_elem((int64_t)
-            (isDet ? encrypt_u32_det(ctx.crypto, val, d.pos, isJoin) :
-                     encrypt_u32_ope(ctx.crypto, val, d.pos, isJoin)));
+            (isDet ? encrypt_u32_det(ctx.crypto, val, pos, isJoin) :
+                     encrypt_u32_ope(ctx.crypto, val, pos, isJoin)));
         case 8:
           return (isDet ?
-              db_elem((int64_t)encrypt_u64_det(ctx.crypto, val, d.pos, isJoin)) :
-              db_elem(encrypt_u64_ope(ctx.crypto, val, d.pos, isJoin)));
+              db_elem((int64_t)encrypt_u64_det(ctx.crypto, val, pos, isJoin)) :
+              db_elem(encrypt_u64_ope(ctx.crypto, val, pos, isJoin)));
       }
 
       assert(false);
@@ -1160,19 +1185,19 @@ do_encrypt_op(exec_context& ctx, const db_elem& elem, const db_column_desc& d)
       SANITY(d.onion_type == oDET ||
              d.onion_type == oOPE);
 
-      bool isJoin = (d.level == SECLEVEL::DETJOIN) ||
-                    (d.level == SECLEVEL::OPEJOIN);
+      bool isJoin = (level == SECLEVEL::DETJOIN) ||
+                    (level == SECLEVEL::OPEJOIN);
 
       // TODO: allow int w/ conversion
       SANITY(elem.get_type() == db_elem::TYPE_DOUBLE);
       double val = elem.unsafe_cast_double() * 100.0;
 
       return (d.onion_type == oDET) ?
-          db_elem((int64_t)encrypt_decimal_15_2_det(ctx.crypto, val, d.pos, isJoin)) :
+          db_elem((int64_t)encrypt_decimal_15_2_det(ctx.crypto, val, pos, isJoin)) :
           db_elem(
             str_reverse(
               str_resize(
-                encrypt_decimal_15_2_ope(ctx.crypto, val, d.pos, isJoin), 16))) ;
+                encrypt_decimal_15_2_ope(ctx.crypto, val, pos, isJoin), 16))) ;
 
     }
 
