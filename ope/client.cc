@@ -1,5 +1,15 @@
 #include "client.hh"
 
+using std::cout;
+using std::endl;
+using std::string;
+using std::ostringstream;
+using std::istringstream;
+using std::stringstream;
+using std::vector;
+using std::cerr;
+using std::max;
+
 
 //Make mask of num_bits 1's
 uint64_t make_mask(){
@@ -20,6 +30,52 @@ ffsl(uint64_t ct)
     for (bit = 1; !(ct & 1); bit++)
         ct = (uint64_t)ct >> 1;
     return (bit+num_bits-1);
+}
+
+template<class V, class BlockCipher>
+int
+ope_client<V, BlockCipher>::ope_client(vector<V> vec, V pt){
+    _static_assert(BlockCipher::blocksize == sizeof(V));
+    
+    int host_port = 1111;
+    std::string host_name = "127.0.0.1";
+    
+    hsock = socket(AF_INET, SOCK_STREAM,0);
+    if(hsock==-1) std::cout<<"Error initializing socket!"<< std::endl;
+    
+    
+    my_addr.sin_family = AF_INET;
+    my_addr.sin_port = htons(host_port);
+    memset(&(my_addr.sin_zero),0, 8);
+    my_addr.sin_addr.s_addr = inet_addr(host_name.c_str());
+    
+    if(connect(hsock, (struct sockaddr*) &my_addr, sizeof(my_addr))<0){
+	std::cout<<"Connect Failed!"<< std::endl;
+    }
+    cur_merkle_hash="";
+    	
+}
+
+template<class V, class BlockCipher>
+int
+ope_client<V, BlockCipher>::predIndex(vector<V> vec, V pt){
+    //Assumes vec is filled with decrypted non-DET values (original pt values)
+	    int tmp_index = 0;
+	    V tmp_pred_key =0;
+	    bool pred_found=false;
+	    for (int i = 0; i< (int) vec.size(); i++)
+	    {
+	        if(vec[i]==pt) return -1;
+	        if (vec[i] < pt && vec[i] > tmp_pred_key)
+	        {
+	            pred_found=true;
+	            tmp_pred_key = vec[i];
+	            tmp_index = i;
+	        }
+	    }
+	    if(vec.size()<N-1) throw ope_lookup_failure();      
+	    if(pred_found) return tmp_index+1;
+	    else return 0;
 }
 
 template<class V, class BlockCipher>
@@ -388,7 +444,7 @@ int main(){
                 handle_udf((void*)csock);
             }
             else{
-                cout<<"Error accepting!"<<endl;
+		std::cout<<"Error accepting!"<<endl;
             }
             //i--;
     }
