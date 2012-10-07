@@ -49,7 +49,7 @@
      blowfish* bc = new blowfish("frankli714");
 
      Connect * dbconnect;
-     dbconnect = new Connect( "localhost", "frank", "passwd","cryptdb", 3306);
+     dbconnect = new Connect( "localhost", "root", "letmein","cryptdb", 3306);
      vector<uint64_t> inserted_vals;
 
      time_t seed;
@@ -81,6 +81,7 @@
 	 ss.clear();
 	 bc->block_encrypt((const uint8_t *) &pt, (uint8_t *) &ct);
 	 ss<<"INSERT INTO emp VALUES ("<<pt<<", ope_enc("<<ct<<"), 0)";
+	 cerr << "plaintext is " << pt << "\n";
 	 dbconnect->execute(ss.str());
 	 pt=0;
 	 ct=0;

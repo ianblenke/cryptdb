@@ -33,7 +33,6 @@ ffsl(uint64_t ct)
 }
 
 template<class V, class BlockCipher>
-int
 ope_client<V, BlockCipher>::ope_client(BlockCipher * bc) : b(bc) {
     _static_assert(BlockCipher::blocksize == sizeof(V));
     
@@ -56,7 +55,6 @@ ope_client<V, BlockCipher>::ope_client(BlockCipher * bc) : b(bc) {
     	
 }
 template<class V, class BlockCipher>
-int
 ope_client<V, BlockCipher>::~ope_client(){
     close(hsock);
 }

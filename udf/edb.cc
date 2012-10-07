@@ -85,6 +85,7 @@ long long ope_enc(UDF_INIT *initid, UDF_ARGS *args,
     long long det_val;
     det_val = *((long long*) args->args[0]);
 
+    cerr << "inside UDF \n";
     mask=make_mask();
 
     int host_port; 
