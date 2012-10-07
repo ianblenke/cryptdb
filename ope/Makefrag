@@ -4,7 +4,7 @@ OPESRC  := btree.cc
 
 all:    $(OBJDIR)/libope.so $(OBJDIR)/libcryptdb.so
 $(OBJDIR)/libope.so: $(patsubst %.cc,$(OBJDIR)/ope/%.o,$(OPESRC))
-	$(CXX) -shared -o $@ $^ $(LDFLAGS)
+	$(CXX) -shared -o $@ $^ $(LDFLAGS) -ledbutil
 
 
 all:	$(OBJDIR)/ope/user

@@ -139,30 +139,24 @@ record_state(Node * node, State & state);
 // Merkle proof that a certain item was deleted
 // ``old'' information in DelInfo is before delete
 // ``new'' is after delete
-typedef struct DelMerkleProof {
+typedef struct UpdateMerkleProof {
     // vector is from root to leaf
     State st_before; 
     State st_after; 
     
     std::string old_hash() const;
-    bool check_change(std::string key_to_del) const;
+    bool check_del_change(std::string key_to_del) const;
+    bool check_ins_change(std::string key_to_ins) const;
     std::string new_hash() const;
 
-        
-} DelMerkleProof;
+} UpdateMerkleProof;
 
-std::ostream& operator<<(std::ostream &out, const DelMerkleProof & dmp);
-std::istream& operator>>(std::istream &is, DelMerkleProof & dmp);
-
+std::ostream& operator<<(std::ostream &out, const UpdateMerkleProof & dmp);
+std::istream& operator>>(std::istream &is, UpdateMerkleProof & dmp);
 
 
-
-typedef struct InsMerkleProof {
-    MerklePath oldproof, newproof;
-} InsMerkleProof;
-
-std::ostream& operator<<(std::ostream &out, const InsMerkleProof & imp);
-std::istream& operator>>(std::istream &is, InsMerkleProof & imp);
+std::ostream& operator<<(std::ostream &out, const UpdateMerkleProof & imp);
+std::istream& operator>>(std::istream &is, UpdateMerkleProof & imp);
 
 class Node {
 
@@ -170,10 +164,10 @@ class Node {
 public:
 
     Elem& search (Elem& desired, Node*& last_visited);
-    
-    bool tree_insert (Elem& element, InsMerkleProof & p);
 
-    bool tree_delete(Elem & target, DelMerkleProof & m);
+    bool tree_insert (Elem& element, UpdateMerkleProof &p);
+
+    bool tree_delete(Elem & target, UpdateMerkleProof & m);
 
     //cleaning up
     int delete_all_subtrees();
@@ -246,11 +240,8 @@ protected:
 
     bool merge_into_root ();
 
-    static int num_elements();
-
-    
     bool
-    tree_delete_help (Elem& target, DelMerkleProof & proof, Node* & start_node, Node * node);
+    tree_delete_help (Elem& target, UpdateMerkleProof & proof, Node* & start_node, Node * node);
 
    
 
@@ -277,7 +268,7 @@ protected:
     NodeMerkleInfo extract_NodeMerkleInfo(int pos);
     NodeInfo extract_NodeInfo(int notextract); //TODO reove NodeMerkleInfo
 
-    void finish_del(DelMerkleProof & proof);
+    void finish_del(UpdateMerkleProof & proof);
 
     // Functions for testing
     void check_merkle_tree(); //checks merkle tree was computed correctly
@@ -325,14 +316,15 @@ verify_merkle_proof(const MerkleProof & proof, const std::string & merkle_root);
 //verifies the merkle proof for deletion and returns true if it holds, and it
 //also sets new_merkle_root accordingly
 bool
-verify_del_merkle_proof(const DelMerkleProof & p,
+verify_del_merkle_proof(const UpdateMerkleProof & p,
 			std::string del_target,
 			const std::string & merkle_root,
 			std::string & new_merkle_root);
 
 
 bool
-verify_ins_merkle_proof(const InsMerkleProof & p,
+verify_ins_merkle_proof(const UpdateMerkleProof & p,
+			std::string ins_target,
 			const std::string & merkle_root,
 			std::string & new_merkle_root);
 
@@ -342,11 +334,15 @@ Node* null_ptr = reinterpret_cast<Node*> (0);
 
 const int invalid_index = -1;
 
-const unsigned int max_elements = 200;  // max elements in a node
+const unsigned int max_elements = 50;  // max elements in a node
 
 // size limit for the array in a vector object.  best performance was
 // at 800 bytes.
-const unsigned int max_array_bytes = 800; 
+const unsigned int max_array_bytes = 800;
+
+int num_elements();
+const int num_elms = num_elements();
+
 
 	
 /*
@@ -466,7 +462,7 @@ public:
 //TODO: clean these myprint vs << functions for gdb
 //for gdb, could not figure out how to call template funcs from gdb
 const char *
-myprint(const DelMerkleProof & v);
+myprint(const UpdateMerkleProof & v);
 const char *
 myprint(const NodeInfo & v);
 const char *

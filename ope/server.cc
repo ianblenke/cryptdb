@@ -444,7 +444,7 @@ tree<EncT>::delete_index(uint64_t v, uint64_t nbits, uint64_t index){
 
 	Elem desired;
 	desired.m_key = delval_str;
-	DelMerkleProof dmp;
+	UpdateMerkleProof dmp;
 	/*bool deleted = */tracker.get_root()->tree_delete(desired, dmp);
 
 	//Test merkle delete
@@ -682,7 +682,7 @@ tree<EncT>::insert(uint64_t v, uint64_t nbits, uint64_t index, EncT encval){
 	Elem elem;
 	elem.m_key = encval_str;
 	elem.m_payload = encval_str+" hi you";
-	InsMerkleProof imp;
+	UpdateMerkleProof imp;
 	tracker.get_root()->tree_insert(elem, imp);
 
 	//Test merkle tree

@@ -145,7 +145,7 @@ void Node::dump(bool recursive){
 } 
 
 int
-Node::num_elements() {
+num_elements() {
 
 // limit the size of the vector to 4 kilobytes max and 200 entries max.
 // TODO: sizeof(Elem) does not compute the size correctly because string
@@ -368,7 +368,7 @@ bool Node::vector_insert_for_split (Elem& element) {
 
 }
 
- 
+
 
 /* split_insert should only be called if node is full */
 bool Node::split_insert (Elem& element) {
@@ -405,12 +405,8 @@ bool Node::split_insert (Elem& element) {
 
     new_node->mp_parent = mp_parent;
 
-    this->update_merkle();
-    new_node->update_merkle();
-    
     // now insert the upward_element into the parent, splitting it if necessary
     if (mp_parent && mp_parent->vector_insert(upward_element)) {
-	mp_parent->update_merkle_upward();
 	return true;
     }
 
@@ -431,9 +427,6 @@ bool Node::split_insert (Elem& element) {
         m_root.set_root (m_root.get_root(),  new_root);
 
         new_root->mp_parent = 0;
-
-	//update merkle hash of the root
-	new_root->update_merkle();
 
     }
     return true;
@@ -621,7 +614,7 @@ operator<<(ostream& out, const State & st) {
     return out;
 }
 std::ostream&
-operator<<(std::ostream &out, const DelMerkleProof & dmp){
+operator<<(std::ostream &out, const UpdateMerkleProof & dmp){
 
     out << "== DelProof:\n before: " << dmp.st_before << "\n after: " << dmp.st_after << "\n";
 
@@ -636,7 +629,7 @@ operator<<(std::ostream &out, const DelMerkleProof & dmp){
 }
 
 std::istream&
-operator>>(std::istream &is, DelMerkleProof & dmp){
+operator>>(std::istream &is, UpdateMerkleProof & dmp){
 /*    std::stringstream s;
     std::string a;   
     int state=0;
@@ -688,44 +681,6 @@ operator>>(std::istream &is, DelMerkleProof & dmp){
     }
 */  return is;
 
-}
-
-std::ostream&
-operator<<(std::ostream &out, const InsMerkleProof & imp){
-    /*  out<<imp.oldproof<<" "<<imp.newproof;*/
-    return out;
-}
-
-std::istream&
-operator>>(std::istream &is, InsMerkleProof & imp){
-    /*   std::stringstream s;
-    std::string a;   
-    int state=0;
-    while(true){
-        is>>a;
-        if(a=="endmp") {
-            MerkleProof mp;
-            s<<a;
-            s>>mp;
-            if(state==0){
-                imp.oldproof=mp;
-                //cout<<"setting oldproof"<<endl;
-                state++;
-                s.str("");
-                s.clear();
-            }else if(state==1){
-                imp.newproof=mp;
-                //cout<<"setting newproof "<<dmp.newproof<<endl;
-                s.str("");  
-                s.clear();          
-                break;
-            }
-        }else{
-            s<<a+" ";
-            //cout<<a<<": "<<s.str()<<endl;
-        }
-	}*/
-    return is;
 }
 
 string
@@ -801,34 +756,49 @@ verify_merkle_proof(const MerkleProof & proof, const string & merkle_root) {
     return true;
 }
 
-bool
-verify_ins_merkle_proof(const InsMerkleProof & p, const string & old_merkle_root, string & new_merkle_root) {
-    //TODO
+
+static bool
+verify_update_merkle_proof(bool is_del,
+			   const UpdateMerkleProof & proof,
+			   string key_target,
+			   const string & old_merkle_root,
+			   string & new_merkle_root) {
     
-    return true;
-}
-
-
-bool
-verify_del_merkle_proof(const DelMerkleProof & proof,
-			string del_target,
-			const string & old_merkle_root,
-			string & new_merkle_root) {
-
     if (DEBUG_PROOF) { cerr << "\n\n start verify\n";}
+
     if (old_merkle_root != proof.old_hash()) {
 	cerr << "merkle hash of old state does not verify \n";
 	return false;
     }
 
-    if (!proof.check_change(del_target)) {
-	cerr << "the change information";
+    bool r = is_del ? proof.check_del_change(key_target)
+	: proof.check_ins_change(key_target);
+    
+    if (!r) {
+	cerr << "incorrect update information";
 	return false;
     }
 
     new_merkle_root = proof.new_hash();
     
     return true;
+}
+
+bool verify_ins_merkle_proof(const UpdateMerkleProof & proof,
+			string ins_target,
+			const string & old_merkle_root,
+			string & new_merkle_root) {
+    return verify_update_merkle_proof(false, proof, ins_target, old_merkle_root, new_merkle_root);
+    
+}
+
+bool
+verify_del_merkle_proof(const UpdateMerkleProof & proof,
+			string del_target,
+			const string & old_merkle_root,
+			string & new_merkle_root) {
+
+    return verify_update_merkle_proof(true, proof, del_target, old_merkle_root, new_merkle_root);
 }
 
 static string
@@ -879,7 +849,7 @@ hash_match(const DelInfo & child, const DelInfo &  parent) {
     }
     
 }
-string DelMerkleProof::old_hash() const {
+string UpdateMerkleProof::old_hash() const {
     
     // first level
     auto it = st_before.begin();
@@ -970,8 +940,12 @@ del_elinfo(string del_target, vector<ElInfo> & v) {
     del_elinfo(pos, v);
 }
 
-static void
+static bool
 ins_elinfo(ElInfo ei, vector<ElInfo> & v) {
+
+    if ((int)v.size() >= (int)num_elms - 1) {
+	return false;
+    }
     bool matched;
     int pos;
     binary_search(v, ei.key, matched, pos);
@@ -982,6 +956,8 @@ ins_elinfo(ElInfo ei, vector<ElInfo> & v) {
 	v[i+1] = v[i];
     }
     v[pos+1] = ei;
+    
+    return true;
 }
 
 static void
@@ -1162,7 +1138,7 @@ smallest_in_subtree(State & st, int index) {
 // for gdb -- could not figure out how to call template funcs from
 // gdb, so the below has repetitions
 const char *
-myprint(const DelMerkleProof & v) {
+myprint(const UpdateMerkleProof & v) {
     stringstream out;
     out << v;
     return out.str().c_str();
@@ -1402,13 +1378,102 @@ operator<<(std::ostream &out, const DelInfo & di) {
 
     return out;
 }
+/*
+static void
+vector_insert_for_split(NodeInfo & node, ElInfo & ins_ei) {
+    assert_s(false, "vector insert for split no implemented");
+}
+*/
+/*
+static void
+split_insert(State & st, int index, ElInfo & ins_ei) {
+    NodeInfo & node = st[index].node;
+
+    int m_count = node.childr.size();
+    
+    assert_s(m_count != num_elms - 1, "split insert should not have been called");
+
+    vector_insert_for_split(node, ins_ei);
+
+    unsigned int split_point = m_count/2;
+
+    if (2 * split_point < (uint) m_count) {
+	split_point++;
+    }
+
+    NodeInfo new_node = NodeInfo();
+
+    ElInfo upward_elm = node.childr[split_point];
+
+    insert_zeroth_subtree(node, upward_elm.hash);
+
+    new_node.key = index > 0 ? st[index-1].node.key : "";
+    node.key = upward_elm.key;
+
+    for (int i = 1; i < (int) (m_count - split_point); i++) {
+	ins_elinfo(new_node.childr, node.childr[split_point+i]);
+    }
+
+    if (index > 0 && ins_elinfo(st[index-1].node.childr, upward_elm)) { // this node has a parent
+	return;
+    }
+    else if (index > 0 && split_insert(st, index-1, upward_elm)) {
+	return true;
+    } 
+    else if (index == 0) { need to move stuff around
+	NodeInfo new_root = NodeInfo();
+	node.key = "";
+	DelInfo new_di = DelInfo();
+	new_node.key = "";
+	ins_elinfo(new_root.childr, upward_elm);
+	di.node = new_root;
+	st.insert(new_di, 0);
+    }
+   
+    }*/
+/*
+static void
+sim_insert(State & st, ElInfo & ins_ei, int index) {
+    assert_s(false, "impl not finished");
+    find(st, ins_ei.key, index);
+
+    if (ins_elinfo(ins_target, st[index].node.childr)) {
+	return; //done
+    }
+
+    split_insert(st, index, ins_ei);
+}*/
+
+/*  We check the change by rerunning the insertion
+    on st_before. It turns out this is much simpler
+    than trying to check if every operation the server
+    did in the deletion was correct. */
+bool UpdateMerkleProof::check_ins_change(std::string ins_target) const {
+
+    assert_s(false, "check ins change not implemented fully");
+    /*   State st_sim = st_before;
+    
+       // simulate insertion
+    sim_insert(st_sim, ElInfo(ins_target, ""), 0);
+    // keys and childr are up to date and
+    // hashes of subtrees not involved in the delete;
+    // other hashes in pos in parent may be stale
+
+    // recompute all hashes
+    recomp_hash_pos(st_sim);
+
+    // compare new state to the one from the server
+    check_equals(st_sim, st_after);
+    */
+    return true;
+}
 
 
 /*  We check the change by rerunning the deletion
     on st_before. It turns out this is much simpler
     than trying to check if every operation the server
     did in the deletion was correct. */
-bool DelMerkleProof::check_change(std::string del_target) const {
+bool UpdateMerkleProof::check_del_change(std::string del_target) const {
    
     State st_sim = st_before;
     
@@ -1427,13 +1492,18 @@ bool DelMerkleProof::check_change(std::string del_target) const {
     return true;
 }
 
-string DelMerkleProof::new_hash() const {
+string UpdateMerkleProof::new_hash() const {
 
     if (st_after.size() == 0) {
 	return hash_empty_node;
     }
     DelInfo root = st_after[0];
-    return root.node.hash();
+    if (!root.this_was_del) {
+	return root.node.hash();
+    } else {
+	assert_s(st_after.size() >= 2, "inconsistency");
+	return st_after[1].node.hash();
+    }
 }
 
 
@@ -1484,7 +1554,7 @@ void Node::update_merkle_upward() {
 }
  
 
-bool Node::tree_insert(Elem& element, InsMerkleProof & p) {
+bool Node::tree_insert(Elem& element, UpdateMerkleProof & p) {
 
     Node* last_visited_ptr = this;
 
@@ -1492,16 +1562,36 @@ bool Node::tree_insert(Elem& element, InsMerkleProof & p) {
         return false;
     }
 
+    // ---- Merkle -----
+    // last_visited_ptr is the start point for the proof
+    record_state(last_visited_ptr, p.st_before);
+    // -----------------
+    
     // insert the element in last_visited_ptr if this node is not fulls
     if (last_visited_ptr->vector_insert(element)) {
+
+        // -----Merkle ----
+	// done making the changes for insert so update merkle hash and record
+	// new state
 	last_visited_ptr->update_merkle_upward();
+	record_state(last_visited_ptr, p.st_after);
+	// ----------------
+	
         return true;
     }
 
     //last_visited_ptr node is full so we will need to split
-    return last_visited_ptr->split_insert(element);
+    bool r = last_visited_ptr->split_insert(element);
 
-} //__________________________________________________________________
+    // -----Merkle ----
+    // done making the changes for insert so update merkle hash and record
+    // new state
+    last_visited_ptr->update_merkle_upward();
+    record_state(last_visited_ptr, p.st_after);
+    // ----------------
+
+    return r;
+} 
 
 
 void
@@ -1536,7 +1626,7 @@ record_state(Node * node, State & state) {
 }
 
 bool
-Node::tree_delete(Elem & target, DelMerkleProof & proof) {
+Node::tree_delete(Elem & target, UpdateMerkleProof & proof) {
 
     if (DEBUG_PROOF) { cerr << "\n\n start delete\n";}
     // first find the node contain the Elem instance with the given key
@@ -1596,7 +1686,7 @@ Node::tree_delete(Elem & target, DelMerkleProof & proof) {
 }
 
 bool
-Node::tree_delete_help (Elem& target, DelMerkleProof & proof, Node * & start_node, Node * node) {
+Node::tree_delete_help (Elem& target, UpdateMerkleProof & proof, Node * & start_node, Node * node) {
 
 // target is just a package for the key value.  the reference does not
 // provide the address of the Elem instance to be deleted.

@@ -6,6 +6,7 @@
 #include <sstream>
 #include <vector>
 #include <algorithm>
+#include <util/util.hh>
 
 using namespace std;
 
@@ -103,7 +104,7 @@ public:
 	for (uint i=0; i< no_elems; i++) {
 	    elem.m_key = vals[i];
 	    elem.m_payload = vals[i]+" hi you";
-	    InsMerkleProof p;
+	    UpdateMerkleProof p;
 	    tracker.get_root()->tree_insert(elem, p);
 	
 	    // check Merkle hash tree integrity
@@ -173,7 +174,7 @@ public:
 	    Elem desired;
 	    desired.m_key = test_val;
 	    //delete it
-	    DelMerkleProof delproof;
+	    UpdateMerkleProof delproof;
 	    bool deleted = tracker.get_root()->tree_delete(desired, delproof);
 
 	    Node * last;
@@ -207,7 +208,117 @@ public:
 	check_good_height(tracker.get_root()->max_height(), no_elems, max_elements);
 
     }
-    
+
+    static string
+    inserted_here(DelInfo before, DelInfo after, int & pos) {
+	NodeInfo node1 = before.node;
+	NodeInfo node2 = after.node;
+
+	if (node1.childr.size() == node2.childr.size()) {
+	    return "";
+	}
+
+	assert_s(node1.childr.size() == (node2.childr.size() - 1), "error in logic");
+	
+	for (uint i = 0; i < node1.childr.size(); i++) {
+	    if (node1.childr[i].key != node2.childr[i].key) {
+		pos = i;
+		return node2.childr[i].key;
+	    }
+	}
+
+	pos = node2.childr.size() - 1;
+	return node2.childr[pos].key;
+    }
+
+    static int
+    cost(Node * node, int pos) {
+	assert_s(pos >=0 , "error somewhere in logic");
+	assert_s(pos < (int)node->m_count , "error somewhere in logic");
+	
+	int total_cost= 0;
+	for (uint i = (uint)pos; i < node->m_count; i++) {
+	    total_cost = 1 + total_cost;
+	    if (node->m_vector[i].mp_subtree != NULL) {
+		total_cost = total_cost + cost(node->m_vector[i].mp_subtree, 0);
+	    }
+	}
+
+	return total_cost;
+    }
+
+    // compute the cost of an insert in terms of elements that changed
+    // their ope encoding
+    static int
+    cost(UpdateMerkleProof & p, RootTracker & tracker) {
+
+	//check first if root grew
+	if (p.st_before.size() == p.st_after.size() -1 ) {
+	    return cost(tracker.get_root(), 0);
+	}
+
+	assert_s(p.st_before.size() == p.st_after.size(), "should be same height!");
+	
+	for (uint i = 0; i < p.st_after.size(); i++) {
+	    string new_key;
+	    int pos = -1;
+	    new_key = inserted_here(p.st_before[i], p.st_after[i], pos);
+	    if (new_key != "") {
+		Elem desired;
+		desired.m_key = new_key;
+		Node * visited;
+		tracker.get_root()->search(desired, visited);
+		return cost(visited, pos);
+	    }
+	    
+
+	}
+
+	assert_s(false, "should have found a new key");
+	return 0;    
+    }
+
+    static void
+    test_B_complexity(vector<string> & vals, uint no_elems) {
+
+	Node::m_failure.invalidate();
+
+	Node::m_failure.m_key = "";
+
+	RootTracker tracker;  // maintains a pointer to the current root of the b-tree
+
+	Node* root_ptr = new Node(tracker);
+
+	tracker.set_root(null_ptr, root_ptr);
+
+	Elem elem;
+	uint total_cost = 0;
+	uint eff_elems = 0;
+	
+	//insert values in tree
+	for (uint i=0; i< no_elems; i++) {
+	    elem.m_key = vals[i];
+	    elem.m_payload = vals[i]+" hi you";
+	    UpdateMerkleProof p;
+	    bool b = tracker.get_root()->tree_insert(elem, p);
+	    if (b) {
+		uint thiscost =  cost(p, tracker);
+		total_cost += thiscost;
+		//	cerr << "cost for this ins " << thiscost << "; ";
+		eff_elems ++;
+	    }
+	}
+
+	
+
+	cerr << "total cost is " << total_cost << " for " << no_elems << " inserts from zero " <<
+	    " and effective elements " << eff_elems << "\n";
+	cerr << "RATIO " << total_cost*1.0/eff_elems << "\n";
+	cerr << "max height was " << tracker.get_root()->max_height() << "\n";
+	cerr << "minimum keys " << Node::minimum_keys() << "\n";
+
+    }
+
 // test the b-tree.
 // -- inserts many elements in random order, increasing order, decreasing order,
 // and checks that the tree is built correctly -- correct order and max height
@@ -217,7 +328,7 @@ public:
     static void
     testBMerkleTree() {
     
-	uint no_elems = 5000;
+	uint no_elems = 150000;
 
 	vector<string> vals;
 	srand( time(NULL));
@@ -230,19 +341,19 @@ public:
 	    vals.push_back(s.str());
 	}
 
-	test_help(vals, no_elems);
+	test_B_complexity(vals, no_elems);
 
 	// test on values in increasing order
 	sort(vals.begin(), vals.end());
 	cerr << "- " << no_elems << " values in increasing order: \n";
-	test_help(vals, no_elems); 
+	test_B_complexity(vals, no_elems); 
 
 	// test on values in decreasing order
 	reverse(vals.begin(), vals.end());
 	cerr << "- " << no_elems << " values in decreasing order: \n";
-	test_help(vals, no_elems);
+	test_B_complexity(vals, no_elems);
 
-	cerr << "test B + Merkle tree OK.\n";
+	cerr << "test B complexity finished OK.\n";
  
     }
 
@@ -286,7 +397,7 @@ public:
 	for (uint i=0; i< no_elems; i++) {
 	    elem.m_key = vals[i];
 	    elem.m_payload = vals[i]+" hi you";
-	    InsMerkleProof p;
+	    UpdateMerkleProof p;
 	    tracker.get_root()->tree_insert(elem, p);
 	}
 
@@ -354,6 +465,7 @@ public:
 
 int main(int argc, char ** argv)
 {
+   
     Test::testBMerkleTree();
     Test::testMerkleProof();
 }
