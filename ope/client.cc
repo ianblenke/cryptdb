@@ -34,7 +34,7 @@ ffsl(uint64_t ct)
 
 template<class V, class BlockCipher>
 int
-ope_client<V, BlockCipher>::ope_client(vector<V> vec, V pt){
+ope_client<V, BlockCipher>::ope_client(BlockCipher * bc) : b(bc) {
     _static_assert(BlockCipher::blocksize == sizeof(V));
     
     int host_port = 1111;
@@ -55,27 +55,32 @@ ope_client<V, BlockCipher>::ope_client(vector<V> vec, V pt){
     cur_merkle_hash="";
     	
 }
+template<class V, class BlockCipher>
+int
+ope_client<V, BlockCipher>::~ope_client(){
+    close(hsock);
+}
 
 template<class V, class BlockCipher>
 int
 ope_client<V, BlockCipher>::predIndex(vector<V> vec, V pt){
     //Assumes vec is filled with decrypted non-DET values (original pt values)
-	    int tmp_index = 0;
-	    V tmp_pred_key =0;
-	    bool pred_found=false;
-	    for (int i = 0; i< (int) vec.size(); i++)
-	    {
-	        if(vec[i]==pt) return -1;
-	        if (vec[i] < pt && vec[i] > tmp_pred_key)
-	        {
-	            pred_found=true;
-	            tmp_pred_key = vec[i];
-	            tmp_index = i;
-	        }
-	    }
-	    if(vec.size()<N-1) throw ope_lookup_failure();      
-	    if(pred_found) return tmp_index+1;
-	    else return 0;
+    int tmp_index = 0;
+    V tmp_pred_key =0;
+    bool pred_found=false;
+    for (int i = 0; i< (int) vec.size(); i++)
+    {
+	if(vec[i]==pt) return -1;
+	if (vec[i] < pt && vec[i] > tmp_pred_key)
+	{
+	    pred_found=true;
+	    tmp_pred_key = vec[i];
+	    tmp_index = i;
+	}
+    }
+    if(vec.size()<N-1) throw ope_lookup_failure();      
+    if(pred_found) return tmp_index+1;
+    else return 0;
 }
 
 template<class V, class BlockCipher>
@@ -144,35 +149,35 @@ ope_client<V, BlockCipher>::delete_value(V pt){
     recv(hsock, buffer, 10240, 0);
 
     /*if(DEBUG_BTREE){
-        cout<<"Delete_value buffer recv: "<<buffer<<endl;
-    }
-    const string tmp_merkle_hash = cur_merkle_hash;
-    string new_merkle_hash;
-    DelMerkleProof dmp;
-    stringstream iss(buffer);
-    iss>>new_merkle_hash;
-    string tmp_hash_str (buffer, 10240);
-    size_t hash_end = tmp_hash_str.find("hash_end");
-    string new_hash_str (buffer, hash_end);
-    cur_merkle_hash = new_hash_str;
-    iss>>dmp;*/    
+      cout<<"Delete_value buffer recv: "<<buffer<<endl;
+      }
+      const string tmp_merkle_hash = cur_merkle_hash;
+      string new_merkle_hash;
+      DelMerkleProof dmp;
+      stringstream iss(buffer);
+      iss>>new_merkle_hash;
+      string tmp_hash_str (buffer, 10240);
+      size_t hash_end = tmp_hash_str.find("hash_end");
+      string new_hash_str (buffer, hash_end);
+      cur_merkle_hash = new_hash_str;
+      iss>>dmp;*/    
 /*      char tmp_hash[10240];
-    strcpy(tmp_hash, buffer);
-    size_t end = 
-    *space='\0';
-    string tmp_hash_str (tmp_hash);
-    cur_merkle_hash=tmp_hash_str;   */    
+	strcpy(tmp_hash, buffer);
+	size_t end = 
+	*space='\0';
+	string tmp_hash_str (tmp_hash);
+	cur_merkle_hash=tmp_hash_str;   */    
     //cur_merkle_hash=new_merkle_hash;   
 
 /*    if(DEBUG_BTREE){
-        cout<<"Delete_value new mh="<<cur_merkle_hash<<endl;
-        cout<<"DMP="<<dmp<<endl;
-    }
-    if(!verify_del_merkle_proof(dmp, "to_delete", tmp_merkle_hash, new_merkle_hash)){
-        cout<<"Deletion merkle proof failed!"<<endl;
-        exit(-1);
-    }
-    if(DEBUG_BTREE) cout<<"Deletion merkle proof succeeded"<<endl;
+      cout<<"Delete_value new mh="<<cur_merkle_hash<<endl;
+      cout<<"DMP="<<dmp<<endl;
+      }
+      if(!verify_del_merkle_proof(dmp, "to_delete", tmp_merkle_hash, new_merkle_hash)){
+      cout<<"Deletion merkle proof failed!"<<endl;
+      exit(-1);
+      }
+      if(DEBUG_BTREE) cout<<"Deletion merkle proof succeeded"<<endl;
 */
 }
 
@@ -196,48 +201,48 @@ ope_client<V, BlockCipher>::insert(uint64_t v, uint64_t nbits, uint64_t index, V
     recv(hsock, buffer, 10240, 0);
 
     /*if(DEBUG_BTREE) cout<<"Insert buffer="<<buffer<<endl;
-    const string tmp_merkle_hash = cur_merkle_hash;
-    string new_merkle_hash;
-    InsMerkleProof imp;
-    stringstream iss(buffer);
-    iss>>new_merkle_hash;
-    string tmp_hash_str (buffer, 10240);
-    size_t hash_end = tmp_hash_str.find("hash_end");
-    string new_hash_str (buffer, hash_end-1);
-    cur_merkle_hash = new_hash_str;
-    iss>>imp;    */
+      const string tmp_merkle_hash = cur_merkle_hash;
+      string new_merkle_hash;
+      InsMerkleProof imp;
+      stringstream iss(buffer);
+      iss>>new_merkle_hash;
+      string tmp_hash_str (buffer, 10240);
+      size_t hash_end = tmp_hash_str.find("hash_end");
+      string new_hash_str (buffer, hash_end-1);
+      cur_merkle_hash = new_hash_str;
+      iss>>imp;    */
 /*      char tmp_hash[10240];
-    strcpy(tmp_hash, buffer);
-    char* space = strchr(tmp_hash,' ');
-    *space='\0';
-    string tmp_hash_str (tmp_hash);
-    cur_merkle_hash=tmp_hash_str;*/
+	strcpy(tmp_hash, buffer);
+	char* space = strchr(tmp_hash,' ');
+	*space='\0';
+	string tmp_hash_str (tmp_hash);
+	cur_merkle_hash=tmp_hash_str;*/
     
 /*    if(DEBUG_BTREE){
-        cout<<"Insert New mh="<<cur_merkle_hash<<endl;
-        cout<<"Insert proof="<<imp<<endl;
-    }
-    if(!verify_ins_merkle_proof(imp, tmp_merkle_hash, new_merkle_hash)){
-        cout<<"Insertion merkle proof failed!"<<endl;
-        exit(-1);
-    }
-    if(DEBUG_BTREE) cout<<"Insert mp succeeded"<<endl;*/
+      cout<<"Insert New mh="<<cur_merkle_hash<<endl;
+      cout<<"Insert proof="<<imp<<endl;
+      }
+      if(!verify_ins_merkle_proof(imp, tmp_merkle_hash, new_merkle_hash)){
+      cout<<"Insertion merkle proof failed!"<<endl;
+      exit(-1);
+      }
+      if(DEBUG_BTREE) cout<<"Insert mp succeeded"<<endl;*/
     //relabeling may have been triggered so we need to lookup value again
     //todo: optimize by avoiding extra tree lookup
     //return encrypt(pt);
 }
 
-    /* Encryption is the path bits (aka v) bitwise left shifted by num_bits
-     * so that the last num_bits can indicate the index of the value pt at
-     * at the node found by the path
-     */
+/* Encryption is the path bits (aka v) bitwise left shifted by num_bits
+ * so that the last num_bits can indicate the index of the value pt at
+ * at the node found by the path
+ */
 
-    /*Server protocol code:
-     * lookup(encrypted_plaintext) = 1
-     * lookup(v, nbits) = 2
-     * insert(v, nbits, index, encrypted_laintext) = 3
-     * delete(v, nbits, index) = 4
-    */
+/*Server protocol code:
+ * lookup(encrypted_plaintext) = 1
+ * lookup(v, nbits) = 2
+ * insert(v, nbits, index, encrypted_laintext) = 3
+ * delete(v, nbits, index) = 4
+ */
 
 template<class V, class BlockCipher>
 void
@@ -294,17 +299,17 @@ ope_client<V, BlockCipher>::encrypt(V det) const{
             xct_vec.push_back(block_decrypt(xct));
         }
 /*        MerkleProof mp;
-        if(DEBUG_BTREE) cout<<"Remaining mp info = "<<iss_tmp.str()<<endl;
-        for(int i=0; i<(int) xct_vec.size(); i++){
-            iss_tmp >> mp;
-            if(DEBUG_BTREE) cout<<"MP "<<i<<"="<<mp<<endl;
-            const string tmp_merkle_hash = cur_merkle_hash;
-            if(!verify_merkle_proof(mp, tmp_merkle_hash)){
-                cout<<"Merkle hash during lookup didn't match!"<<endl;
-                exit(-1);
-            }
-            if(DEBUG_BTREE) cout<<"MP "<<i<<" succeeded"<<endl;
-        }*/
+	  if(DEBUG_BTREE) cout<<"Remaining mp info = "<<iss_tmp.str()<<endl;
+	  for(int i=0; i<(int) xct_vec.size(); i++){
+	  iss_tmp >> mp;
+	  if(DEBUG_BTREE) cout<<"MP "<<i<<"="<<mp<<endl;
+	  const string tmp_merkle_hash = cur_merkle_hash;
+	  if(!verify_merkle_proof(mp, tmp_merkle_hash)){
+	  cout<<"Merkle hash during lookup didn't match!"<<endl;
+	  exit(-1);
+	  }
+	  if(DEBUG_BTREE) cout<<"MP "<<i<<" succeeded"<<endl;
+	  }*/
 
         //Throws ope_lookup_failure if xct size < N, meaning can insert at node
         int pi;
@@ -344,7 +349,7 @@ ope_client<V, BlockCipher>::encrypt(V det) const{
     return;
     //FL todo: s->update_table(block_encrypt(pt),v,nbits);
 /*      if(DEBUG) cout<<"Encryption of "<<pt<<" has v="<< v<<" nbits="<<nbits<<endl;
-    return (v<<(64-nbits)) | (mask<<(64-num_bits-nbits));*/
+	return (v<<(64-nbits)) | (mask<<(64-num_bits-nbits));*/
 }
 
 template<class V, class BlockCipher>
@@ -408,7 +413,7 @@ int main(){
     int host_port = 1112;
     int hsock = socket(AF_INET, SOCK_STREAM, 0);
     if(hsock ==-1){
-            cout<<"Error initializing socket"<<endl;
+	cout<<"Error initializing socket"<<endl;
     }
     cerr<<"Init socket \n";
     struct sockaddr_in my_addr;
@@ -421,13 +426,13 @@ int main(){
     //Bind to socket
     int bind_rtn = bind(hsock, (struct sockaddr*) &my_addr, sizeof(my_addr));
     if(bind_rtn<0){
-            cerr<<"Error binding to socket"<<endl;
+	cerr<<"Error binding to socket"<<endl;
     }
     cerr<<"Bind \n";
     //Start listening
     int listen_rtn = listen(hsock, 10);
     if(listen_rtn<0){
-            cerr<<"Error listening to socket"<<endl;
+	cerr<<"Error listening to socket"<<endl;
     }
     cerr<<"Listening \n";
 
@@ -437,16 +442,16 @@ int main(){
     int i=5;
     //Handle 1 client b/f quiting (can remove later)
     while(i>0){
-            cerr<<"Listening..."<<endl;
-            csock = (int*) malloc(sizeof(int));
-            if((*csock = accept(hsock, (struct sockaddr*) &sadr, &addr_size))!=-1){
-                //Pass connection and messages received to handle_client
-                handle_udf((void*)csock);
-            }
-            else{
-		std::cout<<"Error accepting!"<<endl;
-            }
-            //i--;
+	cerr<<"Listening..."<<endl;
+	csock = (int*) malloc(sizeof(int));
+	if((*csock = accept(hsock, (struct sockaddr*) &sadr, &addr_size))!=-1){
+	    //Pass connection and messages received to handle_client
+	    handle_udf((void*)csock);
+	}
+	else{
+	    std::cout<<"Error accepting!"<<endl;
+	}
+	//i--;
     }
     cerr<<"Done with client, closing now\n";
     close(hsock);

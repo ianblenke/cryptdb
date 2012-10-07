@@ -1,107 +1,107 @@
-#include <algorithm>
-#include <edb/Connect.hh>
-#include <crypto/blowfish.hh>
-#include <sstream>
-#include <iostream>
-#include <stdio.h>
-#include <stdlib.h>
-#include <time.h>
-#include <vector>
+ #include <algorithm>
+ #include <edb/Connect.hh>
+ #include <crypto/blowfish.hh>
+ #include <sstream>
+ #include <iostream>
+ #include <stdio.h>
+ #include <stdlib.h>
+ #include <time.h>
+ #include <vector>
 
-using namespace std; 
+ using namespace std; 
 
-void test_order(int num_vals, int order);
+ void test_order(int num_vals, int order);
 
-int main(){
+ int main(){
 
-	test_order(25,0);
+	 test_order(25,0);
 
-/*
-	blowfish* bc = new blowfish("frankli714");
+ /*
+	 blowfish* bc = new blowfish("frankli714");
 
-	Connect * dbconnect;
-	dbconnect = new Connect( "localhost", "frank", "passwd","cryptdb", 3306);
+	 Connect * dbconnect;
+	 dbconnect = new Connect( "localhost", "frank", "passwd","cryptdb", 3306);
 
-	uint64_t pt=0;
-	uint64_t ct=0;
-    stringstream ss;
-	
-	while(1){
-		cout<<"Insertion value: "<<endl;
-		cin>>pt;
-		if(pt==(uint64_t) -1) { cout<<"Closing"<<endl; break;}
-	    ss.str("");
-	    ss.clear();		
-		bc->block_encrypt((const uint8_t *) &pt, (uint8_t *) &ct);
-		cout<<pt<<" det enc to "<<ct<<endl;	
-		ss<<"INSERT INTO emp VALUES ("<<pt<<", ope_enc("<<ct<<"), 0)";
-		dbconnect->execute(ss.str());
-		pt=0;
-		ct=0;
-	}
+	 uint64_t pt=0;
+	 uint64_t ct=0;
+     stringstream ss;
 
-	return 0;
-*/
-}
+	 while(1){
+		 cout<<"Insertion value: "<<endl;
+		 cin>>pt;
+		 if(pt==(uint64_t) -1) { cout<<"Closing"<<endl; break;}
+	     ss.str("");
+	     ss.clear();		
+		 bc->block_encrypt((const uint8_t *) &pt, (uint8_t *) &ct);
+		 cout<<pt<<" det enc to "<<ct<<endl;	
+		 ss<<"INSERT INTO emp VALUES ("<<pt<<", ope_enc("<<ct<<"), 0)";
+		 dbconnect->execute(ss.str());
+		 pt=0;
+		 ct=0;
+	 }
 
-void test_order(int num_vals, int order){
+	 return 0;
+ */
+ }
 
-	blowfish* bc = new blowfish("frankli714");
+ void test_order(int num_vals, int order){
 
-	Connect * dbconnect;
-	dbconnect = new Connect( "localhost", "frank", "passwd","cryptdb", 3306);
-	vector<uint64_t> inserted_vals;
+     blowfish* bc = new blowfish("frankli714");
 
-	time_t seed;
-	seed = time(NULL);
-	cout<<"Seed is "<<seed<<endl;
-	srand(seed);
+     Connect * dbconnect;
+     dbconnect = new Connect( "localhost", "frank", "passwd","cryptdb", 3306);
+     vector<uint64_t> inserted_vals;
 
-    for(int i=0; i<num_vals; i++){
-            inserted_vals.push_back((uint64_t) rand());
-    }
-    if(order>0){
-            sort(inserted_vals.begin(), inserted_vals.end());
-    }
-    if(order>1){
-            reverse(inserted_vals.begin(), inserted_vals.end());
-    }	
+     time_t seed;
+     seed = time(NULL);
+     cout<<"Seed is "<<seed<<endl;
+     srand(seed);
 
-	vector<uint64_t> tmp_vals;
+     for(int i=0; i<num_vals; i++){
+	 inserted_vals.push_back((uint64_t) rand());
+     }
+     if(order>0){
+	 sort(inserted_vals.begin(), inserted_vals.end());
+     }
+     if(order>1){
+	 reverse(inserted_vals.begin(), inserted_vals.end());
+     }	
 
-	uint64_t pt=0;
-	uint64_t ct=0;
-	stringstream ss;
+     vector<uint64_t> tmp_vals;
 
-    for(int i=0; i<num_vals; i++){
-    	pt = inserted_vals[i];
-        tmp_vals.push_back(pt);
+     uint64_t pt=0;
+     uint64_t ct=0;
+     stringstream ss;
 
-        ss.str("");
-        ss.clear();
-		bc->block_encrypt((const uint8_t *) &pt, (uint8_t *) &ct);
-		ss<<"INSERT INTO emp VALUES ("<<pt<<", ope_enc("<<ct<<"), 0)";
-		dbconnect->execute(ss.str());
-		pt=0;
-		ct=0;
+     for(int i=0; i<num_vals; i++){
+	 pt = inserted_vals[i];
+	 tmp_vals.push_back(pt);
 
-		int do_repeat = rand()%10+1;
-		if(do_repeat<3){
-			int repeat_index = rand()%(tmp_vals.size());
-			pt = tmp_vals[repeat_index];
-	        ss.str("");
-	        ss.clear();
-			bc->block_encrypt((const uint8_t *) &pt, (uint8_t *) &ct);
-			ss<<"INSERT INTO emp VALUES ("<<pt<<", ope_enc("<<ct<<"), 0)";
-			dbconnect->execute(ss.str());
-			pt=0;
-			ct=0;
-		}
+	 ss.str("");
+	 ss.clear();
+	 bc->block_encrypt((const uint8_t *) &pt, (uint8_t *) &ct);
+	 ss<<"INSERT INTO emp VALUES ("<<pt<<", ope_enc("<<ct<<"), 0)";
+	 dbconnect->execute(ss.str());
+	 pt=0;
+	 ct=0;
 
-    }
-    cout<<"Values:"<<endl;
-    for(int i=0; i<num_vals; i++){
-    	cout<<inserted_vals[i]<<", ";
-    }
-    cout<<endl;
+	 int do_repeat = rand()%10+1;
+	 if(do_repeat<3){
+	     int repeat_index = rand()%(tmp_vals.size());
+	     pt = tmp_vals[repeat_index];
+	     ss.str("");
+	     ss.clear();
+	     bc->block_encrypt((const uint8_t *) &pt, (uint8_t *) &ct);
+	     ss<<"INSERT INTO emp VALUES ("<<pt<<", ope_enc("<<ct<<"), 0)";
+	     dbconnect->execute(ss.str());
+	     pt=0;
+	     ct=0;
+	 }
+
+     }
+     cout<<"Values:"<<endl;
+     for(int i=0; i<num_vals; i++){
+	 cout<<inserted_vals[i]<<", ";
+     }
+     cout<<endl;
 }
