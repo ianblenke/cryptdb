@@ -23,8 +23,9 @@
 
 //Whether to print debugging output or not
 #define DEBUG 0
-#define DEBUG_COMM 1
+#define DEBUG_COMM 0
 #define DEBUG_BTREE 0
+#define MALICIOUS 0
 
 const int N = 4;
 const double alpha = 0.3;
@@ -44,7 +45,11 @@ void handle_udf(void* lp);
 
 class ope_lookup_failure {};
 
+
+#if MALICIOUS
 std::string cur_merkle_hash;
+#endif
+
 
 template<class V, class BlockCipher>
 class ope_client {
@@ -52,14 +57,16 @@ public:
     int hsock;
     struct sockaddr_in my_addr;
 	
+
     ope_client(BlockCipher *bc);
     ~ope_client();
+  
 
     /* Determines the index of pt's predecesor given a node's key vector
      * Returns -1 if pt is in the vector, 0 is if is smaller than all
      * elements in the vector, or 1+index where index is the pred's index
      * in the vector (1 is added due to my protocol, where 0 represents null)
-    */
+     */
     static int predIndex(std::vector<V> vec, V pt);
   
     /* Encryption is the path bits (aka v) bitwise left shifted by num_bits
@@ -67,18 +74,20 @@ public:
      * at the node found by the path
      */
     /*Server protocol code:
-	 * lookup(encrypted_plaintext) = 1
-	 * lookup(v, nbits) = 2
-	 * insert(v, nbits, index, encrypted_plaintext) = 3
-	 * delete(v, nbits, index) = 4
-	*/
-    void encrypt(V det) const;
+     * lookup(encrypted_plaintext) = 1
+     * lookup(v, nbits) = 2
+     * insert(v, nbits, index, encrypted_plaintext) = 3
+     * delete(v, nbits, index) = 4
+     */
+
+    uint64_t encrypt(V det, bool imode) const;
     V decrypt(uint64_t ct) const;
     
     void delete_value(V pt);
 
     //Function to tell tree server to insert plaintext pt w/ v, nbits
     void insert(uint64_t v, uint64_t nbits, uint64_t index, V pt, V det) const;
+
 
 private:
     V block_decrypt(V ct) const;

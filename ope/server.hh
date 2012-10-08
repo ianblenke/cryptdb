@@ -9,8 +9,9 @@
 
 //Whether to print debugging output or not
 #define DEBUG 0
-#define DEBUG_COMM 1
+#define DEBUG_COMM 0
 #define DEBUG_BTREE 0
+#define MALICIOUS 1
 
 
 const int N = 4;
@@ -62,7 +63,9 @@ public:
     //int global_version;
     int num_rebalances;
 
+#if MALICIOUS
     RootTracker tracker;
+#endif
 
 
 /////////TO DOOOOO: Switch index to int, no need for uint64_t
@@ -78,10 +81,12 @@ public:
     table_storage lookup(EncT xct);
 
     std::map<EncT, table_storage > ope_table;
+    std::map<EncT, int> ref_table;
     void update_ope_table(tree_node<EncT>* node, table_storage base);
     void update_db(table_storage old_entry, table_storage new_entry);
     void delete_db(table_storage del_entry);
     void clear_db_version();
+
 
     std::vector<EncT> flatten(tree_node<EncT>* node);
     tree_node<EncT>* rebuild(std::vector<EncT> key_list);
@@ -96,12 +101,12 @@ public:
     tree();
     ~tree();
 
-
     bool test_tree(tree_node<EncT>* cur_node);
 
     bool test_node(tree_node<EncT>* cur_node);
 
     bool test_vals(tree_node<EncT>* cur_node, EncT low, EncT high);
+
 
 };
 

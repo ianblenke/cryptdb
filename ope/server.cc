@@ -87,6 +87,8 @@ tree<EncT>::tree(){
     //global_version=0;
     num_rebalances=0;
 
+#if MALICIOUS
+    
     Node::m_failure.invalidate();
 
     Node::m_failure.m_key = "";
@@ -96,6 +98,8 @@ tree<EncT>::tree(){
     Node* root_ptr = new Node(tracker);
     tracker.set_root(null_ptr, root_ptr);
 
+#endif
+    
     dbconnect =new Connect( "localhost", "root", "letmein","cryptdb", 3306);	
 }
 
@@ -483,12 +487,14 @@ tree<EncT>::delete_index(uint64_t v, uint64_t nbits, uint64_t index){
     s << deleted_val;
     string delval_str = s.str();
 
+#if MALICIOUS
     Elem desired;
     desired.m_key = delval_str;
     UpdateMerkleProof dmp;
     /*bool deleted = */tracker.get_root()->tree_delete(desired, dmp);
 
     //Test merkle delete
+
     Node * last;
     Elem result = tracker.get_root()->search(desired, last);
     assert_s(result == Node::m_failure, "found element that should have been deleted");		
@@ -505,6 +511,10 @@ tree<EncT>::delete_index(uint64_t v, uint64_t nbits, uint64_t index){
     s<<dmp;
 
     if(DEBUG_BTREE) cout<<"Delete dmp="<<dmp<<endl;
+
+    if(DEBUG_BTREE) cout<<"Delete msg="<<s.str()<<endl;
+#endif
+
     if(root==NULL) return s.str();
 	
     if(num_nodes<alpha*max_size){
@@ -512,8 +522,9 @@ tree<EncT>::delete_index(uint64_t v, uint64_t nbits, uint64_t index){
 	rebalance(root);
 	max_size=num_nodes;
     }
-    if(DEBUG_BTREE) cout<<"Delete msg="<<s.str()<<endl;
+
     return s.str();
+
 }
 
 //v should just be path to node, not including index. swap indicates whether val being deleted was swapped, should be false for top-lvl call
@@ -720,11 +731,14 @@ tree<EncT>::insert(uint64_t v, uint64_t nbits, uint64_t index, EncT encval){
     s << encval;
     string encval_str = s.str();
 
+
+#if MALICIOUS
     Elem elem;
     elem.m_key = encval_str;
     elem.m_payload = encval_str+" hi you";
     UpdateMerkleProof imp;
     tracker.get_root()->tree_insert(elem, imp);
+
 
     //Test merkle tree
     Elem desired;
@@ -743,9 +757,12 @@ tree<EncT>::insert(uint64_t v, uint64_t nbits, uint64_t index, EncT encval){
     s<<merkle_root<<" hash_end ";
     s<<imp;
 
+
     if(DEBUG_BTREE) cout<<"Insert merkle hash="<<merkle_root<<endl;
     if(DEBUG_BTREE) cout<<"Insert imp="<<imp<<endl;
     if(DEBUG_BTREE) cout<<"Insert msg="<<s.str()<<endl;
+#endif
+
 
     double height= (double) path.size();
 
@@ -1011,6 +1028,7 @@ template class tree<uint16_t>;
 
 template<class EncT>
 void handle_client(void* lp, tree<EncT>* s){
+
     int *csock = (int*) lp;
 
     cout<<"Call to handle_client!"<<endl;
@@ -1041,11 +1059,19 @@ void handle_client(void* lp, tree<EncT>* s){
 	    break;
 	}else if(func_d==1) {
 	    //Lookup using OPE table
+	    bool imode;
+	    iss>>imode;
+	    cout<<imode<<endl;
 	    uint64_t blk_encrypt_pt;
 	    iss>>blk_encrypt_pt;
 	    if(DEBUG_COMM) cout<<"Blk_encrypt_pt: "<<blk_encrypt_pt<<endl;
 	    //Do tree lookup
 	    table_storage table_rslt = s->lookup((uint64_t) blk_encrypt_pt);
+
+	    if(imode && table_rslt.v!=(uint64_t)-1 && table_rslt.pathlen!=(uint64_t)-1 && table_rslt.index!=(uint64_t)-1){
+		s->ref_table[blk_encrypt_pt]+=1;
+	    }
+
 	    if(DEBUG_COMM) cout<<"Rtn b/f ostringstream: "<<table_rslt.v<<" : "<<table_rslt.pathlen<<" : "<<table_rslt.index<<endl;
 	    //Construct response
 	    o<<table_rslt.v<<" "<<table_rslt.pathlen<<" "<<table_rslt.index;
@@ -1076,6 +1102,7 @@ void handle_client(void* lp, tree<EncT>* s){
 		if(DEBUG_BTREE) cout<<"xct_vec "<<i<<"="<<xct_vec[i]<<endl;
 	    }
 	    o<<"; ";
+#if MALICIOUS        
 	    for(int i=0; i<(int) xct_vec.size(); i++){
 		stringstream pss;
 		pss<<xct_vec[i];
@@ -1091,7 +1118,7 @@ void handle_client(void* lp, tree<EncT>* s){
 		pss.str("");
 		pss.clear();
 	    }
-
+#endif
 	    rtn_str=o.str();
 	    if(rtn_str.size()>10240){
 		cout<<"Message too long!"<<endl;
@@ -1106,7 +1133,7 @@ void handle_client(void* lp, tree<EncT>* s){
 	    iss>>nbits;
 	    iss>>index;
 	    iss>>blk_encrypt_pt;
-	    //Insert...need not send response
+                
 	    if(DEBUG_COMM) cout<<"Trying insert("<<v<<", "<<nbits<<", "<<index<<", "<<blk_encrypt_pt<<")"<<endl;
 	    string proof = s->insert(v, nbits, index, blk_encrypt_pt);
 	    if(proof.size()>10240){
@@ -1114,6 +1141,7 @@ void handle_client(void* lp, tree<EncT>* s){
 		exit(-1);
 	    }
 	    if(DEBUG_COMM) cout<<proof<<endl;
+	    s->ref_table[blk_encrypt_pt]=1;
 	    send(*csock, proof.c_str(), proof.size(),0);
 	}else if(func_d==4){
 	    uint64_t v, nbits, index;
@@ -1152,7 +1180,7 @@ void handle_client(void* lp, tree<EncT>* s){
 	}
 
     }
-    free(csock);
+
 }
 
 
@@ -1194,21 +1222,23 @@ int main(int argc, char **argv){
     cerr<<"Listening \n";
 
     socklen_t addr_size=sizeof(sockaddr_in);
-    int* csock;
+    int csock;
     struct sockaddr_in sadr;
     int i=10;
     //Handle 1 client b/f quiting (can remove later)
     while(i>0){
 	cerr<<"Listening..."<<endl;
-	csock = (int*) malloc(sizeof(int));
-	if((*csock = accept(hsock, (struct sockaddr*) &sadr, &addr_size))!=-1){
+	if((csock = accept(hsock, (struct sockaddr*) &sadr, &addr_size))!=-1){
 	    //Pass connection and messages received to handle_client
-	    handle_client((void*)csock,server);
+	    handle_client((void*) &csock,server);
 	}
 	else{
 	    cout<<"Error accepting!"<<endl;
+	    exit(-1);
 	}
+	close(csock);
 	//i--;
+
     }
     cerr<<"Done with server, closing now\n";
     close(hsock);
