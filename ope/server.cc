@@ -96,14 +96,14 @@ tree<EncT>::tree(){
     Node* root_ptr = new Node(tracker);
     tracker.set_root(null_ptr, root_ptr);
 
-    dbconnect =new Connect( "localhost", "frank", "passwd","cryptdb", 3306);	
+    dbconnect =new Connect( "localhost", "root", "letmein","cryptdb", 3306);	
 }
 
 
 template<class EncT>
 tree<EncT>::~tree(){
-    	delete_nodes(root);
-		delete root;
+    delete_nodes(root);
+    delete root;
 }
 
 /****************************/
@@ -136,14 +136,14 @@ template<class EncT>
 tree_node<EncT>* 
 tree<EncT>::rebuild(vector<EncT> key_list){
     //Avoid building a node without any values
-    if(key_list.size()==0) return NULL;
+    if (key_list.size()==0) {return NULL;}
 
     tree_node<EncT>* rtn_node = new tree_node<EncT>();
 
-    if((int) key_list.size()<N){
+    if ((int) key_list.size()<N){
 	//Remaining keys fit in one node, return that node
 	rtn_node->keys=key_list;
-    }else{
+    } else {
 	//Borders to divide key_list by
 	double base = ((double) key_list.size())/ ((double) N);
 
@@ -152,19 +152,19 @@ tree<EncT>::rebuild(vector<EncT> key_list){
 	    rtn_node->keys.push_back(key_list[floor(i*base)]);
 	}
 	//Handle the subvector rebuilding except for the first and last
-	for(int i=1; i<N-1; i++){
+	for (int i=1; i<N-1; i++){
 	    vector<EncT> subvector;
 	    for(int j=floor(i*base)+1; j<floor((i+1)*base); j++){
 		subvector.push_back(key_list[j]);
 	    }
 	    tree_node<EncT>* tmp_child = rebuild(subvector);
-	    if(tmp_child!=NULL){
+	    if (tmp_child!=NULL){
 		rtn_node->right[key_list[floor(i*base)]]=tmp_child;
 	    }
 	}
 	//First subvector rebuilding special case
 	vector<EncT> subvector;
-	for(int j=0; j<floor(base); j++){
+	for (int j=0; j<floor(base); j++){
 	    subvector.push_back(key_list[j]);
 	}
 	tree_node<EncT>* tmp_child = rebuild(subvector);
@@ -275,8 +275,8 @@ tree<EncT>::update_db(table_storage old_entry, table_storage new_entry){
     uint64_t old_v, old_nbits;/*, old_version;*/
     uint64_t new_v, new_nbits;/*, new_version;*/
 
-    old_v=(old_entry.v << num_bits) | old_entry.index;
-    old_nbits=old_entry.pathlen+num_bits;
+    old_v = (old_entry.v << num_bits) | old_entry.index;
+    old_nbits = old_entry.pathlen + num_bits;
     //old_version=old_entry.version;
 
     new_v=(new_entry.v << num_bits) | new_entry.index;
@@ -321,12 +321,12 @@ void
 tree<EncT>::update_ope_table(tree_node<EncT> *node, table_storage base){
 
     table_storage old_table_entry;
-    for(int i=0; i< (int) node->keys.size(); i++){
+    for(int i = 0; i < (int) node->keys.size(); i++){
 	table_storage tmp = base;
-	tmp.index=i;
+	tmp.index = i;
 	//tmp.version=global_version;
 
-	old_table_entry=ope_table[node->keys[i]];
+	old_table_entry = ope_table[node->keys[i]];
 
 	ope_table[node->keys[i]] = tmp;
 	update_db(old_table_entry, tmp);
@@ -338,7 +338,7 @@ tree<EncT>::update_ope_table(tree_node<EncT> *node, table_storage base){
 	tmp.index=0;
 	update_ope_table(node->right[(EncT) NULL], tmp);
     }
-    for(int i=0; i< (int) node->keys.size(); i++){
+    for(int i = 0; i < (int) node->keys.size(); i++){
 	if(node->key_in_map(node->keys[i])){
 	    table_storage tmp = base;
 	    tmp.v = tmp.v<<num_bits | (i+1);
@@ -422,7 +422,7 @@ tree<EncT>::findScapegoat( vector<tree_node<EncT>* > path ){
 }
 
 template<class EncT>
-struct successor{
+struct successor {
     uint64_t succ_v;
     uint64_t succ_nbits;
     tree_node<EncT>* succ_node;
@@ -520,8 +520,8 @@ tree<EncT>::delete_index(uint64_t v, uint64_t nbits, uint64_t index){
 template<class EncT>
 EncT
 tree<EncT>::tree_delete(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint64_t index, uint64_t pathlen, bool swap){
-    if(DEBUG) cout<<"Calling tree_delete with "<<v<< " "<<nbits<<" "<<index<<endl;
-    if(nbits==0){
+    if (DEBUG) cout<<"Calling tree_delete with "<<v<< " "<<nbits<<" "<<index<<endl;
+    if (nbits == 0){
 	EncT del_val = node->keys[index];
 	if(node->right.empty()){
 	    //Value is being deleted from a leaf node

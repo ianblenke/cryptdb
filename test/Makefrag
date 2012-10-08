@@ -3,17 +3,21 @@ OBJDIRS	+= test
 #TEST_SRCS   :=  TestCrypto.cc test_utils.cc \
 #	    	test.cc TestProxy.cc \
 #		TestAccessManager.cc TestQueries.cc
-TEST_SRCS   :=  test_utils.cc \
-	    	    test.cc \
-		        TestAccessManager.cc TestQueries.cc
-        
-all:	$(OBJDIR)/test/test
+TEST_SRCS   :=  TestCrypto.cc \
+		test_searchtree.cc 
 
-TEST_OBJS := $(patsubst %.cc,$(OBJDIR)/test/%.o,$(TEST_SRCS))
-$(OBJDIR)/test/test: $(TEST_OBJS) \
-		     $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbcrypto.so \
-		     $(OBJDIR)/libedbcrypto2.so $(OBJDIR)/libedbutil.so $(OBJDIR)/libedbparser.so
-	$(CXX) -o $@ $(TEST_OBJS) $(LDFLAGS) \
-	       -lcryptdb -ledbcrypto -ledbcrypto2 -ledbutil -ledbparser
+		
+all:	$(OBJDIR)/test/test_searchtree
+$(OBJDIR)/test/test_searchtree: $(OBJDIR)/test/test_searchtree.o $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbutil.so $(OBJDIR)/libope.so
+	$(CXX) $< -o $@ $(LDFLAGS) -ledbutil -lope -lcryptdb
+
+#all:	$(OBJDIR)/test/test
+
+#TEST_OBJS := $(patsubst %.cc,$(OBJDIR)/test/%.o,$(TEST_SRCS))
+#$(OBJDIR)/test/test: $(TEST_OBJS) \
+#		     $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbcrypto.so \
+#		     $(OBJDIR)/libedbcrypto2.so $(OBJDIR)/libedbutil.so $(OBJDIR)/libedbparser.so
+#	$(CXX) -o $@ $(TEST_OBJS) $(LDFLAGS) \
+#	       -lcryptdb -ledbcrypto -ledbcrypto2 -ledbutil -ledbparser
 
 # vim: set noexpandtab:

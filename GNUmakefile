@@ -53,6 +53,7 @@ include edb/Makefrag
 include util/Makefrag
 include ope/Makefrag
 include udf/Makefrag
+include test/Makefrag
 
 $(OBJDIR)/.deps: $(foreach dir, $(OBJDIRS), $(wildcard $(OBJDIR)/$(dir)/*.d))
 	@mkdir -p $(@D)

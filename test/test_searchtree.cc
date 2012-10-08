@@ -2,7 +2,7 @@
  * Tests search trees, AVL, scapegoat, binary, nway.
  */
 
-#include "btree.hh"
+#include "ope/btree.hh"
 #include <sstream>
 #include <vector>
 #include <algorithm>
