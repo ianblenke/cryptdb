@@ -4,6 +4,7 @@
 #include <string.h>
 #include <util/util.hh>
 #include <errno.h>
+#include <util/net.hh>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
@@ -102,23 +103,20 @@ long long ope_enc(UDF_INIT *initid, UDF_ARGS *args,
 
     mask=make_mask();
 
-    int host_port; 
-    string host_name; 
-
     int hsock;
-    struct sockaddr_in my_addr;
+
     int counter = 0;
     while (counter < 2) {
 	counter++;
 
-	hsock = create_and_connect("127.0.0.1", OPE_SERVER_PORT);
+	hsock = create_and_connect(OPE_SERVER_HOST, OPE_SERVER_PORT);
 	
         char buffer[1024];
     
         memset(buffer, '\0', 1024);
 
         ostringstream o;
-        o<<"1 "<<imode<<" "<<det_val;
+        o << "1 " << imode << " " << det_val;
         string msg = o.str();
         send(hsock, msg.c_str(), msg.size(), 0);
         recv(hsock, buffer, 1024, 0);
@@ -127,10 +125,12 @@ long long ope_enc(UDF_INIT *initid, UDF_ARGS *args,
         uint64_t nbits = 0;
 
         istringstream iss(buffer);
-        iss>>early_v;
-        iss>>early_pathlen;
-        iss>>early_index;
-        close(hsock);
+        iss >> early_v;
+        iss >> early_pathlen;
+	iss >> early_index;
+
+	close(hsock);
+	
         if(early_v!=(uint64_t)-1 && early_pathlen!=(uint64_t)-1 && early_index!=(uint64_t)-1){
             cerr<<"In early return"<<endl;
             v = early_v;
@@ -141,24 +141,9 @@ long long ope_enc(UDF_INIT *initid, UDF_ARGS *args,
             return (v<<(64-nbits)) | (mask<<(64-num_bits-nbits));
         }else{
             cerr<<"No early return, must insert"<<endl;
-            host_port = 1112;
-            host_name = "127.0.0.1";
-
-	    hsock = crate_and_connect(host_name, OPE_CLIENT_PORT);
-	    
-            hsock = socket(AF_INET, SOCK_STREAM,0);
-            if(hsock==-1) cout<<"Error initializing socket!"<<endl;
             
-
-            my_addr.sin_family = AF_INET;
-            my_addr.sin_port = htons(host_port);
-            memset(&(my_addr.sin_zero),0, 8);
-            my_addr.sin_addr.s_addr = inet_addr(host_name.c_str());
-
-            if(connect(hsock, (struct sockaddr*) &my_addr, sizeof(my_addr))<0){
-                assert_s(false, "Connect failed!");
-            }
-
+	    hsock = create_and_connect(OPE_CLIENT_HOST, OPE_CLIENT_PORT);
+	    
             memset(buffer, '\0', 1024);
 
             ostringstream o_client;
@@ -180,16 +165,20 @@ long long ope_enc(UDF_INIT *initid, UDF_ARGS *args,
             iss >> output;
             cerr<<"Output = "<<output<<endl;
             if (output=="DONE") {
+		
                 if(!imode) cerr<<"Output done but imode = false"<<endl;
                 cerr<<"Received done!"<<endl;
-            } else if(output=="15"){
-                if(imode) cerr<<"Output 15 but imode = true"<<endl;
+
+	    } else if(output=="15"){
+
+		if(imode) cerr<<"Output 15 but imode = true"<<endl;
                 cerr<<"In 15 waa??"<<endl;
                 uint64_t ope_rtn;
                 iss>>ope_rtn;
                 cout<<"Return ope_rtn="<<ope_rtn<<endl;
                 close(hsock);
                 return ope_rtn;
+		
             } else {
                 cerr<<"Received weird string: "<<buffer<<endl;
             }
