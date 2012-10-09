@@ -337,6 +337,9 @@ public:
 
   db_elem filter(const db_elem& mask) const;
 
+  db_elem min() const;
+  db_elem max() const;
+
   bool empty_mask() const;
 
 private:

@@ -270,3 +270,21 @@ private:
 
   std::string _name;
 };
+
+class min_node : public expr_node {
+public:
+  min_node(expr_node *child) : expr_node({child}) {}
+  virtual db_elem eval(exec_context& ctx)
+  {
+    return first_child()->eval(ctx).min();
+  }
+};
+
+class max_node : public expr_node {
+public:
+  max_node(expr_node *child) : expr_node({child}) {}
+  virtual db_elem eval(exec_context& ctx)
+  {
+    return first_child()->eval(ctx).max();
+  }
+};

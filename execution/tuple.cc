@@ -177,6 +177,30 @@ db_elem::filter(const db_elem& mask) const
   return db_elem(elems);
 }
 
+db_elem
+db_elem::min() const
+{
+  requireType(TYPE_VECTOR);
+  if (_elems.empty()) throw no_data_exception("min on empty vector");
+  db_elem ret = _elems[0];
+  for (auto it = _elems.begin() + 1; it != _elems.end(); ++it)
+    if ((*it) < ret)
+      ret = *it;
+  return ret;
+}
+
+db_elem
+db_elem::max() const
+{
+  requireType(TYPE_VECTOR);
+  if (_elems.empty()) throw no_data_exception("min on empty vector");
+  db_elem ret = _elems[0];
+  for (auto it = _elems.begin() + 1; it != _elems.end(); ++it)
+    if ((*it) > ret)
+      ret = *it;
+  return ret;
+}
+
 bool
 db_elem::empty_mask() const
 {
