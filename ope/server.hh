@@ -8,10 +8,10 @@
 #include "btree.hh"
 
 //Whether to print debugging output or not
-#define DEBUG 0
-#define DEBUG_COMM 0
+#define DEBUG 1
+#define DEBUG_COMM 1
 #define DEBUG_BTREE 0
-#define MALICIOUS 1
+#define MALICIOUS 0
 
 
 const int N = 4;

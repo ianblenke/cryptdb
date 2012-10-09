@@ -14,7 +14,7 @@ void test_order(int num_vals, int order);
 
 int main(){
 
-    test_order(325,0);
+    test_order(10,0);
 
     blowfish* bc = new blowfish("frankli714");
 
@@ -64,7 +64,7 @@ void test_order(int num_vals, int order){
     blowfish* bc = new blowfish("frankli714");
 
     Connect * dbconnect;
-    dbconnect = new Connect( "localhost", "frank", "passwd","cryptdb", 3306);
+    dbconnect = new Connect( "localhost", "root", "letmein","cryptdb", 3306);
     vector<uint64_t> inserted_vals;
 
     int count = 0;

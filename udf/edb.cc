@@ -82,9 +82,10 @@ void ope_enc_deinit(UDF_INIT *initid){
 
 long long ope_enc(UDF_INIT *initid, UDF_ARGS *args,
     char *is_null, char *error){
+    
     long long det_val;
-    det_val = *((long long*) args->args[0]);
 
+    det_val = *((long long*) args->args[0]);
 
     cerr << "inside UDF \n";
 
@@ -92,9 +93,9 @@ long long ope_enc(UDF_INIT *initid, UDF_ARGS *args,
     mode = *((char*) args->args[1]);
 
     bool imode;
-    if(mode=='i'){
+    if (mode=='i'){
         imode=true;
-    }else{
+    } else {
         imode=false;
     }
     cerr<<"mode: "<<mode<<" imode: "<<imode<<endl;
@@ -106,7 +107,10 @@ long long ope_enc(UDF_INIT *initid, UDF_ARGS *args,
 
     int hsock;
     struct sockaddr_in my_addr;
-    while(true){
+    int counter = 0;
+    while (counter < 2) {
+	counter++;
+	
         host_port = 1111;
         host_name = "127.0.0.1";
         hsock = socket(AF_INET, SOCK_STREAM,0);
@@ -118,8 +122,8 @@ long long ope_enc(UDF_INIT *initid, UDF_ARGS *args,
         memset(&(my_addr.sin_zero),0, 8);
         my_addr.sin_addr.s_addr = inet_addr(host_name.c_str());
 
-        if(connect(hsock, (struct sockaddr*) &my_addr, sizeof(my_addr))<0){
-            cerr<<"Connect Failed!!"<<endl;
+        if (connect(hsock, (struct sockaddr*) &my_addr, sizeof(my_addr))<0){
+            assert_s(false, "Connect Failed!!");
         }
 
         char buffer[1024];
@@ -163,26 +167,33 @@ long long ope_enc(UDF_INIT *initid, UDF_ARGS *args,
             my_addr.sin_addr.s_addr = inet_addr(host_name.c_str());
 
             if(connect(hsock, (struct sockaddr*) &my_addr, sizeof(my_addr))<0){
-                cout<<"Connect failed!"<<endl;
+                assert_s(false, "Connect failed!");
             }
 
             memset(buffer, '\0', 1024);
 
             ostringstream o_client;
-            if(imode) o_client<<"14 "<<det_val;
-            else o_client<<"15 "<<det_val;
+            if (imode) {
+		o_client<<"14 "<<det_val;
+	    }
+            else {
+		o_client<<"15 "<<det_val;
+	    }
+	    
             string client_msg = o_client.str();
             send(hsock, client_msg.c_str(), client_msg.size(), 0);
-            recv(hsock, buffer, 1024, 0); 
+	    cerr << "before waiting for receive\n";
+	    recv(hsock, buffer, 1024, 0);
+	    cerr << "after waiting for receive\n";
             istringstream iss(buffer);
-            cerr<<"Buffer for "<<det_val<<" is "<<buffer<<endl;
+            cerr << "Buffer for " << det_val << " is " << buffer << endl;
             string output;
-            iss>>output;
+            iss >> output;
             cerr<<"Output = "<<output<<endl;
-            if(output=="DONE"){
+            if (output=="DONE") {
                 if(!imode) cerr<<"Output done but imode = false"<<endl;
                 cerr<<"Received done!"<<endl;
-            }else if(output=="15"){
+            } else if(output=="15"){
                 if(imode) cerr<<"Output 15 but imode = true"<<endl;
                 cerr<<"In 15 waa??"<<endl;
                 uint64_t ope_rtn;
@@ -190,12 +201,15 @@ long long ope_enc(UDF_INIT *initid, UDF_ARGS *args,
                 cout<<"Return ope_rtn="<<ope_rtn<<endl;
                 close(hsock);
                 return ope_rtn;
-            }else{
+            } else {
                 cerr<<"Received weird string: "<<buffer<<endl;
             }
             close(hsock);
         }        
     }
+
+    assert_s(false, "should not have returned from the while\n");
+    return -1;
 
 }
 
