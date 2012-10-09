@@ -2,7 +2,7 @@
 
 #include <algorithm>
 #include <vector>
-#include <net.hh>
+#include <ope/net.hh>
 #include <cmath>
 #include <stdint.h>
 #include <iostream>

@@ -449,25 +449,8 @@ int main(){
     mask=make_mask();
 
     //Socket connection
-    int host_port = 1112;
-    int hsock = socket(AF_INET, SOCK_STREAM, 0);
-    if(hsock ==-1){
-	cout<<"Error initializing socket"<<endl;
-    }
-    cerr<<"Init socket \n";
-    struct sockaddr_in my_addr;
-    my_addr.sin_family = AF_INET;
-    my_addr.sin_port = htons(host_port);
-    memset(&(my_addr.sin_zero), 0, 8);
-    my_addr.sin_addr.s_addr = INADDR_ANY;
-
-    cerr<<"Sockaddr \n";
-    //Bind to socket
-    int bind_rtn = bind(hsock, (struct sockaddr*) &my_addr, sizeof(my_addr));
-    if(bind_rtn<0){
-	cerr<<"Error binding to socket"<<endl;
-    }
-    cerr<<"Bind \n";
+    int hsock = create_and_bind(OPE_CLIENT_PORT);
+    
     //Start listening
     int listen_rtn = listen(hsock, 10);
     if(listen_rtn<0){

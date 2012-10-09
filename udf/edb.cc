@@ -110,22 +110,9 @@ long long ope_enc(UDF_INIT *initid, UDF_ARGS *args,
     int counter = 0;
     while (counter < 2) {
 	counter++;
+
+	hsock = create_and_connect("127.0.0.1", OPE_SERVER_PORT);
 	
-        host_port = 1111;
-        host_name = "127.0.0.1";
-        hsock = socket(AF_INET, SOCK_STREAM,0);
-        if(hsock==-1) cerr<<"Error initializing socket!"<<endl;
-        
-
-        my_addr.sin_family = AF_INET;
-        my_addr.sin_port = htons(host_port);
-        memset(&(my_addr.sin_zero),0, 8);
-        my_addr.sin_addr.s_addr = inet_addr(host_name.c_str());
-
-        if (connect(hsock, (struct sockaddr*) &my_addr, sizeof(my_addr))<0){
-            assert_s(false, "Connect Failed!!");
-        }
-
         char buffer[1024];
     
         memset(buffer, '\0', 1024);
@@ -157,6 +144,8 @@ long long ope_enc(UDF_INIT *initid, UDF_ARGS *args,
             host_port = 1112;
             host_name = "127.0.0.1";
 
+	    hsock = crate_and_connect(host_name, OPE_CLIENT_PORT);
+	    
             hsock = socket(AF_INET, SOCK_STREAM,0);
             if(hsock==-1) cout<<"Error initializing socket!"<<endl;
             
