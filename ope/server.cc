@@ -1193,27 +1193,8 @@ int main(int argc, char **argv){
     //Construct new server with new tree
     tree<uint64_t>* server = new tree<uint64_t>();
 
-    cerr<<"Made a server \n";
-    //Socket connection
-    int host_port = 1111;
-    int hsock = socket(AF_INET, SOCK_STREAM, 0);
-    if(hsock ==-1){
-	cout<<"Error initializing socket"<<endl;
-    }
-    cerr<<"Init socket \n";
-    struct sockaddr_in my_addr;
-    my_addr.sin_family = AF_INET;
-    my_addr.sin_port = htons(host_port);
-    memset(&(my_addr.sin_zero), 0, 8);
-    my_addr.sin_addr.s_addr = INADDR_ANY;
+    int hsock = create_and_bind(OPE_SERVER_PORT);
 
-    cerr<<"Sockaddr \n";
-    //Bind to socket
-    int bind_rtn = bind(hsock, (struct sockaddr*) &my_addr, sizeof(my_addr));
-    if(bind_rtn<0){
-	cerr<<"Error binding to socket"<<endl;
-    }
-    cerr<<"Bind \n";
     //Start listening
     int listen_rtn = listen(hsock, 10);
     if(listen_rtn<0){
@@ -1224,13 +1205,14 @@ int main(int argc, char **argv){
     socklen_t addr_size=sizeof(sockaddr_in);
     int csock;
     struct sockaddr_in sadr;
+    
     int i=10;
     //Handle 1 client b/f quiting (can remove later)
     while(i>0){
 	cerr<<"Listening..."<<endl;
-	if((csock = accept(hsock, (struct sockaddr*) &sadr, &addr_size))!=-1){
+	if ((csock = accept(hsock, (struct sockaddr*) &sadr, &addr_size))!=-1){
 	    //Pass connection and messages received to handle_client
-	    handle_client((void*) &csock,server);
+	    handle_client((void*) &csock, server);
 	}
 	else{
 	    cout<<"Error accepting!"<<endl;

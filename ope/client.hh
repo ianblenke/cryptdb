@@ -1,3 +1,5 @@
+#pragma once
+
 #include <algorithm>
 #include <vector>
 #include <cmath>
@@ -8,13 +10,9 @@
 #include <time.h>
 #include <stdlib.h>
 #include <sstream>
+#include <ope/net.hh>
 #include <stdio.h>
 #include <string.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <arpa/inet.h>
-#include <unistd.h>
-#include <resolv.h>
 #include <sys/types.h>
 #include <edb/Connect.hh>
 #include <crypto/blowfish.hh>
