@@ -1026,6 +1026,44 @@ template class tree<uint64_t>;
 template class tree<uint32_t>;
 template class tree<uint16_t>;
 
+
+template<class EncT>
+Response * dispatch(void *lp, tree<EncT> *s) {
+    int *csock = (int *)lp;
+
+    uint buflen = 10240;
+    char buffer[buflen];
+    memset(buffer, 0, buflen);
+
+    recv(*csock, buffer, buflen, 0);
+
+    if (DEBUG_COMM) {cerr << "received msg " << buffer << endl;}
+
+    istringstream iss(buffer);
+    
+    MsgType msgtype;
+    iss >> msgtype;
+
+    if (DEBUG_COMM) {cerr << "message type is " << mtnames[msgtype] << endl;}
+
+    Response * r = 0;
+
+    string rtn_str;
+
+    switch (msgtype) {
+    case ENC_INS: {
+	return handle_enc_ins();
+    }
+    case QUERY: {
+	UINPLEMENTED;
+    }
+    default: 
+    }
+
+    assert_s(false, "invalid message type in dispatch");
+    
+}
+
 template<class EncT>
 void handle_client(void* lp, tree<EncT>* s){
 
@@ -1212,7 +1250,7 @@ int main(int argc, char **argv){
 	cerr<<"Listening..."<<endl;
 	if ((csock = accept(hsock, (struct sockaddr*) &sadr, &addr_size))!=-1){
 	    //Pass connection and messages received to handle_client
-	    handle_client((void*) &csock, server);
+	    dispatch((void*) &csock, server);
 	}
 	else{
 	    cout<<"Error accepting!"<<endl;

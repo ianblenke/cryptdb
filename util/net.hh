@@ -25,5 +25,22 @@ create_and_bind(int host_port);
 int
 create_and_connect(std::string host_name, int host_port);
 
-// network message types
-typedef enum MsgType {UDF_ENC, START_INTERACT};
+
+#define MsgType(m)    \
+    m(ENC_INS)		   \
+    m(QUERY)            
+    
+typedef enum class MsgType {
+#define __temp_m(n) n,
+MsgType(__temp_m)
+#undef __temp_m
+} MsgType;
+
+//TODO: what is seclevel_last needed for?
+
+const std::string mtnames[] = {
+#define __temp_m(n) #n,
+MsgType(__temp_m)
+#undef __temp_m
+};
+
