@@ -774,7 +774,8 @@ public:
       normal_vldb_col_pack_no_precomputation,
       normal_vldb_col_pack_with_precomputation,
 
-      monomi,
+      monomi, // opt design
+      monomi_with_det, // opt design + det for all columns
   };
 
   static vector<datatypes> Schema;
@@ -785,6 +786,7 @@ public:
 
   static vector<int> VldbPrecomputeOnions;
   static vector<int> MonomiOnions;
+  static vector<int> MonomiWithDetOnions;
 
   lineitem_encryptor(enum opt_type tpe)
     : tpe(tpe) {
@@ -819,6 +821,12 @@ public:
 
       case monomi:
         onions = MonomiOnions;
+        usenull = false;
+        processrow = true;
+        break;
+
+      case monomi_with_det:
+        onions = MonomiWithDetOnions;
         usenull = false;
         processrow = true;
         break;
@@ -1235,6 +1243,7 @@ protected:
     switch (tpe) {
       case opt_type::normal:
       case opt_type::monomi:
+      case opt_type::monomi_with_det:
         {
           // l_shipdate's year
           const string& l_shipdate = tokens[lineitem::l_shipdate];
@@ -1537,6 +1546,29 @@ vector<int> lineitem_encryptor::MonomiOnions = {
   ONION_OPEJOIN,
   ONION_OPEJOIN,
   ONION_OPEJOIN,
+
+  ONION_DET,
+  ONION_DET,
+  ONION_DET,
+};
+
+vector<int> lineitem_encryptor::MonomiWithDetOnions = {
+  ONION_DETJOIN,
+  ONION_DETJOIN,
+  ONION_DETJOIN,
+  ONION_DETJOIN,
+
+  ONION_DET | ONION_OPE,
+  ONION_DET,
+  ONION_DET | ONION_OPE,
+  ONION_DET,
+
+  ONION_DET,
+  ONION_DET,
+
+  ONION_DET | ONION_OPEJOIN,
+  ONION_DET | ONION_OPEJOIN,
+  ONION_DET | ONION_OPEJOIN,
 
   ONION_DET,
   ONION_DET,
@@ -1937,6 +1969,9 @@ static const vector<int> RegionOnions = {
 // physical database designer. they correspond directly to the
 // *_enc_cryptdb_opt schemas, in the vldb-exp-schemas/cryptdb-opt/*-enc.sql
 // files
+//
+// the *-monomi-with-det are the ones in
+// vldb-exp-schemas/cryptdb-opt-with-det/*-enc.sql
 static map<string, table_encryptor *> EncryptorMap = {
 
   // -- lineitem -------------------------------------------------------------
@@ -1955,6 +1990,7 @@ static map<string, table_encryptor *> EncryptorMap = {
   {"lineitem-normal-vldb-col-pack-no-precomputation", new lineitem_encryptor(lineitem_encryptor::normal_vldb_col_pack_no_precomputation)},
 
   {"lineitem-monomi", new lineitem_encryptor(lineitem_encryptor::monomi)},
+  {"lineitem-monomi-with-det", new lineitem_encryptor(lineitem_encryptor::monomi_with_det)},
 
   // -- partsupp -------------------------------------------------------------
 
@@ -1966,26 +2002,31 @@ static map<string, table_encryptor *> EncryptorMap = {
   {"partsupp-row-packed-volume", new partsupp_encryptor(partsupp_encryptor::row_packed_volume)},
 
   {"partsupp-monomi", new partsupp_encryptor(partsupp_encryptor::normal)},
+  {"partsupp-monomi-with-det", new partsupp_encryptor(partsupp_encryptor::normal)},
 
   // -- supplier -------------------------------------------------------------
 
   {"supplier-none", new table_encryptor(SupplierSchema, SupplierOnions, false, true)},
   {"supplier-monomi", new table_encryptor(SupplierSchema, SupplierMonomiOnions, false, true)},
+  {"supplier-monomi-with-det", new table_encryptor(SupplierSchema, SupplierMonomiOnions, false, true)},
 
   // -- nation -------------------------------------------------------------
 
   {"nation-none", new table_encryptor(NationSchema, NationOnions, false, true)},
   {"nation-monomi", new table_encryptor(NationSchema, NationOnions, false, true)},
+  {"nation-monomi-with-det", new table_encryptor(NationSchema, NationOnions, false, true)},
 
   // -- part -------------------------------------------------------------
 
   {"part-none", new table_encryptor(PartSchema, PartOnions, false, true)},
   {"part-monomi", new table_encryptor(PartSchema, PartOnions, false, true)},
+  {"part-monomi-with-det", new table_encryptor(PartSchema, PartOnions, false, true)},
 
   // -- region -------------------------------------------------------------
 
   {"region-none", new table_encryptor(RegionSchema, RegionOnions, false, true)},
   {"region-monomi", new table_encryptor(RegionSchema, RegionOnions, false, true)},
+  {"region-monomi-with-det", new table_encryptor(RegionSchema, RegionOnions, false, true)},
 
   // -- orders -------------------------------------------------------------
 
@@ -1994,6 +2035,7 @@ static map<string, table_encryptor *> EncryptorMap = {
   {"orders-normal-vldb-greedy", new orders_encryptor(orders_encryptor::normal_vldb_greedy)},
 
   {"orders-monomi", new orders_encryptor(orders_encryptor::normal)},
+  {"orders-monomi-with-det", new orders_encryptor(orders_encryptor::normal)},
 
   // -- customer -------------------------------------------------------------
 
@@ -2005,6 +2047,7 @@ static map<string, table_encryptor *> EncryptorMap = {
   {"customer-normal-vldb-col-pack-with-precomputation", new customer_encryptor(customer_encryptor::normal_vldb_col_pack_with_precomputation)},
 
   {"customer-monomi", new customer_encryptor(customer_encryptor::normal)},
+  {"customer-monomi-with-det", new customer_encryptor(customer_encryptor::normal)},
 
 };
 
