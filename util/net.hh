@@ -9,6 +9,7 @@
 #include <resolv.h>
 
 const int OPE_SERVER_PORT = 1111;
+const int OPE_SERVER_PORT2 = 1113;
 const int OPE_CLIENT_PORT = 1112;
 
 const std::string OPE_SERVER_HOST = "127.0.0.1"; // we will need to get these in
@@ -28,8 +29,9 @@ create_and_connect(std::string host_name, int host_port);
 
 #define MsgType(m)    \
     m(ENC_INS)		   \
-    m(QUERY)            
-    
+    m(QUERY)   \
+    m(INTERACT_FOR_LOOKUP)
+
 typedef enum class MsgType {
 #define __temp_m(n) n,
 MsgType(__temp_m)
@@ -44,3 +46,10 @@ MsgType(__temp_m)
 #undef __temp_m
 };
 
+//=========== Message formats ============
+
+// INTERACT_FOR_LOOKUP
+// server sends
+// 1. type,
+// 2. det_val to encrypt,
+// 3. no keys at current node in tree,  det_val of each key 

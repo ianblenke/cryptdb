@@ -40,7 +40,7 @@ struct tree_node
     }
 
     //Returns true if node's right map contains key (only at non-leaf nodes)
-    bool key_in_map(EncT key){
+    bool key_in_map(EncT key){ // R: why this???
 	// FL: EncT is being used as a primitive, so this is fine.
 	typename map<EncT, tree_node *>::iterator it;
 	for(it=right.begin(); it!=right.end(); it++){
@@ -791,7 +791,7 @@ tree<EncT>::tree_insert(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint6
     //End of the insert line, check if you can insert
     //Assumes v and nbits were from a lookup of an insertable node
     if(nbits==0){
-	if(node->keys.size()>N-2) {
+	if(node->keys.size()> N-2) {
 	    cout<<"Insert fail, found full node"<<endl;
 	    exit(1);
 	}else{
@@ -895,22 +895,17 @@ tree<EncT>::lookup(uint64_t v, uint64_t nbits) const
     	throw ope_lookup_failure();
     }
     return n->keys;
-
 }
 
 template<class EncT>
-table_storage
+table_storage *
 tree<EncT>::lookup(EncT xct){
     if(ope_table.find(xct)!=ope_table.end()){
         if(DEBUG) cout <<"Found "<<xct<<" in table with v="<<ope_table[xct].v<<" nbits="<<ope_table[xct].pathlen<<" index="<<ope_table[xct].index<<endl;
-        return ope_table[xct];
+	return &ope_table[xct];
     }
-    table_storage negative;
-    negative.v=-1;
-    negative.pathlen=-1;
-    negative.index=-1;
-    //negative.version=global_version;
-    return negative;
+
+    return NULL;
 }
 
 template<class EncT>
@@ -1026,6 +1021,72 @@ template class tree<uint64_t>;
 template class tree<uint32_t>;
 template class tree<uint16_t>;
 
+template<class EncT>
+string *
+interaction(EncT ciph, uint64_t ope_enc, tree_node<EncT> & node) {
+
+    stringstream msg;
+
+     while (found) {	
+	msg.clear();
+	msg << MsgType::INTERACT_FOR_LOOKUP << " ";
+	msg << ciph << " ";
+	msg << node.keys.size() << " ";
+	for (uint i = 0; i < keys.size(); i++) {
+	    msg << node.keys[i] << " ";
+	}
+
+	char * replyraw = send_receive(sock_cl, msg.str());
+	istringstream reply(replyraw);
+
+	// R: where is left?
+    }
+    
+
+}
+
+template<class EncT>
+string * handle_enc(istringstream & iss, bool do_ins) {
+   
+    uint64_t ciph;
+    iss >> ciph;
+
+    if(DEBUG_COMM) cout<< "ciph: "<< ciph << endl;
+
+    stringstream resp;
+    resp.clear();
+
+    table_storage * ts = s->lookup((uint64_t) ciph, ts);
+    if (ts) { // found in OPE Table
+	if (DEBUG) {cerr << "found in ope table"; }
+	// if this is an insert, increase ref count
+	if (do_ins) {
+	    ts->refcount++;
+	}
+
+	resp << ts->pathlen << " " << v;
+	return new string(resp.str());
+	
+    } else { // not found in OPE Table
+	if (DEBUG) {cerr << "not in ope table \n"; }
+
+	uint64_t ope_enc = interaction(ciph, ope_enc, Node to insert at); 
+
+	continue ..
+
+	// need to tell the client to interact with server
+	// R: how do we know which client
+
+	// now send to client and need to wait on response back
+	
+    }
+
+
+    if(DEBUG_COMM) {cerr << "Rtn b/f ostringstream: " << table_rslt.v<<" : "
+			 << table_rslt.pathlen<<" : " << table_rslt.index<<endl;}
+    
+
+}
 
 template<class EncT>
 Response * dispatch(void *lp, tree<EncT> *s) {
@@ -1052,10 +1113,10 @@ Response * dispatch(void *lp, tree<EncT> *s) {
 
     switch (msgtype) {
     case ENC_INS: {
-	return handle_enc_ins();
+	return handle_enc(iss, true);
     }
     case QUERY: {
-	UINPLEMENTED;
+	return handle_enc(iss, false);
     }
     default: 
     }
@@ -1105,7 +1166,7 @@ void handle_client(void* lp, tree<EncT>* s){
 	    if(DEBUG_COMM) cout<<"Blk_encrypt_pt: "<<blk_encrypt_pt<<endl;
 	    //Do tree lookup
 	    table_storage table_rslt = s->lookup((uint64_t) blk_encrypt_pt);
-
+	    
 	    if(imode && table_rslt.v!=(uint64_t)-1 && table_rslt.pathlen!=(uint64_t)-1 && table_rslt.index!=(uint64_t)-1){
 		s->ref_table[blk_encrypt_pt]+=1;
 	    }
@@ -1117,7 +1178,7 @@ void handle_client(void* lp, tree<EncT>* s){
 	    if(DEBUG_COMM) cout<<"Rtn_str : "<<rtn_str<<endl;
 	    send(*csock, rtn_str.c_str(), rtn_str.size(),0);
 	    break;
-	}else if(func_d==2){
+	} else if (func_d==2){
 	    //Lookup w/o table, using v and nbits
 	    uint64_t v, nbits;
 	    iss>>v;

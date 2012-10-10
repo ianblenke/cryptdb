@@ -12,10 +12,11 @@
 #include <util/ope-util.hh>
 
 
-struct table_storage{
-    uint64_t v;
-    uint64_t pathlen;
-    uint64_t index;
+// OPE encoding v||index|| 
+struct table_storage {
+    uint64_t v; // v should now be everything
+  
+    uint64_t refcount;
     //int version;
 };
 
