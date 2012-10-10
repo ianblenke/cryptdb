@@ -13,13 +13,11 @@ ffsl(uint64_t ct)
     return (bit+num_bits-1);
 }
 
-void handle_udf(void* lp){
+void handle_server(void* lp, blowfish* bc){
     cout<<"Called handle_udf"<<endl;
     int* csock = (int*) lp;
 
-    blowfish* bc = new blowfish("frankli714");
-
-    ope_client<uint64_t, blowfish>* my_client = new ope_client<uint64_t, blowfish>(bc);    
+    //ope_client<uint64_t, blowfish>* my_client = new ope_client<uint64_t, blowfish>(bc);    
 
     char buffer[1024];
 
@@ -31,7 +29,7 @@ void handle_udf(void* lp){
     istringstream iss(buffer);
     iss>>func_d;
     if(DEBUG_COMM) cout<<"Client sees func_d="<<func_d<<" and buffer "<<buffer<<endl;
-    bool imode;
+    /*bool imode;
     if(func_d==14){
         imode=true;
     }else if(func_d==15){
@@ -39,31 +37,54 @@ void handle_udf(void* lp){
     }else{
         cout<<"ERROR didn't receive 14 or 15"<<endl;
         exit(-1);
-    }
-    if(func_d==14 || func_d==15){
-        uint64_t det_val=0;
+    }*/
+    //if(func_d==14 || func_d==15){
+    assert_s(func_d == MsgType::INTERACT_FOR_LOOKUP, "Incorrect function type in handle_server!");
+    if(func_d == MsgType::INTERACT_FOR_LOOKUP){
+        
+/*        uint64_t det_val=0;
         iss>>det_val;
         if(DEBUG_COMM) cout<<"Client det_val "<<det_val<<endl;
         uint64_t tmp_ope = my_client->encrypt(det_val, imode);
         if(tmp_ope == (uint64_t)-1 ) {
 	    cout<<"WTF error in encrypt"<<endl;
-	}
+	       }
         ostringstream o;
         o.str("");
         o.clear();
         if(tmp_ope==0) {
 	    o<<"DONE";
-	}
+	       }
         else {
 	    o<<"15 "<<tmp_ope;
-	}
+	   }
+*/
+        uint64_t det, pt, tmp_det, tmp_pt;
+        int size, index;
+
+        iss >> det >> size;
+
+        bc->block_decrypt((const uint8_t *) &det, (uint8_t *) &pt);
+
+        for(index=0; index<size; index++){
+            iss>>tmp_key;
+            bc->block_decrypt((const uint8_t *) &tmp_key, (uint8_t *) &tmp_pt);
+
+            if (tmp_pt >= pt){
+                break;
+            }
+
+        }
+
+        stringstream o;
+        o << index << " " << (tmp_pt==pt);
         string rtn_str = o.str();
         send(*csock, rtn_str.c_str(), rtn_str.size(),0);
-        send(my_client->hsock, "0",1,0);
+        //send(my_client->hsock, "0",1,0);
     }
     free(csock);
-    delete my_client;
-    delete bc;    
+    //delete my_client;
+    //delete bc;    
 }
 
 
@@ -86,20 +107,24 @@ int main(){
     struct sockaddr_in sadr;
     int i=5;
     //Handle 1 client b/f quiting (can remove later)
+
+    blowfish* bc = new blowfish("frankli714");
+
     while(i>0){
-	cerr<<"Listening..."<<endl;
-	csock = (int*) malloc(sizeof(int));
-	if((*csock = accept(hsock, (struct sockaddr*) &sadr, &addr_size))!=-1){
-	    //Pass connection and messages received to handle_client
-	    handle_udf((void*)csock);
-	}
-	else{
-	    std::cout<<"Error accepting!"<<endl;
-	}
-	//i--;
+    	cerr<<"Listening..."<<endl;
+    	csock = (int*) malloc(sizeof(int));
+    	if((*csock = accept(hsock, (struct sockaddr*) &sadr, &addr_size))!=-1){
+    	    //Pass connection and messages received to handle_client
+    	    handle_server((void*)csock, bc);
+    	}
+    	else{
+    	    std::cout<<"Error accepting!"<<endl;
+    	}
+    	//i--;
     }
     cerr<<"Done with client, closing now\n";
     close(hsock);
+    delete bc;
 
 }
 
