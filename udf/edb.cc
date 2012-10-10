@@ -73,16 +73,34 @@ getstring(UDF_ARGS * args, int i)
 }*/
 
 extern "C" {
+
+struct ope_state {
+    int sock_cl;
+    int sock_ser;
+};
     
 my_bool  ope_enc_init(UDF_INIT *initid, UDF_ARGS *args, char *message){
+    ope_state * os = new ope_state();
+    os->sock_cl = create_and_connect(OPE_CLIENT_HOST, OPE_CLIENT_PORT);
+    os->sock_ser = create_and_connect(OPE_SERVER_HOST, OPE_SERVER_PORT);
+
+    initid->ptr = (char *) os;
+	
     return 0;
 }
 void ope_enc_deinit(UDF_INIT *initid){
+
+    ope_state *os = (ope_state*)initid->ptr;
+    close(os->sock_cl);
+    close(os->sock_ser);
+    
     return;
 }
 
 long long ope_enc(UDF_INIT *initid, UDF_ARGS *args,
     char *is_null, char *error){
+
+    ope_state * os = (ope_state *) initid->ptr;
     
     long long det_val;
 
@@ -103,13 +121,9 @@ long long ope_enc(UDF_INIT *initid, UDF_ARGS *args,
 
     mask=make_mask();
 
-    int hsock;
-
     int counter = 0;
     while (counter < 2) {
 	counter++;
-
-	hsock = create_and_connect(OPE_SERVER_HOST, OPE_SERVER_PORT);
 	
         char buffer[1024];
     
@@ -118,8 +132,8 @@ long long ope_enc(UDF_INIT *initid, UDF_ARGS *args,
         ostringstream o;
         o << "1 " << imode << " " << det_val;
         string msg = o.str();
-        send(hsock, msg.c_str(), msg.size(), 0);
-        recv(hsock, buffer, 1024, 0);
+        send(os->sock_ser, msg.c_str(), msg.size(), 0);
+        recv(os->sock_ser, buffer, 1024, 0);
         uint64_t early_v, early_pathlen, early_index;
         uint64_t v = 0;
         uint64_t nbits = 0;
@@ -129,8 +143,6 @@ long long ope_enc(UDF_INIT *initid, UDF_ARGS *args,
         iss >> early_pathlen;
 	iss >> early_index;
 
-	close(hsock);
-	
         if(early_v!=(uint64_t)-1 && early_pathlen!=(uint64_t)-1 && early_index!=(uint64_t)-1){
             cerr<<"In early return"<<endl;
             v = early_v;
@@ -142,9 +154,7 @@ long long ope_enc(UDF_INIT *initid, UDF_ARGS *args,
         }else{
             cerr<<"No early return, must insert"<<endl;
             
-	    hsock = create_and_connect(OPE_CLIENT_HOST, OPE_CLIENT_PORT);
-	    
-            memset(buffer, '\0', 1024);
+	    memset(buffer, '\0', 1024);
 
             ostringstream o_client;
             if (imode) {
@@ -155,9 +165,9 @@ long long ope_enc(UDF_INIT *initid, UDF_ARGS *args,
 	    }
 	    
             string client_msg = o_client.str();
-            send(hsock, client_msg.c_str(), client_msg.size(), 0);
+            send(os->sock_cl, client_msg.c_str(), client_msg.size(), 0);
 	    cerr << "before waiting for receive\n";
-	    recv(hsock, buffer, 1024, 0);
+	    recv(os->sock_cl, buffer, 1024, 0);
 	    cerr << "after waiting for receive\n";
             istringstream iss(buffer);
             cerr << "Buffer for " << det_val << " is " << buffer << endl;
@@ -176,13 +186,13 @@ long long ope_enc(UDF_INIT *initid, UDF_ARGS *args,
                 uint64_t ope_rtn;
                 iss>>ope_rtn;
                 cout<<"Return ope_rtn="<<ope_rtn<<endl;
-                close(hsock);
+              
                 return ope_rtn;
 		
             } else {
                 cerr<<"Received weird string: "<<buffer<<endl;
             }
-            close(hsock);
+          
         }        
     }
 
