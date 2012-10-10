@@ -14,7 +14,7 @@ void test_order(int num_vals, int order);
 
 int main(){
 
-    test_order(10,0);
+    test_order(1000,0);
 
     blowfish* bc = new blowfish("frankli714");
 
@@ -79,12 +79,14 @@ void test_order(int num_vals, int order){
     }
     if(order>0){
 	sort(inserted_vals.begin(), inserted_vals.end());
+	cerr << "increasing order \n";
     }
     if(order>1){
 	reverse(inserted_vals.begin(), inserted_vals.end());
+	cerr << "decreasing order \n";
     }	
 
-    vector<uint64_t> tmp_vals;
+    //vector<uint64_t> tmp_vals[num_vals];
 
     uint64_t pt=0;
     uint64_t ct=0;
@@ -92,8 +94,8 @@ void test_order(int num_vals, int order){
 
     for(int i=0; i<num_vals; i++){
     	pt = inserted_vals[i];
-        tmp_vals.push_back(pt);
-        ss.str("");
+	//     tmp_vals[i] = pt;
+	ss.str("");
         ss.clear();
 	bc->block_encrypt((const uint8_t *) &pt, (uint8_t *) &ct);
 	ss<<"INSERT INTO emp VALUES ("<<pt<<", ope_enc("<<ct<<",'i'), 0)";
@@ -102,7 +104,7 @@ void test_order(int num_vals, int order){
 	pt=0;
 	ct=0;
 
-	int do_repeat = rand()%10+1;
+/*	int do_repeat = rand()%10+1;
 	if(do_repeat<3){
 	    int repeat_index = rand()%(tmp_vals.size());
 	    pt = tmp_vals[repeat_index];
@@ -115,7 +117,7 @@ void test_order(int num_vals, int order){
 	    pt=0;
 	    ct=0;
 	}
-
+*/
     }
     cout<<"Values:"<<endl;
     //sort(inserted_vals.begin(), inserted_vals.end());
