@@ -428,12 +428,18 @@ void handle_udf(void* lp){
         iss>>det_val;
         if(DEBUG_COMM) cout<<"Client det_val "<<det_val<<endl;
         uint64_t tmp_ope = my_client->encrypt(det_val, imode);
-        if(tmp_ope == (uint64_t)-1 ) cout<<"WTF error in encrypt"<<endl;
+        if(tmp_ope == (uint64_t)-1 ) {
+	    cout<<"WTF error in encrypt"<<endl;
+	}
         ostringstream o;
         o.str("");
         o.clear();
-        if(tmp_ope==0) o<<"DONE";
-        else o<<"15 "<<tmp_ope;
+        if(tmp_ope==0) {
+	    o<<"DONE";
+	}
+        else {
+	    o<<"15 "<<tmp_ope;
+	}
         string rtn_str = o.str();
         send(*csock, rtn_str.c_str(), rtn_str.size(),0);
         send(my_client->hsock, "0",1,0);

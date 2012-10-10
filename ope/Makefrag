@@ -11,6 +11,10 @@ all:	$(OBJDIR)/ope/user
 $(OBJDIR)/ope/user: $(OBJDIR)/ope/user.o $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbutil.so $(OBJDIR)/libope.so
 	$(CXX) $< -o $@ $(LDFLAGS) -ledbutil -lope -lcryptdb
 
+all:	$(OBJDIR)/ope/bench
+$(OBJDIR)/ope/bench: $(OBJDIR)/ope/bench.o $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbutil.so $(OBJDIR)/libope.so
+	$(CXX) $< -o $@ $(LDFLAGS) -ledbutil -lope -lcryptdb
+
 all:	$(OBJDIR)/ope/client
 $(OBJDIR)/ope/client: $(OBJDIR)/ope/client.o $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbutil.so $(OBJDIR)/libope.so
 	$(CXX) $< -o $@ $(LDFLAGS) -ledbutil -lope -lcryptdb

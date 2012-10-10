@@ -18,25 +18,10 @@
 #include <crypto/blowfish.hh>
 #include <util/static_assert.hh>
 #include "btree.hh"
-
-//Whether to print debugging output or not
-#define DEBUG 1
-#define DEBUG_COMM 1
-#define DEBUG_BTREE 0
-#define MALICIOUS 0
-
-const int N = 4;
-const double alpha = 0.3;
+#include <util/ope-util.hh>
 
 Connect* dbconnect;
 
-// for N not a power of two, we want ceil(log_2(N))
-// for N power of two we want log_2(N) + 1
-const int num_bits = (int) ceil(log2(N+1.0));
-
-uint64_t mask;
-
-uint64_t make_mask();
 bool test_order(int num_vals, int sorted, bool deletes);
 
 void handle_udf(void* lp);
