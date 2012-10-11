@@ -49,18 +49,14 @@ public:
 
 
 /////////TO DOOOOO: Switch index to int, no need for uint64_t
-    std::string insert(uint64_t v, uint64_t nbits, uint64_t index, EncT encval);
-    std::vector<tree_node<EncT>* > tree_insert(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint64_t index, EncT encval, uint64_t pathlen);
+    std::string insert(uint64_t v, uint64_t nbits, uint64_t index, EncT encval, std::map<EncT, table_entry >  & ope_table);
+    std::vector<tree_node<EncT>* > tree_insert(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint64_t index, EncT encval, uint64_t pathlen, std::map<EncT, table_entry >  & ope_table);
 
     tree_node<EncT>* findScapegoat( std::vector<tree_node<EncT>* > path , uint64_t & path_index);
 
     void print_tree();
 
-    tree_node<EncT>* tree_lookup(tree_node<EncT> *root, uint64_t v, uint64_t nbits) const;
-    std::vector<EncT> lookup(uint64_t v, uint64_t nbits) const;
-    table_entry * lookup(EncT xct);
-
-    void update_ope_table(tree_node<EncT>* node, uint64_t base_v, uint64_t base_nbits);
+    void update_ope_table(tree_node<EncT>* node, uint64_t base_v, uint64_t base_nbits, std::map<EncT, table_entry >  & ope_table);
     void update_db(table_entry old_entry, table_entry new_entry);
     void delete_db(table_entry del_entry);
     void clear_db_version();
@@ -68,7 +64,7 @@ public:
 
     std::vector<EncT> flatten(tree_node<EncT>* node);
     tree_node<EncT>* rebuild(std::vector<EncT> key_list);
-    void rebalance(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint64_t path_index);
+    void rebalance(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint64_t path_index,  std::map<EncT, table_entry >  & ope_table);
     void delete_nodes(tree_node<EncT>* node);
 
     successor<EncT> find_succ(tree_node<EncT>* node, uint64_t v, uint64_t nbits);
