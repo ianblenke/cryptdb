@@ -19,7 +19,7 @@
 #include <util/static_assert.hh>
 #include "btree.hh"
 #include <util/ope-util.hh>
-#include <util/net.hh>
+
 
 
 using std::cout;
@@ -163,9 +163,13 @@ ope_client<V, BlockCipher>::encrypt(V det, bool imode) const{
         if (DEBUG_COMM) {
 	    std::cout << "Sending msg: " << msg << std::endl;
 	}
-        send(hsock, msg.c_str(), msg.size(), 0);
+        if(send(hsock, msg.c_str(), msg.size(), 0)!=msg.size()){
+            assert_s(false, "encrypt 1 send failed");
+        }
         memset(buffer, 0, 10240);
-        recv(hsock, buffer, 10240, 0);
+        if(recv(hsock, buffer, 10240, 0)<=0){
+            assert_s(false, "encrypt 1 recv failed");
+        }
         if(DEBUG_COMM || DEBUG_BTREE) std::cout << "Received during iterative lookup: " << buffer << std::endl;
 	std::string check(buffer);           
 
@@ -314,8 +318,12 @@ ope_client<V, BlockCipher>::decrypt(uint64_t ct) const {
     o<<"2 "<<path<<" "<<(nbits-num_bits);
     string msg = o.str();
     if(DEBUG_COMM) cout<<"Sending decrypt msg: "<<msg<<endl;
-    send(hsock, msg.c_str(), msg.size(),0);
-    recv(hsock, buffer, 10240, 0);
+    if( send(hsock, msg.c_str(), msg.size(),0) != msg.size()){
+        assert_s(false, "decrypt send failed");
+    }
+    if( recv(hsock, buffer, 10240, 0) <= 0){
+        assert_s(false, "decrypt recv failed");
+    }
 
     if(DEBUG_BTREE) cout<<"Decrypt recv="<<buffer<<endl;
     istringstream iss_tmp(buffer);
@@ -358,8 +366,12 @@ ope_client<V, BlockCipher>::delete_value(V pt){
     char buffer[10240];
     memset(buffer, '\0', 10240);
 
-    send(hsock, msg.c_str(), msg.size(), 0);
-    recv(hsock, buffer, 10240, 0);
+    if( send(hsock, msg.c_str(), msg.size(), 0) != msg.size()){
+        assert_s(false, "delete_value send failed");
+    }
+    if( recv(hsock, buffer, 10240, 0) <= 0){
+        assert_s(false, "delete_value recv failed");
+    }
 
 #if MALICIOUS
     if(DEBUG_BTREE){
@@ -413,8 +425,12 @@ ope_client<V, BlockCipher>::insert(uint64_t v, uint64_t nbits, uint64_t index, V
 
     char buffer[10240];
     memset(buffer, '\0', 10240);
-    send(hsock, msg.c_str(), msg.size(),0);
-    recv(hsock, buffer, 10240, 0);
+    if( send(hsock, msg.c_str(), msg.size(),0) != msg.size() ){
+        assert_s(false, "insert send failed");
+    }
+    if (recv(hsock, buffer, 10240, 0) <= 0 ){
+        assert_s(false, "insert recv failed");
+    }
 
 
 #if MALICIOUS
