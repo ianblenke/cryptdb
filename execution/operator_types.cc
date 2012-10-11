@@ -132,7 +132,7 @@ remote_sql_op::open(exec_context& ctx)
     _do_cache_write_sql = buf.str();
   }
 
-  cerr << "executing sql: " << _do_cache_write_sql /*.substr(0, 1000)*/ << endl;
+  dprintf("executing sql: %s\n", _do_cache_write_sql.c_str());
 
   // look in query cache first
   if (ctx.cache) {
@@ -242,62 +242,27 @@ remote_sql_op::next(exec_context& ctx, db_tuple_vec& tuples)
           // simplifying assumption for now (relax if needed)
           SANITY(_desc_vec[j].onion_type == oDET);
 
-          if (_desc_vec[j].type == db_elem::TYPE_DECIMAL_15_2) {
-            // for now, this is the only type we care about the actual
-            // *value* of the descriptor's vtype
-
+          if (_desc_vec[j].type != db_elem::TYPE_STRING) {
             vector<db_elem> elems;
             const uint8_t* p = (const uint8_t *) col.data.data();
             const uint8_t* end = p + col.data.size();
 
             switch (_desc_vec[j].vtype) {
               case db_column_desc::vtype_normal:
-                // standard fixed-length slotted arrangement
                 SANITY((col.data.size() % sizeof(uint64_t)) == 0);
                 elems.reserve((col.data.size() / sizeof(uint64_t)));
                 while (p < end) {
                   uint64_t v;
                   deserializer<uint64_t>::read(p, v);
-                  elems.push_back(db_elem((int64_t)v));
+                  // we don't do the decryption yet, so we make everything an
+                  // int here
+                  elems.push_back(db_elem(int64_t(v)));
                 }
                 break;
 
-              case db_column_desc::vtype_delta_compressed: {
-                // delta compressed
-                vector<uint64_t> vs;
-                varint_serializer::delta_decode_uvint64_vector(col.data, vs);
-                p = end; // processed all input
-                elems.reserve(vs.size());
-                for (auto v : vs) elems.push_back(db_elem((int64_t)v));
-                break;
-              }
+              // vtype_delta_compressed and vtype_dict_compressed are
+              // rendered useless by using standard compression
 
-              case db_column_desc::vtype_dict_compressed: {
-                // dictionary compressions
-                SANITY(ctx.dict_tables != NULL);
-                SANITY(_desc_vec[j].dictionary_idx >= 0);
-                SANITY(size_t(_desc_vec[j].dictionary_idx) < ctx.dict_tables->size());
-
-                auto &dict = ctx.dict_tables->at(_desc_vec[j].dictionary_idx);
-
-                // uvint32 num_dict_hits
-                uint32_t n_hits;
-                varint_serializer::read_uvint32(p, n_hits);
-                elems.reserve(n_hits);
-
-                for (size_t i = 0; i < n_hits; i++) {
-                  uint32_t x;
-                  varint_serializer::read_uvint32(p, x);
-                  elems.push_back(db_elem((int64_t)dict[x]));
-                }
-
-                vector<uint64_t> vs;
-                varint_serializer::delta_decode_uvint64_vector(p, end, vs);
-                elems.reserve(elems.size() + vs.size());
-                for (auto v : vs) elems.push_back(db_elem((int64_t)v));
-
-                break;
-              }
               default: assert(false);
             }
 
@@ -369,6 +334,13 @@ remote_sql_op::CreateFromString(
       return (db_elem(data));
 
     case db_elem::TYPE_DATE:
+      {
+        int64_t encoding = resultFromStr<int64_t>(data);
+        uint32_t m, d, y;
+        extract_date_from_encoding(encoding, m, d, y);
+        return db_elem(y, m, d);
+      }
+
     default:
       cerr << __PRETTY_FUNCTION__ << ": unhandled type (" << type << ")" << endl;
       throw runtime_error("should not be reached");
