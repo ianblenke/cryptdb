@@ -14,22 +14,14 @@ ffsl(uint64_t ct)
 }
 
 static
-void
-handle_server(int csock, blowfish* bc){
-    cout<<"Called handle_udf"<<endl;
+string
+handle_interaction(istringstream & iss, blowfish* bc){
+    cerr<<"Called handle_interaction"<<endl;
 
     //ope_client<uint64_t, blowfish>* my_client = new ope_client<uint64_t, blowfish>(bc);    
 
-    char buffer[1024];
-
-    memset(buffer, 0, 1024);
-
-    //Receive message to process
-    if(recv(csock, buffer, 1024, 0) <=0){
-        assert_s(false, "handle_server receive failed");
-    }
+    
     MsgType func_d;
-    istringstream iss(buffer);
     iss>>func_d;
     if(DEBUG_COMM) cout<<"Client sees func_d="<<func_d<<" and buffer "<<buffer<<endl;
   
@@ -56,15 +48,13 @@ handle_server(int csock, blowfish* bc){
 
         stringstream o;
         o << index << " " << (tmp_pt==pt);
-        string rtn_str = o.str();
-        if (send(csock, rtn_str.c_str(), rtn_str.size(),0) != (int)rtn_str.size()){
-            assert_s(false, "handle_server send failed");
-        }
+        return o.str();
+        
         //send(my_client->hsock, "0",1,0);
 
     }
     
-
+    return "";
     //delete my_client;
     //delete bc;    
 }
@@ -88,20 +78,44 @@ int main(){
     //Handle 1 client b/f quiting (can remove later)
 
     blowfish * bc = new blowfish(passwd);
-    
-    while (true) {
-    	cerr << "Listening..." << endl;
-    	int csock = 0;
-    	if ((csock = accept(sock, (struct sockaddr*) &sadr, &addr_size) >= 0){
-    	    //Pass connection and messages received to handle_client
-    	    handle_server(csock, bc);
-    	}
-    	else{
-    	    std::cout<<"Error accepting!"<<endl;
-    	}
-        close(csock);
+    int csock = accept(sock, (struct sockaddr*) &sadr, &addr_size)
+
+    if(csock < 0){
+        assert_s(false, "Client failed to accept correctly");
     }
-    
+
+    int buflen = 1024;
+
+    char buffer[buflen];
+
+    string interaction_rslt="";
+
+
+    while (true) {
+
+        memset(buffer, 0, buflen);
+
+        //Receive message to process
+        if(recv(csock, buffer, buflen, 0) <=0){
+            assert_s(false, "handle_server receive failed");
+        }
+
+        istringstream iss(buffer);
+
+        interaction_rslt = handle_interaction(iss, bc);
+
+        assert_s(interaction_rslt!="", "interaction error");
+
+
+        if (send(csock, interaction_rslt.c_str(), interaction_rslt.size(),0) != (int)interaction_rslt.size()){
+            assert_s(false, "handle_server send failed");
+        }
+
+        interaction_rslt = "";
+
+    }
+
+    close(csock);    
     cerr<<"Done with client, closing now\n";
     close(sock);
     delete bc;

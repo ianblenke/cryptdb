@@ -975,38 +975,38 @@ Server<EncT>::interaction(EncT ciph,
     nbits = 0;
 
      while (true) {	
-	// create message and send it to client
-	stringstream msg;
-	msg.clear();
-	msg << MsgType::INTERACT_FOR_LOOKUP << " ";
-	msg << ciph << " ";
+    	// create message and send it to client
+    	stringstream msg;
+    	msg.clear();
+    	msg << MsgType::INTERACT_FOR_LOOKUP << " ";
+    	msg << ciph << " ";
 
-	uint len = curr->keys.size();
-	msg << len << " ";
+    	uint len = curr->keys.size();
+    	msg << len << " ";
 
-	for (uint i = 0; i < len; i++) {
-	    msg << curr->keys[i] << " ";
-	}
+    	for (uint i = 0; i < len; i++) {
+    	    msg << curr->keys[i] << " ";
+    	}
 
-	string _reply = send_receive(sock_cl, msg.str());
-	istringstream reply(_reply);
+    	string _reply = send_receive(sock_cl, msg.str());
+    	istringstream reply(_reply);
 
-	uint index;
-	bool equals;
-	reply >> index >> equals;
+    	uint index;
+    	bool equals;
+    	reply >> index >> equals;
 
-	assert_s(len > index, "index returned by client is incorrect");
+    	assert_s(len > index, "index returned by client is incorrect");
 
-	tree_node<EncT> * node = curr->right[index];
-	if (equals || !node) {
-	    // done: found node match or empty spot
-	    rnode = curr;
-	    requals = equals;
-	    return;
-	}	
-	curr = node;
-	ope_path = (ope_path << num_bits) | index;
-	nbits += num_bits;
+    	tree_node<EncT> * node = curr->right[index];
+    	if (equals || !node) {
+    	    // done: found node match or empty spot
+    	    rnode = curr;
+    	    requals = equals;
+    	    return;
+    	}	
+    	curr = node;
+    	ope_path = (ope_path << num_bits) | index;
+    	nbits += num_bits;
     }
     
 }
@@ -1048,13 +1048,8 @@ Server<EncT>::handle_enc(int csock, istringstream & iss, bool do_ins) {
 			 << " index " << index << "\n";}
 	if (do_ins) {
 	    // insert in OPE Tree
+        // ope_insert also updates ope_table
 	    ope_tree.insert(ope_path, nbits, index, ciph, ope_table);
-
-	    // insert in OPE Table
-	    table_entry new_entry;
-	    new_entry.ope = ope_enc;
-	    new_entry.refcount = 1;
-	    ope_table[ciph] = new_entry;
 	}
     }
 
