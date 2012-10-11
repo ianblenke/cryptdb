@@ -193,7 +193,7 @@ db_elem
 db_elem::max() const
 {
   requireType(TYPE_VECTOR);
-  if (_elems.empty()) throw no_data_exception("min on empty vector");
+  if (_elems.empty()) throw no_data_exception("max on empty vector");
   db_elem ret = _elems[0];
   for (auto it = _elems.begin() + 1; it != _elems.end(); ++it)
     if ((*it) > ret)

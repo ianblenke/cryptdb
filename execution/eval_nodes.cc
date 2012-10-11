@@ -239,5 +239,38 @@ count_star_node::eval(exec_context& ctx)
   SANITY(!vcs.empty());
 
   return db_elem((int64_t)ctx.tuple->columns[vcs.front()].size());
+}
 
+db_elem
+not_node::eval(exec_context& ctx)
+{
+  db_elem e = first_child()->eval(ctx);
+  if (e.is_vector()) {
+    vector< db_elem > v;
+    vector< db_elem >& elements = e.elements();
+    v.reserve(elements.size());
+    for (auto &e : elements) {
+      v.push_back(!e);
+    }
+    return db_elem(v);
+  } else {
+    return !e;
+  }
+}
+
+db_elem
+exists_node::eval(exec_context& ctx)
+{
+  db_elem e = first_child()->eval(ctx);
+  if (e.is_vector()) {
+    vector< db_elem > v;
+    vector< db_elem >& elements = e.elements();
+    v.reserve(elements.size());
+    for (auto &e : elements) {
+      v.push_back(e.is_inited());
+    }
+    return db_elem(v);
+  } else {
+    return e.is_inited();
+  }
 }

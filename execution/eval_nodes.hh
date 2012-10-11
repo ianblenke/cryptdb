@@ -71,7 +71,7 @@ public:
 class not_node : public unop_node {
 public:
   not_node(expr_node* child) : unop_node(child) {}
-  virtual db_elem eval(exec_context& ctx) { return !first_child()->eval(ctx); }
+  virtual db_elem eval(exec_context& ctx);
 };
 
 class binop_node : public expr_node {
@@ -127,9 +127,7 @@ class exists_node : public expr_node {
 public:
   exists_node(expr_node* child)
     : expr_node({child}) {}
-  virtual db_elem eval(exec_context& ctx) {
-    return first_child()->eval(ctx).is_inited();
-  }
+  virtual db_elem eval(exec_context& ctx);
 };
 
 class substring_node : public expr_node {
