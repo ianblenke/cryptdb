@@ -91,6 +91,7 @@ subselect_node::eval_scalar(exec_context& ctx, db_tuple& scalar_args)
   auto it = _cached_values.find(scalar_args);
   if (it != _cached_values.end()) {
     // cache hit
+    dprintf("subquery(%s): cache-hit\n", TO_C(_n));
     return it->second;
   }
 

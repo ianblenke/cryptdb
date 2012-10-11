@@ -392,8 +392,10 @@ public:
 
   int64_t hash() const {
     // XOR all the column hashes together
-    int64_t h = 0;
-    for (auto &e : columns) h ^= e.hash();
+    int64_t h = 1;
+    for (auto &e : columns) {
+      h = h * 31 + e.hash();
+    }
     return h;
   }
 
