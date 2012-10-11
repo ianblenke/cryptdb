@@ -57,7 +57,7 @@ handle_server(int csock, blowfish* bc){
         stringstream o;
         o << index << " " << (tmp_pt==pt);
         string rtn_str = o.str();
-        if(send(csock, rtn_str.c_str(), rtn_str.size(),0) != rtn_str.size()){
+        if(send(csock, rtn_str.c_str(), rtn_str.size(),0) != (int)rtn_str.size()){
             assert_s(false, "handle_server send failed");
         }
         //send(my_client->hsock, "0",1,0);

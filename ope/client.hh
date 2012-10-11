@@ -163,7 +163,7 @@ ope_client<V, BlockCipher>::encrypt(V det, bool imode) const{
         if (DEBUG_COMM) {
 	    std::cout << "Sending msg: " << msg << std::endl;
 	}
-        if(send(hsock, msg.c_str(), msg.size(), 0)!=msg.size()){
+        if(send(hsock, msg.c_str(), msg.size(), 0)!= (int)msg.size()){
             assert_s(false, "encrypt 1 send failed");
         }
         memset(buffer, 0, 10240);
@@ -425,7 +425,7 @@ ope_client<V, BlockCipher>::insert(uint64_t v, uint64_t nbits, uint64_t index, V
 
     char buffer[10240];
     memset(buffer, '\0', 10240);
-    if( send(hsock, msg.c_str(), msg.size(),0) != msg.size() ){
+    if( send(hsock, msg.c_str(), msg.size(),0) != (int)msg.size() ){
         assert_s(false, "insert send failed");
     }
     if (recv(hsock, buffer, 10240, 0) <= 0 ){
