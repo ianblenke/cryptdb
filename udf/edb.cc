@@ -10,23 +10,12 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <sstream>
+#include <util/net.hh>
 
 using namespace std;
 using namespace NTL;
-const int N = 4;
-const double alpha = 0.3;
-const int num_bits = (int) ceil(log2(N+1.0));
-uint64_t mask;
 
-uint64_t make_mask();
-
-uint64_t make_mask(){
-    uint64_t cur_mask = 1ULL;
-    for(int i=1; i<num_bits; i++){
-        cur_mask = cur_mask | (1ULL<<i);
-    }
-    return cur_mask;
-}
+static int server_sock = create_and_connect(OPE_SERVER_HOST, OPE_SERVER_PORT);
 
 extern "C" {
 
@@ -97,33 +86,31 @@ extern "C" {
 	char mode;
 	mode = *((char*) args->args[1]);
 
-	bool imode;
+	MsgType mt;
 	if (mode=='i'){ // we need to insert value
-	    imode=true;
+	    mt = MsgType::ENC_INS;
 
 	} else { // we do not insert value, just for query
-	    imode=false;
-
+	    mt = MsgType::QUERY;
 	}
 	
-	cerr << "mode: " << mode << " imode: " << imode << endl;
+	cerr << "mode: " << mode << " msgtype: " << mtnames[mt] << endl;
+
 
         char buffer[1024];
     
         memset(buffer, '\0', 1024);
 
-        ostringstream o;
-        o << "1 " << imode << " " << det_val;
-        string msg = o.str();
-        send(os->sock_ser, msg.c_str(), msg.size(), 0);
-        recv(os->sock_ser, buffer, 1024, 0);
+        ostringstream msg;
+        msg << << mt << " " << det_val;
 
-	istringstream iss(buffer);
-	cerr << "Buffer for " << det_val << " is " << buffer << endl;
+	string res = send_receive(sock_server, msg.str());
+	istringstream iss(res);
+	cerr << "Result for " << det_val << " is " << res << endl;
 	
 	uint64_t ope_rtn;
 	iss >> ope_rtn;
-	cerr << "Return ope_rtn="<<ope_rtn<<endl;
+	cerr << "Return ope_rtn=" << ope_rtn << endl;
               
 	return ope_rtn;
 	

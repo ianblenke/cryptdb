@@ -836,18 +836,25 @@ tree<EncT>::tree_insert(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint6
 
     //Protocol set: index 0 is NULL (branch to node with lesser elements)
     //Else, index is 1+(key's index in node's key-vector)
-    if(key_index==0) key= (EncT) NULL;
-    else if(key_index<N) key = node->keys[key_index-1];
-    else{ cout<<"Insert fail, key_index not legal"<<endl;exit(1);}
+    if (key_index==0) {
+	key= (EncT) NULL;
+    }
+    else if (key_index < N) {
+	key = node->keys[key_index-1];
+    }
+    else {
+	cout<<"Insert fail, key_index not legal"<<endl; exit(1);
+    }
 
     //cout<<"Key: "<<key<<endl;
 
     //See if pointer to next node to be checked 
     if(!node->key_in_map(key)){
 	if (nbits == (uint64_t) num_bits && ((int) node->keys.size())==N-1) {
-	    if(DEBUG) cout<<"Creating new node"<<endl;
+	    if(DEBUG) cout << "Creating new node" << endl;
 	    node->right[key] = new tree_node<EncT>();
-	}else{cout<<"Insert fail, wrong condition to create new node child"<<endl; exit(1);}
+	} else{
+	    cout<<"Insert fail, wrong condition to create new node child"<< endl; exit(1);}
     }
     rtn_path = tree_insert(node->right[key], v, nbits-num_bits, index, encval, pathlen);
     rtn_path.push_back(node);
@@ -1033,12 +1040,14 @@ template<class EncT>
 void
 tree::interaction(EncT ciph,
 		  tree_node<EncT> * & rnode, uint & rindex,
-		  uint64_t & rope_path,
+		  uint64_t & ope_path,
                   bool & requals) {
 
     stringstream msg;
 
     tree_node<EncT> * curr = root;
+
+    ope_path = 0;
 
      while (true) {	
 
@@ -1064,7 +1073,7 @@ tree::interaction(EncT ciph,
 	if (equals || !node) {
 	    // done
 	    rnode = curr;
-	    rope_path = ope_path;
+	    ope_path = ope_path;
 	    requals = equals;
 	    return;
 	}
@@ -1098,7 +1107,11 @@ string * handle_enc(istringstream & iss, bool do_ins) {
     } else { // not found in OPE Table
 	if (DEBUG) {cerr << "not in ope table \n"; }
 
-	uint64_t ope_enc = interaction(ciph, ope_enc, Node to insert at); 
+	tree_node<EncT> * node = 0;
+	uint index = 0;
+	uint64_t ope_path = 0;
+	bool equals = false;
+	uint64_t ope_enc = interaction(ciph, node, index, ope_path, equals);
 
 	continue ..
 
@@ -1117,7 +1130,7 @@ string * handle_enc(istringstream & iss, bool do_ins) {
 }
 
 template<class EncT>
-Response * dispatch(void *lp, tree<EncT> *s) {
+std::string dispatch(void *lp, tree<EncT> *s) {
     int *csock = (int *)lp;
 
     uint buflen = 10240;
@@ -1135,10 +1148,6 @@ Response * dispatch(void *lp, tree<EncT> *s) {
 
     if (DEBUG_COMM) {cerr << "message type is " << mtnames[msgtype] << endl;}
 
-    Response * r = 0;
-
-    string rtn_str;
-
     switch (msgtype) {
     case ENC_INS: {
 	return handle_enc(iss, true);
@@ -1152,6 +1161,21 @@ Response * dispatch(void *lp, tree<EncT> *s) {
     assert_s(false, "invalid message type in dispatch");
     
 }
+
+template<class EncT>
+Server<EncT>::Server() {
+    sock_cl = create_and_connect(OPE_CLIENT_HOST, OPE_CLIENT_PORT);
+    sock_udf = create_and_bind(OPE_SERVER_PORT);
+    t = new tree<uint64_t>();
+}
+
+template<class EncT>
+Server<EncT>::~Server() {
+    close(sock_cl);
+    close(sock_udf);
+    ~(*t);
+}
+
 
 template<class EncT>
 void handle_client(void* lp, tree<EncT>* s){
@@ -1312,18 +1336,13 @@ void handle_client(void* lp, tree<EncT>* s){
 
 
 int main(int argc, char **argv){
-    //Build mask based on N
-    mask = make_mask();
+    
 
     cerr<<"Starting tree server \n";
-
-    //Construct new server with new tree
-    tree<uint64_t>* server = new tree<uint64_t>();
-
-    int hsock = create_and_bind(OPE_SERVER_PORT);
-
+    Server server;
+    
     //Start listening
-    int listen_rtn = listen(hsock, 10);
+    int listen_rtn = listen(server.sock_udf, 10);
     if(listen_rtn<0){
 	cerr<<"Error listening to socket"<<endl;
     }
@@ -1333,10 +1352,9 @@ int main(int argc, char **argv){
     int csock;
     struct sockaddr_in sadr;
     
-    int i=10;
-    //Handle 1 client b/f quiting (can remove later)
-    while(i>0){
+    while (true) {
 	cerr<<"Listening..."<<endl;
+	
 	if ((csock = accept(hsock, (struct sockaddr*) &sadr, &addr_size))!=-1){
 	    //Pass connection and messages received to handle_client
 	    dispatch((void*) &csock, server);
@@ -1346,7 +1364,6 @@ int main(int argc, char **argv){
 	    exit(-1);
 	}
 	close(csock);
-	//i--;
 
     }
     cerr<<"Done with server, closing now\n";

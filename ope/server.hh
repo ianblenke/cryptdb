@@ -32,6 +32,17 @@ template<class EncT>
 struct successor;
 
 template<class EncT>
+class Server {
+public:
+    tree * t;
+    int sock_cl; //socket to client; server connects thru it
+    int sock_udf; //socket to udfs; server listens on it
+    server();
+}
+
+   
+
+template<class EncT>
 class tree {
 
 public:
