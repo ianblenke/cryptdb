@@ -196,7 +196,7 @@ void
 tree<EncT>::rebalance(tree_node<EncT>* node){
     if(DEBUG) cout<<"Rebalance"<<endl;
 
-    table_storage base = ope_table[node->keys[0]];
+    table_entry base = ope_table[node->keys[0]];
 
     vector<EncT> key_list = flatten(node);
 /*	if(DEBUG){
@@ -246,7 +246,7 @@ tree<EncT>::clear_db_version(){
 
 template<class EncT>
 void
-tree<EncT>::delete_db(table_storage del_entry){
+tree<EncT>::delete_db(table_entry del_entry){
     uint64_t del_ope = del_entry.ope;
 
     ostringstream o;
@@ -269,7 +269,7 @@ tree<EncT>::delete_db(table_storage del_entry){
 //Update now-stale values in db
 template<class EncT>
 void 
-tree<EncT>::update_db(table_storage old_entry, table_storage new_entry){
+tree<EncT>::update_db(table_entry old_entry, table_entry new_entry){
     //Takes old ope_table entry and new ope_table entry and calculates
     //corresponding db values, and updates db old vals to new vals
 
@@ -308,11 +308,11 @@ tree<EncT>::update_db(table_storage old_entry, table_storage new_entry){
 //Ensure table is correct
 template<class EncT>
 void
-tree<EncT>::update_ope_table(tree_node<EncT> *node, table_storage base){
+tree<EncT>::update_ope_table(tree_node<EncT> *node, table_entry base){
 
-    table_storage old_table_entry;
+    table_entry old_table_entry;
     for(int i = 0; i < (int) node->keys.size(); i++){
-	table_storage tmp = base;
+	table_entry tmp = base;
 	tmp.index = i;
 	//tmp.version=global_version;
 
@@ -322,7 +322,7 @@ tree<EncT>::update_ope_table(tree_node<EncT> *node, table_storage base){
 	update_db(old_table_entry, tmp);
     }
     if(node->key_in_map( (EncT) NULL)){
-	table_storage tmp = base;
+	table_entry tmp = base;
 	tmp.v = tmp.v<<num_bits;
 	tmp.pathlen+=num_bits;
 	tmp.index=0;
@@ -330,7 +330,7 @@ tree<EncT>::update_ope_table(tree_node<EncT> *node, table_storage base){
     }
     for(int i = 0; i < (int) node->keys.size(); i++){
 	if(node->key_in_map(node->keys[i])){
-	    table_storage tmp = base;
+	    table_entry tmp = base;
 	    tmp.v = tmp.v<<num_bits | (i+1);
 	    tmp.pathlen+=num_bits;
 	    tmp.index=0;
@@ -546,10 +546,10 @@ tree<EncT>::tree_delete(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint6
 	    //global_version++;
 
 	    for(int i=(int)index; i< (int) node->keys.size(); i++){
-		table_storage old_entry = ope_table[node->keys[i]];
+		table_entry old_entry = ope_table[node->keys[i]];
 		ope_table[node->keys[i]].index = i;
 		//ope_table[node->keys[i]].version=global_version;
-		table_storage update_entry = ope_table[node->keys[i]];
+		table_entry update_entry = ope_table[node->keys[i]];
 		//Only keys after deleted one need updating
 		update_db(old_entry, update_entry);
 	    }
@@ -570,12 +570,12 @@ tree<EncT>::tree_delete(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint6
 		delete_db(ope_table[del_val]);
 		ope_table.erase(del_val);
 	    }
-	    table_storage old_entry = ope_table[node->keys[index]];
+	    table_entry old_entry = ope_table[node->keys[index]];
 	    ope_table[node->keys[index]].v = v;
 	    ope_table[node->keys[index]].pathlen=pathlen;
 	    ope_table[node->keys[index]].index=index;
 	    //ope_table[node->keys[index]].version=global_version;
-	    table_storage update_entry = ope_table[node->keys[index]];
+	    table_entry update_entry = ope_table[node->keys[index]];
 	    update_db(old_entry, update_entry);
 
 	    tree_delete(node, succ.succ_v, succ.succ_nbits-pathlen, 0, succ.succ_nbits, true); //TODO: Could optimize by just calling delete on next right node?
@@ -598,10 +598,10 @@ tree<EncT>::tree_delete(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint6
 		    ope_table.erase(del_val);
 		}
 		//Updating db entry for newly moved value
-		table_storage old_entry = ope_table[node->keys[index]];
+		table_entry old_entry = ope_table[node->keys[index]];
 		ope_table[node->keys[index]].index=index;
 		//ope_table[node->keys[index]].version=global_version;
-		table_storage update_entry = ope_table[node->keys[index]];
+		table_entry update_entry = ope_table[node->keys[index]];
 		update_db(old_entry, update_entry);
 
 
@@ -629,12 +629,12 @@ tree<EncT>::tree_delete(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint6
 			delete_db(ope_table[del_val]);
 			ope_table.erase(del_val);
 		    }
-		    table_storage old_entry = ope_table[node->keys[index]];
+		    table_entry old_entry = ope_table[node->keys[index]];
 		    ope_table[node->keys[index]].v = v;
 		    ope_table[node->keys[index]].pathlen=pathlen;
 		    ope_table[node->keys[index]].index=index;
 		    //ope_table[node->keys[index]].version=global_version;
-		    table_storage update_entry = ope_table[node->keys[index]];
+		    table_entry update_entry = ope_table[node->keys[index]];
 		    update_db(old_entry, update_entry);
 
 
@@ -654,10 +654,10 @@ tree<EncT>::tree_delete(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint6
 			delete_db(ope_table[del_val]);
 			ope_table.erase(del_val);
 		    }
-		    table_storage old_entry = ope_table[node->keys[index]];
+		    table_entry old_entry = ope_table[node->keys[index]];
 		    ope_table[node->keys[index]].index=index;
 		    //ope_table[node->keys[index]].version=global_version;
-		    table_storage update_entry = ope_table[node->keys[index]];
+		    table_entry update_entry = ope_table[node->keys[index]];
 		    update_db(old_entry, update_entry);		
 								
 		    tree_delete(node, v, nbits, index-1, pathlen, true);
@@ -791,7 +791,7 @@ tree<EncT>::tree_insert(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint6
 	    max_size=max(num_nodes, max_size);
 	    rtn_path.push_back(node);
 
-	    table_storage new_entry;
+	    table_entry new_entry;
 	    new_entry.v = v;
 	    new_entry.pathlen = pathlen;
 	    new_entry.index = index;
@@ -802,10 +802,10 @@ tree<EncT>::tree_insert(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint6
 	    //global_version++;
 
 	    for(int i=(int)index+1; i< (int) node->keys.size(); i++){
-		table_storage old_entry = ope_table[node->keys[i]];
+		table_entry old_entry = ope_table[node->keys[i]];
 		ope_table[node->keys[i]].index = i;
 		//ope_table[node->keys[i]].version=global_version;
-		table_storage update_entry = ope_table[node->keys[i]];
+		table_entry update_entry = ope_table[node->keys[i]];
 		//Only keys after newly inserted one need updating
 		update_db(old_entry, update_entry);
 
@@ -891,7 +891,7 @@ tree<EncT>::lookup(uint64_t v, uint64_t nbits) const
 }
 
 template<class EncT>
-table_storage *
+table_entry *
 tree<EncT>::lookup(EncT xct){
     if(ope_table.find(xct)!=ope_table.end()){
         if(DEBUG) cout <<"Found "<<xct<<" in table with v="<<ope_table[xct].v<<" nbits="<<ope_table[xct].pathlen<<" index="<<ope_table[xct].index<<endl;
@@ -1054,7 +1054,7 @@ server<class EncT>::handle_enc(istringstream & iss, bool do_ins) {
     stringstream resp;
     resp.clear();
 
-    table_storage * ts = s->lookup((uint64_t) ciph, ts);
+    table_entry * ts = s->lookup((uint64_t) ciph, ts);
     if (ts) { // found in OPE Table
 	if (DEBUG) {cerr << "found in ope table"; }
 	// if this is an insert, increase ref count
@@ -1083,7 +1083,7 @@ server<class EncT>::handle_enc(istringstream & iss, bool do_ins) {
 	    t->insert(ope_path, nbits, index, ciph);
 
 	    // insert in OPE Table
-	    table_storage new_entry;
+	    table_entry new_entry;
 	    new_entry.ope_enc = ope_enc;
 	    new_entry.refcount = 1;
 	    ope_table[ciph] = new_entry;
@@ -1188,7 +1188,7 @@ void handle_client(void* lp, tree<EncT>* s){
 	    iss>>blk_encrypt_pt;
 	    if(DEBUG_COMM) cout<<"Blk_encrypt_pt: "<<blk_encrypt_pt<<endl;
 	    //Do tree lookup
-	    table_storage table_rslt = s->lookup((uint64_t) blk_encrypt_pt);
+	    table_entry table_rslt = s->lookup((uint64_t) blk_encrypt_pt);
 	    
 	    if(imode && table_rslt.v!=(uint64_t)-1 && table_rslt.pathlen!=(uint64_t)-1 && table_rslt.index!=(uint64_t)-1){
 		s->ref_table[blk_encrypt_pt]+=1;

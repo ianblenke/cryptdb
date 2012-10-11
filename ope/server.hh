@@ -14,7 +14,7 @@
 
 
 // OPE encoding v||index|| 
-struct table_storage {
+struct table_entry {
     uint64_t ope; // v should now be everything
   
     uint64_t refcount;
@@ -58,13 +58,13 @@ public:
 
     tree_node<EncT>* tree_lookup(tree_node<EncT> *root, uint64_t v, uint64_t nbits) const;
     std::vector<EncT> lookup(uint64_t v, uint64_t nbits) const;
-    table_storage lookup(EncT xct);
+    table_entry lookup(EncT xct);
 
-    std::map<EncT, table_storage > ope_table;
+    std::map<EncT, table_entry > ope_table;
     std::map<EncT, int> ref_table;
-    void update_ope_table(tree_node<EncT>* node, table_storage base);
-    void update_db(table_storage old_entry, table_storage new_entry);
-    void delete_db(table_storage del_entry);
+    void update_ope_table(tree_node<EncT>* node, table_entry base);
+    void update_db(table_entry old_entry, table_entry new_entry);
+    void delete_db(table_entry del_entry);
     void clear_db_version();
 
 
