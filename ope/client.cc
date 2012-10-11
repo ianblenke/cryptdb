@@ -15,9 +15,8 @@ ffsl(uint64_t ct)
 
 static
 void
-handle_server(void* lp, blowfish* bc){
+handle_server(int csock, blowfish* bc){
     cout<<"Called handle_udf"<<endl;
-    int* csock = (int*) lp;
 
     //ope_client<uint64_t, blowfish>* my_client = new ope_client<uint64_t, blowfish>(bc);    
 
@@ -26,7 +25,9 @@ handle_server(void* lp, blowfish* bc){
     memset(buffer, 0, 1024);
 
     //Receive message to process
-    recv(*csock, buffer, 1024, 0);
+    if(recv(csock, buffer, 1024, 0) <=0){
+        assert_s(false, "handle_server receive failed");
+    }
     MsgType func_d;
     istringstream iss(buffer);
     iss>>func_d;
@@ -56,12 +57,14 @@ handle_server(void* lp, blowfish* bc){
         stringstream o;
         o << index << " " << (tmp_pt==pt);
         string rtn_str = o.str();
-        send(*csock, rtn_str.c_str(), rtn_str.size(),0);
+        if(send(csock, rtn_str.c_str(), rtn_str.size(),0) != rtn_str.size()){
+            assert_s(false, "handle_server send failed");
+        }
         //send(my_client->hsock, "0",1,0);
 
     }
     
-    free(csock);
+
     //delete my_client;
     //delete bc;    
 }
@@ -94,11 +97,12 @@ int main(){
     	csock = (int*) malloc(sizeof(int));
     	if((*csock = accept(hsock, (struct sockaddr*) &sadr, &addr_size))!=-1){
     	    //Pass connection and messages received to handle_client
-    	    handle_server((void*)csock, bc);
+    	    handle_server(*csock, bc);
     	}
     	else{
     	    std::cout<<"Error accepting!"<<endl;
     	}
+        free(csock);
     	//i--;
     }
     cerr<<"Done with client, closing now\n";
