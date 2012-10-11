@@ -26,6 +26,16 @@ using std::map;
 using std::max;
 
 
+
+template<class EncT>
+static
+uint64_t compute_ope(uint64_t ope_path, uint nbits, uint index) {
+    ope_path = (ope_path << num_bits) | index;
+    nbits+=num_bits;
+
+    return (ope_path << (64-nbits)) | (mask << (64-num_bits-nbits));
+}
+
 template<class EncT>
 struct tree_node
 {
@@ -218,7 +228,7 @@ tree<EncT>::rebalance(tree_node<EncT>* node, uint64_t v, uint64_t nbits,
     //newly updated (no longer stale) db values
     //global_version++;
 
-    uint64_t base_v = (v >> (path_index * num_bits))
+    uint64_t base_v = (v >> (path_index * num_bits));
     uint64_t base_nbits = nbits - path_index * num_bits;
 
     //Make sure OPE table is updated and correct
@@ -321,7 +331,7 @@ tree<EncT>::update_ope_table(tree_node<EncT> *node, uint64_t base_v, uint64_t ba
 
 		table_entry new_entry = ope_table[node->keys[i]];
 
-		new_entry.ope = compute_ope(base_v, base_nbits, i);
+		new_entry.ope = compute_ope<EncT>(base_v, base_nbits, i);
 
 		ope_table[node->keys[i]] = new_entry;
 		update_db(old_table_entry, new_entry);
@@ -1054,14 +1064,6 @@ tree::interaction(EncT ciph,
 	ope_path = (ope_path << num_bits) | index; 
     }
     
-}
-
-static
-uint64_t compute_ope(uint64_t ope_path, uint nbits, uint index) {
-    ope_path = (ope_path << num_bits) | index;
-    nbits+=num_bits;
-
-    return (ope_path << (64-nbits)) | (mask << (64-num_bits-nbits));
 }
 
 template<class EncT>

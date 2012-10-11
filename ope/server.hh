@@ -62,7 +62,7 @@ public:
 
     std::map<EncT, table_entry > ope_table;
     std::map<EncT, int> ref_table;
-    void update_ope_table(tree_node<EncT>* node, uint64_t base_v uint64_t base_nbits);
+    void update_ope_table(tree_node<EncT>* node, uint64_t base_v, uint64_t base_nbits);
     void update_db(table_entry old_entry, table_entry new_entry);
     void delete_db(table_entry del_entry);
     void clear_db_version();
