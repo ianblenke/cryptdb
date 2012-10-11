@@ -26,6 +26,8 @@ create_and_bind(int host_port);
 int
 create_and_connect(std::string host_name, int host_port);
 
+std::string
+send_receive(int sock, const string & msg);
 
 #define MsgType(m)    \
     m(ENC_INS)		   \
@@ -52,4 +54,7 @@ MsgType(__temp_m)
 // server sends
 // 1. type,
 // 2. det_val to encrypt,
-// 3. no keys at current node in tree,  det_val of each key 
+// 3. no keys at current node in tree,  det_val of each key
+// client replies
+// 1. the index of the item >= det_val and if there is no such value index = size
+// 2. bool value if the index is in fact equal to det_val

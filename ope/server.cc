@@ -30,7 +30,8 @@ template<class EncT>
 struct tree_node
 {
     vector<EncT> keys;
-    map<EncT, tree_node *> right;
+    map<EncT, tree_node *> right; // right has one more element than keys, the 0
+				  // element represents the leftmost subtree
 
     tree_node(){}
 
@@ -1021,28 +1022,55 @@ template class tree<uint64_t>;
 template class tree<uint32_t>;
 template class tree<uint16_t>;
 
+/*
+ * Given ciph, interacts with client and returns
+ * a pair (node, index of subtree of node) where node should be inserted
+ * ope path of node
+ * a flag, equals, indicating if node is the element at index is equal to
+ * underlying val of ciph
+ */
 template<class EncT>
-string *
-interaction(EncT ciph, uint64_t ope_enc, tree_node<EncT> & node) {
+void
+tree::interaction(EncT ciph,
+		  tree_node<EncT> * & rnode, uint & rindex,
+		  uint64_t & rope_path,
+                  bool & requals) {
 
     stringstream msg;
 
-     while (found) {	
+    tree_node<EncT> * curr = root;
+
+     while (true) {	
+
+	// create message and send it to client
 	msg.clear();
 	msg << MsgType::INTERACT_FOR_LOOKUP << " ";
 	msg << ciph << " ";
-	msg << node.keys.size() << " ";
-	for (uint i = 0; i < keys.size(); i++) {
-	    msg << node.keys[i] << " ";
+	uint len = curr->keys.size();
+	msg << len << " ";
+	for (uint i = 0; i < len; i++) {
+	    msg << curr->keys[i] << " ";
 	}
 
-	char * replyraw = send_receive(sock_cl, msg.str());
-	istringstream reply(replyraw);
+	string _reply = send_receive(sock_cl, msg.str());
+	istringstream reply(_reply);
 
-	// R: where is left?
+	uint index << reply;
+	bool equals << reply;
+
+	assert_s(len > index, "index returned by client is incorrect");
+
+	tree_node<EncT> * node = curr->right[index];
+	if (equals || !node) {
+	    // done
+	    rnode = curr;
+	    rope_path = ope_path;
+	    requals = equals;
+	    return;
+	}
+	curr = node;	
     }
     
-
 }
 
 template<class EncT>

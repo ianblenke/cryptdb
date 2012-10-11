@@ -29,36 +29,10 @@ void handle_server(void* lp, blowfish* bc){
     istringstream iss(buffer);
     iss>>func_d;
     if(DEBUG_COMM) cout<<"Client sees func_d="<<func_d<<" and buffer "<<buffer<<endl;
-    /*bool imode;
-    if(func_d==14){
-        imode=true;
-    }else if(func_d==15){
-        imode=false;
-    }else{
-        cout<<"ERROR didn't receive 14 or 15"<<endl;
-        exit(-1);
-    }*/
-    //if(func_d==14 || func_d==15){
+  
     assert_s(func_d == MsgType::INTERACT_FOR_LOOKUP, "Incorrect function type in handle_server!");
-    if(func_d == MsgType::INTERACT_FOR_LOOKUP){
+    if (func_d == MsgType::INTERACT_FOR_LOOKUP){
         
-/*        uint64_t det_val=0;
-        iss>>det_val;
-        if(DEBUG_COMM) cout<<"Client det_val "<<det_val<<endl;
-        uint64_t tmp_ope = my_client->encrypt(det_val, imode);
-        if(tmp_ope == (uint64_t)-1 ) {
-	    cout<<"WTF error in encrypt"<<endl;
-	       }
-        ostringstream o;
-        o.str("");
-        o.clear();
-        if(tmp_ope==0) {
-	    o<<"DONE";
-	       }
-        else {
-	    o<<"15 "<<tmp_ope;
-	   }
-*/
         uint64_t det, pt, tmp_det, tmp_pt;
         int size, index;
 
@@ -81,7 +55,9 @@ void handle_server(void* lp, blowfish* bc){
         string rtn_str = o.str();
         send(*csock, rtn_str.c_str(), rtn_str.size(),0);
         //send(my_client->hsock, "0",1,0);
+
     }
+    
     free(csock);
     //delete my_client;
     //delete bc;    
