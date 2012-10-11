@@ -25,7 +25,6 @@ using std::cerr;
 using std::map;
 using std::max;
 
-
 // Compute the ope encoding out of an ope path, nbits (no of bits of ope_path),
 // and index being the index in the last node on the path
 template<class EncT>
@@ -205,7 +204,7 @@ tree<EncT>::rebuild(vector<EncT> key_list){
 template<class EncT>
 void 
 tree<EncT>::rebalance(tree_node<EncT>* node, uint64_t v, uint64_t nbits,
-					 uint64_t path_index){
+					 uint64_t path_index, map<EncT, table_entry >  & ope_table){
     if(DEBUG) cout<<"Rebalance"<<endl;
 
     //table_entry base = ope_table[node->keys[0]];
@@ -233,7 +232,7 @@ tree<EncT>::rebalance(tree_node<EncT>* node, uint64_t v, uint64_t nbits,
     uint64_t base_nbits = nbits - path_index * num_bits;
 
     //Make sure OPE table is updated and correct
-    update_ope_table(node, base_v, base_nbits);
+    update_ope_table(node, base_v, base_nbits, ope_table);
     clear_db_version();
 }
 
@@ -322,7 +321,8 @@ tree<EncT>::update_db(table_entry old_entry, table_entry new_entry){
 //Ensure table is correct
 template<class EncT>
 void
-tree<EncT>::update_ope_table(tree_node<EncT> *node, uint64_t base_v, uint64_t base_nbits){
+tree<EncT>::update_ope_table(tree_node<EncT> *node, uint64_t base_v, uint64_t base_nbits, 
+							map<EncT, table_entry >  & ope_table){
 
     table_entry old_entry;
     for(int i = 0; i < (int) node->keys.size(); i++){
@@ -351,7 +351,7 @@ tree<EncT>::update_ope_table(tree_node<EncT> *node, uint64_t base_v, uint64_t ba
 		next_v = base_v<<num_bits;
 
 
-		update_ope_table(node->right[(EncT) NULL],  next_v, next_nbits);
+		update_ope_table(node->right[(EncT) NULL],  next_v, next_nbits, ope_table);
     }
     for(int i = 0; i < (int) node->keys.size(); i++){
 
@@ -363,7 +363,7 @@ tree<EncT>::update_ope_table(tree_node<EncT> *node, uint64_t base_v, uint64_t ba
 
 		    next_v = (base_v<<num_bits) | (i+1);
 
-		    update_ope_table(node->right[node->keys[i]], next_v, next_nbits);	
+		    update_ope_table(node->right[node->keys[i]], next_v, next_nbits, ope_table);	
 		}	
     }
 
@@ -537,7 +537,7 @@ tree<EncT>::delete_index(uint64_t v, uint64_t nbits, uint64_t index){
 	
     if(num_nodes<alpha*max_size){
 	if(DEBUG) cout<<"Delete rebalance"<<endl;
-	rebalance(root, (uint64_t) 0, (uint64_t) 0, (uint64_t) 0);
+	rebalance(root, (uint64_t) 0, (uint64_t) 0, (uint64_t) 0, ope_table);
 	max_size=num_nodes;
     }
 
@@ -735,13 +735,13 @@ tree<EncT>::tree_delete(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint6
 
 template<class EncT>
 string
-tree<EncT>::insert(uint64_t v, uint64_t nbits, uint64_t index, EncT encval){
+tree<EncT>::insert(uint64_t v, uint64_t nbits, uint64_t index, EncT encval, map<EncT, table_entry >  & ope_table){
     //If root doesn't exist yet, create it, then continue insertion
     if(!root){
 	if(DEBUG) cout<<"Inserting root"<<endl;
 	root=new tree_node<EncT>();
     }
-    vector<tree_node<EncT> * > path=tree_insert(root, v, nbits, index, encval, nbits);
+    vector<tree_node<EncT> * > path=tree_insert(root, v, nbits, index, encval, nbits, ope_table);
     clear_db_version();
 
     //Merkle tree insert
@@ -791,7 +791,7 @@ tree<EncT>::insert(uint64_t v, uint64_t nbits, uint64_t index, EncT encval){
     if(height> log(num_nodes)/log(((double)1.0)/alpha)+1 ){
     	uint64_t path_index;
 		tree_node<EncT>* scapegoat = findScapegoat(path, path_index);
-		rebalance(scapegoat, v, nbits, path_index);
+		rebalance(scapegoat, v, nbits, path_index, ope_table);
 		if(DEBUG) cout<<"Insert rebalance "<<height<<": "<<num_nodes<<endl;
 		if(scapegoat==root) max_size=num_nodes;
 		//if(DEBUG) print_tree();
@@ -803,7 +803,7 @@ tree<EncT>::insert(uint64_t v, uint64_t nbits, uint64_t index, EncT encval){
 
 template<class EncT>
 vector<tree_node<EncT>* >
-tree<EncT>::tree_insert(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint64_t index, EncT encval, uint64_t pathlen){
+tree<EncT>::tree_insert(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint64_t index, EncT encval, uint64_t pathlen, map<EncT, table_entry >  & ope_table){
 
     vector<tree_node<EncT>* > rtn_path;
 
@@ -877,64 +877,9 @@ tree<EncT>::tree_insert(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint6
 	} else{
 	    cout<<"Insert fail, wrong condition to create new node child"<< endl; exit(1);}
     }
-    rtn_path = tree_insert(node->right[key], v, nbits-num_bits, index, encval, pathlen);
+    rtn_path = tree_insert(node->right[key], v, nbits-num_bits, index, encval, pathlen, ope_table);
     rtn_path.push_back(node);
     return rtn_path;
-}
-
-template<class EncT>
-tree_node<EncT> *
-tree<EncT>::tree_lookup(tree_node<EncT> *node, uint64_t v, uint64_t nbits) const
-{
-
-    if (nbits == 0) {
-        return node;
-    }
-
-    int key_index = (int) (v&(mask<<(nbits-num_bits)))>>(nbits-num_bits);
-
-    EncT key;
-
-    if(key_index==0) key=(EncT) NULL;
-    else if(key_index<N) key = node->keys[key_index-1];
-    else return 0;
-
-    if(!node->key_in_map(key)){
-    	if(DEBUG) cout<<"Key not in map"<<endl;
-    	return 0;
-    }
-    return tree_lookup(node->right[key], v, nbits-num_bits);
-}
-
-template<class EncT>
-vector<EncT>
-tree<EncT>::lookup(uint64_t v, uint64_t nbits) const
-{
-    tree_node<EncT>* n;
-    //Handle if root doesn't exist yet
-    if(!root){
-	if(DEBUG) cout<<"First lookup no root"<<endl;
-	n=0;
-    }else{
-	n  = tree_lookup(root, v, nbits);
-    }
-
-    if(n==0){
-    	if(DEBUG) cout<<"NOPE! "<<v<<": "<<nbits<<endl;    	
-    	throw ope_lookup_failure();
-    }
-    return n->keys;
-}
-
-template<class EncT>
-table_entry *
-tree<EncT>::lookup(EncT xct){
-    if(ope_table.find(xct)!=ope_table.end()){
-        //if(DEBUG) cout <<"Found "<<xct<<" in table with v="<<ope_table[xct].v<<" nbits="<<ope_table[xct].pathlen<<" index="<<ope_table[xct].index<<endl;
-	return &ope_table[xct];
-    }
-
-    return NULL;
 }
 
 template<class EncT>
@@ -1079,17 +1024,17 @@ Server<EncT>::handle_enc(istringstream & iss, bool do_ins) {
     stringstream resp;
     resp.clear();
 
-    table_entry * ts = ope_table->lookup((uint64_t) ciph, ts);
-    if (ts) { // found in OPE Table
-	if (DEBUG) {cerr << "found in ope table"; }
-	// if this is an insert, increase ref count
-	if (do_ins) {
-	    ts->refcount++;
-	}
+    auto ts = ope_table.find((uint64_t) ciph);
+    if (ts != ope_table.end()) { // found in OPE Table
+    	if (DEBUG) {cerr << "found in ope table"; }
+    	// if this is an insert, increase ref count
+    	if (do_ins) {
+    	    ts->refcount++;
+    	}
 
-	resp << ts->pathlen << " " << v;
-	return new string(resp.str());
-	
+    	resp << ts->pathlen << " " << v;
+    	return new string(resp.str());
+    	
     } else { // not found in OPE Table
 	if (DEBUG) {cerr << "not in ope table \n"; }
 
@@ -1105,7 +1050,7 @@ Server<EncT>::handle_enc(istringstream & iss, bool do_ins) {
 	if (DEBUG) {cerr << "new ope_enc is " << ope_enc << " path " << ope_path << " index " << index << "\n"};
 	if (do_ins) {
 	    // insert in OPE Tree
-	    t->insert(ope_path, nbits, index, ciph);
+	    t->insert(ope_path, nbits, index, ciph, ope_table);
 
 	    // insert in OPE Table
 	    table_entry new_entry;
