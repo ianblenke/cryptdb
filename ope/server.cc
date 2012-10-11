@@ -26,7 +26,8 @@ using std::map;
 using std::max;
 
 
-
+// Compute the ope encoding out of an ope path, nbits (no of bits of ope_path),
+// and index being the index in the last node on the path
 template<class EncT>
 static
 uint64_t compute_ope(uint64_t ope_path, uint nbits, uint index) {
@@ -1019,15 +1020,16 @@ template class tree<uint16_t>;
 template<class EncT>
 void
 Server<EncT>::interaction(EncT ciph,
-		  tree_node<EncT> * & rnode, uint & rindex,
-		  uint64_t & ope_path,
-                  bool & requals) {
+			  tree_node<EncT> * & rnode, uint & rindex, uint & nbits,
+			  uint64_t & ope_path,
+			  bool & requals) {
 
     stringstream msg;
 
     tree_node<EncT> * curr = this.root;
 
     ope_path = 0;
+    nbits = 0;
 
      while (true) {	
 
@@ -1059,7 +1061,8 @@ Server<EncT>::interaction(EncT ciph,
 	    return;
 	}
 	curr = node;
-	ope_path = (ope_path << num_bits) | index; 
+	ope_path = (ope_path << num_bits) | index;
+	nbits += num_bits;
     }
     
 }

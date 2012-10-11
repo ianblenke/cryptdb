@@ -97,7 +97,7 @@ public:
     int sock_udf; //socket to udfs; server listens on it
 
     std::map<EncT, table_entry > ope_table;
-      
+  
     Server();
     ~Server();
 
@@ -108,7 +108,7 @@ private:
     /*
      * Given ciph, interacts with client and returns
      * a pair (node, index of subtree of node) where node should be inserted
-     * ope path of node
+     * ope path of node, nbits being bits ob this path,
      * a flag, equals, indicating if node is the element at index is equal to
      * underlying val of ciph
      */
