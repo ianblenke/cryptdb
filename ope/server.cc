@@ -1026,9 +1026,9 @@ Server<EncT>::handle_enc(int csock, istringstream & iss, bool do_ins) {
     	if (DEBUG) {cerr << "found in ope table"; }
     	// if this is an insert, increase ref count
     	if (do_ins) {
-    	    ts->refcount++;
+    	    ts->second.refcount++;
     	}
-	ope = opeToStr(ts->ope);
+	ope = opeToStr(ts->second.ope);
    	
     } else { // not found in OPE Table
 	if (DEBUG) {cerr << "not in ope table \n"; }
@@ -1037,38 +1037,41 @@ Server<EncT>::handle_enc(int csock, istringstream & iss, bool do_ins) {
 	uint index = 0;
 	uint64_t ope_path = 0;
 	bool equals = false;
-
+	uint nbits = 0;
 	interaction(ciph, node, index, nbits, ope_path, equals);
 
 	uint64_t ope_enc = compute_ope<EncT>(ope_path, nbits, index);
 	ope = opeToStr(ope_enc);
 	
-	if (DEBUG) {cerr << "new ope_enc is " << ope_enc << " path " << ope_path << " index " << index << "\n"};
+	if (DEBUG) {cerr << "new ope_enc is "
+			 << ope_enc << " path " << ope_path
+			 << " index " << index << "\n";}
 	if (do_ins) {
 	    // insert in OPE Tree
-	    t->insert(ope_path, nbits, index, ciph, ope_table);
+	    ope_tree.insert(ope_path, nbits, index, ciph, ope_table);
 
 	    // insert in OPE Table
 	    table_entry new_entry;
-	    new_entry.ope_enc = ope_enc;
+	    new_entry.ope = ope_enc;
 	    new_entry.refcount = 1;
 	    ope_table[ciph] = new_entry;
 	}
     }
 
-    assert_s(send(csock, ope.c_str(), ope.size(), 0) != ope.size(),
+    assert_s(send(csock, ope.c_str(), ope.size(), 0) != (int)ope.size(),
 	     "problem with send");
     
 }
 
 template<class EncT>
-void dispatch(int csock, tree<EncT> *s) {
+void
+Server<EncT>::dispatch(int csock) {
 
     uint buflen = 10240;
     char buffer[buflen];
     memset(buffer, 0, buflen);
 
-    recv(*csock, buffer, buflen, 0);
+    recv(csock, buffer, buflen, 0);
 
     if (DEBUG_COMM) {cerr << "received msg " << buffer << endl;}
 
@@ -1080,13 +1083,13 @@ void dispatch(int csock, tree<EncT> *s) {
     if (DEBUG_COMM) {cerr << "message type is " << mtnames[(int) msgtype] << endl;}
 
     switch (msgtype) {
-    case ENC_INS: {
+    case MsgType::ENC_INS: {
 	return handle_enc(csock, iss, true);
     }
-    case QUERY: {
+    case MsgType::QUERY: {
 	return handle_enc(csock, iss, false);
     }
-    default: 
+    default: {}
     }
 
     assert_s(false, "invalid message type in dispatch");
@@ -1097,14 +1100,12 @@ template<class EncT>
 Server<EncT>::Server() {
     sock_cl = create_and_connect(OPE_CLIENT_HOST, OPE_CLIENT_PORT);
     sock_udf = create_and_bind(OPE_SERVER_PORT);
-    t = new tree<uint64_t>();
 }
 
 template<class EncT>
 Server<EncT>::~Server() {
     close(sock_cl);
     close(sock_udf);
-    ~(*t);
 }
 
 
@@ -1130,7 +1131,7 @@ int main(int argc, char **argv){
 	
 	if ((csock = accept(server.sock_udf, (struct sockaddr*) &sadr, &addr_size)) >= 0){
 	    //Pass connection and messages received to handle_client
-	    dispatch(csock, server);
+	    server.dispatch(csock);
 	} else {
 	    cout<<"Error accepting!"<<endl;
 	    exit(-1);

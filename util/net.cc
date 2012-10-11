@@ -49,7 +49,7 @@ create_and_connect(string host_name, int host_port) {
 std::string
 send_receive(int sock, const string & msg) {
 
-    assert_s(send(sock, msg.c_str(), msg.size(), 0) != msg.size(),
+    assert_s(send(sock, msg.c_str(), msg.size(), 0) != (int)msg.size(),
 	     "error with send");
     
     uint buflen = 1024;

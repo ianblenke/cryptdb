@@ -97,9 +97,10 @@ public:
     Server();
     ~Server();
 
-private:
 
-    std::string handle_enc(std::istringstream & iss, bool do_ins);
+    /*************** helper functions *****************************/
+
+    void handle_enc(int csock, std::istringstream & iss, bool do_ins);
 
     /*
      * Given ciph, interacts with client and returns
@@ -112,8 +113,9 @@ private:
 		     tree_node<EncT> * & rnode, uint & rindex, uint & nbits,
 		     uint64_t & ope_path,
 		     bool & requals);
-	
 
+    /* Dispatched messages the server received to their handlers. */
+    void dispatch(int csock);
 
 };
 

@@ -15,7 +15,7 @@
 using namespace std;
 using namespace NTL;
 
-static int server_sock = create_and_connect(OPE_SERVER_HOST, OPE_SERVER_PORT);
+static int sock_server = create_and_connect(OPE_SERVER_HOST, OPE_SERVER_PORT);
 
 extern "C" {
 
@@ -61,7 +61,7 @@ extern "C" {
   return string(args->args[i], args->lengths[i]);
   }*/
 
-static int sock_ser = create_and_connect(OPE_SERVER_HOST, OPE_SEVER_PORT);
+static int sock_ser = create_and_connect(OPE_SERVER_HOST, OPE_SERVER_PORT);
     
 extern "C" {
 
@@ -74,8 +74,6 @@ extern "C" {
 
     long long ope_enc(UDF_INIT *initid, UDF_ARGS *args,
 		      char *is_null, char *error){
-
-	ope_state * os = (ope_state *) initid->ptr;
     
 	long long det_val;
 
@@ -94,7 +92,7 @@ extern "C" {
 	    mt = MsgType::QUERY;
 	}
 	
-	cerr << "mode: " << mode << " msgtype: " << mtnames[mt] << endl;
+	cerr << "mode: " << mode << " msgtype: " << mt << endl;
 
 
         char buffer[1024];
@@ -102,7 +100,7 @@ extern "C" {
         memset(buffer, '\0', 1024);
 
         ostringstream msg;
-        msg << << mt << " " << det_val;
+        msg << mt << " " << det_val;
 
 	string res = send_receive(sock_server, msg.str());
 	istringstream iss(res);
