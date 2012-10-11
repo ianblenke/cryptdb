@@ -193,10 +193,11 @@ tree<EncT>::rebuild(vector<EncT> key_list){
 
 template<class EncT>
 void 
-tree<EncT>::rebalance(tree_node<EncT>* node){
+tree<EncT>::rebalance(tree_node<EncT>* node, uint64_t v, uint64_t nbits,
+					 uint64_t path_index){
     if(DEBUG) cout<<"Rebalance"<<endl;
 
-    table_entry base = ope_table[node->keys[0]];
+    //table_entry base = ope_table[node->keys[0]];
 
     vector<EncT> key_list = flatten(node);
 /*	if(DEBUG){
@@ -217,9 +218,11 @@ tree<EncT>::rebalance(tree_node<EncT>* node){
     //newly updated (no longer stale) db values
     //global_version++;
 
+    uint64_t base_v = (v >> (path_index * num_bits))
+    uint64_t base_nbits = nbits - path_index * num_bits;
 
     //Make sure OPE table is updated and correct
-    update_ope_table(node, base);
+    update_ope_table(node, base_v, base_nbits);
     clear_db_version();
 }
 
@@ -308,34 +311,49 @@ tree<EncT>::update_db(table_entry old_entry, table_entry new_entry){
 //Ensure table is correct
 template<class EncT>
 void
-tree<EncT>::update_ope_table(tree_node<EncT> *node, table_entry base){
+tree<EncT>::update_ope_table(tree_node<EncT> *node, uint64_t base_v, uint64_t base_nbits){
 
-    table_entry old_table_entry;
+    //table_entry old_table_entry;
     for(int i = 0; i < (int) node->keys.size(); i++){
-	table_entry tmp = base;
-	tmp.index = i;
+/*		table_entry tmp = base;
+		tmp.index = i;*/
 	//tmp.version=global_version;
 
-	old_table_entry = ope_table[node->keys[i]];
+		table_entry new_entry = ope_table[node->keys[i]];
 
-	ope_table[node->keys[i]] = tmp;
-	update_db(old_table_entry, tmp);
+		new_entry.ope = compute_ope(base_v, base_nbits, i);
+
+		ope_table[node->keys[i]] = new_entry;
+		update_db(old_table_entry, new_entry);
     }
+
+    uint64_t next_v, next_nbits;
+	
+	next_nbits = base_nbits+num_bits;
+
     if(node->key_in_map( (EncT) NULL)){
-	table_entry tmp = base;
-	tmp.v = tmp.v<<num_bits;
-	tmp.pathlen+=num_bits;
-	tmp.index=0;
-	update_ope_table(node->right[(EncT) NULL], tmp);
+/*		table_entry tmp = base;
+		tmp.v = tmp.v<<num_bits;
+		tmp.pathlen+=num_bits;
+		tmp.index=0;*/
+
+		next_v = base_v<<num_bits;
+
+
+		update_ope_table(node->right[(EncT) NULL],  next_v, next_nbits);
     }
     for(int i = 0; i < (int) node->keys.size(); i++){
-	if(node->key_in_map(node->keys[i])){
-	    table_entry tmp = base;
-	    tmp.v = tmp.v<<num_bits | (i+1);
-	    tmp.pathlen+=num_bits;
-	    tmp.index=0;
-	    update_ope_table(node->right[node->keys[i]], tmp);	
-	}	
+
+		if(node->key_in_map(node->keys[i])){
+	/*	    table_entry tmp = base;
+		    tmp.v = tmp.v<<num_bits | (i+1);
+		    tmp.pathlen+=num_bits;
+		    tmp.index=0;*/
+
+		    next_v = (base_v<<num_bits) | (i+1);
+
+		    update_ope_table(node->right[node->keys[i]], next_v, next_nbits);	
+		}	
     }
 
 }
@@ -372,7 +390,7 @@ tree<EncT>::print_tree(){
 
 template<class EncT>
 tree_node<EncT>* 
-tree<EncT>::findScapegoat( vector<tree_node<EncT>* > path ){
+tree<EncT>::findScapegoat( vector<tree_node<EncT>* > path , uint64_t & path_index){
     int tmp_size = 0;
     tree_node<EncT>* last = NULL;
     typename map<EncT, tree_node<EncT> *>::iterator it;
@@ -382,31 +400,34 @@ tree<EncT>::findScapegoat( vector<tree_node<EncT>* > path ){
 
     //Move along path until you find the scapegoat node
     for(int i=0; i< (int) path.size(); i++){
-	tree_node<EncT>* cur_node = path[i];
+		tree_node<EncT>* cur_node = path[i];
 
-	int tmp_sum=0;
-	for(it=cur_node->right.begin(); it!=cur_node->right.end(); it++){
-	    if(it->second!=last){
-		childSize = it->second->len();
-		tmp_sum+=childSize;
-		childSizes.push_back(childSize);
-	    }else{
-		tmp_sum+=tmp_size;
-		childSizes.push_back(tmp_size);
-	    }
+		int tmp_sum=0;
+		for(it=cur_node->right.begin(); it!=cur_node->right.end(); it++){
+		    if(it->second!=last){
+			childSize = it->second->len();
+			tmp_sum+=childSize;
+			childSizes.push_back(childSize);
+		    }else{
+			tmp_sum+=tmp_size;
+			childSizes.push_back(tmp_size);
+		    }
 
-	}		
-	tmp_size = tmp_sum + cur_node->keys.size();
-	last = cur_node;
+		}		
+		tmp_size = tmp_sum + cur_node->keys.size();
+		last = cur_node;
 
-	for(int i=0; i< (int) childSizes.size(); i++){
-	    if(childSizes[i] > alpha*tmp_size) return cur_node;
-	}
+		for(int i=0; i< (int) childSizes.size(); i++){
+		    if(childSizes[i] > alpha*tmp_size) {
+		    	path_index = i;
+		    	return cur_node;
+		    }
+		}
 
-	childSizes.clear();
+		childSizes.clear();
 
     }
-
+    path_index = path.size()-1;
     return root;
 
 }
@@ -505,7 +526,7 @@ tree<EncT>::delete_index(uint64_t v, uint64_t nbits, uint64_t index){
 	
     if(num_nodes<alpha*max_size){
 	if(DEBUG) cout<<"Delete rebalance"<<endl;
-	rebalance(root);
+	rebalance(root, (uint64_t) 0, (uint64_t) 0, (uint64_t) 0);
 	max_size=num_nodes;
     }
 
@@ -757,11 +778,12 @@ tree<EncT>::insert(uint64_t v, uint64_t nbits, uint64_t index, EncT encval){
     //if(DEBUG) print_tree();
 
     if(height> log(num_nodes)/log(((double)1.0)/alpha)+1 ){
-	tree_node<EncT>* scapegoat = findScapegoat(path);
-	rebalance(scapegoat);
-	if(DEBUG) cout<<"Insert rebalance "<<height<<": "<<num_nodes<<endl;
-	if(scapegoat==root) max_size=num_nodes;
-	//if(DEBUG) print_tree();
+    	uint64_t path_index;
+		tree_node<EncT>* scapegoat = findScapegoat(path, path_index);
+		rebalance(scapegoat, v, nbits, path_index);
+		if(DEBUG) cout<<"Insert rebalance "<<height<<": "<<num_nodes<<endl;
+		if(scapegoat==root) max_size=num_nodes;
+		//if(DEBUG) print_tree();
     } 
 
     return s.str();
@@ -1035,11 +1057,11 @@ tree::interaction(EncT ciph,
 }
 
 static
-OPEType compute_ope(uint64_t ope_path, uint nbits, uint index) {
+uint64_t compute_ope(uint64_t ope_path, uint nbits, uint index) {
     ope_path = (ope_path << num_bits) | index;
     nbits+=num_bits;
 
-    uint64_t ope = (v << (64-nbits)) | (mask << (64-num_bits-nbits));
+    return (ope_path << (64-nbits)) | (mask << (64-num_bits-nbits));
 }
 
 template<class EncT>
@@ -1075,7 +1097,7 @@ server<class EncT>::handle_enc(istringstream & iss, bool do_ins) {
 
 	interaction(ciph, node, index, nbits, ope_path, equals);
 
-	uint64_t ope_enc = compute_ope(ope_path, index);
+	uint64_t ope_enc = compute_ope(ope_path, nbits, index);
 
 	if (DEBUG) {cerr << "new ope_enc is " << ope_enc << " path " << ope_path << " index " << index << "\n"};
 	if (do_ins) {

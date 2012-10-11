@@ -52,7 +52,7 @@ public:
     std::string insert(uint64_t v, uint64_t nbits, uint64_t index, EncT encval);
     std::vector<tree_node<EncT>* > tree_insert(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint64_t index, EncT encval, uint64_t pathlen);
 
-    tree_node<EncT>* findScapegoat( std::vector<tree_node<EncT>* > path );
+    tree_node<EncT>* findScapegoat( std::vector<tree_node<EncT>* > path , int & path_index);
 
     void print_tree();
 
@@ -62,7 +62,7 @@ public:
 
     std::map<EncT, table_entry > ope_table;
     std::map<EncT, int> ref_table;
-    void update_ope_table(tree_node<EncT>* node, table_entry base);
+    void update_ope_table(tree_node<EncT>* node, uint64_t base_v uint64_t base_nbits);
     void update_db(table_entry old_entry, table_entry new_entry);
     void delete_db(table_entry del_entry);
     void clear_db_version();
@@ -70,7 +70,7 @@ public:
 
     std::vector<EncT> flatten(tree_node<EncT>* node);
     tree_node<EncT>* rebuild(std::vector<EncT> key_list);
-    void rebalance(tree_node<EncT>* node);
+    void rebalance(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint64_t path_index);
     void delete_nodes(tree_node<EncT>* node);
 
     successor<EncT> find_succ(tree_node<EncT>* node, uint64_t v, uint64_t nbits);
