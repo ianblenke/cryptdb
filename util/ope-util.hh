@@ -34,4 +34,4 @@ std::string
 opeToStr(OPEType ope);
 
 // hardcoding passwords for our eval
-const string passwd = "opeope";
+const std::string passwd = "opeope";

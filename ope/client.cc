@@ -83,27 +83,27 @@ int main(){
     cerr << "Listening \n";
 
     socklen_t addr_size = sizeof(sockaddr_in);
-    int* csock;
     struct sockaddr_in sadr;
 
     //Handle 1 client b/f quiting (can remove later)
 
-    blowfish* bc = new blowfish(passwd);
-
+    blowfish * bc = new blowfish(passwd);
+    
     while (true) {
-    	cerr<<"Listening..."<<endl;
-    	csock = (int*) malloc(sizeof(int));
-    	if((*csock = accept(hsock, (struct sockaddr*) &sadr, &addr_size))!=-1){
+    	cerr << "Listening..." << endl;
+    	int csock = 0;
+    	if ((csock = accept(sock, (struct sockaddr*) &sadr, &addr_size) >= 0){
     	    //Pass connection and messages received to handle_client
-    	    handle_server(*csock, bc);
+    	    handle_server(csock, bc);
     	}
     	else{
     	    std::cout<<"Error accepting!"<<endl;
     	}
-        free(csock);
+        close(csock);
     }
+    
     cerr<<"Done with client, closing now\n";
-    close(hsock);
+    close(sock);
     delete bc;
 
 }
