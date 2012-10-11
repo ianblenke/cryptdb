@@ -23,7 +23,7 @@ handle_interaction(istringstream & iss, blowfish* bc){
     
     MsgType func_d;
     iss>>func_d;
-    if(DEBUG_COMM) cout<<"Client sees func_d="<<func_d<<" and buffer "<<buffer<<endl;
+    //if(DEBUG_COMM) cout<<"Client sees func_d="<<func_d<<" and buffer "<<buffer<<endl;
   
     assert_s(func_d == MsgType::INTERACT_FOR_LOOKUP, "Incorrect function type in handle_server!");
     if (func_d == MsgType::INTERACT_FOR_LOOKUP){
@@ -78,7 +78,7 @@ int main(){
     //Handle 1 client b/f quiting (can remove later)
 
     blowfish * bc = new blowfish(passwd);
-    int csock = accept(sock, (struct sockaddr*) &sadr, &addr_size)
+    int csock = accept(sock, (struct sockaddr*) &sadr, &addr_size);
 
     if(csock < 0){
         assert_s(false, "Client failed to accept correctly");

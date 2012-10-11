@@ -1,7 +1,7 @@
 #pragma once
 
 #include <stdint.h>
-
+#include <sstream>
 #include <vector>
 #include <iostream>
 #include <map>
@@ -110,12 +110,12 @@ public:
      * underlying val of ciph
      */
     void interaction(EncT ciph,
-		     tree_node<EncT> * & rnode, uint & rindex, uint & nbits,
+		     uint & rindex, uint & nbits,
 		     uint64_t & ope_path,
 		     bool & requals);
 
     /* Dispatched messages the server received to their handlers. */
-    void dispatch(int csock);
+    void dispatch(int csock, std::istringstream & iss);
 
 };
 

@@ -2,7 +2,6 @@
 #include <exception>
 #include <utility>
 #include <stdlib.h>
-#include <sstream>
 #include <stdio.h>
 #include <string.h>
 #include <netinet/in.h>
@@ -1054,8 +1053,7 @@ Server<EncT>::handle_enc(int csock, istringstream & iss, bool do_ins) {
         assert_s(!equals, "equals should always be false");
 
     	
-    	if (DEBUG) {cerr << "new ope_enc is "
-    			 << ope_enc << " path " << ope_path
+    	if (DEBUG) {cerr << "new ope_enc has "<< " path " << ope_path
     			 << " index " << index << "\n";}
     	if (do_ins) {
     	    // insert in OPE Tree
@@ -1129,10 +1127,9 @@ int main(int argc, char **argv){
     cerr<<"Listening \n";
 
     socklen_t addr_size = sizeof(sockaddr_in);
-    int csock;
     struct sockaddr_in sadr;
     
-    csock = accept(server.sock_udf, (struct sockaddr*) &sadr, &addr_size));
+    int csock = accept(server.sock_udf, (struct sockaddr*) &sadr, &addr_size);
     assert_s( csock>=0, "Server accept failed!");
 
     uint buflen = 10240;
