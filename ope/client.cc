@@ -57,7 +57,7 @@ handle_server(int csock, blowfish* bc){
         stringstream o;
         o << index << " " << (tmp_pt==pt);
         string rtn_str = o.str();
-        if(send(csock, rtn_str.c_str(), rtn_str.size(),0) != (int)rtn_str.size()){
+        if (send(csock, rtn_str.c_str(), rtn_str.size(),0) != (int)rtn_str.size()){
             assert_s(false, "handle_server send failed");
         }
         //send(my_client->hsock, "0",1,0);
@@ -71,28 +71,26 @@ handle_server(int csock, blowfish* bc){
 
 
 int main(){
-    //Build mask based on N
-    mask=make_mask();
 
     //Socket connection
-    int hsock = create_and_bind(OPE_CLIENT_PORT);
+    int sock = create_and_bind(OPE_CLIENT_PORT);
     
     //Start listening
-    int listen_rtn = listen(hsock, 10);
-    if(listen_rtn<0){
-	cerr<<"Error listening to socket"<<endl;
+    int listen_rtn = listen(sock, 10);
+    if (listen_rtn < 0) {
+	cerr << "Error listening to socket" << endl;
     }
-    cerr<<"Listening \n";
+    cerr << "Listening \n";
 
-    socklen_t addr_size=sizeof(sockaddr_in);
+    socklen_t addr_size = sizeof(sockaddr_in);
     int* csock;
     struct sockaddr_in sadr;
-    int i=5;
+
     //Handle 1 client b/f quiting (can remove later)
 
-    blowfish* bc = new blowfish("frankli714");
+    blowfish* bc = new blowfish(passwd);
 
-    while(i>0){
+    while (true) {
     	cerr<<"Listening..."<<endl;
     	csock = (int*) malloc(sizeof(int));
     	if((*csock = accept(hsock, (struct sockaddr*) &sadr, &addr_size))!=-1){
@@ -103,7 +101,6 @@ int main(){
     	    std::cout<<"Error accepting!"<<endl;
     	}
         free(csock);
-    	//i--;
     }
     cerr<<"Done with client, closing now\n";
     close(hsock);

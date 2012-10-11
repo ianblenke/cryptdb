@@ -16,7 +16,7 @@ int main(){
 
     test_order(1000,0);
 
-    blowfish* bc = new blowfish("frankli714");
+    blowfish* bc = new blowfish(passwd);
 
     uint64_t pt=0;
     uint64_t ct=0;
@@ -32,7 +32,7 @@ int main(){
     }
 
 /*
-  blowfish* bc = new blowfish("frankli714");
+  blowfish* bc = new blowfish(passwd);
 
   Connect * dbconnect;
   dbconnect = new Connect( "localhost", "frank", "passwd","cryptdb", 3306);
@@ -61,7 +61,7 @@ int main(){
 
 void test_order(int num_vals, int order){
 
-    blowfish* bc = new blowfish("frankli714");
+    blowfish* bc = new blowfish(passwd);
 
     Connect * dbconnect;
     dbconnect = new Connect( "localhost", "root", "letmein","cryptdb", 3306);

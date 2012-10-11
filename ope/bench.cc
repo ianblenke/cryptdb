@@ -19,7 +19,7 @@ bench_passive_enc(uint num_vals) {
     cerr << "comparison encryption of " << num_vals << " random vals\n";
 
     
-    blowfish* bc = new blowfish("frankli714");
+    blowfish* bc = new blowfish(passwd);
     ope_client<uint64_t, blowfish> * my_client =  new ope_client<uint64_t, blowfish>(bc);    
     
     uint64_t ope_encodings[num_vals];
