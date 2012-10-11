@@ -7,6 +7,7 @@ const double alpha = 0.3;
 // for N power of two we want log_2(N) + 1
 const int num_bits = (int) ceil(log2(N+1.0));
 
+typedef OPEType ope;
 
 //Whether to print debugging output or not
 #define DEBUG 1
@@ -26,3 +27,5 @@ make_mask(){
 
 uint64_t mask = make_mask();
 
+std::string
+opeToStr(OPEType ope);

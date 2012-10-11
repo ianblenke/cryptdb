@@ -964,39 +964,6 @@ tree<EncT>::test_node(tree_node<EncT>* cur_node){
 	}
     }
 
-    //Test that all subtree nodes have keys with values in the correct range
-    //No longer true with DET enc
-    /*int low = 0;
-      int high = sorted_keys[0];
-      int i=0;
-      if(cur_node->key_in_map((EncT) NULL)){
-      if(test_vals(cur_node->right[(EncT) NULL], low, high)!=true) return false;
-      }
-
-      for(int j=1; j<N-1; j++){
-      if((int) sorted_keys.size()>j){
-      i++;
-      low = high;
-      high = sorted_keys[j];
-      if(cur_node->key_in_map(sorted_keys[j-1])){
-      if(test_vals(cur_node->right[sorted_keys[j-1]], low, high)!=true) return false;
-      }
-
-      }
-
-      }
-	
-      low = high;
-      high = RAND_MAX; //Note this is 2147483647
-
-      if(cur_node->key_in_map(sorted_keys[i])){
-      if(test_vals(cur_node->right[sorted_keys[i]], low, high)!=true) return false;
-      }
-
-      for(int x=0; x< (int) sorted_keys.size()-1; x++){
-      if(sorted_keys[x]==sorted_keys[x+1]) return false;
-      }*/
-
     return true;
 
 }
@@ -1082,8 +1049,16 @@ tree::interaction(EncT ciph,
     
 }
 
+static
+OPEType compute_ope(uint64_t ope_path, uint nbits, uint index) {
+    ope_path = (ope_path << num_bits) | index;
+    nbits+=num_bits;
+
+    uint64_t ope = (v << (64-nbits)) | (mask << (64-num_bits-nbits));
+}
+
 template<class EncT>
-string *
+string 
 server<class EncT>::handle_enc(istringstream & iss, bool do_ins) {
    
     uint64_t ciph;
@@ -1112,22 +1087,24 @@ server<class EncT>::handle_enc(istringstream & iss, bool do_ins) {
 	uint index = 0;
 	uint64_t ope_path = 0;
 	bool equals = false;
-	interaction(ciph, node, index, ope_path, equals);
 
-	uint64_t ope_enc = compute_ope(ope_path, index, )
+	interaction(ciph, node, index, nbits, ope_path, equals);
+
+	uint64_t ope_enc = compute_ope(ope_path, index);
+
+	if (DEBUG) {cerr << "new ope_enc is " << ope_enc << " path " << ope_path << " index " << index << "\n"};
 	if (do_ins) {
 	    // insert in OPE Tree
-	    t->insert;
+	    t->insert(ope_path, nbits, index, ciph);
 
 	    // insert in OPE Table
 	    table_storage new_entry;
-	    new_entry.
+	    new_entry.ope_enc = ope_enc;
+	    new_entry.refcount = 1;
+	    ope_table[ciph] = new_entry;
 	}
 
-	// need to tell the client to interact with server
-	// R: how do we know which client
-
-	// now send to client and need to wait on response back
+	return opeToStr(ope_enc);
 	
     }
 
