@@ -109,7 +109,7 @@ private:
      * underlying val of ciph
      */
     void interaction(EncT ciph,
-		     tree_node<EncT> * & rnode, uint & rindex,
+		     tree_node<EncT> * & rnode, uint & rindex, uint & nbits,
 		     uint64_t & ope_path,
 		     bool & requals);
 	

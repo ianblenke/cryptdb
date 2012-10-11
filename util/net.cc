@@ -49,14 +49,16 @@ create_and_connect(string host_name, int host_port) {
 std::string
 send_receive(int sock, const string & msg) {
 
-    send(sock, msg.c_str(), msg.size(), 0);
+    assert_s(send(sock, msg.c_str(), msg.size(), 0) != msg.size(),
+	     "error with send");
     
     uint buflen = 1024;
     char buffer[buflen];
 	
     memset(buffer, '\0', buflen);
     
-    recv(sock, buffer, buflen, 0);
+    assert_s(recv(sock, buffer, buflen, 0) > 0,
+	     "error with receive");
     
     return string(buffer);
        

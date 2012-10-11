@@ -1012,17 +1012,15 @@ Server<EncT>::interaction(EncT ciph,
 }
 
 template<class EncT>
-string 
-Server<EncT>::handle_enc(istringstream & iss, bool do_ins) {
+void 
+Server<EncT>::handle_enc(int csock, istringstream & iss, bool do_ins) {
    
     uint64_t ciph;
     iss >> ciph;
-
     if(DEBUG_COMM) cout<< "ciph: "<< ciph << endl;
 
-    stringstream resp;
-    resp.clear();
-
+    string ope;
+    
     auto ts = ope_table.find((uint64_t) ciph);
     if (ts != ope_table.end()) { // found in OPE Table
     	if (DEBUG) {cerr << "found in ope table"; }
@@ -1030,10 +1028,8 @@ Server<EncT>::handle_enc(istringstream & iss, bool do_ins) {
     	if (do_ins) {
     	    ts->refcount++;
     	}
-
-    	resp << ts->pathlen << " " << v;
-    	return new string(resp.str());
-    	
+	ope = opeToStr(ts->ope);
+   	
     } else { // not found in OPE Table
 	if (DEBUG) {cerr << "not in ope table \n"; }
 
@@ -1045,7 +1041,8 @@ Server<EncT>::handle_enc(istringstream & iss, bool do_ins) {
 	interaction(ciph, node, index, nbits, ope_path, equals);
 
 	uint64_t ope_enc = compute_ope<EncT>(ope_path, nbits, index);
-
+	ope = opeToStr(ope_enc);
+	
 	if (DEBUG) {cerr << "new ope_enc is " << ope_enc << " path " << ope_path << " index " << index << "\n"};
 	if (do_ins) {
 	    // insert in OPE Tree
@@ -1057,20 +1054,15 @@ Server<EncT>::handle_enc(istringstream & iss, bool do_ins) {
 	    new_entry.refcount = 1;
 	    ope_table[ciph] = new_entry;
 	}
-
-	return opeToStr(ope_enc);
-	
     }
 
-
-   // if(DEBUG_COMM) {cerr << "Rtn b/f ostringstream: " << table_rslt.v<<" : " << table_rslt.pathlen<<" : " << table_rslt.index<<endl;}
+    assert_s(send(csock, ope.c_str(), ope.size(), 0) != ope.size(),
+	     "problem with send");
     
-
 }
 
 template<class EncT>
-std::string dispatch(void *lp, tree<EncT> *s) {
-    int *csock = (int *)lp;
+void dispatch(int csock, tree<EncT> *s) {
 
     uint buflen = 10240;
     char buffer[buflen];
@@ -1089,10 +1081,10 @@ std::string dispatch(void *lp, tree<EncT> *s) {
 
     switch (msgtype) {
     case ENC_INS: {
-	return handle_enc(iss, true);
+	return handle_enc(csock, iss, true);
     }
     case QUERY: {
-	return handle_enc(iss, false);
+	return handle_enc(csock, iss, false);
     }
     default: 
     }
@@ -1138,7 +1130,7 @@ int main(int argc, char **argv){
 	
 	if ((csock = accept(server.sock_udf, (struct sockaddr*) &sadr, &addr_size)) >= 0){
 	    //Pass connection and messages received to handle_client
-	    dispatch((void*) &csock, server);
+	    dispatch(csock, server);
 	} else {
 	    cout<<"Error accepting!"<<endl;
 	    exit(-1);
