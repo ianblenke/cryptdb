@@ -996,8 +996,8 @@ tree<EncT>::test_vals(tree_node<EncT>* cur_node, EncT low, EncT high){
     //Make sure all keys at node are in proper range
     for(int i=0; i< (int) cur_node->keys.size(); i++){
 	EncT this_key = cur_node->keys[i];
-	if(this_key<=low || this_key>=high){
-	    cout<<"Values off "<<this_key<<": "<<low<<", "<<high<<endl;
+	if ( this_key <= low || this_key >= high) {
+	    cout << "Values off "<< this_key << ": " << low << ", " << high << endl;
 	    return false;
 	}
     }
@@ -1024,21 +1024,21 @@ Server<EncT>::interaction(EncT ciph,
 			  uint64_t & ope_path,
 			  bool & requals) {
 
-    stringstream msg;
-
-    tree_node<EncT> * curr = this.root;
+    tree_node<EncT> * curr = ope_tree.root;
 
     ope_path = 0;
     nbits = 0;
 
      while (true) {	
-
 	// create message and send it to client
+	stringstream msg;
 	msg.clear();
 	msg << MsgType::INTERACT_FOR_LOOKUP << " ";
 	msg << ciph << " ";
+
 	uint len = curr->keys.size();
 	msg << len << " ";
+
 	for (uint i = 0; i < len; i++) {
 	    msg << curr->keys[i] << " ";
 	}
@@ -1047,19 +1047,18 @@ Server<EncT>::interaction(EncT ciph,
 	istringstream reply(_reply);
 
 	uint index;
-	reply >> index;
 	bool equals;
-	reply >> equals;
+	reply >> index >> equals;
 
 	assert_s(len > index, "index returned by client is incorrect");
 
 	tree_node<EncT> * node = curr->right[index];
 	if (equals || !node) {
-	    // done
+	    // done: found node match or empty spot
 	    rnode = curr;
 	    requals = equals;
 	    return;
-	}
+	}	
 	curr = node;
 	ope_path = (ope_path << num_bits) | index;
 	nbits += num_bits;
@@ -1175,35 +1174,33 @@ Server<EncT>::~Server() {
 
 int main(int argc, char **argv){
     
-
     cerr<<"Starting tree server \n";
     Server<uint64_t> server;
     
     //Start listening
     int listen_rtn = listen(server.sock_udf, 10);
-    if(listen_rtn<0){
+    if (listen_rtn < 0) {
 	cerr<<"Error listening to socket"<<endl;
     }
     cerr<<"Listening \n";
 
-    socklen_t addr_size=sizeof(sockaddr_in);
+    socklen_t addr_size = sizeof(sockaddr_in);
     int csock;
     struct sockaddr_in sadr;
     
     while (true) {
 	cerr<<"Listening..."<<endl;
 	
-	if ((csock = accept(server.sock_udf, (struct sockaddr*) &sadr, &addr_size))!=-1){
+	if ((csock = accept(server.sock_udf, (struct sockaddr*) &sadr, &addr_size)) >= 0){
 	    //Pass connection and messages received to handle_client
 	    dispatch((void*) &csock, server);
-	}
-	else{
+	} else {
 	    cout<<"Error accepting!"<<endl;
 	    exit(-1);
 	}
 	close(csock);
 
     }
-    cerr<<"Done with server, closing now\n";
-    close(server.sock_udf);
+
+    cerr << "Server exits!\n";
 }

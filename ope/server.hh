@@ -92,10 +92,10 @@ public:
 template<class EncT>
 class Server {
 public:
-    tree<EncT> * t;
     int sock_cl; //socket to client; server connects thru it
     int sock_udf; //socket to udfs; server listens on it
 
+    tree<EncT> ope_tree;
     std::map<EncT, table_entry > ope_table;
   
     Server();
