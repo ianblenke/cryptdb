@@ -48,18 +48,12 @@ extern "C" {
     long long   ope_enc(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error);
 
 } /* extern C */
-/*
-  static uint64_t
-  getui(UDF_ARGS * args, int i)
-  {
-  return (uint64_t) (*((ulonglong *) args->args[i]));
-  }
-*/
-/*static string
-  getstring(UDF_ARGS * args, int i)
-  {
-  return string(args->args[i], args->lengths[i]);
-  }*/
+
+static uint64_t
+getui(UDF_ARGS * args, int i)
+{
+    return (uint64_t) (*((ulonglong *) args->args[i]));
+}
 
 static int sock_ser = create_and_connect(OPE_SERVER_HOST, OPE_SERVER_PORT);
     
@@ -75,9 +69,7 @@ extern "C" {
     long long ope_enc(UDF_INIT *initid, UDF_ARGS *args,
 		      char *is_null, char *error){
     
-	long long det_val;
-
-	det_val = *((long long*) args->args[0]);
+	uint64_t det_val = getui(args, 0);
 
 	cerr << "inside UDF \n";
 
@@ -94,24 +86,18 @@ extern "C" {
 	
 	cerr << "mode: " << mode << " msgtype: " << mt << endl;
 
-
-        char buffer[1024];
-    
-        memset(buffer, '\0', 1024);
-
         ostringstream msg;
         msg << mt << " " << det_val;
 
 	string res = send_receive(sock_server, msg.str());
-	istringstream iss(res);
 	cerr << "Result for " << det_val << " is " << res << endl;
-	
+
+	istringstream iss(res);
 	uint64_t ope_rtn;
 	iss >> ope_rtn;
-	cerr << "Return ope_rtn=" << ope_rtn << endl;
+	cerr << "Return ope_rtn = " << ope_rtn << endl;
               
 	return ope_rtn;
-	
     }
 
     my_bool

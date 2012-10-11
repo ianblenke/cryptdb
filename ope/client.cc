@@ -92,7 +92,7 @@ int main(){
     while (true) {
     	cerr << "Listening..." << endl;
     	int csock = 0;
-    	if ((csock = accept(sock, (struct sockaddr*) &sadr, &addr_size) >= 0){
+    	if ((csock = accept(sock, (struct sockaddr*) &sadr, &addr_size)) >= 0){
     	    //Pass connection and messages received to handle_client
     	    handle_server(csock, bc);
     	}

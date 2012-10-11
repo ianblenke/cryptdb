@@ -75,3 +75,6 @@ operator>>(std::istream & o, MsgType & mt);
 // client replies
 // 1. the index of the item >= det_val and if there is no such value index = size
 // 2. bool value if the index is in fact equal to det_val
+
+// UDF
+// ope_enc(det_val, i) -- i indicates whether the value should be inserted
