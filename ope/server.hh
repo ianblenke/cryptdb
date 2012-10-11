@@ -60,8 +60,6 @@ public:
     std::vector<EncT> lookup(uint64_t v, uint64_t nbits) const;
     table_entry * lookup(EncT xct);
 
-    std::map<EncT, table_entry > ope_table;
-    std::map<EncT, int> ref_table;
     void update_ope_table(tree_node<EncT>* node, uint64_t base_v, uint64_t base_nbits);
     void update_db(table_entry old_entry, table_entry new_entry);
     void delete_db(table_entry del_entry);
@@ -98,10 +96,29 @@ public:
     int sock_cl; //socket to client; server connects thru it
     int sock_udf; //socket to udfs; server listens on it
 
-    std::string handle_enc(istringstream & iss, bool do_ins) 
-
+    std::map<EncT, table_entry > ope_table;
+      
     Server();
     ~Server();
+
+private:
+
+    std::string handle_enc(std::istringstream & iss, bool do_ins);
+
+    /*
+     * Given ciph, interacts with client and returns
+     * a pair (node, index of subtree of node) where node should be inserted
+     * ope path of node
+     * a flag, equals, indicating if node is the element at index is equal to
+     * underlying val of ciph
+     */
+    void interaction(EncT ciph,
+		     tree_node<EncT> * & rnode, uint & rindex,
+		     uint64_t & ope_path,
+		     bool & requals);
+	
+
+
 };
 
    

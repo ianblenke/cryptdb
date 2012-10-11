@@ -1016,16 +1016,9 @@ template class tree<uint64_t>;
 template class tree<uint32_t>;
 template class tree<uint16_t>;
 
-/*
- * Given ciph, interacts with client and returns
- * a pair (node, index of subtree of node) where node should be inserted
- * ope path of node
- * a flag, equals, indicating if node is the element at index is equal to
- * underlying val of ciph
- */
 template<class EncT>
 void
-tree<EncT>::interaction(EncT ciph,
+Server<EncT>::interaction(EncT ciph,
 		  tree_node<EncT> * & rnode, uint & rindex,
 		  uint64_t & ope_path,
                   bool & requals) {
@@ -1051,8 +1044,10 @@ tree<EncT>::interaction(EncT ciph,
 	string _reply = send_receive(sock_cl, msg.str());
 	istringstream reply(_reply);
 
-	uint index << reply;
-	bool equals << reply;
+	uint index;
+	reply >> index;
+	bool equals;
+	reply >> equals;
 
 	assert_s(len > index, "index returned by client is incorrect");
 
@@ -1071,7 +1066,7 @@ tree<EncT>::interaction(EncT ciph,
 
 template<class EncT>
 string 
-Server<class EncT>::handle_enc(istringstream & iss, bool do_ins) {
+Server<EncT>::handle_enc(istringstream & iss, bool do_ins) {
    
     uint64_t ciph;
     iss >> ciph;
@@ -1081,7 +1076,7 @@ Server<class EncT>::handle_enc(istringstream & iss, bool do_ins) {
     stringstream resp;
     resp.clear();
 
-    table_entry * ts = s->lookup((uint64_t) ciph, ts);
+    table_entry * ts = ope_table->lookup((uint64_t) ciph, ts);
     if (ts) { // found in OPE Table
 	if (DEBUG) {cerr << "found in ope table"; }
 	// if this is an insert, increase ref count
