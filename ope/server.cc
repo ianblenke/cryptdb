@@ -1073,17 +1073,18 @@ tree::interaction(EncT ciph,
 	if (equals || !node) {
 	    // done
 	    rnode = curr;
-	    ope_path = ope_path;
 	    requals = equals;
 	    return;
 	}
-	curr = node;	
+	curr = node;
+	ope_path = (ope_path << num_bits) | index; 
     }
     
 }
 
 template<class EncT>
-string * handle_enc(istringstream & iss, bool do_ins) {
+string *
+server<class EncT>::handle_enc(istringstream & iss, bool do_ins) {
    
     uint64_t ciph;
     iss >> ciph;
@@ -1111,9 +1112,17 @@ string * handle_enc(istringstream & iss, bool do_ins) {
 	uint index = 0;
 	uint64_t ope_path = 0;
 	bool equals = false;
-	uint64_t ope_enc = interaction(ciph, node, index, ope_path, equals);
+	interaction(ciph, node, index, ope_path, equals);
 
-	continue ..
+	uint64_t ope_enc = compute_ope(ope_path, index, )
+	if (do_ins) {
+	    // insert in OPE Tree
+	    t->insert;
+
+	    // insert in OPE Table
+	    table_storage new_entry;
+	    new_entry.
+	}
 
 	// need to tell the client to interact with server
 	// R: how do we know which client
