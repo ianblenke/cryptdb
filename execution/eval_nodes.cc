@@ -104,15 +104,14 @@ subselect_node::eval_scalar(exec_context& ctx, db_tuple& scalar_args)
   op->close(eval_ctx);
 
   // we expect this query to return a single scalar result (or empty)
-  SANITY(v.size() == 0 || v.size() == 1);
-
+  // XXX: this is bad design- we should return all the results and let the
+  // callers decide what to do
   if (v.size() == 0) {
     // exists query, return false
-    dprintf("subquery(%s): returning false\n", TO_C(_n));
-    return _cached_values[scalar_args] = db_elem(false);
+    dprintf("subquery(%s): returning no results\n", TO_C(_n));
+    return _cached_values[scalar_args] = db_elem();
   } else {
-    // scalar result
-    SANITY(v[0].columns.size() == 1);
+    // only retains 1 result
     dprintf("subquery(%s): %s\n", TO_C(_n), TO_C(v[0].columns.front()));
     return _cached_values[scalar_args] = v[0].columns.front();
   }
