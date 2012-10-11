@@ -45,3 +45,35 @@ create_and_connect(string host_name, int host_port) {
 
     return hsock;
 }
+
+std::string
+send_receive(int sock, const string & msg) {
+
+    send(sock, msg.c_str(), msg.size(), 0);
+    
+    uint buflen = 1024;
+    char buffer[buflen];
+	
+    memset(buffer, '\0', buflen);
+    
+    recv(sock, buffer, buflen, 0);
+    
+    return string(buffer);
+       
+}
+
+
+ostream &
+operator<<(ostream & o, MsgType mt) {
+    o << mtnames[(int)mt];
+    return o;
+}
+
+istream & 
+operator>>(istream & o, MsgType & mt) {
+    string s;
+    o >> s;
+    mt = string_to_msg_type(s);
+    return o;
+}
+

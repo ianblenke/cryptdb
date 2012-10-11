@@ -1,20 +1,21 @@
 #pragma once
 
-#include <algorithm>
-#include <vector>
-#include <util/net.hh>
-#include <cmath>
 #include <stdint.h>
+
+#include <vector>
 #include <iostream>
 #include <map>
-#include <edb/Connect.hh>
-#include "btree.hh"
+
+#include <util/net.hh>
 #include <util/ope-util.hh>
+#include <edb/Connect.hh>
+#include <ope/btree.hh>
+
 
 
 // OPE encoding v||index|| 
 struct table_storage {
-    uint64_t v; // v should now be everything
+    uint64_t ope; // v should now be everything
   
     uint64_t refcount;
     //int version;
@@ -30,17 +31,6 @@ struct predecessor;
 
 template<class EncT>
 struct successor;
-
-template<class EncT>
-class Server {
-public:
-    tree * t;
-    int sock_cl; //socket to client; server connects thru it
-    int sock_udf; //socket to udfs; server listens on it
-    server();
-}
-
-   
 
 template<class EncT>
 class tree {
@@ -100,4 +90,15 @@ public:
 
 };
 
+
+template<class EncT>
+class Server {
+public:
+    tree<EncT> * t;
+    int sock_cl; //socket to client; server connects thru it
+    int sock_udf; //socket to udfs; server listens on it
+    Server();
+};
+
+   
 

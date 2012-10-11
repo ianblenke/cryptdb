@@ -7,6 +7,7 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <resolv.h>
+#include <sstream>
 
 const int OPE_SERVER_PORT = 1111;
 const int OPE_SERVER_PORT2 = 1113;
@@ -27,12 +28,13 @@ int
 create_and_connect(std::string host_name, int host_port);
 
 std::string
-send_receive(int sock, const string & msg);
+send_receive(int sock, const std::string & msg);
 
 #define MsgType(m)    \
     m(ENC_INS)		   \
     m(QUERY)   \
-    m(INTERACT_FOR_LOOKUP)
+    m(INTERACT_FOR_LOOKUP) \
+    m(INVALID)
 
 typedef enum class MsgType {
 #define __temp_m(n) n,
@@ -47,6 +49,21 @@ const std::string mtnames[] = {
 MsgType(__temp_m)
 #undef __temp_m
 };
+
+inline MsgType string_to_msg_type(const std::string &s)
+{
+#define __temp_m(n) if (s == #n) return MsgType::n;
+MsgType(__temp_m)
+#undef __temp_m
+    // TODO: possibly raise an exception
+    return MsgType::INVALID;
+}
+
+std::ostream &
+operator<<(std::ostream & o, MsgType mt);
+
+std::istream &
+operator>>(std::istream & o, MsgType & mt);
 
 //=========== Message formats ============
 

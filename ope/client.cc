@@ -13,7 +13,9 @@ ffsl(uint64_t ct)
     return (bit+num_bits-1);
 }
 
-void handle_server(void* lp, blowfish* bc){
+static
+void
+handle_server(void* lp, blowfish* bc){
     cout<<"Called handle_udf"<<endl;
     int* csock = (int*) lp;
 
@@ -25,7 +27,7 @@ void handle_server(void* lp, blowfish* bc){
 
     //Receive message to process
     recv(*csock, buffer, 1024, 0);
-    int func_d;
+    MsgType func_d;
     istringstream iss(buffer);
     iss>>func_d;
     if(DEBUG_COMM) cout<<"Client sees func_d="<<func_d<<" and buffer "<<buffer<<endl;
@@ -33,7 +35,7 @@ void handle_server(void* lp, blowfish* bc){
     assert_s(func_d == MsgType::INTERACT_FOR_LOOKUP, "Incorrect function type in handle_server!");
     if (func_d == MsgType::INTERACT_FOR_LOOKUP){
         
-        uint64_t det, pt, tmp_det, tmp_pt;
+        uint64_t det, pt, tmp_pt;
         int size, index;
 
         iss >> det >> size;
@@ -41,7 +43,8 @@ void handle_server(void* lp, blowfish* bc){
         bc->block_decrypt((const uint8_t *) &det, (uint8_t *) &pt);
 
         for(index=0; index<size; index++){
-            iss>>tmp_key;
+	    uint64_t tmp_key;
+	    iss >> tmp_key;
             bc->block_decrypt((const uint8_t *) &tmp_key, (uint8_t *) &tmp_pt);
 
             if (tmp_pt >= pt){

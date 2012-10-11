@@ -247,12 +247,7 @@ tree<EncT>::clear_db_version(){
 template<class EncT>
 void
 tree<EncT>::delete_db(table_storage del_entry){
-    uint64_t del_v, del_nbits;//, del_version;
-    del_v=(del_entry.v << num_bits) | del_entry.index;
-    del_nbits=del_entry.pathlen+num_bits;
-    //del_version=del_entry.version;	
-
-    uint64_t del_ope = (del_v<<(64-del_nbits)) | (mask<<(64-num_bits-del_nbits));
+    uint64_t del_ope = del_entry.ope;
 
     ostringstream o;
     o.str("");
@@ -277,19 +272,9 @@ void
 tree<EncT>::update_db(table_storage old_entry, table_storage new_entry){
     //Takes old ope_table entry and new ope_table entry and calculates
     //corresponding db values, and updates db old vals to new vals
-    uint64_t old_v, old_nbits;/*, old_version;*/
-    uint64_t new_v, new_nbits;/*, new_version;*/
 
-    old_v = (old_entry.v << num_bits) | old_entry.index;
-    old_nbits = old_entry.pathlen + num_bits;
-    //old_version=old_entry.version;
-
-    new_v=(new_entry.v << num_bits) | new_entry.index;
-    new_nbits=new_entry.pathlen+num_bits;
-    //new_version=new_entry.version;	
-
-    uint64_t old_ope = (old_v<<(64-old_nbits)) | (mask<<(64-num_bits-old_nbits));
-    uint64_t new_ope = (new_v<<(64-new_nbits)) | (mask<<(64-num_bits-new_nbits));
+    uint64_t old_ope = old_entry.ope;
+    uint64_t new_ope = new_entry.ope;
 
     ostringstream o;
     o.str("");
