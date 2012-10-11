@@ -328,13 +328,13 @@ tree<EncT>::update_ope_table(tree_node<EncT> *node, uint64_t base_v, uint64_t ba
 /*		table_entry tmp = base;
 		tmp.index = i;*/
 	//tmp.version=global_version;
-    	old_entry = ope_table[node->keys[i]]
-		table_entry new_entry = old_entry ;
+    	old_entry = ope_table[node->keys[i]];
+	table_entry new_entry = old_entry ;
 
-		new_entry.ope = compute_ope<EncT>(base_v, base_nbits, i);
+	new_entry.ope = compute_ope<EncT>(base_v, base_nbits, i);
 
-		ope_table[node->keys[i]] = new_entry;
-		update_db(old_entry , new_entry);
+	ope_table[node->keys[i]] = new_entry;
+	update_db(old_entry , new_entry);
     }
 
     uint64_t next_v, next_nbits;
