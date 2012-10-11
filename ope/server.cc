@@ -491,7 +491,7 @@ tree<EncT>::find_pred(tree_node<EncT>* node, uint64_t v, uint64_t nbits){
     }
 }
 
-template<class EncT>
+/*template<class EncT>
 string
 tree<EncT>::delete_index(uint64_t v, uint64_t nbits, uint64_t index){
     if(DEBUG) cout<<"Deleting index at v="<<v<<" nbits="<<nbits<<" index="<<index<<endl;
@@ -508,7 +508,7 @@ tree<EncT>::delete_index(uint64_t v, uint64_t nbits, uint64_t index){
     Elem desired;
     desired.m_key = delval_str;
     UpdateMerkleProof dmp;
-    /*bool deleted = */tracker.get_root()->tree_delete(desired, dmp);
+    tracker.get_root()->tree_delete(desired, dmp);
 
     //Test merkle delete
 
@@ -542,10 +542,10 @@ tree<EncT>::delete_index(uint64_t v, uint64_t nbits, uint64_t index){
 
     return s.str();
 
-}
+}*/
 
 //v should just be path to node, not including index. swap indicates whether val being deleted was swapped, should be false for top-lvl call
-template<class EncT>
+/*template<class EncT>
 EncT
 tree<EncT>::tree_delete(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint64_t index, uint64_t pathlen, bool swap){
     if (DEBUG) cout<<"Calling tree_delete with "<<v<< " "<<nbits<<" "<<index<<endl;
@@ -730,7 +730,7 @@ tree<EncT>::tree_delete(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint6
 	node->right.erase(key);    			
     }    
     return tree_delete(next_node, v, nbits-num_bits, index, pathlen, swap);
-}
+}*/
 
 template<class EncT>
 string
@@ -824,9 +824,11 @@ tree<EncT>::tree_insert(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint6
 	    rtn_path.push_back(node);
 
 	    table_entry new_entry;
-	    new_entry.v = v;
+	    /*new_entry.v = v;
 	    new_entry.pathlen = pathlen;
-	    new_entry.index = index;
+	    new_entry.index = index;*/
+	    new_entry.ope = compute_ope<EncT>(v, pathlen, index);
+	    new_entry.refcount = 1;
 	    //new_entry.version = global_version;
 	    ope_table[encval] = new_entry;
 
@@ -834,12 +836,13 @@ tree<EncT>::tree_insert(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint6
 	    //global_version++;
 
 	    for(int i=(int)index+1; i< (int) node->keys.size(); i++){
-		table_entry old_entry = ope_table[node->keys[i]];
-		ope_table[node->keys[i]].index = i;
-		//ope_table[node->keys[i]].version=global_version;
-		table_entry update_entry = ope_table[node->keys[i]];
-		//Only keys after newly inserted one need updating
-		update_db(old_entry, update_entry);
+			table_entry old_entry = ope_table[node->keys[i]];
+			//ope_table[node->keys[i]].index = i;
+			ope_table[node->keys[i]].ope = compute_ope<EncT>(v, pathlen, i);
+			//ope_table[node->keys[i]].version=global_version;
+			table_entry update_entry = ope_table[node->keys[i]];
+			//Only keys after newly inserted one need updating
+			update_db(old_entry, update_entry);
 
 	    }
 			
@@ -926,7 +929,7 @@ template<class EncT>
 table_entry *
 tree<EncT>::lookup(EncT xct){
     if(ope_table.find(xct)!=ope_table.end()){
-        if(DEBUG) cout <<"Found "<<xct<<" in table with v="<<ope_table[xct].v<<" nbits="<<ope_table[xct].pathlen<<" index="<<ope_table[xct].index<<endl;
+        //if(DEBUG) cout <<"Found "<<xct<<" in table with v="<<ope_table[xct].v<<" nbits="<<ope_table[xct].pathlen<<" index="<<ope_table[xct].index<<endl;
 	return &ope_table[xct];
     }
 
@@ -1022,14 +1025,14 @@ template class tree<uint16_t>;
  */
 template<class EncT>
 void
-tree::interaction(EncT ciph,
+tree<EncT>::interaction(EncT ciph,
 		  tree_node<EncT> * & rnode, uint & rindex,
 		  uint64_t & ope_path,
                   bool & requals) {
 
     stringstream msg;
 
-    tree_node<EncT> * curr = root;
+    tree_node<EncT> * curr = this.root;
 
     ope_path = 0;
 
@@ -1068,7 +1071,7 @@ tree::interaction(EncT ciph,
 
 template<class EncT>
 string 
-server<class EncT>::handle_enc(istringstream & iss, bool do_ins) {
+Server<class EncT>::handle_enc(istringstream & iss, bool do_ins) {
    
     uint64_t ciph;
     iss >> ciph;
@@ -1099,7 +1102,7 @@ server<class EncT>::handle_enc(istringstream & iss, bool do_ins) {
 
 	interaction(ciph, node, index, nbits, ope_path, equals);
 
-	uint64_t ope_enc = compute_ope(ope_path, nbits, index);
+	uint64_t ope_enc = compute_ope<EncT>(ope_path, nbits, index);
 
 	if (DEBUG) {cerr << "new ope_enc is " << ope_enc << " path " << ope_path << " index " << index << "\n"};
 	if (do_ins) {
@@ -1118,8 +1121,7 @@ server<class EncT>::handle_enc(istringstream & iss, bool do_ins) {
     }
 
 
-    if(DEBUG_COMM) {cerr << "Rtn b/f ostringstream: " << table_rslt.v<<" : "
-			 << table_rslt.pathlen<<" : " << table_rslt.index<<endl;}
+   // if(DEBUG_COMM) {cerr << "Rtn b/f ostringstream: " << table_rslt.v<<" : " << table_rslt.pathlen<<" : " << table_rslt.index<<endl;}
     
 
 }
@@ -1141,7 +1143,7 @@ std::string dispatch(void *lp, tree<EncT> *s) {
     MsgType msgtype;
     iss >> msgtype;
 
-    if (DEBUG_COMM) {cerr << "message type is " << mtnames[msgtype] << endl;}
+    if (DEBUG_COMM) {cerr << "message type is " << mtnames[(int) msgtype] << endl;}
 
     switch (msgtype) {
     case ENC_INS: {
@@ -1172,169 +1174,12 @@ Server<EncT>::~Server() {
 }
 
 
-template<class EncT>
-void handle_client(void* lp, tree<EncT>* s){
-
-    int *csock = (int*) lp;
-
-    cout<<"Call to handle_client!"<<endl;
-    //Buffer to handle all messages received
-    char buffer[10240];
-    while(true){
-	//Clear buffer
-	memset(buffer, 0, 10240);
-
-	//Receive message to process
-	recv(*csock, buffer, 10240, 0);
-	if(DEBUG_COMM) cout<<"Received msg "<<buffer<<endl;
-	//Find protocol code:
-	/*Server protocol code:
-	 * lookup(encrypted_plaintext) = 1
-	 * lookup(v, nbits) = 2
-	 * insert(v, nbits, index, encrypted_laintext) = 3
-	 */            
-	int func_d;
-	istringstream iss(buffer);
-	iss>>func_d;
-	if(DEBUG_COMM) cout<<"See value func_d: "<<func_d<<endl;
-
-	ostringstream o;
-	string rtn_str;
-	if(func_d==0){
-	    //Kill server
-	    break;
-	}else if(func_d==1) {
-	    //Lookup using OPE table
-	    bool imode;
-	    iss>>imode;
-	    cout<<imode<<endl;
-	    uint64_t blk_encrypt_pt;
-	    iss>>blk_encrypt_pt;
-	    if(DEBUG_COMM) cout<<"Blk_encrypt_pt: "<<blk_encrypt_pt<<endl;
-	    //Do tree lookup
-	    table_entry table_rslt = s->lookup((uint64_t) blk_encrypt_pt);
-	    
-	    if(imode && table_rslt.v!=(uint64_t)-1 && table_rslt.pathlen!=(uint64_t)-1 && table_rslt.index!=(uint64_t)-1){
-		s->ref_table[blk_encrypt_pt]+=1;
-	    }
-
-	    if(DEBUG_COMM) cout<<"Rtn b/f ostringstream: "<<table_rslt.v<<" : "<<table_rslt.pathlen<<" : "<<table_rslt.index<<endl;
-	    //Construct response
-	    o<<table_rslt.v<<" "<<table_rslt.pathlen<<" "<<table_rslt.index;
-	    rtn_str=o.str();
-	    if(DEBUG_COMM) cout<<"Rtn_str : "<<rtn_str<<endl;
-	    send(*csock, rtn_str.c_str(), rtn_str.size(),0);
-	    break;
-	} else if (func_d==2){
-	    //Lookup w/o table, using v and nbits
-	    uint64_t v, nbits;
-	    iss>>v;
-	    iss>>nbits;
-	    if(DEBUG_COMM) cout<<"Trying lookup("<<v<<", "<<nbits<<")"<<endl;
-	    vector<EncT> xct_vec;
-	    //Do tree lookup
-	    try{
-		xct_vec = s->lookup(v, nbits);
-	    }catch(ope_lookup_failure&){
-		if(DEBUG_COMM) cout<<"Lookup fail, need to insert!"<<endl;
-		const char* ope_fail = "ope_fail";
-		send(*csock, ope_fail, strlen(ope_fail),0);
-		continue;
-	    }
-	    //Construct response out of vector xct_vec
-	    for(int i=0; i< (int) xct_vec.size(); i++){
-		o<<xct_vec[i];
-		o<<" ";
-		if(DEBUG_BTREE) cout<<"xct_vec "<<i<<"="<<xct_vec[i]<<endl;
-	    }
-	    o<<"; ";
-#if MALICIOUS        
-	    for(int i=0; i<(int) xct_vec.size(); i++){
-		stringstream pss;
-		pss<<xct_vec[i];
-
-		Elem desired;
-		desired.m_key = pss.str();
-		Node* last;
-		Elem& result = s->tracker.get_root()->search(desired, last);
-		assert_s(desired.m_key == result.m_key, "could not find val that should be there");
-		MerkleProof proof = get_search_merkle_proof(last);
-		o<<proof<<" ";
-		if(DEBUG_BTREE) cout<<"2 MP "<<i<<"="<<proof<<endl;
-		pss.str("");
-		pss.clear();
-	    }
-#endif
-	    rtn_str=o.str();
-	    if(rtn_str.size()>10240){
-		cout<<"Message too long!"<<endl;
-		exit(-1);
-	    }
-	    if(DEBUG_COMM || DEBUG_BTREE) cout<<"Rtn_str: "<<rtn_str<<endl;
-	    send(*csock, rtn_str.c_str(), rtn_str.size(),0);
-	}else if(func_d==3){
-	    //Insert using v and nbits
-	    uint64_t v, nbits, index, blk_encrypt_pt;
-	    iss>>v;
-	    iss>>nbits;
-	    iss>>index;
-	    iss>>blk_encrypt_pt;
-                
-	    if(DEBUG_COMM) cout<<"Trying insert("<<v<<", "<<nbits<<", "<<index<<", "<<blk_encrypt_pt<<")"<<endl;
-	    string proof = s->insert(v, nbits, index, blk_encrypt_pt);
-	    if(proof.size()>10240){
-		cout<<"Insert proof too large"<<endl;
-		exit(-1);
-	    }
-	    if(DEBUG_COMM) cout<<proof<<endl;
-	    s->ref_table[blk_encrypt_pt]=1;
-	    send(*csock, proof.c_str(), proof.size(),0);
-	}else if(func_d==4){
-	    uint64_t v, nbits, index;
-	    iss>>v;
-	    iss>>nbits;
-	    iss>>index;
-	    string proof = s->delete_index(v, nbits, index);
-	    if(proof.size()>10240){
-		cout<<"Delete proof too large"<<endl;
-		exit(-1);
-	    }
-	    send(*csock, proof.c_str(), proof.size(),0);
-	}else{
-	    //Uh oh!
-	    cout<<"Something's wrong!: "<<buffer<<endl;
-	    break;
-	}
-	if(DEBUG) cout<<"Message "<<func_d<<" processed"<<endl;
-	//TEST CODE (comment out in release version)
-	if(s->root!=NULL){
-	    if(DEBUG) cout<<"Testing tree"<<endl;
-	    //After every message, check tree is still really a tree,
-	    //and that it maintains approx. alpha height balance
-	    if(DEBUG) s->print_tree();			
-	    if(s->test_tree(s->root)!=1){
-		cout<<"No test_tree pass"<<endl;
-		return;
-	    } 
-	    if(s->num_nodes>1){
-		if(((s->root->height()-1)<= log(s->num_nodes)/log(((double)1.0)/alpha)+1)!=1) {
-		    cout<<func_d<<" height wrong "<<s->root->height()-1<<" : "<<log(s->num_nodes)/log(((double)1.0)/alpha)+1<<endl;
-		    cout<<"Max size: "<<s->max_size<<" num_nodes: "<<s->num_nodes<<endl;
-		    return;
-		}
-	    }	
-	}
-
-    }
-
-}
-
 
 int main(int argc, char **argv){
     
 
     cerr<<"Starting tree server \n";
-    Server server;
+    Server<uint64_t> server;
     
     //Start listening
     int listen_rtn = listen(server.sock_udf, 10);
@@ -1350,7 +1195,7 @@ int main(int argc, char **argv){
     while (true) {
 	cerr<<"Listening..."<<endl;
 	
-	if ((csock = accept(hsock, (struct sockaddr*) &sadr, &addr_size))!=-1){
+	if ((csock = accept(server.sock_udf, (struct sockaddr*) &sadr, &addr_size))!=-1){
 	    //Pass connection and messages received to handle_client
 	    dispatch((void*) &csock, server);
 	}
@@ -1362,5 +1207,5 @@ int main(int argc, char **argv){
 
     }
     cerr<<"Done with server, closing now\n";
-    close(hsock);
+    close(server.sock_udf);
 }

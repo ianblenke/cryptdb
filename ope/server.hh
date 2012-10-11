@@ -52,13 +52,13 @@ public:
     std::string insert(uint64_t v, uint64_t nbits, uint64_t index, EncT encval);
     std::vector<tree_node<EncT>* > tree_insert(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint64_t index, EncT encval, uint64_t pathlen);
 
-    tree_node<EncT>* findScapegoat( std::vector<tree_node<EncT>* > path , int & path_index);
+    tree_node<EncT>* findScapegoat( std::vector<tree_node<EncT>* > path , uint64_t & path_index);
 
     void print_tree();
 
     tree_node<EncT>* tree_lookup(tree_node<EncT> *root, uint64_t v, uint64_t nbits) const;
     std::vector<EncT> lookup(uint64_t v, uint64_t nbits) const;
-    table_entry lookup(EncT xct);
+    table_entry * lookup(EncT xct);
 
     std::map<EncT, table_entry > ope_table;
     std::map<EncT, int> ref_table;
@@ -75,8 +75,8 @@ public:
 
     successor<EncT> find_succ(tree_node<EncT>* node, uint64_t v, uint64_t nbits);
     predecessor<EncT> find_pred(tree_node<EncT>* node, uint64_t v, uint64_t nbits);
-    EncT tree_delete(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint64_t index, uint64_t pathlen, bool swap);
-    std::string delete_index(uint64_t v, uint64_t nbits, uint64_t index);
+    //EncT tree_delete(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint64_t index, uint64_t pathlen, bool swap);
+    //std::string delete_index(uint64_t v, uint64_t nbits, uint64_t index);
 
     tree();
     ~tree();
@@ -97,7 +97,11 @@ public:
     tree<EncT> * t;
     int sock_cl; //socket to client; server connects thru it
     int sock_udf; //socket to udfs; server listens on it
+
+    std::string handle_enc(istringstream & iss, bool do_ins) 
+
     Server();
+    ~Server();
 };
 
    
