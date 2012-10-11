@@ -815,6 +815,9 @@ tree<EncT>::tree_insert(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint6
 	    exit(1);
 	}else{
 	    if(DEBUG) cout<<"Found node, inserting into index "<<index<<endl;
+
+        assert_s(node->keys[index] != encval, "attempting to insert same value into tree");
+
 	    typename vector<EncT>::iterator it;
 	    it=node->keys.begin();
 
@@ -965,7 +968,7 @@ template class tree<uint16_t>;
 template<class EncT>
 void
 Server<EncT>::interaction(EncT ciph,
-			  tree_node<EncT> * & rnode, uint & rindex, uint & nbits,
+			  uint & rindex, uint & nbits,
 			  uint64_t & ope_path,
 			  bool & requals) {
 
@@ -992,18 +995,26 @@ Server<EncT>::interaction(EncT ciph,
     	istringstream reply(_reply);
 
     	uint index;
-    	bool equals;
+    	bool equals = false;
     	reply >> index >> equals;
 
     	assert_s(len > index, "index returned by client is incorrect");
 
-    	tree_node<EncT> * node = curr->right[index];
-    	if (equals || !node) {
+    	tree_node<EncT> * node  =curr->right[index];
+    	if (equals || (!node && len<N-1) ) {
     	    // done: found node match or empty spot
-    	    rnode = curr;
     	    requals = equals;
+            rindex = index;
     	    return;
-    	}	
+    	}
+        else if ( !node && len==N-1) {
+            //done: curr_node is full though, need new node
+            ope_path = (ope_path << num_bits) | index;
+            nbits += num_bits;          
+            rindex = 0;
+            requals = equals;
+            return;
+        }
     	curr = node;
     	ope_path = (ope_path << num_bits) | index;
     	nbits += num_bits;
@@ -1021,7 +1032,7 @@ Server<EncT>::handle_enc(int csock, istringstream & iss, bool do_ins) {
 
     string ope;
     
-    auto ts = ope_table.find((uint64_t) ciph);
+    auto ts = ope_table.find(ciph);
     if (ts != ope_table.end()) { // found in OPE Table
     	if (DEBUG) {cerr << "found in ope table"; }
     	// if this is an insert, increase ref count
@@ -1031,28 +1042,38 @@ Server<EncT>::handle_enc(int csock, istringstream & iss, bool do_ins) {
 	ope = opeToStr(ts->second.ope);
    	
     } else { // not found in OPE Table
-	if (DEBUG) {cerr << "not in ope table \n"; }
+    	if (DEBUG) {cerr << "not in ope table \n"; }
 
-	tree_node<EncT> * node = 0;
-	uint index = 0;
-	uint64_t ope_path = 0;
-	bool equals = false;
-	uint nbits = 0;
-	interaction(ciph, node, index, nbits, ope_path, equals);
+    	uint index = 0;
+    	uint64_t ope_path = 0;
+    	bool equals = false;
+    	uint nbits = 0;
 
-	uint64_t ope_enc = compute_ope<EncT>(ope_path, nbits, index);
-	ope = opeToStr(ope_enc);
-	
-	if (DEBUG) {cerr << "new ope_enc is "
-			 << ope_enc << " path " << ope_path
-			 << " index " << index << "\n";}
-	if (do_ins) {
-	    // insert in OPE Tree
-        // ope_insert also updates ope_table
-	    ope_tree.insert(ope_path, nbits, index, ciph, ope_table);
-	}
+    	interaction(ciph, index, nbits, ope_path, equals);
+
+        assert_s(!equals, "equals should always be false");
+
+    	
+    	if (DEBUG) {cerr << "new ope_enc is "
+    			 << ope_enc << " path " << ope_path
+    			 << " index " << index << "\n";}
+    	if (do_ins) {
+    	    // insert in OPE Tree
+            // ope_insert also updates ope_table
+    	    ope_tree.insert(ope_path, nbits, index, ciph, ope_table);
+
+            ts = ope_table.find( ciph);
+            assert_s( ts != ope_table.end() , "after insert, value must be in ope_table");
+            ope = opeToStr(ts->second.ope);            
+        }else{
+
+            uint64_t ope_enc = compute_ope<EncT>(ope_path, nbits, index);
+
+            //Subtract 1 b/c if ope points to existing value in tree, want this ope value
+            //to be less than 
+            ope = opeToStr(ope_enc-1);            
+        }
     }
-
     assert_s(send(csock, ope.c_str(), ope.size(), 0) != (int)ope.size(),
 	     "problem with send");
     
@@ -1060,18 +1081,8 @@ Server<EncT>::handle_enc(int csock, istringstream & iss, bool do_ins) {
 
 template<class EncT>
 void
-Server<EncT>::dispatch(int csock) {
-
-    uint buflen = 10240;
-    char buffer[buflen];
-    memset(buffer, 0, buflen);
-
-    recv(csock, buffer, buflen, 0);
-
-    if (DEBUG_COMM) {cerr << "received msg " << buffer << endl;}
-
-    istringstream iss(buffer);
-    
+Server<EncT>::dispatch( int csock, istringstream & iss) {
+   
     MsgType msgtype;
     iss >> msgtype;
 
@@ -1121,19 +1132,28 @@ int main(int argc, char **argv){
     int csock;
     struct sockaddr_in sadr;
     
+    csock = accept(server.sock_udf, (struct sockaddr*) &sadr, &addr_size));
+    assert_s( csock>=0, "Server accept failed!");
+
+    uint buflen = 10240;
+    char buffer[buflen];
+
     while (true) {
-	cerr<<"Listening..."<<endl;
+    	cerr<<"Listening..."<<endl;
+
+        memset(buffer, 0, buflen);
+
+        recv(csock, buffer, buflen, 0);
+
+        if (DEBUG_COMM) {cerr << "received msg " << buffer << endl;}
+        istringstream iss(buffer);	
 	
-	if ((csock = accept(server.sock_udf, (struct sockaddr*) &sadr, &addr_size)) >= 0){
 	    //Pass connection and messages received to handle_client
-	    server.dispatch(csock);
-	} else {
-	    cout<<"Error accepting!"<<endl;
-	    exit(-1);
-	}
-	close(csock);
+	    server.dispatch(csock, iss);
+
 
     }
 
+    close(csock);
     cerr << "Server exits!\n";
 }
