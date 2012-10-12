@@ -97,6 +97,8 @@ tree<EncT>::tree(){
     //global_version=0;
     num_rebalances=0;
 
+    root = new tree_node<EncT>();
+    
 #if MALICIOUS
     
     Node::m_failure.invalidate();
@@ -110,7 +112,7 @@ tree<EncT>::tree(){
 
 #endif
     
-    dbconnect =new Connect( "localhost", "root", "letmein","cryptdb", 3306);	
+    dbconnect = new Connect( "localhost", "root", "letmein","cryptdb", 3306);	
 }
 
 

@@ -56,8 +56,6 @@ getui(UDF_ARGS * args, int i)
 {
     return (uint64_t) (*((ulonglong *) args->args[i]));
 }
-
-static int sock_ser = create_and_connect(OPE_SERVER_HOST, OPE_SERVER_PORT);
     
 extern "C" {
 
