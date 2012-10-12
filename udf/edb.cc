@@ -15,10 +15,6 @@
 using namespace std;
 using namespace NTL;
 
-static int sock_server;
-
-static bool sock_init = false;
-
 extern "C" {
 
     typedef unsigned long long ulonglong;
@@ -69,10 +65,7 @@ extern "C" {
     long long ope_enc(UDF_INIT *initid, UDF_ARGS *args,
 		      char *is_null, char *error){
 
-	if (!sock_init) {
-	    sock_init = true;
-	    sock_server = create_and_connect(OPE_SERVER_HOST, OPE_SERVER_PORT);
-	}
+	int sock_server = create_and_connect(OPE_SERVER_HOST, OPE_SERVER_PORT);
 	
 	uint64_t det_val = getui(args, 0);
 

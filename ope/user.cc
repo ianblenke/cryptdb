@@ -15,7 +15,7 @@ void test_order(int num_vals, int order);
 
 int main(){
 
-    test_order(100,0);
+    test_order(10, 0);
 
     blowfish* bc = new blowfish(passwd);
 
@@ -71,7 +71,6 @@ void test_order(int num_vals, int order){
     int count = 0;
     time_t seed;
     seed = time(NULL);
-    seed = 1349052520;
     cout<<"Seed is "<<seed<<endl;
     srand(seed);
 

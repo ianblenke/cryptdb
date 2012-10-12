@@ -37,7 +37,7 @@ class tree {
 
 public:
     tree_node<EncT> *root;
-    unsigned int num_nodes;
+    unsigned int num_nodes; //number of tree nodes, not values
     unsigned int max_size;
     Connect * dbconnect;
     //int global_version;
@@ -47,6 +47,8 @@ public:
     RootTracker tracker;
 #endif
 
+    tree();
+    ~tree();
 
 /////////TO DOOOOO: Switch index to int, no need for uint64_t
     std::string insert(uint64_t v, uint64_t nbits, uint64_t index, EncT encval, std::map<EncT, table_entry >  & ope_table);
@@ -71,9 +73,6 @@ public:
     predecessor<EncT> find_pred(tree_node<EncT>* node, uint64_t v, uint64_t nbits);
     //EncT tree_delete(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint64_t index, uint64_t pathlen, bool swap);
     //std::string delete_index(uint64_t v, uint64_t nbits, uint64_t index);
-
-    tree();
-    ~tree();
 
     bool test_tree(tree_node<EncT>* cur_node);
 

@@ -54,23 +54,30 @@ handle_interaction(istringstream & iss, blowfish* bc){
 }
 
 static int sock = 0;
-
+static int csock = 0;
+ 
 static void
-signal_cleanup_handler(int signum) {
+cleanup(int signum) {
 
-    cerr << "print kill signal \n";
-    if (sock) {
-	close(sock);
-    }
+    close(csock);
+    close(sock);
+    cerr << "cleaned-up sockets \n";
 }
 
-int main(){
+int main(int argc, char ** argv){
 
 
+    assert_s(argc <= 2, "usage: client [port] ");
+    if (argc == 2) {
+	OPE_CLIENT_PORT = atoi(argv[1]);
+    }
+    cerr << "OPE CLIENT PORT " << OPE_CLIENT_PORT << "\n";
+	
     //Socket connection
     sock = create_and_bind(OPE_CLIENT_PORT);
 
-    signal(SIGKILL, signal_cleanup_handler);
+    signal(SIGQUIT, cleanup);
+        
     //Start listening
     int listen_rtn = listen(sock, 10);
     if (listen_rtn < 0) {
@@ -81,7 +88,7 @@ int main(){
     socklen_t addr_size = sizeof(sockaddr_in);
     struct sockaddr_in sadr;
 
-    int csock = accept(sock, (struct sockaddr*) &sadr, &addr_size);    
+    csock = accept(sock, (struct sockaddr*) &sadr, &addr_size);    
     assert_s(csock >= 0, "Client failed to accept connection");
     cerr << "accepted connection (from server hopefully)\n";
    
@@ -99,7 +106,7 @@ int main(){
 
 	cerr << "waiting to receive \n";
         //Receive message to process
-        assert_s(recv(csock, buffer, buflen, 0) > 0, "received <=0 bits");
+        assert_s(recv(csock, buffer, buflen, 0) > 0, "receive gets  <=0 bytes");
 
 	cerr << "received " << buffer << "\n";
         istringstream iss(buffer);

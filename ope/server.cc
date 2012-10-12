@@ -56,8 +56,8 @@ struct tree_node
     bool key_in_map(EncT key){ // R: why this???
 	// FL: EncT is being used as a primitive, so this is fine.
 	auto it = right.find(key);
-	bool contained = it != right.end();
-	assert_s(!contained && it->second != NULL, "inconsistency in right");
+	bool contained = (it != right.end());
+	assert_s(!contained || (it->second != NULL), "inconsistency in right");
 	return contained;
     }
 
@@ -93,13 +93,11 @@ struct tree_node
 
 template<class EncT>
 tree<EncT>::tree(){
-    num_nodes=0;
-    max_size=0;
-    root = NULL;
-    //global_version=0;
-    num_rebalances=0;
-
+    cerr << "creating the tree!!!\n";
     root = new tree_node<EncT>();
+    num_nodes=1;
+    max_size=0;
+    num_rebalances=0;
     
 #if MALICIOUS
     
@@ -120,6 +118,7 @@ tree<EncT>::tree(){
 
 template<class EncT>
 tree<EncT>::~tree(){
+    cerr << "destroying the tree\n";
     delete_nodes(root);
     delete root;
 }
@@ -741,11 +740,7 @@ tree<EncT>::find_pred(tree_node<EncT>* node, uint64_t v, uint64_t nbits){
 template<class EncT>
 string
 tree<EncT>::insert(uint64_t v, uint64_t nbits, uint64_t index, EncT encval, map<EncT, table_entry >  & ope_table){
-    //If root doesn't exist yet, create it, then continue insertion
-    if(!root){
-	if(DEBUG) cout<<"Inserting root"<<endl;
-	root=new tree_node<EncT>();
-    }
+    
     vector<tree_node<EncT> * > path = tree_insert(root, v, nbits, index, encval, nbits, ope_table);
     clear_db_version();
 
@@ -874,23 +869,11 @@ tree<EncT>::tree_insert(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint6
     if (key_index==0) {
 	key= (EncT) NULL;
     }
-    else if (key_index < N) {
-	key = node->keys[key_index-1];
-    }
     else {
-	cout<<"Insert fail, key_index not legal"<<endl; exit(1);
+	assert_s(key_index < N, "insert fail, key_index not legal");
+    	key = node->keys[key_index-1];
     }
-
-    //cout<<"Key: "<<key<<endl;
-
-    //See if pointer to next node to be checked 
-    if(!node->key_in_map(key)){
-	if (nbits == (uint64_t) num_bits && ((int) node->keys.size())==N-1) {
-	    if(DEBUG) cout << "Creating new node" << endl;
-	    node->right[key] = new tree_node<EncT>();
-	} else{
-	    cout<<"Insert fail, wrong condition to create new node child"<< endl; exit(1);}
-    }
+    
     rtn_path = tree_insert(node->right[key], v, nbits-num_bits, index, encval, pathlen, ope_table);
     rtn_path.push_back(node);
     return rtn_path;
@@ -983,12 +966,14 @@ Server<EncT>::interaction(EncT ciph,
 			  uint64_t & ope_path,
 			  bool & equals) {
 
+    assert_s(ope_tree.root != NULL, "root is null");
     tree_node<EncT> * curr = ope_tree.root;
 
     ope_path = 0;
     nbits = 0;
 
-    while (true) {	
+    while (true) {
+	cerr << "LOOP! \n";
     	// create message and send it to client
     	stringstream msg;
     	msg.clear();
@@ -1011,15 +996,19 @@ Server<EncT>::interaction(EncT ciph,
 
     	assert_s(len >= index, "index returned by client is incorrect");
 
+	if (equals) {
+	    rindex = index;
+	    return;
+	}
+	
 	EncT next_ciph = (index == 0) ? 0 : curr->keys[index-1];
-    	tree_node<EncT> * node = curr->right[next_ciph];
-    	if (equals || !node) {
-    	    // done: found node match or empty spot
-            rindex = index;
-    	    return;
-    	}
-      
-    	curr = node;
+
+	if (!curr->key_in_map(next_ciph)) {
+	    rindex = index;
+	    return;
+	}
+	
+	curr = curr->right[next_ciph];
     	ope_path = (ope_path << num_bits) | index;
     	nbits += num_bits;
     }
@@ -1117,23 +1106,45 @@ Server<EncT>::~Server() {
 }
 
 
+Server<uint64_t> * server = NULL;
+
+static void
+signal_cleanup(int signum) {
+
+    if (server->sock_udf) {
+	close(server->sock_udf);
+    }
+    if (server->sock_cl) {
+	close(server->sock_cl);
+    }
+    cerr << "cleaned up sockets \n";
+}
+
 
 int main(int argc, char **argv){
     
+    assert_s(argc <= 2, "usage: server [port of client]");
+    if (argc == 2) {
+	OPE_CLIENT_PORT = atoi(argv[1]);
+    }
+    cerr << "OPE CLIENT PORT " << OPE_CLIENT_PORT << "\n";
+
+    
     cerr<<"Starting tree server \n";
-    Server<uint64_t> server;
+    server = new Server<uint64_t>();
+    signal(SIGQUIT, signal_cleanup);
     
     //Start listening
-    int listen_rtn = listen(server.sock_udf, 10);
+    int listen_rtn = listen(server->sock_udf, 10);
     if (listen_rtn < 0) {
 	cerr<<"Error listening to socket"<<endl;
     }
     cerr<<"Listening \n";
-
+    
     socklen_t addr_size = sizeof(sockaddr_in);
     struct sockaddr_in sadr;
     
-    int csock = accept(server.sock_udf, (struct sockaddr*) &sadr, &addr_size);
+    int csock = accept(server->sock_udf, (struct sockaddr*) &sadr, &addr_size);
     assert_s(csock >= 0, "Server accept failed!");
     cerr << "Server accepted connection with udf \n";
 
@@ -1152,7 +1163,7 @@ int main(int argc, char **argv){
         istringstream iss(buffer);
 	
 	//Pass connection and messages received to handle_client
-	server.dispatch(csock, iss);
+	server->dispatch(csock, iss);
 
     }
 
