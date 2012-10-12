@@ -12,3 +12,8 @@ opeToStr(OPEType ope) {
     ss << ope;
     return ss.str();
 }
+
+uint64_t
+path_append(uint64_t v, uint index) {
+    return (v << num_bits | index);
+}

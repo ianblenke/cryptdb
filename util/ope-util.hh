@@ -33,5 +33,8 @@ uint64_t mask = make_mask();
 std::string
 opeToStr(OPEType ope);
 
+uint64_t
+path_append(uint64_t v, uint index);
+
 // hardcoding passwords for our eval
 const std::string passwd = "opeope";

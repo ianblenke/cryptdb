@@ -15,7 +15,7 @@ void test_order(int num_vals, int order);
 
 int main(){
 
-    test_order(5,0);
+    test_order(100,0);
 
     blowfish* bc = new blowfish(passwd);
 

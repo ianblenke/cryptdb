@@ -24,6 +24,9 @@ using std::cerr;
 using std::map;
 using std::max;
 
+//TODO: how do we find scapegoat? better to record the number of nodes at each
+//noe than to go through all nodes
+
 // Compute the ope encoding out of an ope path, nbits (no of bits of ope_path),
 // and index being the index in the last node on the path
 template<class EncT>
@@ -52,11 +55,10 @@ struct tree_node
     //Returns true if node's right map contains key (only at non-leaf nodes)
     bool key_in_map(EncT key){ // R: why this???
 	// FL: EncT is being used as a primitive, so this is fine.
-	typename map<EncT, tree_node *>::iterator it;
-	for(it=right.begin(); it!=right.end(); it++){
-	    if(it->first==key) return true;
-	}
-	return false;
+	auto it = right.find(key);
+	bool contained = it != right.end();
+	assert_s(!contained && it->second != NULL, "inconsistency in right");
+	return contained;
     }
 
     //Recursively calculate height of node in tree
@@ -138,7 +140,7 @@ tree<EncT>::flatten(tree_node<EncT>* node){
     for(int i=0; i<(int) node->keys.size(); i++){
 	EncT tmp_key = node->keys[i];
 	rtn_keys.push_back(tmp_key);
-	if(node->key_in_map(tmp_key)){
+	if(node->key_in_map(tmp_key)) {
 	    tmp = flatten(node->right[tmp_key]);
 	    rtn_keys.insert(rtn_keys.end(), tmp.begin(), tmp.end() );
 	}
@@ -734,6 +736,8 @@ tree<EncT>::find_pred(tree_node<EncT>* node, uint64_t v, uint64_t nbits){
   return tree_delete(next_node, v, nbits-num_bits, index, pathlen, swap);
   }*/
 
+
+// v is path to node where the insertion should happen
 template<class EncT>
 string
 tree<EncT>::insert(uint64_t v, uint64_t nbits, uint64_t index, EncT encval, map<EncT, table_entry >  & ope_table){
@@ -802,6 +806,8 @@ tree<EncT>::insert(uint64_t v, uint64_t nbits, uint64_t index, EncT encval, map<
 
 }
 
+// v is path to node where to insert (if node is full, insertion will create a
+// new node)
 template<class EncT>
 vector<tree_node<EncT>* >
 tree<EncT>::tree_insert(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint64_t index, EncT encval, uint64_t pathlen, map<EncT, table_entry >  & ope_table){
@@ -810,41 +816,45 @@ tree<EncT>::tree_insert(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint6
 
     //End of the insert line, check if you can insert
     //Assumes v and nbits were from a lookup of an insertable node
-    if (nbits==0){
- 	assert_s(node->keys.size() <= N-2," Insert fail, found full node");
-
-	if(DEBUG) cout<<"Found node, inserting into index "<<index<<endl;
-
+    if (nbits==0) {
+ 	assert_s(node->keys.size() <= N-1," too many values at node");
+	
 	assert_s(index == node->keys.size() ||
 		 node->keys[index] != encval,
 		 "attempting to insert same value into tree");
+
+	if (node->keys.size() == N-1) {// node is full
+	    
+	    EncT ciph = (index == 0) ? 0 : node->keys[index-1];
+
+	    assert_s(node->right[ciph] == NULL, "subtree should be null");
+	    node->right[ciph] = new tree_node<EncT>();
+	    num_nodes++;
+	    rtn_path = tree_insert(node->right[ciph], path_append(v, index),
+				   0, 0, encval, pathlen+num_bits, ope_table);
+	    rtn_path.push_back(node);
+ 
+	    return rtn_path;
+	}
+	
+	if(DEBUG) cout<<"Found node, inserting into index "<<index<<endl;
 
 	typename vector<EncT>::iterator it;
 	it=node->keys.begin();
 
 	node->keys.insert(it+index, encval);
-	//sort(node->keys.begin(), node->keys.end());
-	num_nodes++;
 	max_size=max(num_nodes, max_size);
 	rtn_path.push_back(node);
 
 	table_entry new_entry;
-	/*new_entry.v = v;
-	  new_entry.pathlen = pathlen;
-	  new_entry.index = index;*/
 	new_entry.ope = compute_ope<EncT>(v, pathlen, index);
 	new_entry.refcount = 1;
-	//new_entry.version = global_version;
 	ope_table[encval] = new_entry;
 
-	//Incr puts new entry in ope table at unique version #.
-	//global_version++;
-
+	// update the ope table
 	for(int i=(int)index+1; i< (int) node->keys.size(); i++){
 	    table_entry old_entry = ope_table[node->keys[i]];
-	    //ope_table[node->keys[i]].index = i;
 	    ope_table[node->keys[i]].ope = compute_ope<EncT>(v, pathlen, i);
-	    //ope_table[node->keys[i]].version=global_version;
 	    table_entry update_entry = ope_table[node->keys[i]];
 	    //Only keys after newly inserted one need updating
 	    update_db(old_entry, update_entry);
@@ -1001,7 +1011,8 @@ Server<EncT>::interaction(EncT ciph,
 
     	assert_s(len >= index, "index returned by client is incorrect");
 
-    	tree_node<EncT> * node = curr->right[index];
+	EncT next_ciph = (index == 0) ? 0 : curr->keys[index-1];
+    	tree_node<EncT> * node = curr->right[next_ciph];
     	if (equals || !node) {
     	    // done: found node match or empty spot
             rindex = index;

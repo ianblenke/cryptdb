@@ -1,5 +1,6 @@
 #include "client.hh"
 
+#include <signal.h>
 
 static inline int
 ffsl(uint64_t ct)
@@ -52,12 +53,24 @@ handle_interaction(istringstream & iss, blowfish* bc){
   
 }
 
+static int sock = 0;
+
+static void
+signal_cleanup_handler(int signum) {
+
+    cerr << "print kill signal \n";
+    if (sock) {
+	close(sock);
+    }
+}
 
 int main(){
 
+
     //Socket connection
-    int sock = create_and_bind(OPE_CLIENT_PORT);
-    
+    sock = create_and_bind(OPE_CLIENT_PORT);
+
+    signal(SIGKILL, signal_cleanup_handler);
     //Start listening
     int listen_rtn = listen(sock, 10);
     if (listen_rtn < 0) {
