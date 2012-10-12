@@ -18,12 +18,8 @@ string
 handle_interaction(istringstream & iss, blowfish* bc){
     cerr<<"Called handle_interaction"<<endl;
 
-    //ope_client<uint64_t, blowfish>* my_client = new ope_client<uint64_t, blowfish>(bc);    
-
-    
     MsgType func_d;
     iss>>func_d;
-    //if(DEBUG_COMM) cout<<"Client sees func_d="<<func_d<<" and buffer "<<buffer<<endl;
   
     assert_s(func_d == MsgType::INTERACT_FOR_LOOKUP, "Incorrect function type in handle_server!");
     if (func_d == MsgType::INTERACT_FOR_LOOKUP){
@@ -50,13 +46,10 @@ handle_interaction(istringstream & iss, blowfish* bc){
         o << index << " " << (tmp_pt==pt);
         return o.str();
         
-        //send(my_client->hsock, "0",1,0);
-
     }
     
     return "";
-    //delete my_client;
-    //delete bc;    
+  
 }
 
 
@@ -75,31 +68,27 @@ int main(){
     socklen_t addr_size = sizeof(sockaddr_in);
     struct sockaddr_in sadr;
 
-    //Handle 1 client b/f quiting (can remove later)
-
-    blowfish * bc = new blowfish(passwd);
-    int csock = accept(sock, (struct sockaddr*) &sadr, &addr_size);
-
-    if(csock < 0){
-        assert_s(false, "Client failed to accept correctly");
-    }
-
+    int csock = accept(sock, (struct sockaddr*) &sadr, &addr_size);    
+    assert_s(csock >= 0, "Client failed to accept connection");
+    cerr << "accepted connection (from server hopefully)\n";
+   
     int buflen = 1024;
 
     char buffer[buflen];
 
     string interaction_rslt="";
 
-
+    blowfish * bc = new blowfish(passwd);
+    
     while (true) {
 
         memset(buffer, 0, buflen);
 
+	cerr << "waiting to receive \n";
         //Receive message to process
-        if(recv(csock, buffer, buflen, 0) <=0){
-            assert_s(false, "handle_server receive failed");
-        }
+        assert_s(recv(csock, buffer, buflen, 0) > 0, "received <=0 bits");
 
+	cerr << "received " << buffer << "\n";
         istringstream iss(buffer);
 
         interaction_rslt = handle_interaction(iss, bc);
@@ -107,9 +96,9 @@ int main(){
         assert_s(interaction_rslt!="", "interaction error");
 
 
-        if (send(csock, interaction_rslt.c_str(), interaction_rslt.size(),0) != (int)interaction_rslt.size()){
-            assert_s(false, "handle_server send failed");
-        }
+        assert_s(send(csock, interaction_rslt.c_str(), interaction_rslt.size(),0)
+		 != (int)interaction_rslt.size(),
+		 "send failed");
 
         interaction_rslt = "";
 

@@ -1130,7 +1130,8 @@ int main(int argc, char **argv){
     struct sockaddr_in sadr;
     
     int csock = accept(server.sock_udf, (struct sockaddr*) &sadr, &addr_size);
-    assert_s( csock>=0, "Server accept failed!");
+    assert_s(csock >= 0, "Server accept failed!");
+    cerr << "Server accepted connection with udf \n";
 
     uint buflen = 10240;
     char buffer[buflen];
@@ -1140,14 +1141,14 @@ int main(int argc, char **argv){
 
         memset(buffer, 0, buflen);
 
-        recv(csock, buffer, buflen, 0);
+	uint len;
+        assert_s((len = recv(csock, buffer, buflen, 0)) > 0, "received 0 bytes");
 
         if (DEBUG_COMM) {cerr << "received msg " << buffer << endl;}
-        istringstream iss(buffer);	
+        istringstream iss(buffer);
 	
-	    //Pass connection and messages received to handle_client
-	    server.dispatch(csock, iss);
-
+	//Pass connection and messages received to handle_client
+	server.dispatch(csock, iss);
 
     }
 

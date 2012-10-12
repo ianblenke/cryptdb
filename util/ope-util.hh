@@ -15,7 +15,7 @@ typedef  uint64_t OPEType;
 //Whether to print debugging output or not
 #define DEBUG 1
 #define DEBUG_COMM 1
-#define DEBUG_BTREE 0
+#define DEBUG_BTREE 1
 #define MALICIOUS 0
 
 //Make mask of num_bits 1's

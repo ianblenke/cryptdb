@@ -15,14 +15,14 @@ void test_order(int num_vals, int order);
 
 int main(){
 
-    test_order(1000,0);
+    test_order(1,0);
 
     blowfish* bc = new blowfish(passwd);
 
     uint64_t pt=0;
     uint64_t ct=0;
 
-    while(1){
+    while (true){
 	cout<<"What det enc do you want? ";
 	cin>>pt;
 	if(pt==(uint64_t) -1) {cout<<"Closing"<<endl; break;}

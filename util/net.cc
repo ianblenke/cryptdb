@@ -29,18 +29,19 @@ create_and_bind(int host_port) {
 
 int
 create_and_connect(string host_name, int host_port) {
-    
+    cerr << "Create and connect \n";
     int hsock = socket(AF_INET, SOCK_STREAM,0);
-    if(hsock==-1) cerr<<"Error initializing socket!"<<endl;
+    assert_s(hsock>=0, "Error initializing socket!");
     
     struct sockaddr_in my_addr;
     my_addr.sin_family = AF_INET;
     my_addr.sin_port = htons(host_port);
     memset(&(my_addr.sin_zero),0, 8);
     my_addr.sin_addr.s_addr = inet_addr(host_name.c_str());
-    
+
+    cerr << "trying to connect to " << host_name << " " << host_port << "\n";
     if (connect(hsock, (struct sockaddr*) &my_addr, sizeof(my_addr))<0){
-	assert_s(false, "Connect Failed!!");
+	assert_s(false, "cannot connect");
     }
 
     return hsock;
