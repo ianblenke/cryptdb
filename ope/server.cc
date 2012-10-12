@@ -814,10 +814,12 @@ tree<EncT>::tree_insert(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint6
 	if(node->keys.size()> N-2) {
 	    cout<<"Insert fail, found full node"<<endl;
 	    exit(1);
-	}else{
+	} else {
 	    if(DEBUG) cout<<"Found node, inserting into index "<<index<<endl;
 
-        assert_s(node->keys[index] != encval, "attempting to insert same value into tree");
+	    assert_s(index == node->keys.size() ||
+		     node->keys[index] != encval,
+		     "attempting to insert same value into tree");
 
 	    typename vector<EncT>::iterator it;
 	    it=node->keys.begin();
@@ -999,7 +1001,7 @@ Server<EncT>::interaction(EncT ciph,
     	bool equals = false;
     	reply >> index >> equals;
 
-    	assert_s(len > index, "index returned by client is incorrect");
+    	assert_s(len >= index, "index returned by client is incorrect");
 
     	tree_node<EncT> * node  =curr->right[index];
     	if (equals || (!node && len<N-1) ) {
