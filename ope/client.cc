@@ -53,31 +53,12 @@ handle_interaction(istringstream & iss, blowfish* bc){
   
 }
 
-static int sock = 0;
-static int csock = 0;
- 
-static void
-cleanup(int signum) {
-
-    close(csock);
-    close(sock);
-    cerr << "cleaned-up sockets \n";
-}
-
 int main(int argc, char ** argv){
 
-    int client_port = DEFAULT_OPE_CLIENT_PORT;
-    assert_s(argc <= 2, "usage: client [port] ");
-    if (argc == 2) {
-	client_port = atoi(argv[1]);
-    }
-    cerr << "client port " << client_port << "\n";
 	
     //Socket connection
-    sock = create_and_bind(client_port);
+    int sock = create_and_bind(OPE_CLIENT_PORT);
 
-    signal(SIGQUIT, cleanup);
-        
     //Start listening
     int listen_rtn = listen(sock, 10);
     if (listen_rtn < 0) {
@@ -88,7 +69,7 @@ int main(int argc, char ** argv){
     socklen_t addr_size = sizeof(sockaddr_in);
     struct sockaddr_in sadr;
 
-    csock = accept(sock, (struct sockaddr*) &sadr, &addr_size);    
+    int csock = accept(sock, (struct sockaddr*) &sadr, &addr_size);    
     assert_s(csock >= 0, "Client failed to accept connection");
     cerr << "accepted connection (from server hopefully)\n";
    

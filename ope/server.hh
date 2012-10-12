@@ -92,9 +92,8 @@ public:
 
     tree<EncT> ope_tree;
     std::map<EncT, table_entry > ope_table;
-    int client_port;
     
-    Server(int client_port);
+    Server();
     ~Server();
 
 

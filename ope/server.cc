@@ -1094,8 +1094,8 @@ Server<EncT>::dispatch( int csock, istringstream & iss) {
 }
 
 template<class EncT>
-Server<EncT>::Server(int _client_port) : client_port(_client_port) {
-    sock_cl = create_and_connect(OPE_CLIENT_HOST, client_port);
+Server<EncT>::Server() {
+    sock_cl = create_and_connect(OPE_CLIENT_HOST, OPE_CLIENT_PORT);
     sock_udf = create_and_bind(OPE_SERVER_PORT);
 }
 
@@ -1106,37 +1106,13 @@ Server<EncT>::~Server() {
 }
 
 
-Server<uint64_t> * server = NULL;
-
-static void
-signal_cleanup(int signum) {
-
-    if (server->sock_udf) {
-	close(server->sock_udf);
-    }
-    if (server->sock_cl) {
-	close(server->sock_cl);
-    }
-    cerr << "cleaned up sockets \n";
-}
-
-
 int main(int argc, char **argv){
 
-    int client_port = DEFAULT_OPE_CLIENT_PORT;
-    assert_s(argc <= 2, "usage: server [port of client]");
-    if (argc == 2) {
-	client_port = atoi(argv[1]);
-    } 
-    cerr << "client port " << client_port << "\n";
-
-    
     cerr<<"Starting tree server \n";
-    server = new Server<uint64_t>(client_port);
-    signal(SIGQUIT, signal_cleanup);
+    Server<uint64_t> server;
     
     //Start listening
-    int listen_rtn = listen(server->sock_udf, 10);
+    int listen_rtn = listen(server.sock_udf, 10);
     if (listen_rtn < 0) {
 	cerr<<"Error listening to socket"<<endl;
     }
@@ -1145,7 +1121,7 @@ int main(int argc, char **argv){
     socklen_t addr_size = sizeof(sockaddr_in);
     struct sockaddr_in sadr;
     
-    int csock = accept(server->sock_udf, (struct sockaddr*) &sadr, &addr_size);
+    int csock = accept(server.sock_udf, (struct sockaddr*) &sadr, &addr_size);
     assert_s(csock >= 0, "Server accept failed!");
     cerr << "Server accepted connection with udf \n";
 
@@ -1164,7 +1140,7 @@ int main(int argc, char **argv){
         istringstream iss(buffer);
 	
 	//Pass connection and messages received to handle_client
-	server->dispatch(csock, iss);
+	server.dispatch(csock, iss);
 
     }
 
