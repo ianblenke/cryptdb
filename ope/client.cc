@@ -74,7 +74,7 @@ int main(int argc, char ** argv){
     cerr << "client port " << client_port << "\n";
 	
     //Socket connection
-    sock = create_and_bind(OPE_CLIENT_PORT);
+    sock = create_and_bind(client_port);
 
     signal(SIGQUIT, cleanup);
         

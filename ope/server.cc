@@ -1128,7 +1128,7 @@ int main(int argc, char **argv){
     if (argc == 2) {
 	client_port = atoi(argv[1]);
     } 
-    cerr << "OPE CLIENT PORT " << client_port << "\n";
+    cerr << "client port " << client_port << "\n";
 
     
     cerr<<"Starting tree server \n";

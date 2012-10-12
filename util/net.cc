@@ -1,5 +1,7 @@
 #include <util/net.hh>
 #include <util/util.hh>
+#include <sys/types.h>
+#include <sys/socket.h>
 
 using namespace std;
 
@@ -7,9 +9,16 @@ int
 create_and_bind(int host_port) {
 
     cerr << "Create and bind\n";
+
     int hsock = socket(AF_INET, SOCK_STREAM, 0);
     assert_s(hsock >= 0, "Error initializing socket");
 
+    // allow reuse of this socket in case we restarted server
+    int optval;
+    // set SO_REUSEADDR on a socket to true (1):
+    optval = 1;
+    setsockopt(hsock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof optval);
+    
     struct sockaddr_in my_addr;
     my_addr.sin_family = AF_INET;
     my_addr.sin_port = htons(host_port);
