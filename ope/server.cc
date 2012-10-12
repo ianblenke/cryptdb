@@ -1094,8 +1094,8 @@ Server<EncT>::dispatch( int csock, istringstream & iss) {
 }
 
 template<class EncT>
-Server<EncT>::Server() {
-    sock_cl = create_and_connect(OPE_CLIENT_HOST, OPE_CLIENT_PORT);
+Server<EncT>::Server(int _client_port) : client_port(_client_port) {
+    sock_cl = create_and_connect(OPE_CLIENT_HOST, client_port);
     sock_udf = create_and_bind(OPE_SERVER_PORT);
 }
 
@@ -1122,16 +1122,17 @@ signal_cleanup(int signum) {
 
 
 int main(int argc, char **argv){
-    
+
+    int client_port = DEFAULT_OPE_CLIENT_PORT;
     assert_s(argc <= 2, "usage: server [port of client]");
     if (argc == 2) {
-	OPE_CLIENT_PORT = atoi(argv[1]);
-    }
-    cerr << "OPE CLIENT PORT " << OPE_CLIENT_PORT << "\n";
+	client_port = atoi(argv[1]);
+    } 
+    cerr << "OPE CLIENT PORT " << client_port << "\n";
 
     
     cerr<<"Starting tree server \n";
-    server = new Server<uint64_t>();
+    server = new Server<uint64_t>(client_port);
     signal(SIGQUIT, signal_cleanup);
     
     //Start listening

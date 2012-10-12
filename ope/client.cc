@@ -66,12 +66,12 @@ cleanup(int signum) {
 
 int main(int argc, char ** argv){
 
-
+    int client_port = DEFAULT_OPE_CLIENT_PORT;
     assert_s(argc <= 2, "usage: client [port] ");
     if (argc == 2) {
-	OPE_CLIENT_PORT = atoi(argv[1]);
+	client_port = atoi(argv[1]);
     }
-    cerr << "OPE CLIENT PORT " << OPE_CLIENT_PORT << "\n";
+    cerr << "client port " << client_port << "\n";
 	
     //Socket connection
     sock = create_and_bind(OPE_CLIENT_PORT);
