@@ -50,7 +50,8 @@ create_and_connect(string host_name, int host_port) {
 std::string
 send_receive(int sock, const string & msg) {
 
-    assert_s(send(sock, msg.c_str(), msg.size(), 0) != (int)msg.size(),
+    cerr << "send/receive; to send  " << msg << "\n";
+    assert_s(send(sock, msg.c_str(), msg.size(), 0) == (int)msg.size(),
 	     "error with send");
     
     uint buflen = 1024;
@@ -60,6 +61,7 @@ send_receive(int sock, const string & msg) {
     
     assert_s(recv(sock, buffer, buflen, 0) > 0,
 	     "error with receive");
+    cerr << "received " << buffer << "\n";
     
     return string(buffer);
        

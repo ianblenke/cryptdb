@@ -95,9 +95,9 @@ int main(){
 
         assert_s(interaction_rslt!="", "interaction error");
 
-
+	cerr << "sending " << interaction_rslt << "\n";
         assert_s(send(csock, interaction_rslt.c_str(), interaction_rslt.size(),0)
-		 != (int)interaction_rslt.size(),
+		 == (int)interaction_rslt.size(),
 		 "send failed");
 
         interaction_rslt = "";

@@ -1074,7 +1074,7 @@ Server<EncT>::handle_enc(int csock, istringstream & iss, bool do_ins) {
             ope = opeToStr(ope_enc-1);            
         }
     }
-    assert_s(send(csock, ope.c_str(), ope.size(), 0) != (int)ope.size(),
+    assert_s(send(csock, ope.c_str(), ope.size(), 0) == (int)ope.size(),
 	     "problem with send");
     
 }
