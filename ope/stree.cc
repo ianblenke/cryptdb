@@ -255,40 +255,23 @@ void
 tree<EncT>::update_ope_table(tree_node<EncT> *node, uint64_t base_v, uint64_t base_nbits, 
 			     OPETable<EncT> & ope_table){
 
-    for(int i = 0; i < (int) node->keys.size(); i++){
-	EncT ckey = node->keys[i];
-	OPEType old_ope = ope_table.get(ckey).ope;
-	OPEType new_ope = compute_ope<EncT>(base_v, base_nbits, i);
-	
-	ope_table.update(ckey, new_ope);
-	update_db(old_ope , new_ope);
-    }
+    update_shifted_paths(0, base_v, base_nbits, node, ope_table);
 
     uint64_t next_v, next_nbits;
 	
     next_nbits = base_nbits+num_bits;
 
     if(node->key_in_map( (EncT) NULL)){
-/*		table_entry tmp = base;
-		tmp.v = tmp.v<<num_bits;
-		tmp.pathlen+=num_bits;
-		tmp.index=0;*/
 
 	next_v = base_v<<num_bits;
-
-
 	update_ope_table(node->right[(EncT) NULL],  next_v, next_nbits, ope_table);
     }
+    
     for(int i = 0; i < (int) node->keys.size(); i++){
 
 	if(node->key_in_map(node->keys[i])){
-	    /*	    table_entry tmp = base;
-		    tmp.v = tmp.v<<num_bits | (i+1);
-		    tmp.pathlen+=num_bits;
-		    tmp.index=0;*/
 
 	    next_v = (base_v<<num_bits) | (i+1);
-
 	    update_ope_table(node->right[node->keys[i]], next_v, next_nbits, ope_table);	
 	}	
     }
@@ -671,14 +654,14 @@ trigger(uint height, uint num_nodes, uint branch_factor, double alpha) {
 		     log(((double)1.0)/alpha))+3;
 }
 
-// v is path to node where the insertion should happen
+// v is path to node where the insertion should happen; nbits is len of v
+// index is position in node where insertion should happen
 template<class EncT>
 void
 tree<EncT>::insert(uint64_t v, uint64_t nbits, uint64_t index, EncT encval,
 		   OPETable<EncT>  & ope_table){
     
     vector<tree_node<EncT> * > path = tree_insert(root, v, nbits, index, encval, nbits, ope_table);
-    clear_db_version();
 
 #if MALICIOUS
     
@@ -726,15 +709,19 @@ tree<EncT>::insert(uint64_t v, uint64_t nbits, uint64_t index, EncT encval,
     
     //if(DEBUG) print_tree();
 
-    if (trigger(height, num_nodes, N-1, alpha)){
+    if (trigger(height, num_nodes, N-1, alpha)) {
     	uint64_t path_index;
+
 	tree_node<EncT>* scapegoat = findScapegoat(path, path_index);
 	rebalance(scapegoat, v, nbits, path_index, ope_table);
+	
 	if (DEBUG) {cout<< " Insert rebalance "<< height <<": "<< num_nodes << endl;}
+
 	if (scapegoat == root && max_size < num_nodes) {
 	    max_size = num_nodes;
 	}
-	//if(DEBUG) print_tree();
+
+        //if(DEBUG) print_tree();
     }
     
 }
@@ -744,20 +731,28 @@ tree<EncT>::insert(uint64_t v, uint64_t nbits, uint64_t index, EncT encval,
 // does not proceed recursively down the tree because it assumes this is a leaf
 template<class EncT>
 void
-tree_node<EncT>::update_shifted_paths(uint index, tree_node<EncT> * node, OPETable<EncT> & ope_table) {
+tree<EncT>::update_shifted_paths(uint index, uint64_t v, int pathlen,
+				      tree_node<EncT> * node,
+				      OPETable<EncT> & ope_table) {
 
-	for(int i=(int)index+1; i< (int) node->keys.size(); i++) {
-	    EncT ckey = node->keys[i];
-
-	    OPEType newope = compute_ope<EncT>(v, pathlen, i);
-	    OPEType oldope = ope_table.get(ckey).ope;
-	    
-	    ope_table.update(ckey, newope);
+    for(int i=(int)index+1; i< (int) node->keys.size(); i++) {
+	EncT ckey = node->keys[i];
+	
+	OPEType newope = compute_ope<EncT>(v, pathlen, i);
+	OPEType oldope = ope_table.get(ckey).ope;
+	
+	ope_table.update(ckey, newope);
 	    update_db(oldope, newope);
-	}
-
-	clear_db_version();
+    }
+    
 }
+
+/* Extracts the first index from v --> the next direction to take */
+static int
+extract_index(OPEType v, uint nbits) {
+    return (int) (v&(mask<<(nbits-num_bits)))>>(nbits-num_bits);    
+}
+
 
 // v is path to node where to insert (if node is full, insertion will create a
 // new node)
@@ -787,45 +782,42 @@ tree<EncT>::tree_insert(tree_node<EncT>* node,
 	    assert_s(node->right[ciph] == NULL, "subtree should be null");
 	    node->right[ciph] = new tree_node<EncT>();
 	    num_nodes++;
+	    max_size = max(num_nodes, max_size);
+	    
 	    rtn_path = tree_insert(node->right[ciph], path_append(v, index),
 				   0, 0, encval, pathlen+num_bits, ope_table);
 	    rtn_path.push_back(node);
  
 	    return rtn_path;
 	}
+
+	//INSERT HERE
 	
-	if(DEBUG) cout<<"Found node, inserting into index "<<index<<endl;
+	if(DEBUG) cout<< "Found node, inserting into index " << index << endl;
 
 	typename vector<EncT>::iterator it;
 	it = node->keys.begin();
 
 	node->keys.insert(it+index, encval);
-	max_size = max(num_nodes, max_size);
+
 	rtn_path.push_back(node);
 
 	assert_s(ope_table.insert(encval, compute_ope<EncT>(v, pathlen, index)),
 		 "did not insert new entry in ope_table");
 
-	update_shifted_paths(index, node);
+	update_shifted_paths(index, v, pathlen, node, ope_table);
+	clear_db_version();
 	
 	return rtn_path;
     }
 
-    int key_index = (int) (v&(mask<<(nbits-num_bits)))>>(nbits-num_bits);
-
-    EncT key;
-
-    //Protocol set: index 0 is NULL (branch to node with lesser elements)
-    //Else, index is 1+(key's index in node's key-vector)
-    if (key_index==0) {
-	key= (EncT) NULL;
-    }
-    else {
-	assert_s(key_index < N, "insert fail, key_index not legal");
-    	key = node->keys[key_index-1];
-    }
+    // nbits > 0
     
-    rtn_path = tree_insert(node->right[key], v, nbits-num_bits, index, encval, pathlen, ope_table);
+    EncT key;
+    int key_index = extract_index(v, nbits);
+    tree_node<EncT> * subtree = node->get_subtree(key_index);
+        
+    rtn_path = tree_insert(subtree, v, nbits-num_bits, index, encval, pathlen, ope_table);
     rtn_path.push_back(node);
     return rtn_path;
 }
@@ -949,4 +941,23 @@ tree_node<EncT>::key_in_map(EncT key){
     bool contained = (it != right.end());
     assert_s(!contained || (it->second != NULL), "inconsistency in right");
     return contained;
+}
+
+template<class EncT>
+tree_node *
+tree_node<EncT>::get_subtree(int index) {
+    assert_s(index <= keys.size(), "invalid index, larger than size of keys");
+
+    EncT key;
+    if (index == 0) {
+	key = (EncT) NULL;
+    } else {
+	key = node->keys[index - 1];
+    }
+
+    assert_s(key_in_map(key), "key does not have subtree");
+    tree_node * subtree = node->right[key];
+    assert_s(subtree != NULL, "requested subtree does not exist");
+
+    return subtree;
 }

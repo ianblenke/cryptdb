@@ -55,8 +55,8 @@ public:
 
     /*********** Helper methods **************/
     
-    std::vector<tree_node<EncT>* > tree_insert(tree_node<EncT>* node, uint64_t v,
-					       uint64_t nbits, uint64_t index,
+    std::vector<tree_node<EncT>* > tree_insert(tree_node<EncT>* node,
+					       uint64_t v, uint64_t nbits, uint64_t index,
 					       EncT encval, uint64_t pathlen,
 					       OPETable<EncT>  & ope_table);
 
@@ -66,9 +66,11 @@ public:
     void print_tree();
 
     
-    void update_shifted_paths(uint index, tree_node<EncT> * node,
+    void update_shifted_paths(uint index, uint64_t v, int pathlen,
+			      tree_node<EncT> * node,
 			      OPETable<EncT> & ope_table);
-    void update_ope_table(tree_node<EncT>* node, uint64_t base_v, uint64_t base_nbits,
+    void update_ope_table(tree_node<EncT>* node, 
+			  uint64_t base_v, uint64_t base_nbits,
 			  OPETable<EncT>  & ope_table);
     void update_db(OPEType old_entry, OPEType new_entry);
     void delete_db(table_entry del_entry);
@@ -116,6 +118,8 @@ struct tree_node
 	keys.clear();
 	right.clear();
     }
+
+    tree_node * get_subtree(index);
     
     //Returns true if node's right map contains key (only at non-leaf nodes)
     bool key_in_map(EncT key);
