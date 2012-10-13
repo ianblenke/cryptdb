@@ -53,14 +53,12 @@ Server<EncT>::interaction(EncT ciph,
 	    return;
 	}
 	
-	EncT next_ciph = (index == 0) ? 0 : curr->keys[index-1];
-
-	if (!curr->key_in_map(next_ciph)) {
+	if (!curr->has_subtree(index)) {
 	    rindex = index;
 	    return;
 	}
 	
-	curr = curr->right[next_ciph];
+	curr = curr->get_subtree(index);
     	ope_path = (ope_path << num_bits) | index;
     	nbits += num_bits;
     }

@@ -105,8 +105,8 @@ void test_order(int num_vals, int order){
 	ct=0;
 
 /*	int do_repeat = rand()%10+1;
-	if(do_repeat<3){
-	    int repeat_index = rand()%(tmp_vals.size());
+	if( do_repeat<3){
+	   int repeat_index = rand()%(tmp_vals.size());
 	    pt = tmp_vals[repeat_index];
 	    ss.str("");
 	    ss.clear();
@@ -115,13 +115,16 @@ void test_order(int num_vals, int order){
 	    assert_s(dbconnect->execute(ss.str()), "user could not execute query");
 	    count++;
 	    pt=0;
-	    ct=0;} }
-    cout<<"Values:"<<endl;
-    //sort(inserted_vals.begin(), inserted_vals.end());
-    for(int i=0; i<num_vals; i++){
-    	cout<<inserted_vals[i]<<", ";
+	    ct=0;
+       } 
+*/
     }
-    cout<<endl;
-    cout<<"Count="<<count<<endl;
+	cout<<"Values:"<<endl;
+	//sort(inserted_vals.begin(), inserted_vals.end());
+	for(int i=0; i<num_vals; i++){
+	    cout<<inserted_vals[i]<<", ";
+	}
+	cout<<endl;
+	cout<<"Count="<<count<<endl;
 }
 

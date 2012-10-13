@@ -118,15 +118,15 @@ struct tree_node
 
     // Returns the subtree to the right of key if there is such a subtree, else
     // returns null 
-    tree_node * has_subtree(EncT key);
+    tree_node<EncT> * has_subtree(EncT key);
   
     // returns the subtree at position index
     // asserts that such a subtree exists
-    tree_node * get_subtree(index);
+    tree_node<EncT> * get_subtree(uint index);
 
     //creates a new subtree at index
     // asserts the subtree does not exist
-    tree_node * new_subtree(index);
+    tree_node<EncT> * new_subtree(uint index);
     
     // Calculate height of node in subtree of current node 
     // height is defined as the no. of nodes on the longest path

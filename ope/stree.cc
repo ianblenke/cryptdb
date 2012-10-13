@@ -236,7 +236,7 @@ tree<EncT>::update_db(uint64_t old_ope, uint64_t new_ope){
 
     if(DEBUG_COMM) cout << "Query: " << query << endl;
 
-    assert_s(dbconnect->execute(query.str()), "query " + query + " failed ");
+    assert_s(dbconnect->execute(query.str()), string("query ") + query.str() + " failed ");
 
 }
 
@@ -934,9 +934,9 @@ tree_node<EncT>::has_subtree(EncT key){
     }
 }
 
-temaplate<class EncT>
+template<class EncT>
 static EncT
-get_key_for_index(int index, tree_node<EncT> * tnode) {
+get_key_for_index(uint index, tree_node<EncT> * tnode) {
     assert_s(index <= tnode->keys.size(), "invalid index, larger than size of keys");
 
     if (index == 0) {
@@ -947,8 +947,8 @@ get_key_for_index(int index, tree_node<EncT> * tnode) {
 }
 
 template<class EncT>
-tree_node *
-tree_node<EncT>::get_subtree(int index) {
+tree_node<EncT> *
+tree_node<EncT>::get_subtree(uint index) {
 
     EncT key = get_key_for_index(index, this);
     tree_node * subtree;
@@ -958,8 +958,8 @@ tree_node<EncT>::get_subtree(int index) {
 }
 
 template<class EncT>
-tree_node *
-tree_node<EncT>::new_subtree(int index) {
+tree_node<EncT> *
+tree_node<EncT>::new_subtree(uint index) {
     EncT key = get_key_for_index(index, this);
 
     assert_s(!has_subtree(key), "key should not have been in map");
