@@ -51,7 +51,7 @@ int main(){
   bc->block_encrypt((const uint8_t *) &pt, (uint8_t *) &ct);
   cout<<pt<<" det enc to "<<ct<<endl;	
   ss<<"INSERT INTO emp VALUES ("<<pt<<", ope_enc("<<ct<<"), 0)";
-  dbconnect->execute(ss.str());
+  assert_s(dbconnect->execute(ss.str()), "user could not execute query");
   pt=0;
   ct=0;
   }
@@ -99,7 +99,7 @@ void test_order(int num_vals, int order){
         ss.clear();
 	bc->block_encrypt((const uint8_t *) &pt, (uint8_t *) &ct);
 	ss<<"INSERT INTO emp VALUES ("<<pt<<", ope_enc("<<ct<<",'i'), 0)";
-	dbconnect->execute(ss.str());
+	assert_s(dbconnect->execute(ss.str()), "user could not execute query " + ss.str());
 	count++;
 	pt=0;
 	ct=0;
@@ -112,13 +112,10 @@ void test_order(int num_vals, int order){
 	    ss.clear();
 	    bc->block_encrypt((const uint8_t *) &pt, (uint8_t *) &ct);
 	    ss<<"INSERT INTO emp VALUES ("<<pt<<", ope_enc("<<ct<<",'i'), 0)";
-	    dbconnect->execute(ss.str());
+	    assert_s(dbconnect->execute(ss.str()), "user could not execute query");
 	    count++;
 	    pt=0;
-	    ct=0;
-	}
-*/
-    }
+	    ct=0;} }
     cout<<"Values:"<<endl;
     //sort(inserted_vals.begin(), inserted_vals.end());
     for(int i=0; i<num_vals; i++){

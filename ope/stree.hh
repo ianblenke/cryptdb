@@ -100,10 +100,7 @@ public:
     bool test_node(tree_node<EncT>* cur_node);
     bool test_vals(tree_node<EncT>* cur_node, EncT low, EncT high);
 
-
 };
-
-
 
 template<class EncT>
 struct tree_node

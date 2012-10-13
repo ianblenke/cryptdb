@@ -197,7 +197,7 @@ template<class EncT>
 void
 tree<EncT>::clear_db_version(){
     string query="UPDATE emp SET version=0 where version=1";
-    dbconnect->execute(query);
+    assert_s(dbconnect->execute(query), "failed to execute query " + query);
 }
 
 template<class EncT>
@@ -219,33 +219,24 @@ tree<EncT>::delete_db(table_entry del_entry){
 	del_ope_str;/*+
 		      " and version="+del_version_str;*/
     if(DEBUG_COMM) cout<<"Query: "<<query<<endl;
-    dbconnect->execute(query);
+    assert_s(dbconnect->execute(query), "query " + query + " failed");
 }
 
 //Update now-stale values in db
 template<class EncT>
 void 
 tree<EncT>::update_db(uint64_t old_ope, uint64_t new_ope){
-    ostringstream o;
-    o.str("");
-    o.clear();
-    o<<old_ope;
-    string old_ope_str = o.str();
-  
-    o.str("");
-    o.clear();
-    o<<new_ope;
-    string new_ope_str = o.str();
-  
 
-    string query="UPDATE emp SET ope_enc="+
-	new_ope_str+
-	", version=1 where ope_enc="+
-	old_ope_str+
-	" and version=0";
-    if(DEBUG_COMM) cout<<"Query: "<<query<<endl;
+    stringstream query;
+    query << "UPDATE emp SET ope_enc="
+	  << new_ope
+	  << ", version=1 where ope_enc="
+	  << old_ope
+	  << " and version=0";
 
-    dbconnect->execute(query);
+    if(DEBUG_COMM) cout << "Query: " << query << endl;
+
+    assert_s(dbconnect->execute(query.str()), "query " + query + " failed ");
 
 }
 
@@ -735,19 +726,19 @@ tree<EncT>::update_shifted_paths(uint index, uint64_t v, int pathlen,
 				      tree_node<EncT> * node,
 				      OPETable<EncT> & ope_table) {
 
-    for(int i=(int)index+1; i< (int) node->keys.size(); i++) {
+    for(int i=(int)index; i< (int) node->keys.size(); i++) {
 	EncT ckey = node->keys[i];
 	
 	OPEType newope = compute_ope<EncT>(v, pathlen, i);
 	OPEType oldope = ope_table.get(ckey).ope;
 	
 	ope_table.update(ckey, newope);
-	    update_db(oldope, newope);
+	update_db(oldope, newope);
     }
     
 }
 
-/* Extracts the first index from v --> the next direction to take */
+/* Extracts the first index from the last nbits of v */
 static int
 extract_index(OPEType v, uint nbits) {
     return (int) (v&(mask<<(nbits-num_bits)))>>(nbits-num_bits);    
@@ -757,6 +748,7 @@ extract_index(OPEType v, uint nbits) {
 // v is path to node where to insert (if node is full, insertion will create a
 // new node)
 // the vector returned is the path from where encval is inserted is the root
+// pathlen is the length of v
 template<class EncT>
 vector<tree_node<EncT>* >
 tree<EncT>::tree_insert(tree_node<EncT>* node,
@@ -794,17 +786,15 @@ tree<EncT>::tree_insert(tree_node<EncT>* node,
 
 	typename vector<EncT>::iterator it;
 	it = node->keys.begin();
-
 	node->keys.insert(it+index, encval);
 
-	rtn_path.push_back(node);
-
+	// update ope table and db
 	assert_s(ope_table.insert(encval, compute_ope<EncT>(v, pathlen, index)),
 		 "did not insert new entry in ope_table");
-
-	update_shifted_paths(index, v, pathlen, node, ope_table);
+	update_shifted_paths(index+1, v, pathlen, node, ope_table);
 	clear_db_version();
-	
+
+	rtn_path.push_back(node);
 	return rtn_path;
     }
 
