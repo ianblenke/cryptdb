@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <stdexcept>
+#include <limits>
 
 #include <execution/tuple.hh>
 #include <parser/cdb_helpers.hh>
@@ -247,6 +248,7 @@ string
 db_elem::print(bool force_unsigned) const
 {
   ostringstream o;
+  o.precision(numeric_limits<double>::digits10);
   switch (_t) {
     case db_elem::TYPE_UNINIT: o << "UNINIT"; break;
     case db_elem::TYPE_NULL: o << "NULL"; break;
@@ -255,7 +257,7 @@ db_elem::print(bool force_unsigned) const
       else                o << _d.i64;
       break;
     case db_elem::TYPE_BOOL: o << (_d.b ? "true" : "false"); break;
-    case db_elem::TYPE_DOUBLE: o << _d.dbl; break;
+    case db_elem::TYPE_DOUBLE: o << fixed << _d.dbl; break;
     case db_elem::TYPE_CHAR  :
     case db_elem::TYPE_STRING: o << _s; break;
     case db_elem::TYPE_DATE:
