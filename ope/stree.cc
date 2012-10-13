@@ -63,8 +63,7 @@ tree<EncT>::~tree(){
     delete root;
 }
 
-/****************************/
-//Tree rebalancing
+/********** Tree rebalancing ******************/
 
 template<class EncT>
 vector<EncT> 
@@ -227,27 +226,17 @@ tree<EncT>::delete_db(table_entry del_entry){
 template<class EncT>
 void 
 tree<EncT>::update_db(uint64_t old_ope, uint64_t new_ope){
-    //Takes old ope_table entry and new ope_table entry and calculates
-    //corresponding db values, and updates db old vals to new vals
-
     ostringstream o;
     o.str("");
     o.clear();
     o<<old_ope;
     string old_ope_str = o.str();
-    /*o.str("");
-      o.clear();
-      o<<old_version;
-      string old_version_str = o.str();
-    */
+  
     o.str("");
     o.clear();
     o<<new_ope;
     string new_ope_str = o.str();
-    /*o.str("");
-      o.clear();
-      o<<new_version;
-      string new_version_str = o.str();	*/
+  
 
     string query="UPDATE emp SET ope_enc="+
 	new_ope_str+
@@ -255,6 +244,7 @@ tree<EncT>::update_db(uint64_t old_ope, uint64_t new_ope){
 	old_ope_str+
 	" and version=0";
     if(DEBUG_COMM) cout<<"Query: "<<query<<endl;
+
     dbconnect->execute(query);
 
 }
@@ -749,6 +739,26 @@ tree<EncT>::insert(uint64_t v, uint64_t nbits, uint64_t index, EncT encval,
     
 }
 
+// updates ope encodings for the keys at node starting from index+1
+// in the ope table and the DB
+// does not proceed recursively down the tree because it assumes this is a leaf
+template<class EncT>
+void
+tree_node<EncT>::update_shifted_paths(uint index, tree_node<EncT> * node, OPETable<EncT> & ope_table) {
+
+	for(int i=(int)index+1; i< (int) node->keys.size(); i++) {
+	    EncT ckey = node->keys[i];
+
+	    OPEType newope = compute_ope<EncT>(v, pathlen, i);
+	    OPEType oldope = ope_table.get(ckey).ope;
+	    
+	    ope_table.update(ckey, newope);
+	    update_db(oldope, newope);
+	}
+
+	clear_db_version();
+}
+
 // v is path to node where to insert (if node is full, insertion will create a
 // new node)
 // the vector returned is the path from where encval is inserted is the root
@@ -793,19 +803,10 @@ tree<EncT>::tree_insert(tree_node<EncT>* node,
 	max_size = max(num_nodes, max_size);
 	rtn_path.push_back(node);
 
-	ope_table.insert(encval, compute_ope<EncT>(v, pathlen, index));
+	assert_s(ope_table.insert(encval, compute_ope<EncT>(v, pathlen, index)),
+		 "did not insert new entry in ope_table");
 
-	// update the ope table
-	for(int i=(int)index+1; i< (int) node->keys.size(); i++) {
-	    EncT ckey = node->keys[i];
-
-	    OPEType newope = compute_ope<EncT>(v, pathlen, i);
-	    OPEType oldope = ope_table.get(ckey).ope;
-	    
-	    ope_table.update(ckey, newope);
-	    update_db(oldope, newope);
-	}
-			
+	update_shifted_paths(index, node);
 	
 	return rtn_path;
     }
@@ -909,3 +910,43 @@ template class tree<uint64_t>;
 template class tree<uint32_t>;
 template class tree<uint16_t>;
 
+template <class EncT>
+int
+tree_node<EncT>::height() {
+    typename std::map<EncT, tree_node *>::iterator it;
+    int max_child_height=0;
+    int tmp_height=0;
+    
+    for(it=right.begin(); it!=right.end(); it++){
+	tmp_height=it->second->height();
+	if(tmp_height>max_child_height) {
+	    max_child_height=tmp_height;
+	}
+    }		
+    
+    return max_child_height+1;
+    
+}
+
+template<class EncT>
+int
+tree_node<EncT>::size(){
+    int totalsize = keys.size();
+    typename std::map<EncT, tree_node *>::iterator it;
+    
+    for( it = right.begin(); it!=right.end(); it++){
+	totalsize +=it->second->size();
+    }		
+    
+    return totalsize;		    
+}
+
+//Returns true if node's right map contains key (only at non-leaf nodes)
+template<class EncT>
+bool
+tree_node<EncT>::key_in_map(EncT key){ 
+    auto it = right.find(key);
+    bool contained = (it != right.end());
+    assert_s(!contained || (it->second != NULL), "inconsistency in right");
+    return contained;
+}
