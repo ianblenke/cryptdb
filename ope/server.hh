@@ -36,6 +36,7 @@ template<class EncT>
 class tree {
 
 public:
+
     tree_node<EncT> *root;
     unsigned int num_nodes; //number of tree nodes, not values
     unsigned int max_size;
@@ -47,11 +48,22 @@ public:
     RootTracker tracker;
 #endif
 
+    /************ Main methods *****************/
+    
     tree();
     ~tree();
 
-/////////TO DOOOOO: Switch index to int, no need for uint64_t
-    std::string insert(uint64_t v, uint64_t nbits, uint64_t index, EncT encval, std::map<EncT, table_entry >  & ope_table);
+    /* Inputs: v is path to node where encval should be inserted, nbits is the
+     * length of the path; index is 
+     * the position where it should be inserted
+     * Requires that encval is not in tree.
+     */
+    void insert(uint64_t v, uint64_t nbits, uint64_t index, EncT encval, std::map<EncT, table_entry >  & ope_table);
+
+
+
+    /*********** Helper methods **************/
+    
     std::vector<tree_node<EncT>* > tree_insert(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint64_t index, EncT encval, uint64_t pathlen, std::map<EncT, table_entry >  & ope_table);
 
     tree_node<EncT>* findScapegoat( std::vector<tree_node<EncT>* > path , uint64_t & path_index);
@@ -74,6 +86,8 @@ public:
     //EncT tree_delete(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint64_t index, uint64_t pathlen, bool swap);
     //std::string delete_index(uint64_t v, uint64_t nbits, uint64_t index);
 
+    /************ Test methods ******************/
+    
     bool test_tree(tree_node<EncT>* cur_node);
 
     bool test_node(tree_node<EncT>* cur_node);

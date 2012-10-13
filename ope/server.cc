@@ -53,15 +53,15 @@ struct tree_node
     }
 
     //Returns true if node's right map contains key (only at non-leaf nodes)
-    bool key_in_map(EncT key){ // R: why this???
-	// FL: EncT is being used as a primitive, so this is fine.
+    bool key_in_map(EncT key){ 
 	auto it = right.find(key);
 	bool contained = (it != right.end());
 	assert_s(!contained || (it->second != NULL), "inconsistency in right");
 	return contained;
     }
 
-    //Recursively calculate height of node in tree
+    // Calculate height of node in subtree of current node 
+    // height is defined as the no. of nodes on the longest path
     int height(){
 	typename map<EncT, tree_node *>::iterator it;
 	int max_child_height=0;
@@ -69,7 +69,9 @@ struct tree_node
 
 	for(it=right.begin(); it!=right.end(); it++){
 	    tmp_height=it->second->height();
-	    if(tmp_height>max_child_height) max_child_height=tmp_height;
+	    if(tmp_height>max_child_height) {
+		max_child_height=tmp_height;
+	    }
 	}		
 
 	return max_child_height+1;
@@ -77,15 +79,15 @@ struct tree_node
     }
 
     //Recursively calculate number of keys at node and subtree nodes
-    int len(){
-	int len = keys.size();
+    int size(){
+	int totalsize = keys.size();
 	typename map<EncT, tree_node *>::iterator it;
 
 	for(it=right.begin(); it!=right.end(); it++){
-	    len+=it->second->len();
+	    totalsize +=it->second->size();
 	}		
 
-	return len;		
+	return totalsize;		
 
     }
 
@@ -93,26 +95,26 @@ struct tree_node
 
 template<class EncT>
 tree<EncT>::tree(){
-    cerr << "creating the tree!!!\n";
+    If (DEBUG_STREE) {cerr << "creating the tree \n";}
+    
     root = new tree_node<EncT>();
+
     num_nodes=1;
     max_size=0;
     num_rebalances=0;
+
+    dbconnect = new Connect( "localhost", "root", "letmein","cryptdb", 3306);
     
 #if MALICIOUS
     
     Node::m_failure.invalidate();
-
     Node::m_failure.m_key = "";
-
-    //tracker=RootTracker();
 
     Node* root_ptr = new Node(tracker);
     tracker.set_root(null_ptr, root_ptr);
 
 #endif
-    
-    dbconnect = new Connect( "localhost", "root", "letmein","cryptdb", 3306);	
+
 }
 
 
@@ -238,6 +240,8 @@ tree<EncT>::rebalance(tree_node<EncT>* node, uint64_t v, uint64_t nbits,
     clear_db_version();
 }
 
+
+
 //Used to delete all subtrees of node
 template<class EncT>
 void 
@@ -251,7 +255,7 @@ tree<EncT>::delete_nodes(tree_node<EncT>* node){
 
 }
 
-/****************************/
+
 template<class EncT>
 void
 tree<EncT>::clear_db_version(){
@@ -444,7 +448,7 @@ tree<EncT>::findScapegoat( vector<tree_node<EncT>* > path , uint64_t & path_inde
     return root;
 
 }
-
+/*
 template<class EncT>
 struct successor {
     uint64_t succ_v;
@@ -465,7 +469,8 @@ tree<EncT>::find_succ(tree_node<EncT>* node, uint64_t v, uint64_t nbits){
 	return succ;
     }
 }
-
+*/
+/*
 template<class EncT>
 struct predecessor{
     uint64_t pred_v;
@@ -478,13 +483,16 @@ template<class EncT>
 predecessor<EncT>
 tree<EncT>::find_pred(tree_node<EncT>* node, uint64_t v, uint64_t nbits){
     int max_index = node->keys.size()-1;
-    if(node->key_in_map(node->keys[max_index])){
+
+    EncT ciph = node->keys[max_index];
+    
+    if(node->key_in_map(ciph)){
 	if(max_index!=N-2) {
 	    cout<<"Error in pred, max_index not N-1"<<endl;
 	    exit(1);
 	}
-	return find_pred(node->right[node->keys[max_index]], (v<<num_bits | (max_index+1)), nbits+num_bits);
-    }else{
+	return find_pred(node->right[ciph], (v<<num_bits | (max_index+1)), nbits+num_bits);
+    } else {
 	predecessor<EncT> pred;
 	pred.pred_v = v;
 	pred.pred_nbits = nbits;
@@ -493,7 +501,7 @@ tree<EncT>::find_pred(tree_node<EncT>* node, uint64_t v, uint64_t nbits){
 	return pred;
     }
 }
-
+*/
 /*template<class EncT>
   string
   tree<EncT>::delete_index(uint64_t v, uint64_t nbits, uint64_t index){
@@ -736,21 +744,27 @@ tree<EncT>::find_pred(tree_node<EncT>* node, uint64_t v, uint64_t nbits){
   }*/
 
 
+bool trigger(uint height, uint num_nodes, uint branch_factor, double alpha) {
+    
+    return height > ((1.0 * log(num_nodes*1.0)/log(1.0 * branch_factor))/
+		     log(((double)1.0)/alpha))+3;
+}
+
 // v is path to node where the insertion should happen
 template<class EncT>
-string
+void
 tree<EncT>::insert(uint64_t v, uint64_t nbits, uint64_t index, EncT encval, map<EncT, table_entry >  & ope_table){
     
     vector<tree_node<EncT> * > path = tree_insert(root, v, nbits, index, encval, nbits, ope_table);
     clear_db_version();
 
+#if MALICIOUS
+    
     //Merkle tree insert
     stringstream s;
     s << encval;
     string encval_str = s.str();
 
-
-#if MALICIOUS
     Elem elem;
     elem.m_key = encval_str;
     elem.m_payload = encval_str+" hi you";
@@ -782,23 +796,23 @@ tree<EncT>::insert(uint64_t v, uint64_t nbits, uint64_t index, EncT encval, map<
 #endif
 
 
-    double height= (double) path.size();
+    double height = (double) path.size();
 
-    if (height==0) return s.str();
-
+    if (height==0) {
+	return;
+    }
+    
     //if(DEBUG) print_tree();
 
-    if(height> log(num_nodes)/log(((double)1.0)/alpha)+1 ){
+    if(trigger(height, num_nodes, alpha)){
     	uint64_t path_index;
 	tree_node<EncT>* scapegoat = findScapegoat(path, path_index);
 	rebalance(scapegoat, v, nbits, path_index, ope_table);
 	if(DEBUG) cout<<"Insert rebalance "<<height<<": "<<num_nodes<<endl;
 	if(scapegoat==root) max_size=num_nodes;
 	//if(DEBUG) print_tree();
-    } 
-
-    return s.str();
-
+    }
+    
 }
 
 // v is path to node where to insert (if node is full, insertion will create a
