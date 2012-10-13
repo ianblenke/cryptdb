@@ -21,6 +21,15 @@ struct table_entry {
     //int version;
 };
 
+struct OPETable {
+    map<EncT, table_entry> table;
+    // returns true if new table entry was
+    // returns false if encval existed (in which case refcount is incremented)
+    bool insert(EncT encval, uint64_t ope);
+
+    table_entry & find(EncT encval);
+};
+
 class ope_lookup_failure {};
 
 template<class EncT>

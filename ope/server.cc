@@ -804,12 +804,14 @@ tree<EncT>::insert(uint64_t v, uint64_t nbits, uint64_t index, EncT encval, map<
     
     //if(DEBUG) print_tree();
 
-    if(trigger(height, num_nodes, alpha)){
+    if (trigger(height, num_nodes, alpha)){
     	uint64_t path_index;
 	tree_node<EncT>* scapegoat = findScapegoat(path, path_index);
 	rebalance(scapegoat, v, nbits, path_index, ope_table);
-	if(DEBUG) cout<<"Insert rebalance "<<height<<": "<<num_nodes<<endl;
-	if(scapegoat==root) max_size=num_nodes;
+	if (DEBUG) {cout<< " Insert rebalance "<< height <<": "<< num_nodes << endl;}
+	if (scapegoat == root && max_size < num_nodes) {
+	    max_size = num_nodes;
+	}
 	//if(DEBUG) print_tree();
     }
     
@@ -817,14 +819,15 @@ tree<EncT>::insert(uint64_t v, uint64_t nbits, uint64_t index, EncT encval, map<
 
 // v is path to node where to insert (if node is full, insertion will create a
 // new node)
+// the vector returned is the path from where encval is inserted is the root
 template<class EncT>
 vector<tree_node<EncT>* >
 tree<EncT>::tree_insert(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint64_t index, EncT encval, uint64_t pathlen, map<EncT, table_entry >  & ope_table){
 
     vector<tree_node<EncT>* > rtn_path;
 
-    //End of the insert line, check if you can insert
-    //Assumes v and nbits were from a lookup of an insertable node
+    // End of the insert line, check if you can insert
+    // Assumes v and nbits were from a lookup of an insertable node
     if (nbits==0) {
  	assert_s(node->keys.size() <= N-1," too many values at node");
 	
@@ -849,23 +852,17 @@ tree<EncT>::tree_insert(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint6
 	if(DEBUG) cout<<"Found node, inserting into index "<<index<<endl;
 
 	typename vector<EncT>::iterator it;
-	it=node->keys.begin();
+	it = node->keys.begin();
 
 	node->keys.insert(it+index, encval);
-	max_size=max(num_nodes, max_size);
+	max_size = max(num_nodes, max_size);
 	rtn_path.push_back(node);
 
-	table_entry new_entry;
-	new_entry.ope = compute_ope<EncT>(v, pathlen, index);
-	new_entry.refcount = 1;
-	ope_table[encval] = new_entry;
+	ope_table.insert(encval, compute_ope<EncT>(v, pathlen, index));
 
 	// update the ope table
 	for(int i=(int)index+1; i< (int) node->keys.size(); i++){
-	    table_entry old_entry = ope_table[node->keys[i]];
-	    ope_table[node->keys[i]].ope = compute_ope<EncT>(v, pathlen, i);
-	    table_entry update_entry = ope_table[node->keys[i]];
-	    //Only keys after newly inserted one need updating
+	    ope_table.update(node->keys[i], compute_ope<EncT>(v, pathlen, i));
 	    update_db(old_entry, update_entry);
 
 	}
