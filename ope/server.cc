@@ -1,15 +1,4 @@
 #include "server.hh"
-#include <exception>
-#include <utility>
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <arpa/inet.h>
-#include <unistd.h>
-#include <resolv.h>
-#include <sys/types.h>
 
 using std::cout;
 using std::endl;
@@ -20,6 +9,7 @@ using std::stringstream;
 using std::vector;
 using std::cerr;
 using std::map;
+
 
 template<class EncT>
 void
@@ -88,13 +78,13 @@ Server<EncT>::handle_enc(int csock, istringstream & iss, bool do_ins) {
     string ope;
     
     auto ts = ope_table.find(ciph);
-    if (ts != ope_table.end()) { // found in OPE Table
+    if (ts) { // found in OPE Table
     	if (DEBUG) {cerr << "found in ope table"; }
     	// if this is an insert, increase ref count
     	if (do_ins) {
-    	    ts->second.refcount++;
+    	    ts->refcount++;
     	}
-	ope = opeToStr(ts->second.ope);
+	ope = opeToStr(ts->ope);
    	
     } else { // not found in OPE Table
     	if (DEBUG) {cerr << "not in ope table \n"; }
@@ -115,9 +105,8 @@ Server<EncT>::handle_enc(int csock, istringstream & iss, bool do_ins) {
             // ope_insert also updates ope_table
     	    ope_tree.insert(ope_path, nbits, index, ciph, ope_table);
 
-            ts = ope_table.find( ciph);
-            assert_s( ts != ope_table.end() , "after insert, value must be in ope_table");
-            ope = opeToStr(ts->second.ope);            
+            table_entry te = ope_table.get(ciph); // ciph must be in ope_table
+            ope = opeToStr(te.ope);            
         }else{
 
             uint64_t ope_enc = compute_ope<EncT>(ope_path, nbits, index);

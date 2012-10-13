@@ -1,5 +1,15 @@
 #pragma once
 
+
+#include <exception>
+#include <utility>
+#include <string.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <resolv.h>
+#include <sys/types.h>
+
 #include <edb/Connect.hh>
 #include <ope/stree.hh>
 #include <ope/btree.hh>
@@ -13,7 +23,7 @@ public:
     int sock_udf; //socket to udfs; server listens on it
 
     tree<EncT> ope_tree;
-    OPETable ope_table;
+    OPETable<EncT> ope_table;
     
     Server();
     ~Server();

@@ -6,13 +6,6 @@
  *
  **********************************************/
 
-
-#include <stdint.h>
-#include <sstream>
-#include <vector>
-#include <iostream>
-#include <map>
-
 #include <util/net.hh>
 #include <util/ope-util.hh>
 #include <edb/Connect.hh>
@@ -56,19 +49,21 @@ public:
      * the position where it should be inserted
      * Requires that encval is not in tree.
      */
-    void insert(uint64_t v, uint64_t nbits, uint64_t index, EncT encval, std::map<EncT, table_entry >  & ope_table);
+    void insert(uint64_t v, uint64_t nbits, uint64_t index, EncT encval,
+		OPETable<EncT> & ope_table);
 
 
 
     /*********** Helper methods **************/
     
-    std::vector<tree_node<EncT>* > tree_insert(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint64_t index, EncT encval, uint64_t pathlen, std::map<EncT, table_entry >  & ope_table);
+    std::vector<tree_node<EncT>* > tree_insert(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint64_t index, EncT encval, uint64_t pathlen, OPETable<EncT>  & ope_table);
 
     tree_node<EncT>* findScapegoat( std::vector<tree_node<EncT>* > path , uint64_t & path_index);
 
     void print_tree();
 
-    void update_ope_table(tree_node<EncT>* node, uint64_t base_v, uint64_t base_nbits, std::map<EncT, table_entry >  & ope_table);
+    void update_ope_table(tree_node<EncT>* node, uint64_t base_v, uint64_t base_nbits,
+			  OPETable<EncT>  & ope_table);
     void update_db(OPEType old_entry, OPEType new_entry);
     void delete_db(table_entry del_entry);
     void clear_db_version();
@@ -76,7 +71,8 @@ public:
 
     std::vector<EncT> flatten(tree_node<EncT>* node);
     tree_node<EncT>* rebuild(std::vector<EncT> key_list);
-    void rebalance(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint64_t path_index,  std::map<EncT, table_entry >  & ope_table);
+    void rebalance(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint64_t path_index,
+		   OPETable<EncT>  & ope_table);
     void delete_nodes(tree_node<EncT>* node);
 
     successor<EncT> find_succ(tree_node<EncT>* node, uint64_t v, uint64_t nbits);
@@ -92,5 +88,62 @@ public:
 
     bool test_vals(tree_node<EncT>* cur_node, EncT low, EncT high);
 
+
+};
+
+
+
+template<class EncT>
+struct tree_node
+{
+    std::vector<EncT> keys;
+    std::map<EncT, tree_node *> right; // right has one more element than keys, the 0
+				  // element represents the leftmost subtree
+
+    tree_node(){}
+
+    ~tree_node(){
+	keys.clear();
+	right.clear();
+    }
+
+    //Returns true if node's right map contains key (only at non-leaf nodes)
+    bool key_in_map(EncT key){ 
+	auto it = right.find(key);
+	bool contained = (it != right.end());
+	assert_s(!contained || (it->second != NULL), "inconsistency in right");
+	return contained;
+    }
+
+    // Calculate height of node in subtree of current node 
+    // height is defined as the no. of nodes on the longest path
+    int height(){
+	typename std::map<EncT, tree_node *>::iterator it;
+	int max_child_height=0;
+	int tmp_height=0;
+
+	for(it=right.begin(); it!=right.end(); it++){
+	    tmp_height=it->second->height();
+	    if(tmp_height>max_child_height) {
+		max_child_height=tmp_height;
+	    }
+	}		
+
+	return max_child_height+1;
+
+    }
+
+    //Recursively calculate number of keys at node and subtree nodes
+    int size(){
+	int totalsize = keys.size();
+	typename std::map<EncT, tree_node *>::iterator it;
+
+	for(it=right.begin(); it!=right.end(); it++){
+	    totalsize +=it->second->size();
+	}		
+
+	return totalsize;		
+
+    }
 
 };

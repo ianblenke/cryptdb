@@ -1,6 +1,12 @@
 #pragma once
 
 
+#include <sstream>
+#include <vector>
+#include <iostream>
+#include <map>
+
+#include <util/util.hh>
 
 // OPE encoding v||index|| 
 struct table_entry {
@@ -20,7 +26,7 @@ struct OPETable {
 
     // must return a valid pointer
     // if a table_entry for encval does not exist, it throws exception
-    table_entry * get(EncT encval);
+    table_entry get(EncT encval);
 
     // returns true if new table entry was
     // returns false if encval existed (in which case refcount is incremented)

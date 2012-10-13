@@ -7,8 +7,6 @@ using std::string;
 using std::ostringstream;
 using std::istringstream;
 using std::stringstream;
-using std::ceil;
-using std::sort;
 using std::vector;
 using std::cerr;
 using std::map;
@@ -27,11 +25,11 @@ OPETable<EncT>::find(EncT encval) {
 }
 
 template <class EncT>
-table_entry *
+table_entry 
 OPETable<EncT>::get(EncT encval) {
     auto p = find(encval);
     assert_s(p, "key for ope_table.get not found");
-    return p;
+    return *p;
 }
 
 template <class EncT>
@@ -43,7 +41,7 @@ OPETable<EncT>::insert(EncT encval, uint64_t ope) {
 	table_entry te;
 	te.ope = ope;
 	te.refcount = 1;
-	table[encval] = ope;
+	table[encval] = te;
 
 	return true;
     }
@@ -64,3 +62,10 @@ OPETable<EncT>::update(EncT encval, uint64_t newope) {
 	return true;
     }
 }
+
+/*
+ * Explicitly instantiate the tree template for various ciphertext types.
+ */
+template struct OPETable<uint64_t>;
+template struct OPETable<uint32_t>;
+template struct OPETable<uint16_t>;

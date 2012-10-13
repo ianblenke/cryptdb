@@ -20,7 +20,6 @@ using std::ostringstream;
 using std::istringstream;
 using std::stringstream;
 using std::ceil;
-using std::sort;
 using std::vector;
 using std::cerr;
 using std::map;
@@ -31,71 +30,6 @@ using std::max;
 //TODO: how do we find scapegoat? better to record the number of nodes at each
 //noe than to go through all nodes
 
-// Compute the ope encoding out of an ope path, nbits (no of bits of ope_path),
-// and index being the index in the last node on the path
-template<class EncT>
-static
-uint64_t compute_ope(uint64_t ope_path, uint nbits, uint index) {
-    ope_path = (ope_path << num_bits) | index;
-    nbits+=num_bits;
-
-    return (ope_path << (64-nbits)) | (mask << (64-num_bits-nbits));
-}
-
-template<class EncT>
-struct tree_node
-{
-    vector<EncT> keys;
-    map<EncT, tree_node *> right; // right has one more element than keys, the 0
-				  // element represents the leftmost subtree
-
-    tree_node(){}
-
-    ~tree_node(){
-	keys.clear();
-	right.clear();
-    }
-
-    //Returns true if node's right map contains key (only at non-leaf nodes)
-    bool key_in_map(EncT key){ 
-	auto it = right.find(key);
-	bool contained = (it != right.end());
-	assert_s(!contained || (it->second != NULL), "inconsistency in right");
-	return contained;
-    }
-
-    // Calculate height of node in subtree of current node 
-    // height is defined as the no. of nodes on the longest path
-    int height(){
-	typename map<EncT, tree_node *>::iterator it;
-	int max_child_height=0;
-	int tmp_height=0;
-
-	for(it=right.begin(); it!=right.end(); it++){
-	    tmp_height=it->second->height();
-	    if(tmp_height>max_child_height) {
-		max_child_height=tmp_height;
-	    }
-	}		
-
-	return max_child_height+1;
-
-    }
-
-    //Recursively calculate number of keys at node and subtree nodes
-    int size(){
-	int totalsize = keys.size();
-	typename map<EncT, tree_node *>::iterator it;
-
-	for(it=right.begin(); it!=right.end(); it++){
-	    totalsize +=it->second->size();
-	}		
-
-	return totalsize;		
-
-    }
-
-};
 
 template<class EncT>
 tree<EncT>::tree(){
@@ -212,7 +146,7 @@ tree<EncT>::rebuild(vector<EncT> key_list){
 template<class EncT>
 void 
 tree<EncT>::rebalance(tree_node<EncT>* node, uint64_t v, uint64_t nbits,
-		      uint64_t path_index, OPETable & ope_table){
+		      uint64_t path_index, OPETable<EncT> & ope_table){
     if(DEBUG) cout<<"Rebalance"<<endl;
 
     //table_entry base = ope_table[node->keys[0]];
@@ -329,20 +263,15 @@ tree<EncT>::update_db(uint64_t old_ope, uint64_t new_ope){
 template<class EncT>
 void
 tree<EncT>::update_ope_table(tree_node<EncT> *node, uint64_t base_v, uint64_t base_nbits, 
-			     OPETable  & ope_table){
+			     OPETable<EncT> & ope_table){
 
-    table_entry old_entry;
     for(int i = 0; i < (int) node->keys.size(); i++){
-/*		table_entry tmp = base;
-		tmp.index = i;*/
-	//tmp.version=global_version;
-    	old_entry = ope_table[node->keys[i]];
-	table_entry new_entry = old_entry ;
-
-	new_entry.ope = compute_ope<EncT>(base_v, base_nbits, i);
-
-	ope_table[node->keys[i]] = new_entry;
-	update_db(old_entry , new_entry);
+	EncT ckey = node->keys[i];
+	OPEType old_ope = ope_table.get(ckey).ope;
+	OPEType new_ope = compute_ope<EncT>(base_v, base_nbits, i);
+	
+	ope_table.update(ckey, new_ope);
+	update_db(old_ope , new_ope);
     }
 
     uint64_t next_v, next_nbits;
@@ -423,7 +352,7 @@ tree<EncT>::findScapegoat( vector<tree_node<EncT>* > path , uint64_t & path_inde
 	int tmp_sum=0;
 	for(it=cur_node->right.begin(); it!=cur_node->right.end(); it++){
 	    if(it->second!=last){
-		childSize = it->second->len();
+		childSize = it->second->size();
 		tmp_sum+=childSize;
 		childSizes.push_back(childSize);
 	    }else{
@@ -756,7 +685,7 @@ trigger(uint height, uint num_nodes, uint branch_factor, double alpha) {
 template<class EncT>
 void
 tree<EncT>::insert(uint64_t v, uint64_t nbits, uint64_t index, EncT encval,
-		   OPETable  & ope_table){
+		   OPETable<EncT>  & ope_table){
     
     vector<tree_node<EncT> * > path = tree_insert(root, v, nbits, index, encval, nbits, ope_table);
     clear_db_version();
@@ -828,7 +757,7 @@ vector<tree_node<EncT>* >
 tree<EncT>::tree_insert(tree_node<EncT>* node,
 			uint64_t v, uint64_t nbits, uint64_t index,
 			EncT encval, uint64_t pathlen,
-			OPETable  & ope_table){
+			OPETable<EncT>  & ope_table){
 
     vector<tree_node<EncT>* > rtn_path;
 
@@ -871,7 +800,7 @@ tree<EncT>::tree_insert(tree_node<EncT>* node,
 	    EncT ckey = node->keys[i];
 
 	    OPEType newope = compute_ope<EncT>(v, pathlen, i);
-	    OPEType oldope = ope_table.get(ckey)->ope;
+	    OPEType oldope = ope_table.get(ckey).ope;
 	    
 	    ope_table.update(ckey, newope);
 	    update_db(oldope, newope);
@@ -980,53 +909,3 @@ template class tree<uint64_t>;
 template class tree<uint32_t>;
 template class tree<uint16_t>;
 
-
-template <class EncT>
-table_entry *
-OPETable<EncT>::find(EncT encval) {
-    auto it = table.find(encval);
-    if (it == table.end()) {
-	return NULL;
-    } else {
-	return &it->second;
-    }
-}
-
-template <class EncT>
-table_entry *
-OPETable<EncT>::get(EncT encval) {
-    auto p = find(encval);
-    assert_s(p, "key for ope_table.get not found");
-    return p;
-}
-
-template <class EncT>
-bool
-OPETable<EncT>::insert(EncT encval, uint64_t ope) {
-    auto it = table.find(encval);
-
-    if (it == table.end()) {
-	table_entry te;
-	te.ope = ope;
-	te.refcount = 1;
-	table[encval] = ope;
-
-	return true;
-    }
-
-    it->second.refcount++;
-    return false;
-}
-
-template <class EncT>
-bool
-OPETable<EncT>::update(EncT encval, uint64_t newope) {
-    auto it = table.find(encval);
-
-    if (it == table.end()) {
-	return false;
-    } else {
-	it->second.ope = newope;
-	return true;
-    }
-}
