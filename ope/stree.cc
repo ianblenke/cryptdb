@@ -71,14 +71,14 @@ tree<EncT>::flatten(tree_node<EncT>* node){
     vector<EncT> rtn_keys;
 
     vector<EncT> tmp;
-    if(node->key_in_map( (EncT) NULL)){
+    if(node->has_subtree( (EncT) NULL)){
 	tmp=flatten(node->right[(EncT) NULL]);
 	rtn_keys.insert(rtn_keys.end(), tmp.begin(), tmp.end());
     }
     for(int i=0; i<(int) node->keys.size(); i++){
 	EncT tmp_key = node->keys[i];
 	rtn_keys.push_back(tmp_key);
-	if(node->key_in_map(tmp_key)) {
+	if(node->has_subtree(tmp_key)) {
 	    tmp = flatten(node->right[tmp_key]);
 	    rtn_keys.insert(rtn_keys.end(), tmp.begin(), tmp.end() );
 	}
@@ -261,7 +261,7 @@ tree<EncT>::update_ope_table(tree_node<EncT> *node, uint64_t base_v, uint64_t ba
 	
     next_nbits = base_nbits+num_bits;
 
-    if(node->key_in_map( (EncT) NULL)){
+    if(node->has_subtree( (EncT) NULL)){
 
 	next_v = base_v<<num_bits;
 	update_ope_table(node->right[(EncT) NULL],  next_v, next_nbits, ope_table);
@@ -269,7 +269,7 @@ tree<EncT>::update_ope_table(tree_node<EncT> *node, uint64_t base_v, uint64_t ba
     
     for(int i = 0; i < (int) node->keys.size(); i++){
 
-	if(node->key_in_map(node->keys[i])){
+	if(node->has_subtree(node->keys[i])){
 
 	    next_v = (base_v<<num_bits) | (i+1);
 	    update_ope_table(node->right[node->keys[i]], next_v, next_nbits, ope_table);	
@@ -291,13 +291,13 @@ tree<EncT>::print_tree(){
 	    continue;
 	}
 	cout<<cur_node->height()-1<<": ";
-	if(cur_node->key_in_map( (EncT)NULL)){
+	if(cur_node->has_subtree( (EncT)NULL)){
 	    queue.push_back(cur_node->right[ (EncT)NULL]);
 	}	
 	for(int i=0; i< (int) cur_node->keys.size(); i++){
 	    EncT key = cur_node->keys[i];
 	    cout<<key<<", ";
-	    if(cur_node->key_in_map(key)){
+	    if(cur_node->has_subtree(key)){
 		queue.push_back(cur_node->right[key]);
 	    }
 	}	
@@ -362,7 +362,7 @@ struct successor {
 template<class EncT>
 successor<EncT>
 tree<EncT>::find_succ(tree_node<EncT>* node, uint64_t v, uint64_t nbits){
-    if(node->key_in_map((EncT) NULL)){
+    if(node->has_subtree((EncT) NULL)){
 	return find_succ(node->right[(EncT) NULL], (v<<num_bits), nbits+num_bits);
     }else{
 	successor<EncT> succ;
@@ -389,7 +389,7 @@ tree<EncT>::find_pred(tree_node<EncT>* node, uint64_t v, uint64_t nbits){
 
     EncT ciph = node->keys[max_index];
     
-    if(node->key_in_map(ciph)){
+    if(node->has_subtree(ciph)){
 	if(max_index!=N-2) {
 	    cout<<"Error in pred, max_index not N-1"<<endl;
 	    exit(1);
@@ -499,7 +499,7 @@ tree<EncT>::find_pred(tree_node<EncT>* node, uint64_t v, uint64_t nbits){
   update_db(old_entry, update_entry);
   }
 
-  }else if(node->key_in_map(del_val)){
+  }else if(node->has_subtree(del_val)){
   if(DEBUG) cout<<"Deleting val by swapping with succ"<<endl;
   //Find node w/ succ, swap succ_val with curr_val, then delete succ_val
   successor<EncT> succ = find_succ(node->right[del_val], (v<<num_bits | (index+1)), pathlen+num_bits);
@@ -531,7 +531,7 @@ tree<EncT>::find_pred(tree_node<EncT>* node, uint64_t v, uint64_t nbits){
   //This case means node->right has no entry for del_val
   bool has_succ = false;
   for(int i=(int) index+1; i<N-1; i++){
-  if(node->key_in_map(node->keys[i])) {has_succ=true; break;}
+  if(node->has_subtree(node->keys[i])) {has_succ=true; break;}
   }
   if(has_succ){
   if(DEBUG) cout<<"Deleting val by shifting towards succ"<<endl;
@@ -555,13 +555,13 @@ tree<EncT>::find_pred(tree_node<EncT>* node, uint64_t v, uint64_t nbits){
   //Must find pred
   EncT right_parent;
   if(index==0){
-  if(!node->key_in_map((EncT) NULL)){cout<<"Error in delete, child is truly leaf"<<endl; exit(1);}
+  if(!node->has_subtree((EncT) NULL)){cout<<"Error in delete, child is truly leaf"<<endl; exit(1);}
   right_parent = (EncT) NULL;
   }else{
   right_parent = node->keys[index-1];
   }
 
-  if(node->key_in_map(right_parent)){
+  if(node->has_subtree(right_parent)){
   if(DEBUG) cout<<"Deleting val by swapping with pred"<<endl;
   predecessor<EncT> pred = find_pred(node->right[right_parent], (v<<num_bits | index), pathlen+num_bits);
   node->keys[index]=pred.pred_node->keys[pred.pred_index];
@@ -629,7 +629,7 @@ tree<EncT>::find_pred(tree_node<EncT>* node, uint64_t v, uint64_t nbits){
   //cout<<"Key: "<<key<<endl;
 
   //See if pointer to next node to be checked 
-  if(!node->key_in_map(key)){
+  if(!node->has_subtree(key)){
   cout<<"Delete fail, wrong condition to traverse to new node"<<endl;
   cout<<"v: "<<v<<" nbits:"<<nbits<<" index:"<<index<<" pathlen:"<<pathlen<<endl;
   exit(1);
@@ -776,15 +776,12 @@ tree<EncT>::tree_insert(tree_node<EncT>* node,
 		 "attempting to insert same value into tree");
 
 	if (node->keys.size() == N-1) {// node is full
-	    
-	    EncT ciph = (index == 0) ? 0 : node->keys[index-1];
 
-	    assert_s(node->right[ciph] == NULL, "subtree should be null");
-	    node->right[ciph] = new tree_node<EncT>();
+	    tree_node<EncT> * subtree = node->new_subtree(index);
 	    num_nodes++;
 	    max_size = max(num_nodes, max_size);
 	    
-	    rtn_path = tree_insert(node->right[ciph], path_append(v, index),
+	    rtn_path = tree_insert(subtree, path_append(v, index),
 				   0, 0, encval, pathlen+num_bits, ope_table);
 	    rtn_path.push_back(node);
  
@@ -813,9 +810,7 @@ tree<EncT>::tree_insert(tree_node<EncT>* node,
 
     // nbits > 0
     
-    EncT key;
-    int key_index = extract_index(v, nbits);
-    tree_node<EncT> * subtree = node->get_subtree(key_index);
+    tree_node<EncT> * subtree = node->get_subtree(extract_index(v, nbits));
         
     rtn_path = tree_insert(subtree, v, nbits-num_bits, index, encval, pathlen, ope_table);
     rtn_path.push_back(node);
@@ -864,9 +859,9 @@ tree<EncT>::test_node(tree_node<EncT>* cur_node){
     //If num of keys < N-1, then node is a leaf node. 
     //Right map should have no entries.
     if(sorted_keys.size()<N-1){
-	if(cur_node->key_in_map( (EncT) NULL)) return false;
+	if(cur_node->has_subtree( (EncT) NULL)) return false;
 	for(int i=0; i< (int) sorted_keys.size(); i++){
-	    if(cur_node->key_in_map(sorted_keys[i])) return false;
+	    if(cur_node->has_subtree(sorted_keys[i])) return false;
 	}
     }
 
@@ -935,29 +930,50 @@ tree_node<EncT>::size(){
 
 //Returns true if node's right map contains key (only at non-leaf nodes)
 template<class EncT>
-bool
-tree_node<EncT>::key_in_map(EncT key){ 
+tree_node<EncT> *
+tree_node<EncT>::has_subtree(EncT key){ 
     auto it = right.find(key);
-    bool contained = (it != right.end());
-    assert_s(!contained || (it->second != NULL), "inconsistency in right");
-    return contained;
+
+    // either key is not in right or it is in which case the subtree should we non-NULL
+    assert_s((it == right.end()) || (it->second != NULL), "inconsistency in right");
+
+    if (it == right.end()) {
+	return NULL;
+    } else {	
+	return it->second;
+    }
+}
+
+temaplate<class EncT>
+static EncT
+get_key_for_index(int index, tree_node<EncT> * tnode) {
+    assert_s(index <= tnode->keys.size(), "invalid index, larger than size of keys");
+
+    if (index == 0) {
+	return (EncT) NULL;
+    } else {
+	return tnode->keys[index - 1];
+    }
 }
 
 template<class EncT>
 tree_node *
 tree_node<EncT>::get_subtree(int index) {
-    assert_s(index <= keys.size(), "invalid index, larger than size of keys");
 
-    EncT key;
-    if (index == 0) {
-	key = (EncT) NULL;
-    } else {
-	key = node->keys[index - 1];
-    }
+    EncT key = get_key_for_index(index, this);
+    tree_node * subtree;
+    assert_s((subtree = has_subtree(key)), "key does not have subtree");
 
-    assert_s(key_in_map(key), "key does not have subtree");
-    tree_node * subtree = node->right[key];
-    assert_s(subtree != NULL, "requested subtree does not exist");
+    return subtree;
+}
 
+template<class EncT>
+tree_node *
+tree_node<EncT>::new_subtree(int index) {
+    EncT key = get_key_for_index(index, this);
+
+    assert_s(!has_subtree(key), "key should not have been in map");
+    tree_node * subtree = new tree_node();
+    right[key] = subtree;
     return subtree;
 }

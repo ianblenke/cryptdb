@@ -119,11 +119,18 @@ struct tree_node
 	right.clear();
     }
 
+    // Returns the subtree to the right of key if there is such a subtree, else
+    // returns null 
+    tree_node * has_subtree(EncT key);
+  
+    // returns the subtree at position index
+    // asserts that such a subtree exists
     tree_node * get_subtree(index);
+
+    //creates a new subtree at index
+    // asserts the subtree does not exist
+    tree_node * new_subtree(index);
     
-    //Returns true if node's right map contains key (only at non-leaf nodes)
-    bool key_in_map(EncT key);
-   
     // Calculate height of node in subtree of current node 
     // height is defined as the no. of nodes on the longest path
     int height();
