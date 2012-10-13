@@ -1,11 +1,10 @@
 #pragma once
 
-/********************************
+/***********************************************
  *
- * File contains scapegoat tree and
- * OPE table implementation.
+ * File contains scapegoat tree implementation.
  *
- ********************************/
+ **********************************************/
 
 
 #include <stdint.h>
@@ -16,30 +15,8 @@
 
 #include <util/net.hh>
 #include <util/ope-util.hh>
-
-
-// OPE encoding v||index|| 
-struct table_entry {
-    uint64_t ope; // v should now be everything
-  
-    uint64_t refcount;
-    //int version;
-};
-
-struct OPETable {
-    map<EncT, table_entry> table;
-
-    // returns a pointer to the table_entry for encval
-    // or NULL if it does not exist
-    table_entry * find(EncT encval);
-
-    // returns true if new table entry was
-    // returns false if encval existed (in which case refcount is incremented)
-    bool insert(EncT encval, uint64_t ope);
-
-    // returns true if encval was in the table and was thus updated
-    bool update(EncT encval, uint64_t newope);
-};
+#include <edb/Connect.hh>
+#include <ope/opetable.hh>
 
 class ope_lookup_failure {};
 
@@ -92,7 +69,7 @@ public:
     void print_tree();
 
     void update_ope_table(tree_node<EncT>* node, uint64_t base_v, uint64_t base_nbits, std::map<EncT, table_entry >  & ope_table);
-    void update_db(table_entry old_entry, table_entry new_entry);
+    void update_db(OPEType old_entry, OPEType new_entry);
     void delete_db(table_entry del_entry);
     void clear_db_version();
 

@@ -1,5 +1,5 @@
 OBJDIRS     += ope
-OPESRC  := btree.cc
+OPESRC  := btree.cc stree.cc
 
 
 all:    $(OBJDIR)/libope.so $(OBJDIR)/libcryptdb.so

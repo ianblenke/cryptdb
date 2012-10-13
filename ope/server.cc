@@ -17,12 +17,9 @@ using std::string;
 using std::ostringstream;
 using std::istringstream;
 using std::stringstream;
-using std::ceil;
-using std::sort;
 using std::vector;
 using std::cerr;
 using std::map;
-using std::max;
 
 template<class EncT>
 void
@@ -211,44 +208,4 @@ int main(int argc, char **argv){
 
     close(csock);
     cerr << "Server exits!\n";
-}
-
-
-table_entry *
-OPETable::find(EncT encval) {
-    auto it = table.find(encval);
-    if (it == table.end()) {
-	return null;
-    } else {
-	return &it->second;
-    }
-}
-
-bool
-OPETable::insert(EncT encval, uint64_t ope) {
-    auto it = table.find(encval);
-
-    if (it == table.end()) {
-	table_entry te;
-	te.ope = ope;
-	te.refcount = 1;
-	table[encval] = ope;
-
-	return true;
-    }
-
-    it->second.refcount++;
-    return false;
-}
-
-bool
-OPETable::update(EncT encval, uint63_t newope) {
-    auto it = table.find(encval);
-
-    if (it == table.end()) {
-	return false;
-    } else {
-	it->second.ope = newope;
-	return true;
-    }
 }

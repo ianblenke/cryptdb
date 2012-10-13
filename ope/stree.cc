@@ -99,7 +99,7 @@ struct tree_node
 
 template<class EncT>
 tree<EncT>::tree(){
-    If (DEBUG_STREE) {cerr << "creating the tree \n";}
+    if (DEBUG_STREE) {cerr << "creating the tree \n";}
     
     root = new tree_node<EncT>();
 
@@ -212,7 +212,7 @@ tree<EncT>::rebuild(vector<EncT> key_list){
 template<class EncT>
 void 
 tree<EncT>::rebalance(tree_node<EncT>* node, uint64_t v, uint64_t nbits,
-		      uint64_t path_index, map<EncT, table_entry >  & ope_table){
+		      uint64_t path_index, OPETable & ope_table){
     if(DEBUG) cout<<"Rebalance"<<endl;
 
     //table_entry base = ope_table[node->keys[0]];
@@ -292,12 +292,9 @@ tree<EncT>::delete_db(table_entry del_entry){
 //Update now-stale values in db
 template<class EncT>
 void 
-tree<EncT>::update_db(table_entry old_entry, table_entry new_entry){
+tree<EncT>::update_db(uint64_t old_ope, uint64_t new_ope){
     //Takes old ope_table entry and new ope_table entry and calculates
     //corresponding db values, and updates db old vals to new vals
-
-    uint64_t old_ope = old_entry.ope;
-    uint64_t new_ope = new_entry.ope;
 
     ostringstream o;
     o.str("");
@@ -332,7 +329,7 @@ tree<EncT>::update_db(table_entry old_entry, table_entry new_entry){
 template<class EncT>
 void
 tree<EncT>::update_ope_table(tree_node<EncT> *node, uint64_t base_v, uint64_t base_nbits, 
-			     map<EncT, table_entry >  & ope_table){
+			     OPETable  & ope_table){
 
     table_entry old_entry;
     for(int i = 0; i < (int) node->keys.size(); i++){
@@ -748,7 +745,8 @@ tree<EncT>::find_pred(tree_node<EncT>* node, uint64_t v, uint64_t nbits){
   }*/
 
 
-bool trigger(uint height, uint num_nodes, uint branch_factor, double alpha) {
+static bool
+trigger(uint height, uint num_nodes, uint branch_factor, double alpha) {
     
     return height > ((1.0 * log(num_nodes*1.0)/log(1.0 * branch_factor))/
 		     log(((double)1.0)/alpha))+3;
@@ -757,7 +755,8 @@ bool trigger(uint height, uint num_nodes, uint branch_factor, double alpha) {
 // v is path to node where the insertion should happen
 template<class EncT>
 void
-tree<EncT>::insert(uint64_t v, uint64_t nbits, uint64_t index, EncT encval, map<EncT, table_entry >  & ope_table){
+tree<EncT>::insert(uint64_t v, uint64_t nbits, uint64_t index, EncT encval,
+		   OPETable  & ope_table){
     
     vector<tree_node<EncT> * > path = tree_insert(root, v, nbits, index, encval, nbits, ope_table);
     clear_db_version();
@@ -808,7 +807,7 @@ tree<EncT>::insert(uint64_t v, uint64_t nbits, uint64_t index, EncT encval, map<
     
     //if(DEBUG) print_tree();
 
-    if (trigger(height, num_nodes, alpha)){
+    if (trigger(height, num_nodes, N-1, alpha)){
     	uint64_t path_index;
 	tree_node<EncT>* scapegoat = findScapegoat(path, path_index);
 	rebalance(scapegoat, v, nbits, path_index, ope_table);
@@ -826,7 +825,10 @@ tree<EncT>::insert(uint64_t v, uint64_t nbits, uint64_t index, EncT encval, map<
 // the vector returned is the path from where encval is inserted is the root
 template<class EncT>
 vector<tree_node<EncT>* >
-tree<EncT>::tree_insert(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint64_t index, EncT encval, uint64_t pathlen, map<EncT, table_entry >  & ope_table){
+tree<EncT>::tree_insert(tree_node<EncT>* node,
+			uint64_t v, uint64_t nbits, uint64_t index,
+			EncT encval, uint64_t pathlen,
+			OPETable  & ope_table){
 
     vector<tree_node<EncT>* > rtn_path;
 
@@ -865,9 +867,14 @@ tree<EncT>::tree_insert(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint6
 	ope_table.insert(encval, compute_ope<EncT>(v, pathlen, index));
 
 	// update the ope table
-	for(int i=(int)index+1; i< (int) node->keys.size(); i++){
-	    ope_table.update(node->keys[i], compute_ope<EncT>(v, pathlen, i));
-	    update_db(old_entry, update_entry);
+	for(int i=(int)index+1; i< (int) node->keys.size(); i++) {
+	    EncT ckey = node->keys[i];
+
+	    OPEType newope = compute_ope<EncT>(v, pathlen, i);
+	    OPEType oldope = ope_table.get(ckey)->ope;
+	    
+	    ope_table.update(ckey, newope);
+	    update_db(oldope, newope);
 	}
 			
 	
@@ -974,19 +981,28 @@ template class tree<uint32_t>;
 template class tree<uint16_t>;
 
 
-
+template <class EncT>
 table_entry *
-OPETable::find(EncT encval) {
+OPETable<EncT>::find(EncT encval) {
     auto it = table.find(encval);
     if (it == table.end()) {
-	return null;
+	return NULL;
     } else {
 	return &it->second;
     }
 }
 
+template <class EncT>
+table_entry *
+OPETable<EncT>::get(EncT encval) {
+    auto p = find(encval);
+    assert_s(p, "key for ope_table.get not found");
+    return p;
+}
+
+template <class EncT>
 bool
-OPETable::insert(EncT encval, uint64_t ope) {
+OPETable<EncT>::insert(EncT encval, uint64_t ope) {
     auto it = table.find(encval);
 
     if (it == table.end()) {
@@ -1002,8 +1018,9 @@ OPETable::insert(EncT encval, uint64_t ope) {
     return false;
 }
 
+template <class EncT>
 bool
-OPETable::update(EncT encval, uint63_t newope) {
+OPETable<EncT>::update(EncT encval, uint64_t newope) {
     auto it = table.find(encval);
 
     if (it == table.end()) {
