@@ -1,0 +1,6 @@
+OBJDIRS += benchmark-4
+BENCHMARK_4PROGS := program
+BENCHMARK_4PROGOBJS := $(patsubst %,$(OBJDIR)/benchmark-4/%,$(BENCHMARK_4PROGS))
+all: $(BENCHMARK_4PROGOBJS)
+$(BENCHMARK_4PROGOBJS): %: %.o $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbparser.so $(OBJDIR)/libedbutil.so $(OBJDIR)/libexecution.so
+	$(CXX) $< -o $@ -ledbparser  $(LDFLAGS) -ledbutil -lcryptdb -ledbcrypto -ledbcrypto2 -lexecution -lmysqlclient -ltbb -lgmp -lpq

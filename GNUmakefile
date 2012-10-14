@@ -75,6 +75,26 @@ include util/Makefrag
 include udf/Makefrag
 include mysqlproxy/Makefrag
 
+include benchmark-0/Makefrag
+include benchmark-1/Makefrag
+include benchmark-2/Makefrag
+include benchmark-3/Makefrag
+include benchmark-4/Makefrag
+include benchmark-5/Makefrag
+include benchmark-6/Makefrag
+include benchmark-7/Makefrag
+include benchmark-8/Makefrag
+include benchmark-9/Makefrag
+include benchmark-10/Makefrag
+include benchmark-11/Makefrag
+include benchmark-12/Makefrag
+include benchmark-13/Makefrag
+include benchmark-14/Makefrag
+include benchmark-15/Makefrag
+include benchmark-16/Makefrag
+include benchmark-17/Makefrag
+include benchmark-18/Makefrag
+
 $(OBJDIR)/.deps: $(foreach dir, $(OBJDIRS), $(wildcard $(OBJDIR)/$(dir)/*.d))
 	@mkdir -p $(@D)
 	perl mergedep.pl $@ $^
