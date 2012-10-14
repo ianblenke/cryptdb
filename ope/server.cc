@@ -18,6 +18,7 @@ Server<EncT>::interaction(EncT ciph,
 			  uint64_t & ope_path,
 			  bool & equals) {
 
+    cerr << "\n\n Start Interaction\n";
     assert_s(ope_tree.root != NULL, "root is null");
     tree_node<EncT> * curr = ope_tree.root;
 
@@ -25,7 +26,7 @@ Server<EncT>::interaction(EncT ciph,
     nbits = 0;
 
     while (true) {
-	cerr << "LOOP! \n";
+	cerr << "** Interaction STEP \n";
     	// create message and send it to client
     	stringstream msg;
     	msg.clear();
@@ -52,13 +53,15 @@ Server<EncT>::interaction(EncT ciph,
 	    rindex = index;
 	    return;
 	}
-	
-	if (!curr->has_subtree(index)) {
+
+	tree_node<EncT> * subtree = curr->get_subtree(index);
+	if (!subtree) {
+	    cerr << "no subtree at index " << index << "\n";
 	    rindex = index;
 	    return;
 	}
 	
-	curr = curr->get_subtree(index);
+	curr = subtree;
     	ope_path = (ope_path << num_bits) | index;
     	nbits += num_bits;
     }
@@ -105,7 +108,7 @@ Server<EncT>::handle_enc(int csock, istringstream & iss, bool do_ins) {
 
             table_entry te = ope_table.get(ciph); // ciph must be in ope_table
             ope = opeToStr(te.ope);            
-        }else{
+        } else{
 
             uint64_t ope_enc = compute_ope<EncT>(ope_path, nbits, index);
 
@@ -114,6 +117,7 @@ Server<EncT>::handle_enc(int csock, istringstream & iss, bool do_ins) {
             ope = opeToStr(ope_enc-1);            
         }
     }
+    cerr << "replying to udf \n";
     assert_s(send(csock, ope.c_str(), ope.size(), 0) == (int)ope.size(),
 	     "problem with send");
     
@@ -121,7 +125,7 @@ Server<EncT>::handle_enc(int csock, istringstream & iss, bool do_ins) {
 
 template<class EncT>
 void
-Server<EncT>::dispatch( int csock, istringstream & iss) {
+Server<EncT>::dispatch(int csock, istringstream & iss) {
    
     MsgType msgtype;
     iss >> msgtype;
@@ -170,15 +174,16 @@ int main(int argc, char **argv){
     socklen_t addr_size = sizeof(sockaddr_in);
     struct sockaddr_in sadr;
     
-    int csock = accept(server.sock_udf, (struct sockaddr*) &sadr, &addr_size);
-    assert_s(csock >= 0, "Server accept failed!");
-    cerr << "Server accepted connection with udf \n";
-
+   
     uint buflen = 10240;
     char buffer[buflen];
 
     while (true) {
-    	cerr<<"Listening..."<<endl;
+    	cerr<<"Waiting for connection..."<<endl;
+
+	 int csock = accept(server.sock_udf, (struct sockaddr*) &sadr, &addr_size);
+	 assert_s(csock >= 0, "Server accept failed!");
+	 cerr << "Server accepted connection with udf \n";
 
         memset(buffer, 0, buflen);
 
@@ -191,8 +196,8 @@ int main(int argc, char **argv){
 	//Pass connection and messages received to handle_client
 	server.dispatch(csock, iss);
 
+	close(csock);
     }
 
-    close(csock);
     cerr << "Server exits!\n";
 }

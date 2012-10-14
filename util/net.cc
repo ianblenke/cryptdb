@@ -55,7 +55,7 @@ create_and_connect(string host_name, int host_port) {
 std::string
 send_receive(int sock, const string & msg) {
 
-    cerr << "send/receive; to send  " << msg << "\n";
+    cerr << "send/receive; ------ \n to send  " << msg << "\n";
     assert_s(send(sock, msg.c_str(), msg.size(), 0) == (int)msg.size(),
 	     "error with send");
     
@@ -63,10 +63,11 @@ send_receive(int sock, const string & msg) {
     char buffer[buflen];
 	
     memset(buffer, '\0', buflen);
-    
+
+    cerr << "waiting for receive\n";
     assert_s(recv(sock, buffer, buflen, 0) > 0,
 	     "error with receive");
-    cerr << "received " << buffer << "\n";
+    cerr << "received " << buffer << "\n -------- \n";
     
     return string(buffer);
        

@@ -123,9 +123,9 @@ struct tree_node
     // Returns the subtree to the right of key if there is such a subtree, else
     // returns null 
     tree_node<EncT> * has_subtree(EncT key);
-  
+
     // returns the subtree at position index
-    // asserts that such a subtree exists
+    // or null if it does not exist
     tree_node<EncT> * get_subtree(uint index);
 
     //creates a new subtree at index

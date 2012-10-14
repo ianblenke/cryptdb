@@ -767,6 +767,8 @@ tree<EncT>::tree_insert(tree_node<EncT>* node,
 
 	if (node->keys.size() == N-1) {// node is full
 
+	    cerr << "tree_insert: node is full, create subtree \n";
+	    
 	    tree_node<EncT> * subtree = node->new_subtree(index);
 	    node->num_nodes++;
 	    max_size = max(node->num_nodes, max_size);
@@ -782,7 +784,7 @@ tree<EncT>::tree_insert(tree_node<EncT>* node,
 
 	//INSERT HERE
 	
-	if(DEBUG) cout<< "Found node, inserting into index " << index << endl;
+	if(DEBUG) cout<< "tree_insert: inserting; ope path " << v << " index " << index << endl;
 
 	typename vector<EncT>::iterator it;
 	it = node->keys.begin();
@@ -801,9 +803,12 @@ tree<EncT>::tree_insert(tree_node<EncT>* node,
     }
 
     // nbits > 0
+
+    cerr << "tree_insert: one step down the tree\n";
     
     tree_node<EncT> * subtree = node->get_subtree(extract_index(v, nbits));
-
+    assert_s(subtree, "subtree must exist, but it doesn't");
+    
     rtn_path = tree_insert(subtree, v, nbits-num_bits, index, encval, pathlen, ope_table, node_inserted);
 
     //prepare results
@@ -958,10 +963,8 @@ tree_node<EncT> *
 tree_node<EncT>::get_subtree(uint index) {
 
     EncT key = get_key_for_index(index, this);
-    tree_node * subtree;
-    assert_s((subtree = has_subtree(key)), "key does not have subtree");
 
-    return subtree;
+    return has_subtree(key);
 }
 
 template<class EncT>
@@ -969,7 +972,7 @@ tree_node<EncT> *
 tree_node<EncT>::new_subtree(uint index) {
     EncT key = get_key_for_index(index, this);
 
-    assert_s(!has_subtree(key), "key should not have been in map");
+    assert_s(!has_subtree(key), "subtree should not have existed");
     tree_node * subtree = new tree_node();
     right[key] = subtree;
     return subtree;
