@@ -375,6 +375,8 @@ do_decrypt_hom_agg(exec_context& ctx, const string& data)
   const uint8_t* p = (const uint8_t *) data.data();
   //dprintf("got %s bytes data\n", TO_C(data.size()));
 
+  assert(data.size() >= 20);
+
   using namespace hom_agg_constants;
 
   // read header
@@ -412,9 +414,6 @@ do_decrypt_hom_agg(exec_context& ctx, const string& data)
   deserializer<uint32_t>::read(p, n_aggs);
 
   //cerr << "n_aggs: " << n_aggs << endl;
-
-  //NTL::ZZ mask = NTL::to_ZZ(1); mask <<= BitsPerDecimalSlot; mask -= 1;
-  //SANITY(NTL::NumBits(mask) == (int)BitsPerDecimalSlot);
 
   // TODO: if n_aggs is large enough consider parallel decryption
   NTL::ZZ accum = NTL::to_ZZ(0);
