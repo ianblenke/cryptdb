@@ -29,7 +29,6 @@ class tree {
 public:
 
     tree_node<EncT> *root;
-    unsigned int num_nodes; //number of tree nodes, not values
     unsigned int max_size;
     Connect * dbconnect;
     //int global_version;
@@ -58,7 +57,8 @@ public:
     std::vector<tree_node<EncT>* > tree_insert(tree_node<EncT>* node,
 					       uint64_t v, uint64_t nbits, uint64_t index,
 					       EncT encval, uint64_t pathlen,
-					       OPETable<EncT>  & ope_table);
+					       OPETable<EncT>  & ope_table,
+	                                       bool & node_inserted);
 
     tree_node<EncT>* findScapegoat( std::vector<tree_node<EncT>* > path,
 				    uint64_t & path_index);
@@ -69,7 +69,7 @@ public:
     void update_shifted_paths(uint index, uint64_t v, int pathlen,
 			      tree_node<EncT> * node,
 			      OPETable<EncT> & ope_table);
-    void update_ope_table(tree_node<EncT>* node, 
+    void update_opetable_db(tree_node<EncT>* node, 
 			  uint64_t base_v, uint64_t base_nbits,
 			  OPETable<EncT>  & ope_table);
     void update_db(OPEType old_entry, OPEType new_entry);
@@ -105,11 +105,15 @@ public:
 template<class EncT>
 struct tree_node
 {
+    uint num_nodes; //the number of nodes in the subtree rooted in this node -->
+		    //these are tree nodes, not keys
     std::vector<EncT> keys;
     std::map<EncT, tree_node *> right; // right has one more element than keys, the 0
 				  // element represents the leftmost subtree
 
-    tree_node(){}
+    tree_node(){
+	num_nodes = 1;
+    }
 
     ~tree_node(){
 	keys.clear();

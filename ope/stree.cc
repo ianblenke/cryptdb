@@ -26,10 +26,28 @@ using std::map;
 using std::max;
 
 
+/* Some notes on when rebalancings happen and what is complexity for b-ary trees:
+ *
+ * Rivest and Galperin'93 say that the tree gets rebalanced if
+ * max height > floor(log_1/alpha(num_nodes)), where height is num edges
+ *
+ * When this happens, relabeling triggers and tries to find the first element
+ * from leaf to root that is alpha-weight unbalanced. A node is alpha-weight
+ * balanced if the size of each child (size being num nodes including itself)
+ * is at least alpha * size of parent. They later also propose to balance the
+ * tree when at the first node that is not alpha-height balanced. A node is
+ * alpha height balanced if its max height is at most floor(log_1/alpha(node size)).
+ *
+ * What amortized complexity does this give us for a b-ary tree? (B trees have
+ * of b log_b n).
+ *
+ * If we pick the alpha-height-balanced scapegoat finding strategy, we get an amortized cost of
+ * log_b n * (1-alpha)/(alpha - 1/2) worst case
+ *
+ * If we pick the alpha-weight-balanced it is at least this.
+ */
 
-//TODO: how do we find scapegoat? better to record the number of nodes at each
-//noe than to go through all nodes
-
+		      
 
 template<class EncT>
 tree<EncT>::tree(){
@@ -37,7 +55,6 @@ tree<EncT>::tree(){
     
     root = new tree_node<EncT>();
 
-    num_nodes=1;
     max_size=0;
     num_rebalances=0;
 
@@ -88,6 +105,10 @@ tree<EncT>::flatten(tree_node<EncT>* node){
 
 }
 
+//TODO eff: both rebuild and flatten create a whole vector and keep copying it
+// around
+// -- could take advantage of the fact that we
+// know the num of nodes;
 template<class EncT>
 tree_node<EncT>* 
 tree<EncT>::rebuild(vector<EncT> key_list){
@@ -142,13 +163,12 @@ tree<EncT>::rebuild(vector<EncT> key_list){
 
 }
 
+// depth is the depth of the scapegoat node (num edges from root to scapegoat)
 template<class EncT>
 void 
 tree<EncT>::rebalance(tree_node<EncT>* node, uint64_t v, uint64_t nbits,
-		      uint64_t path_index, OPETable<EncT> & ope_table){
-    if(DEBUG) cout<<"Rebalance"<<endl;
-
-    //table_entry base = ope_table[node->keys[0]];
+		      uint64_t depth, OPETable<EncT> & ope_table){
+    if (DEBUG) cout<<"Rebalance"<<endl;
 
     vector<EncT> key_list = flatten(node);
 /*	if(DEBUG){
@@ -165,15 +185,11 @@ tree<EncT>::rebalance(tree_node<EncT>* node, uint64_t v, uint64_t nbits,
 
     num_rebalances++;
 
-    //Make sure new fresh global_version number to use as versions for
-    //newly updated (no longer stale) db values
-    //global_version++;
-
-    uint64_t base_v = (v >> (path_index * num_bits));
-    uint64_t base_nbits = nbits - path_index * num_bits;
+    uint64_t base_v = (v >> (nbits - depth * num_bits));
+    uint64_t base_nbits = depth * num_bits;
 
     //Make sure OPE table is updated and correct
-    update_ope_table(node, base_v, base_nbits, ope_table);
+    update_opetable_db(node, base_v, base_nbits, ope_table);
     clear_db_version();
 }
 
@@ -243,7 +259,7 @@ tree<EncT>::update_db(uint64_t old_ope, uint64_t new_ope){
 //Ensure table is correct
 template<class EncT>
 void
-tree<EncT>::update_ope_table(tree_node<EncT> *node, uint64_t base_v, uint64_t base_nbits, 
+tree<EncT>::update_opetable_db(tree_node<EncT> *node, uint64_t base_v, uint64_t base_nbits, 
 			     OPETable<EncT> & ope_table){
 
     update_shifted_paths(0, base_v, base_nbits, node, ope_table);
@@ -255,7 +271,7 @@ tree<EncT>::update_ope_table(tree_node<EncT> *node, uint64_t base_v, uint64_t ba
     if(node->has_subtree( (EncT) NULL)){
 
 	next_v = base_v<<num_bits;
-	update_ope_table(node->right[(EncT) NULL],  next_v, next_nbits, ope_table);
+	update_opetable_db(node->right[(EncT) NULL],  next_v, next_nbits, ope_table);
     }
     
     for(int i = 0; i < (int) node->keys.size(); i++){
@@ -263,7 +279,7 @@ tree<EncT>::update_ope_table(tree_node<EncT> *node, uint64_t base_v, uint64_t ba
 	if(node->has_subtree(node->keys[i])){
 
 	    next_v = (base_v<<num_bits) | (i+1);
-	    update_ope_table(node->right[node->keys[i]], next_v, next_nbits, ope_table);	
+	    update_opetable_db(node->right[node->keys[i]], next_v, next_nbits, ope_table);	
 	}	
     }
 
@@ -299,49 +315,32 @@ tree<EncT>::print_tree(){
 
 }
 
+/*
+ * Given a path to a newly inserted node (from leaf to root node), find a
+ * scapegoat on this path.
+ * Sets path_index to be the depth of the scapegoat (no of edges to scapegoat
+ * from root)
+ */
 template<class EncT>
 tree_node<EncT>* 
 tree<EncT>::findScapegoat( vector<tree_node<EncT>* > path , uint64_t & path_index){
-    int tmp_size = 0;
-    tree_node<EncT>* last = NULL;
-    typename map<EncT, tree_node<EncT> *>::iterator it;
 
-    int childSize=0;
-    vector<int> childSizes;
-
-    //Move along path until you find the scapegoat node
-    for(int i=0; i< (int) path.size(); i++){
+    // Move along path from leaf to root
+    // until find scapegoat
+    for (int i=0; i < (int) path.size(); i++){
 	tree_node<EncT>* cur_node = path[i];
 
-	int tmp_sum=0;
-	for(it=cur_node->right.begin(); it!=cur_node->right.end(); it++){
-	    if(it->second!=last){
-		childSize = it->second->size();
-		tmp_sum+=childSize;
-		childSizes.push_back(childSize);
-	    }else{
-		tmp_sum+=tmp_size;
-		childSizes.push_back(tmp_size);
+	for(auto it=cur_node->right.begin(); it!=cur_node->right.end(); it++){
+	    if (it->second->num_nodes > alpha * cur_node->num_nodes) {
+		path_index = path.size() - 1 - i;
+		return it->second;
 	    }
-
 	}		
-	tmp_size = tmp_sum + cur_node->keys.size();
-	last = cur_node;
-
-	for(int i=0; i< (int) childSizes.size(); i++){
-	    if(childSizes[i] > alpha*tmp_size) {
-		path_index = i;
-		return cur_node;
-	    }
-	}
-
-	childSizes.clear();
-
     }
-    path_index = path.size()-1;
+    path_index = 0;
     return root;
-
 }
+
 /*
 template<class EncT>
 struct successor {
@@ -637,12 +636,9 @@ tree<EncT>::find_pred(tree_node<EncT>* node, uint64_t v, uint64_t nbits){
   return tree_delete(next_node, v, nbits-num_bits, index, pathlen, swap);
   }*/
 
-
 static bool
-trigger(uint height, uint num_nodes, uint branch_factor, double alpha) {
-    
-    return height > ((1.0 * log(num_nodes*1.0)/log(1.0 * branch_factor))/
-		     log(((double)1.0)/alpha))+3;
+trigger(uint height, uint num_nodes, double alpha) {
+    return height > (1.0 * log(num_nodes*1.0)/log(((double)1.0)/alpha) + 1);
 }
 
 // v is path to node where the insertion should happen; nbits is len of v
@@ -651,8 +647,9 @@ template<class EncT>
 void
 tree<EncT>::insert(uint64_t v, uint64_t nbits, uint64_t index, EncT encval,
 		   OPETable<EncT>  & ope_table){
-    
-    vector<tree_node<EncT> * > path = tree_insert(root, v, nbits, index, encval, nbits, ope_table);
+    bool node_inserted;
+    vector<tree_node<EncT> * > path = tree_insert(root, v, nbits, index,
+						  encval, nbits, ope_table, node_inserted);
 
 #if MALICIOUS
     
@@ -700,16 +697,16 @@ tree<EncT>::insert(uint64_t v, uint64_t nbits, uint64_t index, EncT encval,
     
     //if(DEBUG) print_tree();
 
-    if (trigger(height, num_nodes, N-1, alpha)) {
+    if (trigger(height, root->num_nodes, alpha)) {
     	uint64_t path_index;
 
 	tree_node<EncT>* scapegoat = findScapegoat(path, path_index);
 	rebalance(scapegoat, v, nbits, path_index, ope_table);
 	
-	if (DEBUG) {cout<< " Insert rebalance "<< height <<": "<< num_nodes << endl;}
+	if (DEBUG) {cout<< " Insert rebalance "<< height <<": "<< root->num_nodes << endl;}
 
-	if (scapegoat == root && max_size < num_nodes) {
-	    max_size = num_nodes;
+	if (scapegoat == root && max_size < root->num_nodes) {
+	    max_size = root->num_nodes;
 	}
 
         //if(DEBUG) print_tree();
@@ -747,14 +744,15 @@ extract_index(OPEType v, uint nbits) {
 
 // v is path to node where to insert (if node is full, insertion will create a
 // new node)
-// the vector returned is the path from where encval is inserted is the root
+// the vector returned is the path from where encval is inserted to root
 // pathlen is the length of v
+// node_inserted is set to true if a node (tree node, not key) was inserted
 template<class EncT>
 vector<tree_node<EncT>* >
 tree<EncT>::tree_insert(tree_node<EncT>* node,
 			uint64_t v, uint64_t nbits, uint64_t index,
 			EncT encval, uint64_t pathlen,
-			OPETable<EncT>  & ope_table){
+			OPETable<EncT>  & ope_table, bool & node_inserted){
 
     vector<tree_node<EncT>* > rtn_path;
 
@@ -770,11 +768,13 @@ tree<EncT>::tree_insert(tree_node<EncT>* node,
 	if (node->keys.size() == N-1) {// node is full
 
 	    tree_node<EncT> * subtree = node->new_subtree(index);
-	    num_nodes++;
-	    max_size = max(num_nodes, max_size);
+	    node->num_nodes++;
+	    max_size = max(node->num_nodes, max_size);
 	    
 	    rtn_path = tree_insert(subtree, path_append(v, index),
-				   0, 0, encval, pathlen+num_bits, ope_table);
+				   0, 0, encval, pathlen+num_bits, ope_table, node_inserted);
+
+	    node_inserted = true;
 	    rtn_path.push_back(node);
  
 	    return rtn_path;
@@ -794,6 +794,8 @@ tree<EncT>::tree_insert(tree_node<EncT>* node,
 	update_shifted_paths(index+1, v, pathlen, node, ope_table);
 	clear_db_version();
 
+	// prepare return values
+	node_inserted = false;
 	rtn_path.push_back(node);
 	return rtn_path;
     }
@@ -801,8 +803,13 @@ tree<EncT>::tree_insert(tree_node<EncT>* node,
     // nbits > 0
     
     tree_node<EncT> * subtree = node->get_subtree(extract_index(v, nbits));
-        
-    rtn_path = tree_insert(subtree, v, nbits-num_bits, index, encval, pathlen, ope_table);
+
+    rtn_path = tree_insert(subtree, v, nbits-num_bits, index, encval, pathlen, ope_table, node_inserted);
+
+    //prepare results
+    if (node_inserted) {
+	node->num_nodes++;
+    }
     rtn_path.push_back(node);
     return rtn_path;
 }

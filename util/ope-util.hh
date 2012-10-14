@@ -9,7 +9,8 @@
 #include <string>
 
 const int N = 4;
-const double alpha = 0.3;
+const double alpha = 0.75;
+// alpha > 1/N else constant rebalancing
 
 // for N not a power of two, we want ceil(log_2(N))
 // for N power of two we want log_2(N) + 1
