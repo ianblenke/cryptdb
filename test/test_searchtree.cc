@@ -309,7 +309,8 @@ public:
 	    }
 	}
 
-	
+	root_ptr->delete_all_subtrees();
+	delete root_ptr;
 
 	cerr << "total cost is " << total_cost << " for " << no_elems << " inserts from zero " <<
 	    " and effective elements " << eff_elems << "\n";
@@ -326,9 +327,7 @@ public:
 // -- tests deletion
 // -- checks that Merkle hash tree is overall correct with some period
     static void
-    testBMerkleTree() {
-    
-	uint no_elems = 150000;
+    testBMerkleTree(uint no_elems) {
 
 	vector<string> vals;
 	srand( time(NULL));
@@ -341,7 +340,7 @@ public:
 	    vals.push_back(s.str());
 	}
 
-	test_B_complexity(vals, no_elems);
+//	test_B_complexity(vals, no_elems);
 
 	// test on values in increasing order
 	sort(vals.begin(), vals.end());
@@ -465,9 +464,12 @@ public:
 
 int main(int argc, char ** argv)
 {
-   
-    Test::testBMerkleTree();
-    Test::testMerkleProof();
+    //Test::testBMerkleTree();
+    //Test::testMerkleProof();
+
+    //Test::testBMerkleTree(10000);
+    Test::testBMerkleTree(1000000);
+    
 }
 
  

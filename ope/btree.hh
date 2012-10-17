@@ -336,7 +336,7 @@ Node* null_ptr = reinterpret_cast<Node*> (0);
 
 const int invalid_index = -1;
 
-const unsigned int max_elements = 50;  // max elements in a node
+const unsigned int max_elements = 2;  // max elements in a node
 
 // size limit for the array in a vector object.  best performance was
 // at 800 bytes.
