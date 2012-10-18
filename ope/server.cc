@@ -19,8 +19,9 @@ Server<EncT>::interaction(EncT ciph,
 			  bool & equals) {
 
     cerr << "\n\n Start Interaction\n";
-    assert_s(ope_tree.root != NULL, "root is null");
-    tree_node<EncT> * curr = ope_tree.root;
+    TreeNode<EncT> * root = ope_tree.get_root();
+    assert_s(root != NULL, "root is null");
+    tree_node<EncT> * curr = root;
 
     ope_path = 0;
     nbits = 0;
@@ -33,11 +34,12 @@ Server<EncT>::interaction(EncT ciph,
     	msg << MsgType::INTERACT_FOR_LOOKUP << " ";
     	msg << ciph << " ";
 
-    	uint len = curr->keys.size();
+	vector<EncT> keys = curr->get_keys();
+    	uint len = keys.size();
     	msg << len << " ";
 
     	for (uint i = 0; i < len; i++) {
-    	    msg << curr->keys[i] << " ";
+    	    msg << keys[i] << " ";
     	}
 
     	string _reply = send_receive(sock_cl, msg.str());
@@ -104,7 +106,7 @@ Server<EncT>::handle_enc(int csock, istringstream & iss, bool do_ins) {
     	if (do_ins) {
     	    // insert in OPE Tree
             // ope_insert also updates ope_table
-    	    ope_tree.insert(ope_path, nbits, index, ciph, ope_table);
+    	    ope_tree.insert(ciph, ope_path, nbits, index);
 
             table_entry te = ope_table.get(ciph); // ciph must be in ope_table
             ope = opeToStr(te.ope);            
@@ -148,6 +150,10 @@ Server<EncT>::dispatch(int csock, istringstream & iss) {
 
 template<class EncT>
 Server<EncT>::Server() {
+    ope_table = new OPETable<EncT>();
+    db = new Connect( "localhost", "root", "letmein","cryptdb", 3306);
+    ope_tree = Stree<EncT>(ope_table, db);
+    
     sock_cl = create_and_connect(OPE_CLIENT_HOST, OPE_CLIENT_PORT);
     sock_udf = create_and_bind(OPE_SERVER_PORT);
 }

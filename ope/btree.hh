@@ -1,10 +1,18 @@
 #pragma once
 
+/*****************
+ * B Tree
+ ****************/
+
 #include <iostream>
 #include <string>
 #include <vector>
 #include <util/util.hh>
 #include <crypto/sha.hh>
+
+
+
+/** Data Structures **/
 
 template<class payload> class Element;
 typedef Element<std::string> Elem;
@@ -38,7 +46,6 @@ typedef struct NodeMerkleInfo {
 
 std::ostream& operator<<(std::ostream &out, const NodeMerkleInfo & mi);
 std::istream& operator>>(std::istream &is, NodeMerkleInfo & mi);
-
 
 
 // Contains Merkle information for each node on the path from a specific node
@@ -272,6 +279,9 @@ protected:
 
     void finish_del(UpdateMerkleProof & proof);
 
+    // returns the number of nodes to be included in a Merkle proof of insertion
+    uint Merkle_cost();
+
     // Functions for testing
     void check_merkle_tree(); //checks merkle tree was computed correctly
     void recompute_merkle_subtree();
@@ -298,6 +308,25 @@ protected:
 #endif
     
 };
+
+
+/** Parameters **/
+
+Node* invalid_ptr = reinterpret_cast<Node*> (-1);
+
+Node* null_ptr = reinterpret_cast<Node*> (0);
+
+const int invalid_index = -1;
+
+const unsigned int max_elements = 4;  // max elements in a node
+
+// size limit for the array in a vector object.  best performance was
+// at 800 bytes.
+const unsigned int max_array_bytes = 800;
+
+int num_elements();
+const int num_elms = num_elements();
+
 
 std::ostream &
 operator<<(std::ostream & out, const Node & n);
@@ -329,22 +358,6 @@ verify_ins_merkle_proof(const UpdateMerkleProof & p,
 			std::string ins_target,
 			const std::string & merkle_root,
 			std::string & new_merkle_root);
-
-Node* invalid_ptr = reinterpret_cast<Node*> (-1);
-
-Node* null_ptr = reinterpret_cast<Node*> (0);
-
-const int invalid_index = -1;
-
-const unsigned int max_elements = 2;  // max elements in a node
-
-// size limit for the array in a vector object.  best performance was
-// at 800 bytes.
-const unsigned int max_array_bytes = 800;
-
-int num_elements();
-const int num_elms = num_elements();
-
 
 	
 /*

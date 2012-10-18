@@ -46,7 +46,17 @@ void Element<payload>::dump () {
 	cout << "NO SUBTREE) ";
     }
 */
-} 
+}
+
+uint
+Node::Merkle_cost() {
+    if (!mp_parent) {
+	return m_count;
+    } else {
+	uint cost = mp_parent->m_count;
+	return cost + mp_parent->Merkle_cost();
+    }
+}
 
 uint
 Node::minimum_keys () {

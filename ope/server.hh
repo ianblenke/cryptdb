@@ -22,10 +22,11 @@ public:
     int sock_cl; //socket to client; server connects thru it
     int sock_udf; //socket to udfs; server listens on it
 
-    tree<EncT> ope_tree;
-    OPETable<EncT> ope_table;
-    
-    Server();
+    Tree<EncT> ope_tree;
+    OPETable<EncT> * ope_table;
+    Connect * db; 
+   
+    Server(TreeType tt);
     ~Server();
 
     /*************** helper functions *****************************/

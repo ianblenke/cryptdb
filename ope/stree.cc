@@ -50,15 +50,16 @@ using std::max;
 		      
 
 template<class EncT>
-tree<EncT>::tree(){
+Stree<EncT>::Stree(OPETable<EncT> * ot, Connect * db) : Tree<EncT>(ot, db){
     if (DEBUG_STREE) {cerr << "creating the tree \n";}
     
-    root = new tree_node<EncT>();
+    root = new Stree_node<EncT>();
 
     max_size=0;
     num_rebalances=0;
 
-    dbconnect = new Connect( "localhost", "root", "letmein","cryptdb", 3306);
+    cerr << "ope table " << this->ope_table << "\n";
+
     
 #if MALICIOUS
     
@@ -74,7 +75,7 @@ tree<EncT>::tree(){
 
 
 template<class EncT>
-tree<EncT>::~tree(){
+Stree<EncT>::~Stree(){
     cerr << "destroying the tree\n";
     delete_nodes(root);
     delete root;
@@ -84,7 +85,7 @@ tree<EncT>::~tree(){
 
 template<class EncT>
 vector<EncT> 
-tree<EncT>::flatten(tree_node<EncT>* node){
+Stree<EncT>::flatten(Stree_node<EncT>* node){
     vector<EncT> rtn_keys;
 
     vector<EncT> tmp;
@@ -110,12 +111,12 @@ tree<EncT>::flatten(tree_node<EncT>* node){
 // -- could take advantage of the fact that we
 // know the num of nodes;
 template<class EncT>
-tree_node<EncT>* 
-tree<EncT>::rebuild(vector<EncT> key_list){
+Stree_node<EncT>* 
+Stree<EncT>::rebuild(vector<EncT> key_list){
     //Avoid building a node without any values
     if (key_list.size()==0) {return NULL;}
 
-    tree_node<EncT>* rtn_node = new tree_node<EncT>();
+    Stree_node<EncT>* rtn_node = new Stree_node<EncT>();
 
     if ((int) key_list.size()<N){
 	//Remaining keys fit in one node, return that node
@@ -134,7 +135,7 @@ tree<EncT>::rebuild(vector<EncT> key_list){
 	    for(int j=floor(i*base)+1; j<floor((i+1)*base); j++){
 		subvector.push_back(key_list[j]);
 	    }
-	    tree_node<EncT>* tmp_child = rebuild(subvector);
+	    Stree_node<EncT>* tmp_child = rebuild(subvector);
 	    if (tmp_child!=NULL){
 		rtn_node->right[key_list[floor(i*base)]]=tmp_child;
 	    }
@@ -144,7 +145,7 @@ tree<EncT>::rebuild(vector<EncT> key_list){
 	for (int j=0; j<floor(base); j++){
 	    subvector.push_back(key_list[j]);
 	}
-	tree_node<EncT>* tmp_child = rebuild(subvector);
+	Stree_node<EncT>* tmp_child = rebuild(subvector);
 	if(tmp_child!=NULL){
 	    rtn_node->right[(EncT) NULL]=tmp_child;
 	}	
@@ -166,8 +167,8 @@ tree<EncT>::rebuild(vector<EncT> key_list){
 // depth is the depth of the scapegoat node (num edges from root to scapegoat)
 template<class EncT>
 void 
-tree<EncT>::rebalance(tree_node<EncT>* node, uint64_t v, uint64_t nbits,
-		      uint64_t depth, OPETable<EncT> & ope_table){
+Stree<EncT>::rebalance(Stree_node<EncT>* node, uint64_t v, uint64_t nbits,
+		      uint64_t depth){
     if (DEBUG) cout<<"Rebalance"<<endl;
 
     vector<EncT> key_list = flatten(node);
@@ -177,7 +178,7 @@ tree<EncT>::rebalance(tree_node<EncT>* node, uint64_t v, uint64_t nbits,
 	if(key_list!=tmp_list) cout<<"Flatten isn't sorted!"<<endl;		
 	}*/
 
-    tree_node<EncT>* tmp_node = rebuild(key_list);
+    Stree_node<EncT>* tmp_node = rebuild(key_list);
     delete_nodes(node);
     node->keys = tmp_node->keys;
     node->right = tmp_node->right;
@@ -189,7 +190,7 @@ tree<EncT>::rebalance(tree_node<EncT>* node, uint64_t v, uint64_t nbits,
     uint64_t base_nbits = depth * num_bits;
 
     //Make sure OPE table is updated and correct
-    update_opetable_db(node, base_v, base_nbits, ope_table);
+    update_opetable_db(node, base_v, base_nbits);
     clear_db_version();
 }
 
@@ -198,8 +199,8 @@ tree<EncT>::rebalance(tree_node<EncT>* node, uint64_t v, uint64_t nbits,
 //Used to delete all subtrees of node
 template<class EncT>
 void 
-tree<EncT>::delete_nodes(tree_node<EncT>* node){
-    typename map<EncT, tree_node<EncT> *>::iterator it;
+Stree<EncT>::delete_nodes(Stree_node<EncT>* node){
+    typename map<EncT, Stree_node<EncT> *>::iterator it;
 
     for(it=node->right.begin(); it!=node->right.end(); it++){
 	delete_nodes(it->second);
@@ -211,14 +212,14 @@ tree<EncT>::delete_nodes(tree_node<EncT>* node){
 
 template<class EncT>
 void
-tree<EncT>::clear_db_version(){
+Stree<EncT>::clear_db_version(){
     string query="UPDATE emp SET version=0 where version=1";
     assert_s(dbconnect->execute(query), "failed to execute query " + query);
 }
 
 template<class EncT>
 void
-tree<EncT>::delete_db(table_entry del_entry){
+Stree<EncT>::delete_db(table_entry del_entry){
     uint64_t del_ope = del_entry.ope;
 
     ostringstream o;
@@ -241,7 +242,7 @@ tree<EncT>::delete_db(table_entry del_entry){
 //Update now-stale values in db
 template<class EncT>
 void 
-tree<EncT>::update_db(uint64_t old_ope, uint64_t new_ope){
+Stree<EncT>::update_db(uint64_t old_ope, uint64_t new_ope){
 
     stringstream query;
     query << "UPDATE emp SET ope_enc="
@@ -259,10 +260,9 @@ tree<EncT>::update_db(uint64_t old_ope, uint64_t new_ope){
 //Ensure table is correct
 template<class EncT>
 void
-tree<EncT>::update_opetable_db(tree_node<EncT> *node, uint64_t base_v, uint64_t base_nbits, 
-			     OPETable<EncT> & ope_table){
+Stree<EncT>::update_opetable_db(Stree_node<EncT> *node, uint64_t base_v, uint64_t base_nbits){
 
-    update_shifted_paths(0, base_v, base_nbits, node, ope_table);
+    update_shifted_paths(0, base_v, base_nbits, node);
 
     uint64_t next_v, next_nbits;
 	
@@ -271,7 +271,7 @@ tree<EncT>::update_opetable_db(tree_node<EncT> *node, uint64_t base_v, uint64_t 
     if(node->has_subtree( (EncT) NULL)){
 
 	next_v = base_v<<num_bits;
-	update_opetable_db(node->right[(EncT) NULL],  next_v, next_nbits, ope_table);
+	update_opetable_db(node->right[(EncT) NULL],  next_v, next_nbits);
     }
     
     for(int i = 0; i < (int) node->keys.size(); i++){
@@ -279,7 +279,7 @@ tree<EncT>::update_opetable_db(tree_node<EncT> *node, uint64_t base_v, uint64_t 
 	if(node->has_subtree(node->keys[i])){
 
 	    next_v = (base_v<<num_bits) | (i+1);
-	    update_opetable_db(node->right[node->keys[i]], next_v, next_nbits, ope_table);	
+	    update_opetable_db(node->right[node->keys[i]], next_v, next_nbits);	
 	}	
     }
 
@@ -287,11 +287,11 @@ tree<EncT>::update_opetable_db(tree_node<EncT> *node, uint64_t base_v, uint64_t 
 
 template<class EncT>
 void 
-tree<EncT>::print_tree(){
-    vector<tree_node<EncT>* > queue;
+Stree<EncT>::print_tree(){
+    vector<Stree_node<EncT>* > queue;
     queue.push_back(root);
     while(queue.size()!=0){
-	tree_node<EncT>* cur_node = queue[0];
+	Stree_node<EncT>* cur_node = queue[0];
 	if(cur_node==NULL){
 	    queue.erase(queue.begin());
 	    cout<<endl;
@@ -322,13 +322,13 @@ tree<EncT>::print_tree(){
  * from root)
  */
 template<class EncT>
-tree_node<EncT>* 
-tree<EncT>::findScapegoat( vector<tree_node<EncT>* > path , uint64_t & path_index){
+Stree_node<EncT>* 
+Stree<EncT>::findScapegoat( vector<Stree_node<EncT>* > path , uint64_t & path_index){
 
     // Move along path from leaf to root
     // until find scapegoat
     for (int i=0; i < (int) path.size(); i++){
-	tree_node<EncT>* cur_node = path[i];
+	Stree_node<EncT>* cur_node = path[i];
 
 	for(auto it=cur_node->right.begin(); it!=cur_node->right.end(); it++){
 	    if (it->second->num_nodes > alpha * cur_node->num_nodes) {
@@ -346,12 +346,12 @@ template<class EncT>
 struct successor {
     uint64_t succ_v;
     uint64_t succ_nbits;
-    tree_node<EncT>* succ_node;
+    Stree_node<EncT>* succ_node;
 };
 
 template<class EncT>
 successor<EncT>
-tree<EncT>::find_succ(tree_node<EncT>* node, uint64_t v, uint64_t nbits){
+Stree<EncT>::find_succ(Stree_node<EncT>* node, uint64_t v, uint64_t nbits){
     if(node->has_subtree((EncT) NULL)){
 	return find_succ(node->right[(EncT) NULL], (v<<num_bits), nbits+num_bits);
     }else{
@@ -369,12 +369,12 @@ struct predecessor{
     uint64_t pred_v;
     uint64_t pred_nbits;
     uint64_t pred_index;
-    tree_node<EncT>* pred_node;
+    Stree_node<EncT>* pred_node;
 };
 
 template<class EncT>
 predecessor<EncT>
-tree<EncT>::find_pred(tree_node<EncT>* node, uint64_t v, uint64_t nbits){
+Stree<EncT>::find_pred(Stree_node<EncT>* node, uint64_t v, uint64_t nbits){
     int max_index = node->keys.size()-1;
 
     EncT ciph = node->keys[max_index];
@@ -397,7 +397,7 @@ tree<EncT>::find_pred(tree_node<EncT>* node, uint64_t v, uint64_t nbits){
 */
 /*template<class EncT>
   string
-  tree<EncT>::delete_index(uint64_t v, uint64_t nbits, uint64_t index){
+  Stree<EncT>::delete_index(uint64_t v, uint64_t nbits, uint64_t index){
   if(DEBUG) cout<<"Deleting index at v="<<v<<" nbits="<<nbits<<" index="<<index<<endl;
   EncT deleted_val = tree_delete(root, v, nbits, index, nbits, false);
   clear_db_version();
@@ -451,8 +451,8 @@ tree<EncT>::find_pred(tree_node<EncT>* node, uint64_t v, uint64_t nbits){
 //v should just be path to node, not including index. swap indicates whether val being deleted was swapped, should be false for top-lvl call
 /*template<class EncT>
   EncT
-  tree<EncT>::tree_delete(tree_node<EncT>* node, uint64_t v, uint64_t nbits, uint64_t index, uint64_t pathlen, bool swap){
-  if (DEBUG) cout<<"Calling tree_delete with "<<v<< " "<<nbits<<" "<<index<<endl;
+  Stree<EncT>::tree_delete(Stree_node<EncT>* node, uint64_t v, uint64_t nbits, uint64_t index, uint64_t pathlen, bool swap){
+  if (DEBUG) cout<<"Calling Stree_delete with "<<v<< " "<<nbits<<" "<<index<<endl;
   if (nbits == 0){
   EncT del_val = node->keys[index];
   if(node->right.empty()){
@@ -645,11 +645,10 @@ trigger(uint height, uint num_nodes, double alpha) {
 // index is position in node where insertion should happen
 template<class EncT>
 void
-tree<EncT>::insert(uint64_t v, uint64_t nbits, uint64_t index, EncT encval,
-		   OPETable<EncT>  & ope_table){
+Stree<EncT>::insert(EncT encval, uint64_t v, uint64_t nbits, uint64_t index){
     bool node_inserted;
-    vector<tree_node<EncT> * > path = tree_insert(root, v, nbits, index,
-						  encval, nbits, ope_table, node_inserted);
+    vector<Stree_node<EncT> * > path = tree_insert(root, v, nbits, index,
+						  encval, nbits, node_inserted);
 
 #if MALICIOUS
     
@@ -700,8 +699,8 @@ tree<EncT>::insert(uint64_t v, uint64_t nbits, uint64_t index, EncT encval,
     if (trigger(height, root->num_nodes, alpha)) {
     	uint64_t path_index;
 
-	tree_node<EncT>* scapegoat = findScapegoat(path, path_index);
-	rebalance(scapegoat, v, nbits, path_index, ope_table);
+	Stree_node<EncT>* scapegoat = findScapegoat(path, path_index);
+	rebalance(scapegoat, v, nbits, path_index);
 	
 	if (DEBUG) {cout<< " Insert rebalance "<< height <<": "<< root->num_nodes << endl;}
 
@@ -719,17 +718,16 @@ tree<EncT>::insert(uint64_t v, uint64_t nbits, uint64_t index, EncT encval,
 // does not proceed recursively down the tree because it assumes this is a leaf
 template<class EncT>
 void
-tree<EncT>::update_shifted_paths(uint index, uint64_t v, int pathlen,
-				      tree_node<EncT> * node,
-				      OPETable<EncT> & ope_table) {
+Stree<EncT>::update_shifted_paths(uint index, uint64_t v, int pathlen,
+				      Stree_node<EncT> * node) {
 
     for(int i=(int)index; i< (int) node->keys.size(); i++) {
 	EncT ckey = node->keys[i];
 	
 	OPEType newope = compute_ope<EncT>(v, pathlen, i);
-	OPEType oldope = ope_table.get(ckey).ope;
+	OPEType oldope = this->ope_table->get(ckey).ope;
 	
-	ope_table.update(ckey, newope);
+	this->ope_table->update(ckey, newope);
 	update_db(oldope, newope);
     }
     
@@ -748,13 +746,13 @@ extract_index(OPEType v, uint nbits) {
 // pathlen is the length of v
 // node_inserted is set to true if a node (tree node, not key) was inserted
 template<class EncT>
-vector<tree_node<EncT>* >
-tree<EncT>::tree_insert(tree_node<EncT>* node,
+vector<Stree_node<EncT>* >
+Stree<EncT>::tree_insert(Stree_node<EncT>* node,
 			uint64_t v, uint64_t nbits, uint64_t index,
 			EncT encval, uint64_t pathlen,
-			OPETable<EncT>  & ope_table, bool & node_inserted){
+			bool & node_inserted){
 
-    vector<tree_node<EncT>* > rtn_path;
+    vector<Stree_node<EncT>* > rtn_path;
 
     // End of the insert line, check if you can insert
     // Assumes v and nbits were from a lookup of an insertable node
@@ -769,12 +767,12 @@ tree<EncT>::tree_insert(tree_node<EncT>* node,
 
 	    cerr << "tree_insert: node is full, create subtree \n";
 	    
-	    tree_node<EncT> * subtree = node->new_subtree(index);
+	    Stree_node<EncT> * subtree = node->new_subtree(index);
 	    node->num_nodes++;
 	    max_size = max(node->num_nodes, max_size);
 	    
 	    rtn_path = tree_insert(subtree, path_append(v, index),
-				   0, 0, encval, pathlen+num_bits, ope_table, node_inserted);
+				   0, 0, encval, pathlen+num_bits, node_inserted);
 
 	    node_inserted = true;
 	    rtn_path.push_back(node);
@@ -791,9 +789,9 @@ tree<EncT>::tree_insert(tree_node<EncT>* node,
 	node->keys.insert(it+index, encval);
 
 	// update ope table and db
-	assert_s(ope_table.insert(encval, compute_ope<EncT>(v, pathlen, index)),
+	assert_s(this->ope_table->insert(encval, compute_ope<EncT>(v, pathlen, index)),
 		 "did not insert new entry in ope_table");
-	update_shifted_paths(index+1, v, pathlen, node, ope_table);
+	update_shifted_paths(index+1, v, pathlen, node);
 	clear_db_version();
 
 	// prepare return values
@@ -806,10 +804,10 @@ tree<EncT>::tree_insert(tree_node<EncT>* node,
 
     cerr << "tree_insert: one step down the tree\n";
     
-    tree_node<EncT> * subtree = node->get_subtree(extract_index(v, nbits));
+    Stree_node<EncT> * subtree = node->get_subtree(extract_index(v, nbits));
     assert_s(subtree, "subtree must exist, but it doesn't");
     
-    rtn_path = tree_insert(subtree, v, nbits-num_bits, index, encval, pathlen, ope_table, node_inserted);
+    rtn_path = tree_insert(subtree, v, nbits-num_bits, index, encval, pathlen, node_inserted);
 
     //prepare results
     if (node_inserted) {
@@ -821,10 +819,10 @@ tree<EncT>::tree_insert(tree_node<EncT>* node,
 
 template<class EncT>
 bool
-tree<EncT>::test_tree(tree_node<EncT>* cur_node){
+Stree<EncT>::test_tree(Stree_node<EncT>* cur_node){
     if(test_node(cur_node)!=true) return false;
 
-    typename map<EncT, tree_node<EncT> *>::iterator it;
+    typename map<EncT, Stree_node<EncT> *>::iterator it;
 
     //Recursively check tree at this node and all subtrees
     for(it=cur_node->right.begin(); it!=cur_node->right.end(); it++){
@@ -839,7 +837,7 @@ tree<EncT>::test_tree(tree_node<EncT>* cur_node){
 
 template<class EncT>
 bool
-tree<EncT>::test_node(tree_node<EncT>* cur_node){
+Stree<EncT>::test_node(Stree_node<EncT>* cur_node){
     vector<EncT> sorted_keys = cur_node->keys;
     //Make sure num of keys is b/w 0 and N exclusive 
     //(no node should have no keys)
@@ -874,7 +872,7 @@ tree<EncT>::test_node(tree_node<EncT>* cur_node){
 //Input: Node, and low and high end of range to test key values at
 template<class EncT>
 bool
-tree<EncT>::test_vals(tree_node<EncT>* cur_node, EncT low, EncT high){
+Stree<EncT>::test_vals(Stree_node<EncT>* cur_node, EncT low, EncT high){
     //Make sure all keys at node are in proper range
     for(int i=0; i< (int) cur_node->keys.size(); i++){
 	EncT this_key = cur_node->keys[i];
@@ -884,7 +882,7 @@ tree<EncT>::test_vals(tree_node<EncT>* cur_node, EncT low, EncT high){
 	}
     }
 
-    typename map<EncT, tree_node<EncT> *>::iterator it;
+    typename map<EncT, Stree_node<EncT> *>::iterator it;
 
     for(it=cur_node->right.begin(); it!=cur_node->right.end(); it++){
 	if(test_vals(it->second, low, high)!=true) return false;
@@ -895,14 +893,14 @@ tree<EncT>::test_vals(tree_node<EncT>* cur_node, EncT low, EncT high){
 /*
  * Explicitly instantiate the tree template for various ciphertext types.
  */
-template class tree<uint64_t>;
-template class tree<uint32_t>;
-template class tree<uint16_t>;
+template class Stree<uint64_t>;
+template class Stree<uint32_t>;
+template class Stree<uint16_t>;
 
 template <class EncT>
 int
-tree_node<EncT>::height() {
-    typename std::map<EncT, tree_node *>::iterator it;
+Stree_node<EncT>::height() {
+    typename std::map<EncT, Stree_node *>::iterator it;
     int max_child_height=0;
     int tmp_height=0;
     
@@ -918,10 +916,16 @@ tree_node<EncT>::height() {
 }
 
 template<class EncT>
+vector<EncT>
+Stree_node<EncT>::get_keys() {
+    return keys;
+}
+
+template<class EncT>
 int
-tree_node<EncT>::size(){
+Stree_node<EncT>::size(){
     int totalsize = keys.size();
-    typename std::map<EncT, tree_node *>::iterator it;
+    typename std::map<EncT, Stree_node *>::iterator it;
     
     for( it = right.begin(); it!=right.end(); it++){
 	totalsize +=it->second->size();
@@ -932,8 +936,8 @@ tree_node<EncT>::size(){
 
 //Returns true if node's right map contains key (only at non-leaf nodes)
 template<class EncT>
-tree_node<EncT> *
-tree_node<EncT>::has_subtree(EncT key){ 
+Stree_node<EncT> *
+Stree_node<EncT>::has_subtree(EncT key){ 
     auto it = right.find(key);
 
     // either key is not in right or it is in which case the subtree should we non-NULL
@@ -948,7 +952,7 @@ tree_node<EncT>::has_subtree(EncT key){
 
 template<class EncT>
 static EncT
-get_key_for_index(uint index, tree_node<EncT> * tnode) {
+get_key_for_index(uint index, Stree_node<EncT> * tnode) {
     assert_s(index <= tnode->keys.size(), "invalid index, larger than size of keys");
 
     if (index == 0) {
@@ -959,8 +963,8 @@ get_key_for_index(uint index, tree_node<EncT> * tnode) {
 }
 
 template<class EncT>
-tree_node<EncT> *
-tree_node<EncT>::get_subtree(uint index) {
+Stree_node<EncT> *
+Stree_node<EncT>::get_subtree(uint index) {
 
     EncT key = get_key_for_index(index, this);
 
@@ -968,12 +972,12 @@ tree_node<EncT>::get_subtree(uint index) {
 }
 
 template<class EncT>
-tree_node<EncT> *
-tree_node<EncT>::new_subtree(uint index) {
+Stree_node<EncT> *
+Stree_node<EncT>::new_subtree(uint index) {
     EncT key = get_key_for_index(index, this);
 
     assert_s(!has_subtree(key), "subtree should not have existed");
-    tree_node * subtree = new tree_node();
+    Stree_node * subtree = new Stree_node();
     right[key] = subtree;
     return subtree;
 }
