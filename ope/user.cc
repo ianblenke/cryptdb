@@ -141,6 +141,11 @@ void test_order(int num_vals, int order){
     }
     last_val = cur_val;
 
+    if (ItemToString(rt.rows[rc][2]!= "0")){
+      cout << "Row " << rc << " has non-zero version?!";
+      exit(-1);
+    }
+
     uint64_t name_val;
     ss.str("");
     ss.clear();
