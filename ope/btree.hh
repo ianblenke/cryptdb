@@ -272,6 +272,9 @@ protected:
 
     void finish_del(UpdateMerkleProof & proof);
 
+    // returns the number of nodes to be included in a Merkle proof of insertion
+    uint Merkle_cost();
+
     // Functions for testing
     void check_merkle_tree(); //checks merkle tree was computed correctly
     void recompute_merkle_subtree();
@@ -336,7 +339,7 @@ Node* null_ptr = reinterpret_cast<Node*> (0);
 
 const int invalid_index = -1;
 
-const unsigned int max_elements = 50;  // max elements in a node
+const unsigned int max_elements = 4;  // max elements in a node
 
 // size limit for the array in a vector object.  best performance was
 // at 800 bytes.

@@ -250,7 +250,7 @@ public:
     // compute the cost of an insert in terms of elements that changed
     // their ope encoding
     static int
-    cost(UpdateMerkleProof & p, RootTracker & tracker) {
+    cost(UpdateMerkleProof & p, RootTracker & tracker, uint & merkle_cost) {
 
 	//check first if root grew
 	if (p.st_before.size() == p.st_after.size() -1 ) {
@@ -268,6 +268,7 @@ public:
 		desired.m_key = new_key;
 		Node * visited;
 		tracker.get_root()->search(desired, visited);
+		merkle_cost = visited->Merkle_cost();
 		return cost(visited, pos);
 	    }
 	    
@@ -293,6 +294,7 @@ public:
 
 	Elem elem;
 	uint total_cost = 0;
+	uint total_merkle_cost = 0;
 	uint eff_elems = 0;
 	
 	//insert values in tree
@@ -302,7 +304,9 @@ public:
 	    UpdateMerkleProof p;
 	    bool b = tracker.get_root()->tree_insert(elem, p);
 	    if (b) {
-		uint thiscost =  cost(p, tracker);
+		uint merkle_cost;
+		uint thiscost =  cost(p, tracker, merkle_cost);
+		total_merkle_cost += merkle_cost;
 		total_cost += thiscost;
 		//	cerr << "cost for this ins " << thiscost << "; ";
 		eff_elems ++;
@@ -314,6 +318,7 @@ public:
 	cerr << "total cost is " << total_cost << " for " << no_elems << " inserts from zero " <<
 	    " and effective elements " << eff_elems << "\n";
 	cerr << "RATIO " << total_cost*1.0/eff_elems << "\n";
+	cerr << "total Merkle cost is " << total_merkle_cost*1.0/eff_elems << "\n";
 	cerr << "max height was " << tracker.get_root()->max_height() << "\n";
 	cerr << "minimum keys " << Node::minimum_keys() << "\n";
 
@@ -328,7 +333,7 @@ public:
     static void
     testBMerkleTree() {
     
-	uint no_elems = 150000;
+	uint no_elems = 100000;
 
 	vector<string> vals;
 	srand( time(NULL));
@@ -467,7 +472,7 @@ int main(int argc, char ** argv)
 {
    
     Test::testBMerkleTree();
-    Test::testMerkleProof();
+    // Test::testMerkleProof();
 }
 
  
