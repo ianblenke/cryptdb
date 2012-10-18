@@ -15,7 +15,7 @@ void test_order(int num_vals, int order);
 
 int main(){
 
-    test_order(1000, 0);
+    test_order(100, 0);
 
     blowfish* bc = new blowfish(passwd);
 
@@ -141,7 +141,7 @@ void test_order(int num_vals, int order){
     }
     last_val = cur_val;
 
-    if (ItemToString(rt.rows[rc][2]!= "0")){
+    if (ItemToString(rt.rows[rc][2]) != "0"){
       cout << "Row " << rc << " has non-zero version?!";
       exit(-1);
     }
