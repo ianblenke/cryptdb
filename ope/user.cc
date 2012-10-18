@@ -111,7 +111,7 @@ void test_order(int num_vals, int order){
 	    ss.str("");
 	    ss.clear();
 	    bc->block_encrypt((const uint8_t *) &pt, (uint8_t *) &ct);
-	    ss<<"INSERT INTO emp VALUES ("<<pt<<", ope_enc("<<ct<<",'i'), 0)";
+	    ss<<"INSERT INTO emp VAULES ("<<pt<<", ope_enc("<<ct<<",'i'), 0)";
 	    assert_s(dbconnect->execute(ss.str()), "user could not execute query");
 	    count++;
 	    pt=0;
@@ -119,6 +119,28 @@ void test_order(int num_vals, int order){
        } 
 */
     }
+
+  DBResult * result;
+
+  dbconnect->execute("SELECT * FROM emp ORDER BY name", result);
+
+  ResType rt = result->unpack();
+
+  uint64_t last_val = 0;
+
+  for ( int rc=0; rc < (int) rt.rows.size(); rc++){
+    uint64_t cur_val = 0;
+    stringstream ss;
+    ss << ItemToString(rt.rows[rc][1]);
+    ss >> cur_val;
+    if(cur_val <= last_val) {
+      cout << "Values are not in order: " << cur_val << " < " << last_val;
+      exit(-1);
+    }
+    last_val = cur_val;
+
+  }
+
 	cout<<"Values:"<<endl;
 	//sort(inserted_vals.begin(), inserted_vals.end());
 	for(int i=0; i<num_vals; i++){
