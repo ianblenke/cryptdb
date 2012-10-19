@@ -250,7 +250,7 @@ for a in [0.3, 0.5, 0.75]:
         num_inserted = 0
         merklecost_key = 0
         merklecost_hash = 0
-        num_vals = 1000000
+        num_vals = 10
 
         if order == 'd':
             vals = xrange(num_vals, 0, -1)
