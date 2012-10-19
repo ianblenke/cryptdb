@@ -33,9 +33,10 @@ public:
 
     Stree_node<EncT> * root;
     unsigned int max_size;
+    OPETable<EncT> * ope_table;
     Connect * dbconnect;
-    //int global_version;
     int num_rebalances;
+
 
 #if MALICIOUS
     RootTracker tracker;
@@ -51,7 +52,7 @@ public:
      * the position where it should be inserted
      * Requires that encval is not in tree.
      */
-    void insert(EncT encval, uint64_t v, uint64_t nbits, uint64_t index);
+    void insert(EncT encval, OPEType v, uint64_t nbits, uint64_t index);
 
 
     /*********** Helper methods **************/

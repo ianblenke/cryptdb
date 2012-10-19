@@ -17,7 +17,6 @@
 #include <edb/Connect.hh>
 #include <crypto/blowfish.hh>
 #include <util/static_assert.hh>
-#include "btree.hh"
 #include <util/ope-util.hh>
 
 

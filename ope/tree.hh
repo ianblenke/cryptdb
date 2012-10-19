@@ -1,17 +1,19 @@
 #pragma once
 
+/***************
+ * Pure virtual classes which are
+ * interfaces for
+ * for a generic search tree.
+ **************/
+
 #include <util/ope-util.hh>
-#include <ope/stree.hh>
-#include <ope/btree.hh>
 #include <ope/opetable.hh>
 #include <edb/Connect.hh>
-
-enum TreeType {SCAPEGOAT, BTREE};
 
 
 template <class EncT>
 class TreeNode {
-    
+public:    
     virtual std::vector<EncT> get_keys() = 0;
     
     /* Returns the subtree at index,
@@ -20,18 +22,11 @@ class TreeNode {
     
 };    
 
-
 template<class EncT>
 class Tree {
 public:
 
-    /* Creates tree.
-       Gets pointers to ope_table and db to keep these updated upon
-       ope encodings changing.
-     */
-    Tree(OPETable<EncT> * ot, Connect * dbcon): ope_table(ot), db(dbcon) {}
-
-    virtual TreeNode<EncT> * get_root();
+    virtual TreeNode<EncT> * get_root() = 0;
 
     /* Inserts ciph in the tree; the position of insert is at given node, at
      * position indicated by index.
@@ -40,10 +35,9 @@ public:
      * Updates ope_table and DB. 
      */ 
     virtual void insert(EncT ciph,
-		OPEType ope_path, uint64_t nbits, uint64_t index);
+			OPEType ope_path, uint64_t nbits, uint64_t index) = 0;
 
- protected:
-    OPETable<EncT> * ope_table;
-    Connect * db;
 };
 
+
+template class Tree<uint64_t>;

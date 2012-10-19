@@ -7,9 +7,9 @@ TEST_SRCS   :=  TestCrypto.cc \
 		test_searchtree.cc 
 
 		
-all:	$(OBJDIR)/test/test_searchtree
-$(OBJDIR)/test/test_searchtree: $(OBJDIR)/test/test_searchtree.o $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbutil.so $(OBJDIR)/libope.so
-	$(CXX) $< -o $@ $(LDFLAGS) -ledbutil -lope -lcryptdb
+#all:	$(OBJDIR)/test/test_searchtree
+#$(OBJDIR)/test/test_searchtree: $(OBJDIR)/test/test_searchtree.o $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbutil.so $(OBJDI#R)/libope.so
+#	$(CXX) $< -o $@ $(LDFLAGS) -ledbutil -lope -lcryptdb
 
 #all:	$(OBJDIR)/test/test
 

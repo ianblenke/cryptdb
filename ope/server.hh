@@ -12,7 +12,7 @@
 
 #include <edb/Connect.hh>
 #include <ope/stree.hh>
-#include <ope/btree.hh>
+//#include <ope/btree.hh>
 
 
 
@@ -22,11 +22,11 @@ public:
     int sock_cl; //socket to client; server connects thru it
     int sock_udf; //socket to udfs; server listens on it
 
-    Tree<EncT> ope_tree;
+    Tree<EncT> * ope_tree;
     OPETable<EncT> * ope_table;
     Connect * db; 
    
-    Server(TreeType tt);
+    Server();
     ~Server();
 
     /*************** helper functions *****************************/

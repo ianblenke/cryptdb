@@ -50,7 +50,7 @@ using std::max;
 		      
 
 template<class EncT>
-Stree<EncT>::Stree(OPETable<EncT> * ot, Connect * db) : Tree<EncT>(ot, db){
+Stree<EncT>::Stree(OPETable<EncT> * ot, Connect * db) : ope_table(ot), dbconnect(db){
     if (DEBUG_STREE) {cerr << "creating the tree \n";}
     
     root = new Stree_node<EncT>();
@@ -981,3 +981,6 @@ Stree_node<EncT>::new_subtree(uint index) {
     right[key] = subtree;
     return subtree;
 }
+
+template class Stree_node<uint64_t>;
+
