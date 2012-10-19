@@ -1,0 +1,126 @@
+Results num_vals:  100000  alpha:  0.3  order:  r
+num of keys touched during rebalances:  0.73603
+avg merkle key cost:  25.89779
+avg merkle hash cost:  29.28707
+avg total merkle cost:  55.18486
+tree height:  10
+
+Results num_vals:  100000  alpha:  0.3  order:  i
+num of keys touched during rebalances:  39.93308
+avg merkle key cost:  67.94449
+avg merkle hash cost:  33.48411
+avg total merkle cost:  101.4286
+tree height:  10
+
+Results num_vals:  100000  alpha:  0.3  order:  d
+num of keys touched during rebalances:  45.04295
+avg merkle key cost:  73.48689
+avg merkle hash cost:  33.73826
+avg total merkle cost:  107.22515
+tree height:  10
+
+Results num_vals:  100000  alpha:  0.5  order:  r
+num of keys touched during rebalances:  0.0
+avg merkle key cost:  28.63537
+avg merkle hash cost:  33.02021
+avg total merkle cost:  61.65558
+tree height:  17
+
+Results num_vals:  100000  alpha:  0.5  order:  i
+num of keys touched during rebalances:  12.87247
+avg merkle key cost:  58.83965
+avg merkle hash cost:  52.95409
+avg total merkle cost:  111.79374
+tree height:  16
+
+Results num_vals:  100000  alpha:  0.5  order:  d
+num of keys touched during rebalances:  13.41446
+avg merkle key cost:  59.70836
+avg merkle hash cost:  53.52555
+avg total merkle cost:  113.23391
+tree height:  17
+
+Results num_vals:  100000  alpha:  0.75  order:  r
+num of keys touched during rebalances:  0.0
+avg merkle key cost:  29.25471
+avg merkle hash cost:  33.88868
+avg total merkle cost:  63.14339
+tree height:  19
+
+Results num_vals:  100000  alpha:  0.75  order:  i
+num of keys touched during rebalances:  8.47749
+avg merkle key cost:  114.94913
+avg merkle hash cost:  107.30931
+avg total merkle cost:  222.25844
+tree height:  41
+
+Results num_vals:  100000  alpha:  0.75  order:  d
+num of keys touched during rebalances:  8.74434
+avg merkle key cost:  115.75524
+avg merkle hash cost:  108.5118
+avg total merkle cost:  224.26704
+tree height:  39
+
+Results num_vals:  1000000  alpha:  0.3  order:  r
+num of keys touched during rebalances:  0.644208
+avg merkle key cost:  31.170859
+avg merkle hash cost:  36.34732
+avg total merkle cost:  67.518179
+tree height:  12
+
+Results num_vals:  1000000  alpha:  0.3  order:  i
+num of keys touched during rebalances:  54.510201
+avg merkle key cost:  88.285327
+avg merkle hash cost:  41.170514
+avg total merkle cost:  129.455841
+tree height:  12
+
+Results num_vals:  1000000  alpha:  0.3  order:  d
+num of keys touched during rebalances:  58.533028
+avg merkle key cost:  92.739704
+avg merkle hash cost:  41.420852
+avg total merkle cost:  134.160556
+tree height:  12
+
+Results num_vals:  1000000  alpha:  0.5  order:  r
+num of keys touched during rebalances:  2.9e-05
+avg merkle key cost:  34.416919
+avg merkle hash cost:  40.772139
+avg total merkle cost:  75.189058
+tree height:  20
+
+Results num_vals:  1000000  alpha:  0.5  order:  i
+num of keys touched during rebalances:  16.41446
+avg merkle key cost:  72.164403
+avg merkle hash cost:  65.987001
+avg total merkle cost:  138.151404
+tree height:  20
+
+Results num_vals:  1000000  alpha:  0.5  order:  d
+num of keys touched during rebalances:  16.7439
+avg merkle key cost:  72.821838
+avg merkle hash cost:  66.552388
+avg total merkle cost:  139.374226
+tree height:  20
+
+Results num_vals:  1000000  alpha:  0.75  order:  r
+num of keys touched during rebalances:  0.0
+avg merkle key cost:  36.193847
+avg merkle hash cost:  43.124585
+avg total merkle cost:  79.318432
+tree height:  24
+
+Results num_vals:  1000000  alpha:  0.75  order:  i
+num of keys touched during rebalances:  11.357878
+avg merkle key cost:  141.823984
+avg merkle hash cost:  139.092422
+avg total merkle cost:  280.916406
+tree height:  49
+
+Results num_vals:  1000000  alpha:  0.75  order:  d
+num of keys touched during rebalances:  11.275514
+avg merkle key cost:  142.287618
+avg merkle hash cost:  140.309157
+avg total merkle cost:  282.596775
+tree height:  47
+

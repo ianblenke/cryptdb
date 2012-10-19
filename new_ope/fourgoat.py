@@ -24,7 +24,8 @@ ALPHA = 0.75
 touchednodes = 0
 num_rebalances = 0
 num_inserted = 0
-merklecost = 0
+merklecost_key = 0
+merklecost_hash = 0
 
 class Node(object):
     def __init__(self):
@@ -68,16 +69,17 @@ class Node(object):
     def height(self):
         return 1 + max([child.height() for child in self.right.values()] or [0])
 
-    def depth(self):
-        if 
-        return 1 +
+    # def depth(self):
+    #     if 
+    #     return 1 +
     
     def rebalance(self):
         # LAAAME; you can do this in linear time
-	global touchednodes
-	global num_rebalances
-        
-	num_rebalances+=1
+        global touchednodes
+        global num_rebalances
+        global merklecost_key
+
+        num_rebalances += 1
         keys = []
         def flatten(n):
             if n is None:
@@ -87,9 +89,10 @@ class Node(object):
                 flatten(child)
         flatten(self)
         keys.sort()
+        merklecost_key += len(keys)
 	touchednodes = touchednodes + len(keys)
-        my_merkle_cost = self.merklecost()
-	print "Rebalance # ", num_rebalances, " at ", num_inserted, " rebalance size: ", len(keys), " total touched: ", touchednodes
+        if NOISY:
+            print "Rebalance # ", num_rebalances, " at ", num_inserted, " rebalance size: ", len(keys), " total touched: ", touchednodes
         
         def getMid(keys):
             mid = len(keys)/2
@@ -134,14 +137,62 @@ class BalancedTree(Node):
         Node.__init__(self)
         self.size = 0
 
+    @staticmethod
+    def compute_merkle_cost(n, path):
+        count = 0
+        do_count = False
+        for node in path:
+            if do_count:
+                count += len(node.right.keys())
+            if (node == n):
+                do_count = True
+        return count + 1 # 1 is for the root
+    
+    @staticmethod
+    def path_merkle_key_cost(path):
+        global merklecost_key
+        for node in path:
+            merklecost_key += len(node.keys)
+
+    @staticmethod
+    def path_merkle_hash_cost(path):
+        global merklecost_hash
+        for node in path:
+            merklecost_hash += len(node.right.keys())
+
+    @staticmethod
+    def findScapegoat(path):
+        # Return the lowest node in path (that is, the earliest) where
+        # the subtree rooted at that node isn't alpha-height-balanced.
+        size = 0
+        last = None
+        for n in path:
+            childSizes = [size if child is last else len(child)
+                          for child in n.right.values()]
+            size = sum(childSizes) + len(n.keys)
+            last = n
+            if NOISY:
+                print "-->", childSizes, size, ALPHA*size
+#            assert size == len(n)
+            if any(childSize > ALPHA*size for childSize in childSizes):
+                # mymerklecost = BalancedTree.compute_merkle_cost(n, path)
+                # if NOISY:
+                #     print " extra merkle cost ", mymerklecost 
+                # global merklecost
+                # merklecost += mymerklecost
+                return n
+            continue
+
     def insert(self, key):
-	global num_inserted
-	num_inserted+=1
+    	global num_inserted
+    	num_inserted+=1
         path = Node.insert(self, key)
         if path is None:
             # key was already in the tree
             return
 
+        BalancedTree.path_merkle_key_cost(path)
+        BalancedTree.path_merkle_hash_cost(path)
         if NOISY:
             print "==============="
             tree.dump()
@@ -178,65 +229,55 @@ class BalancedTree(Node):
                 sys.stdout.write(".")
                 sys.stdout.flush()
 
-    @staticmethod
-    def findScapegoatDumb(path):
-        # This is equivalent to findScapegoat, but doesn't optimize to
-        # eliminate repeated work computing the subtree size as we
-        # move up the tree.
-        for n in path:
-            if any(len(child) > ALPHA*len(n) for child in n.right.values()):
-                return n
+    # @staticmethod
+    # def findScapegoatDumb(path):
+    #     # This is equivalent to findScapegoat, but doesn't optimize to
+    #     # eliminate repeated work computing the subtree size as we
+    #     # move up the tree.
+    #     for n in path:
+    #         if any(len(child) > ALPHA*len(n) for child in n.right.values()):
+    #             return n
 
     # number of nodes (not keys) and siblings on the path of a node n to root
-    @staticmethod
-    def compute_merkle_cost(n, path):
-        count = 0
-        do_count = False
-        for node in path:
-            if do_count:
-                count += len(node.right.keys())
-            if (node == n):
-                do_count = True
-         return count + 1 # 1 is for the root
-    
-    @staticmethod
-    def findScapegoat(path):
-        # Return the lowest node in path (that is, the earliest) where
-        # the subtree rooted at that node isn't alpha-height-balanced.
-        size = 0
-        global merklecost
-        last = None
-        for n in path:
-            childSizes = [size if child is last else len(child)
-                          for child in n.right.values()]
-            size = sum(childSizes) + len(n.keys)
-            last = n
-            if NOISY:
-                print "-->", childSizes, size, ALPHA*size
-#            assert size == len(n)
-            if any(childSize > ALPHA*size for childSize in childSizes):
-                mymerklecost = compute_merkle_cost(n, path)
-                if NOISY:
-                    print " extra merkle cost ", mymerklecost 
-                merklecost += mymerklecost
-                return n
-            continue
 
-tree = BalancedTree()
-keys = set()
-num_vals = 1000000
-for n in range(num_vals):
-    # Random key distribution
-#    key = random.randint(0,1000000000)
-    #print key
-    # Worst-case
-    key = n
-    tree.insert(key)
-    keys.add(key)
+for a in [0.3, 0.5, 0.75]:
+    for order in ['r','i','d']:
 
-print touchednodes/(1.0*num_vals)
-print "extra merkle cost ", merklecost/(1.0 * num_vals)
-print "total merkle cost", (touchednodes + merklecost)/(1.0 * num_vals)
-print tree.height()
-#for key in range(max(keys)):
-#    assert (key in tree) == (key in keys)
+        ALPHA = a
+        tree = BalancedTree()
+        touchednodes = 0
+        num_rebalances = 0
+        num_inserted = 0
+        merklecost_key = 0
+        merklecost_hash = 0
+        num_vals = 1000000
+
+        if order == 'd':
+            vals = xrange(num_vals, 0, -1)
+        else:
+            vals = xrange(num_vals)
+        print "Results num_vals: ", num_vals, " alpha: ", ALPHA, " order: ", order
+
+        #keys = set()
+
+        for n in vals:
+            # Random key distribution
+            #print key
+            # Worst-case
+            key = n
+            if order == 'r':
+                key = random.randint(0,1000000000)    
+            tree.insert(key)
+        #    keys.add(key)
+
+        print "num of keys touched during rebalances: ", touchednodes/(1.0*num_vals)
+        print "avg merkle key cost: ", merklecost_key/(1.0 * num_vals)
+        print "avg merkle hash cost: ", merklecost_hash/(1.0 * num_vals)
+        print "avg total merkle cost: ", (merklecost_key+merklecost_hash)/(1.0 * num_vals)
+        # print "extra merkle cost ", merklecost/(1.0 * num_vals)
+        # print "total merkle cost", (touchednodes + merklecost)/(1.0 * num_vals)
+        print "tree height: ", tree.height()
+
+        print ""
+        #for key in range(max(keys)):
+        #    assert (key in tree) == (key in keys)
