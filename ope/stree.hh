@@ -47,6 +47,8 @@ public:
     Stree(OPETable<EncT> * ot, Connect * db);
     ~Stree();
 
+    Stree_node<EncT> * get_root();
+
     /* Inputs: v is path to node where encval should be inserted, nbits is the
      * length of the path; index is 
      * the position where it should be inserted

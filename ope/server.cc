@@ -19,7 +19,7 @@ Server<EncT>::interaction(EncT ciph,
 			  bool & equals) {
 
     cerr << "\n\n Start Interaction\n";
-    TreeNode<EncT> * root = ope_tree.get_root();
+    TreeNode<EncT> * root = ope_tree->get_root();
     assert_s(root != NULL, "root is null");
     TreeNode<EncT> * curr = root;
 
@@ -106,7 +106,7 @@ Server<EncT>::handle_enc(int csock, istringstream & iss, bool do_ins) {
     	if (do_ins) {
     	    // insert in OPE Tree
             // ope_insert also updates ope_table
-    	    ope_tree.insert(ciph, ope_path, nbits, index);
+    	    ope_tree->insert(ciph, ope_path, nbits, index);
 
             table_entry te = ope_table->get(ciph); // ciph must be in ope_table
             ope = opeToStr(te.ope);            
@@ -153,7 +153,7 @@ Server<EncT>::Server() {
     ope_table = new OPETable<EncT>();
     db = new Connect( "localhost", "root", "letmein","cryptdb", 3306);
 
-    ope_tree = (Tree<EncT> *)new Stree<EncT>(ope_table, db);
+    ope_tree = (Tree<EncT> *) new Stree<EncT>(ope_table, db);
 
     sock_cl = create_and_connect(OPE_CLIENT_HOST, OPE_CLIENT_PORT);
     sock_udf = create_and_bind(OPE_SERVER_PORT);

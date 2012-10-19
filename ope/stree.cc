@@ -81,6 +81,13 @@ Stree<EncT>::~Stree(){
     delete root;
 }
 
+template<class EncT>
+Stree_node<EncT> *
+Stree<EncT>::get_root(){
+  return root;
+
+}
+
 /********** Tree rebalancing ******************/
 
 template<class EncT>
