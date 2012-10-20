@@ -4,7 +4,7 @@
 
 using namespace std;
 
-static const int w = 8;
+static const int w = 4;
 
 struct WBNode;
 
@@ -29,6 +29,7 @@ node_size(WBNode * n) {
 static int cost = 0;
 static int existing = 0;
 static int not_balanced = 0;
+static int mcost = 0;
 
 struct WBTree {
     WBNode * root;
@@ -39,6 +40,7 @@ struct WBTree {
 
 static WBNode *
 rot_single_left(WBNode * left, WBNode * right, uint key) {
+    mcost += 2; //extra nodes beside those on main merkle path
     WBNode * res = new  WBNode(new WBNode(left, right->left, key),
 		       right->right, right->key);
     delete(right);
@@ -47,6 +49,7 @@ rot_single_left(WBNode * left, WBNode * right, uint key) {
 
 static WBNode *
 rot_double_left(WBNode * left, WBNode * right, uint key) {
+    mcost += 6; // extra nodes besides those on main merkle path
     WBNode * res = new WBNode(
 	new WBNode(left, right->left->left, key),
 	new WBNode(right->left->right, right->right, right->key),
@@ -59,6 +62,7 @@ rot_double_left(WBNode * left, WBNode * right, uint key) {
 
 static WBNode *
 rot_single_right(WBNode * left, WBNode * right, uint key) {
+    mcost += 2;
     WBNode * res = new WBNode(left->left,
 			      new WBNode(left->right, right, key),
 			      left->key);
@@ -69,6 +73,7 @@ rot_single_right(WBNode * left, WBNode * right, uint key) {
 
 static WBNode *
 rot_double_right(WBNode * left, WBNode * right, uint key) {
+    mcost += 6; //extra nodes besides main path
     WBNode * res = new WBNode(
 	new WBNode(left->left, left->right->left, left->key),
 	new WBNode(left->right->right, right, key),
@@ -255,9 +260,34 @@ insert(WBNode * node, uint key) {
     return node;
 }
 
+
+static uint
+merkle_cost(WBNode * node, uint key) {
+
+    assert_s(node, "not found");
+
+    if (node->key == key) {
+	return 1;
+    }
+    
+    if (node->key < key) {
+	if (node->left) {
+	    return 2 + merkle_cost(node->right, key);
+	} else {
+	    return 1 + merkle_cost(node->right, key);
+	}
+    } else {
+	if (node->right) {
+	    return 2 + merkle_cost(node->left, key);
+	} else {
+	    return 1 + merkle_cost(node->left, key);
+	}
+    }
+}
 void
 WBTree::tree_insert(uint key) {
-    root = insert(root, key);    
+    root = insert(root, key);
+    mcost += merkle_cost(root, key);
 }
 
 static void
@@ -287,6 +317,7 @@ run(vector<uint> vals, uint no_elems) {
 
     WBTree tree;
 
+    mcost = 0;
     cost = 0;
     existing = 0;
     not_balanced = 0;
@@ -303,6 +334,7 @@ run(vector<uint> vals, uint no_elems) {
     cerr << "max_height " << height(tree.root) << "\n";
     cerr << "nodes not balanced " << not_balanced << "\n";
     cerr << "overall cost was " << cost*1.0/(no_elems-existing) << "\n";
+    cerr << "merkle cost was " << mcost * 1.0 /(no_elems - existing) << "\n";
     
     delete_tree(tree.root);
  
