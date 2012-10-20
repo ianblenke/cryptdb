@@ -39,151 +39,6 @@ const int num_elms = num_elements();
 
 
 
-//TODO: delete and insert path should be cached because traversed four times
-
-// The Merkle information at a node N
-// needed for Merkle checks
-typedef struct NodeMerkleInfo {
-
-    // The vector of all children of node N
-    // for each child, key and merkle_hash
-    // for some children, hash may not be set
-    std::vector<std::pair<std::string, std::string>> childr;
-
-    // The position in the vector of children of the node
-    // to check by recomputing the hash;
-    // the node from which the Merkle computation starts
-    // upwards will have a pos_of_child_to_check of -1
-    int pos_of_child_to_check;
-
-    std::string hash() const;
-
-
-} NodeMerkleInfo;
-
-std::ostream& operator<<(std::ostream &out, const NodeMerkleInfo & mi);
-std::istream& operator>>(std::istream &is, NodeMerkleInfo & mi);
-
-
-// Contains Merkle information for each node on the path from a specific node
-// to the root 
-// Each element of the list is the NodeMerkleInfo for one level
-// starting with the originating node and ending with the root
-typedef std::list<NodeMerkleInfo>  MerklePath;
-
-typedef struct MerkleProof {
-    MerklePath path;
-} MerkleProof;
-
-std::ostream& operator<<(std::ostream &out, const MerkleProof & mp);
-std::istream& operator>>(std::istream &is, MerkleProof & mp);
-
-/*
- *  Deletion Merkle Proof
- *
- * -  Delete changes at most the nodes on a path from a node (``deletion path'')
- *    up to the root and one additional node, sibling of one node on this path
- *
- * - There are a few transformations deletion may perform on the tree and we
- * - need to convey these in the proofs
- */
-
-typedef struct ElInfo {
-    std::string key;
-    std::string hash;
-    
-    ElInfo(std::string key_, std::string hash_): key(key_), hash(hash_) {}
-    ElInfo() {}
-} ElInfo;
-
-bool operator==(const ElInfo & e1, const ElInfo & e2);
-
-std::ostream&
-operator<<(std::ostream &out, const ElInfo & ei);
-
-
-typedef struct NodeInfo {
-    std::string key;
-    int pos_in_parent;
-    
-    std::vector<ElInfo> childr;
-
-    std::string hash() const;
-    bool equals(const NodeInfo & node) const;
-
-    NodeInfo() {
-	pos_in_parent = -1;
-	key = "";
-	childr.clear();
-    }
-
-    uint key_count() {
-	assert_s(childr.size() >= 1, "invalid childr size");
-	return childr.size() - 1;
-    }
-
-} NodeInfo;
-
-std::ostream& operator<<(std::ostream &out, const NodeInfo & node);
-
-// Information needed about a delete on a level
-typedef struct DelInfo {
-    NodeInfo node;
-    
-    bool has_left_sib;
-    NodeInfo left_sib;
-
-    bool has_right_sib;
-    NodeInfo right_sib;
-
-    // info added by client during verification
-    bool this_was_del;
-    bool right_was_del;
-    
-    DelInfo() {
-	has_left_sib = false;
-	has_right_sib = false;
-	this_was_del = false;
-	right_was_del = false;
-    }
-} DelInfo;
-
-bool
-equals(const DelInfo & sim, const DelInfo & given);
-
-std::ostream&
-operator<<(std::ostream &out, const DelInfo & di);
-
-typedef std::vector<DelInfo> State;
-
-std::ostream&
-operator<<(std::ostream& out, const State & st);
-
-void
-record_state(Node * node, State & state);
-
-// Merkle proof that a certain item was deleted
-// ``old'' information in DelInfo is before delete
-// ``new'' is after delete
-typedef struct UpdateMerkleProof {
-    // vector is from root to leaf
-    State st_before; 
-    State st_after; 
-    
-    std::string old_hash() const;
-    bool check_del_change(std::string key_to_del) const;
-    bool check_ins_change(std::string key_to_ins) const;
-    std::string new_hash() const;
-
-} UpdateMerkleProof;
-
-std::ostream& operator<<(std::ostream &out, const UpdateMerkleProof & dmp);
-std::istream& operator>>(std::istream &is, UpdateMerkleProof & dmp);
-
-
-std::ostream& operator<<(std::ostream &out, const UpdateMerkleProof & imp);
-std::istream& operator>>(std::istream &is, UpdateMerkleProof & imp);
-
 class Node {
 
     
@@ -479,8 +334,11 @@ public:
 
 }; 
 
-//TODO: clean these myprint vs << functions for gdb
-//for gdb, could not figure out how to call template funcs from gdb
+
+
+// TODO: clean these myprint vs << functions for gdb
+// functions for my gdb macro,
+// could not figure out how to call template funcs from gdb
 const char *
 myprint(const UpdateMerkleProof & v);
 const char *
@@ -493,3 +351,4 @@ const char *
 myprint(const Elem & v);
 const char *
 myprint(const Node & v);
+
