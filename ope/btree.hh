@@ -9,6 +9,7 @@
 #include <vector>
 #include <util/util.hh>
 #include <crypto/sha.hh>
+#include <ope/merkle.hh>
 
 // benchmarking
 uint Merklecost = 0;
@@ -24,165 +25,8 @@ class RootTracker;
 class Node;
 
 
-/**  Merkle data structures **/
-
-// Represents one element: its key and the hash of its subtree
-struct ElInfo {
-    std::string key;
-    std::string hash;
-    
-    ElInfo(std::string key_, std::string hash_): key(key_), hash(hash_) {}
-    ElInfo() {}
-};
-
-bool operator==(const ElInfo & e1, const ElInfo & e2);
-
-std::ostream&
-operator<<(std::ostream &out, const ElInfo & ei);
-
-
-// Records information at a B tree node; key of node, children, etc.
-struct NodeInfo {
-    std::string key;
-    int pos_in_parent;
-    
-    std::vector<ElInfo> childr;
-
-    std::string hash() const;
-    bool equals(const NodeInfo & node) const;
-
-    NodeInfo() {
-	pos_in_parent = -1;
-	key = "";
-	childr.clear();
-    }
-
-    uint key_count() {
-	assert_s(childr.size() >= 1, "invalid childr size");
-	return childr.size() - 1;
-    }
-
-};
-
-std::ostream& operator<<(std::ostream &out, const NodeInfo & node);
-
-// a merkle path from a leaf node to root
-typedef std::list<NodeInfo> MerklePath;
-
-    
-// Information needed about a delete on a level
-struct DelInfo  {
-    
-    bool has_left_sib;
-    NodeInfo left_sib;
-
-    bool has_right_sib;
-    NodeInfo right_sib;
-
-    // info added by client during verification
-    bool this_was_del;
-    bool right_was_del;
-    
-    DelInfo() {
-	has_left_sib = false;
-	has_right_sib = false;
-	this_was_del = false;
-	right_was_del = false;
-    }
-
-    // marshall this
-    std::ostream&
-    operator>>(std::ostream &out);
-
-    std::ostream&
-    operator<<(std::ostream &out);
-
-    // pretty print
-    std::string
-    pretty();
-    
-};
-
-typedef std::vector<DelInfo> State;
-
-std::ostream&
-operator<<(std::ostream& out, const State & st);
-    
-bool
-equals(const DelInfo & sim, const DelInfo & given);
-
-
-void
-record_state(Node * node, State & state);
-
-
-/*
- *  Deletion Merkle Proof
- *
- * -  Delete changes at most the nodes on a path from a node (``deletion path'')
- *    up to the root and one additional node, sibling of one node on this path
- *
- * - There are a few transformations deletion may perform on the tree and we
- * - need to convey these in the proofs
- *
- * Insertion Merkle Proof
- *
- * - Changes only the nodes on a path from a node up to root
- */
-
-
-// Merkle proof that a certain item was deleted
-// ``old'' information in DelInfo is before delete/insert
-// ``new'' is after delete/insert
-// for search, only st_before is set
-struct MerkleProof {
-    // vector is from root to leaf
-    State st_before; 
-    State st_after; 
-    
-    std::string old_hash() const;
-    bool check_del_change(std::string key_to_del) const;
-    bool check_ins_change(std::string key_to_ins) const;
-    std::string new_hash() const;
-
-};
-
-std::ostream& operator<<(std::ostream &out, const MerkleProof & dmp);
-std::istream& operator>>(std::istream &is, MerkleProof & dmp);
-
-
-// returns the information needed to check the validity of node n
-MerklePath
-node_merkle_proof(Node * n);
-
-
-// verifies that the merkle information corresponding to a node matches the
-// overall root merkle hash
-bool
-verify_merkle_proof(const MerkleProof & proof, const std::string & merkle_root);
-
-//verifies the merkle proof for deletion and returns true if it holds, and it
-//also sets new_merkle_root accordingly
-bool
-verify_del_merkle_proof(const MerkleProof & p,
-			std::string del_target,
-			const std::string & merkle_root,
-			std::string & new_merkle_root);
-
-
-bool
-verify_ins_merkle_proof(const MerkleProof & p,
-			std::string ins_target,
-			const std::string & merkle_root,
-			std::string & new_merkle_root);
-
-
-/////////////////////////////////////////////////////////////////////////////////////
-
-
-
-
 /****** Parameters **********/
+
 const int invalid_index = -1;
 
 const unsigned int max_elements = 4;  // max elements in a node
@@ -202,16 +46,7 @@ class Node {
     
 public:
 
-    Elem& search (Elem& desired, Node*& last_visited);
-
-    bool tree_insert (Elem& element, MerkleProof &p);
-
-    bool tree_delete(Elem & target, MerkleProof & m);
-
-    //cleaning up
-    int delete_all_subtrees();
-
-    Node* find_root();
+    Node (RootTracker& root_track);
 
     // to return a reference when a search fails.
     static Elem m_failure;
@@ -219,21 +54,25 @@ public:
     // the merkle hash of this node
     std::string merkle_hash;
  
-    /********************/
-    
     // the root of the tree may change.  this attribute keeps it accessible.
     RootTracker& m_root;
 
+    
+    Node* find_root();
+    Elem& search (Elem& desired, Node*& last_visited);
+    bool tree_insert (Elem& element, MerkleProof &p);
+    bool tree_delete(Elem & target, MerkleProof & m);
+
+    //cleaning up
+    int delete_all_subtrees();
+
     Elem& operator[] (int i) { return m_vector[i]; }
     // node cannot be instantiated without a root tracker
-
-    Node (RootTracker& root_track);
 
     void dump(bool recursive = true);
     void in_order_traverse(std::list<std::string> & res);
     static uint minimum_keys ();
     
-
 protected:
 
     // locality of reference, beneficial to effective cache utilization,
@@ -463,6 +302,42 @@ public:
 };
 
 
+
+
+/**  Merkle Proof and verification **/
+
+
+void
+record_state(Node * node, State & state);
+
+
+// returns the information needed to check the validity of node n
+MerklePath
+node_merkle_proof(Node * n);
+
+
+// verifies that the merkle information corresponding to a node matches the
+// overall root merkle hash
+bool
+verify_merkle_proof(const MerkleProof & proof, const std::string & merkle_root);
+
+//verifies the merkle proof for deletion and returns true if it holds, and it
+//also sets new_merkle_root accordingly
+bool
+verify_del_merkle_proof(const MerkleProof & p,
+			std::string del_target,
+			const std::string & merkle_root,
+			std::string & new_merkle_root);
+
+
+bool
+verify_ins_merkle_proof(const MerkleProof & p,
+			std::string ins_target,
+			const std::string & merkle_root,
+			std::string & new_merkle_root);
+
+
+/////////////////////////////////////////////////////////////////////////////////////
 
 
 
