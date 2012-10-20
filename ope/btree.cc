@@ -50,11 +50,20 @@ void Element<payload>::dump () {
 
 uint
 Node::Merkle_cost() {
+
+    uint mycost = m_count; // no of keys
+
+    //add no of hashes
+    for (uint i = 0 ; i < m_count; i++) {
+	if (m_vector[i].mp_subtree != NULL) {
+	    mycost++;
+	}
+    }
+
     if (!mp_parent) {
-	return m_count;
+	return mycost;
     } else {
-	uint cost = mp_parent->m_count;
-	return cost + mp_parent->Merkle_cost();
+	return mycost + mp_parent->Merkle_cost();
     }
 }
 
@@ -1562,7 +1571,6 @@ void Node::update_merkle_upward() {
 	mp_parent->update_merkle_upward();
     }
 }
- 
 
 bool Node::tree_insert(Elem& element, UpdateMerkleProof & p) {
 
@@ -1576,6 +1584,11 @@ bool Node::tree_insert(Elem& element, UpdateMerkleProof & p) {
     // last_visited_ptr is the start point for the proof
     record_state(last_visited_ptr, p.st_before);
     // -----------------
+
+    // ---- bench ----
+    // insert happens at last_visited_ptr
+    Merklecost += last_visited_ptr->Merkle_cost();
+    //---------------
     
     // insert the element in last_visited_ptr if this node is not fulls
     if (last_visited_ptr->vector_insert(element)) {
