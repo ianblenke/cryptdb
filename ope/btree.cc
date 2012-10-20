@@ -461,22 +461,6 @@ Element<payload>::get_subtree_merkle() {
     }
 }
 
-//TODO: remove this and use only NodeInfo
-NodeMerkleInfo
-Node::extract_NodeMerkleInfo(int pos) {
-    NodeMerkleInfo mi = NodeMerkleInfo();
-    mi.childr.resize(m_count);
-    mi.pos_of_child_to_check = pos;
-
-    for (uint i = 0; i < m_count; i++) {
-	Elem e = m_vector[i];
-	mi.childr[i] = make_pair(e.m_key, e.get_subtree_merkle());
-    }
-    return mi;
-}
-
-
-
 // notextract is a position for which we should
 // not extract the hash because it may have changed from the
 // time we want to snaposhot
@@ -518,111 +502,17 @@ Node::index_in_parent() {
 }
 
 MerklePath
-get_merkle_path(Node * curr_node) {
-
-    MerklePath path = MerklePath();
-
-    // TODO: is find_root efficient?, should be constant work
-
-    int pos = -1;
-
-    while (true) {
-	path.push_back(curr_node->extract_NodeMerkleInfo(pos));
-
-	if (curr_node == curr_node->find_root()) {
-	    break;
-	}
-	pos = curr_node->index_in_parent();
-	curr_node = curr_node->mp_parent;
+node_merkle_proof(Node * start_node) {
+    MerklePath p;
+    Node * node = start_node;
+    
+    while (node) {
+	p.push_back(node->extract_NodeInfo());
+	node = node->mp_parent;
     }
 
-    return path;
-}
-
-MerkleProof
-get_search_merkle_proof(Node * curr_node) {
-    MerkleProof p = MerkleProof();
-    p.path = get_merkle_path(curr_node);
     return p;
 }
-
-std::ostream&
-operator<<(std::ostream &out, const NodeMerkleInfo & mi) {
-    out << " children( ";
-    for (int i=0; i<(int) mi.childr.size(); i++) {
-    std::pair<std::string,std::string> c = mi.childr[i];
-    if(c.first=="") c.first="null_key";
-    if(c.second=="") c.second="null_key";
-    out << c.first << " " << c.second << " ";
-    }
-    out << "; ";
-    out << mi.pos_of_child_to_check;
-
-    return out;
-}
-
-std::istream&
-operator>>(std::istream &is, NodeMerkleInfo & mi) {
-    std::string a;   
-    std::string b;
-    bool flag=false;
-    is>>a;
-    while(!is.eof()){
-        is>>a;
-        //cout<<a<<endl;
-        if(a==";") {
-            flag=true;
-            continue;
-        }
-        if(!flag){
-            is>>b;
-            if(a=="null_key") a="";
-            if(b=="null_key") b="";
-            //cout<<b<<endl;
-            mi.childr.push_back(make_pair(a,b));
-        }else{
-            mi.pos_of_child_to_check=atoi(a.c_str());
-            break;
-        }
-
-    }
-    return is;
-}
-
-std::ostream&
-operator<<(std::ostream &out, const MerkleProof & mp){
-    std::list<NodeMerkleInfo>::const_iterator it;
-    for(it=mp.path.begin() ; it!=mp.path.end(); it++){
-        NodeMerkleInfo nmi = *it;
-        out<<nmi<<" | ";
-    }
-    out<<"endmp";
-    return out;
-
-}
-
-std::istream&
-operator>>(std::istream &is, MerkleProof & mp){
-    std::stringstream s;
-    std::string a;   
-    while(!is.eof()){
-        is>>a;
-        if(a=="endmp"){
-            break;
-        }else if(a=="|") {
-            NodeMerkleInfo nmi;
-            s>>nmi;
-            mp.path.push_back(nmi);
-            s.str("");
-            s.clear();
-        }else{
-            s<<a+" ";
-        }
-
-    }   
-    return is;
-}
-
 
 ostream&
 operator<<(ostream& out, const State & st) {
@@ -633,7 +523,7 @@ operator<<(ostream& out, const State & st) {
     return out;
 }
 std::ostream&
-operator<<(std::ostream &out, const UpdateMerkleProof & dmp){
+operator<<(std::ostream &out, const MerkleProof & dmp){
 
     out << "== DelProof:\n before: " << dmp.st_before << "\n after: " << dmp.st_after << "\n";
 
@@ -648,7 +538,7 @@ operator<<(std::ostream &out, const UpdateMerkleProof & dmp){
 }
 
 std::istream&
-operator>>(std::istream &is, UpdateMerkleProof & dmp){
+operator>>(std::istream &is, MerkleProof & dmp){
 /*    std::stringstream s;
     std::string a;   
     int state=0;
@@ -733,33 +623,31 @@ NodeInfo::hash() const {
 
 
 static bool
-Merkle_path_hash(const MerkleProof & proof, string & hash){
-    assert_s(proof.path.begin() != proof.path.end(), "proof is empty");
-    
-    NodeMerkleInfo origin_node = *(proof.path.begin());
+Merkle_path_hash(const MerklePath & proof, string & root_hash){
 
-    hash = "";
+    hash =  "";
 
-    for (auto mi : proof.path) {
-
-	if (mi.pos_of_child_to_check >= 0) {
-	    assert_s(hash.size() > 0, "position of child to check is >= 0 for origin node");
-            // check that hash at pos_of_child_to_check corresponds to the one calc
-	    // so far
-	    if (mi.childr.at(mi.pos_of_child_to_check).second != hash) {
-		cerr << " hash at pos of child does not match has so far \n";
+    for (auto ni = proof.begin(); ni != proof.end(); ni++) {
+	hash = ni->hash();
+	if (ni->pos_in_parent >= 0) {
+	    auto parent = ni + 1;
+	    if (parent->childr.hash != hash) {
+		cerr << "child hash does not verify in parent\n";
 		return false;
 	    }
 	}
-
-	// compute parent's hash
-	hash = mi.hash();
     }
+
+    if (hash != root_hash) {
+	cerr << "root hash does not verify\n";
+	return false;
+    }
+
     return true;
 }
 
 bool
-verify_merkle_proof(const MerkleProof & proof, const string & merkle_root) {
+verify_merkle_proof(const MerklePath & proof, const string & merkle_root) {
 
   
     // check that the resulting hash matches the root Merkle hash
@@ -778,7 +666,7 @@ verify_merkle_proof(const MerkleProof & proof, const string & merkle_root) {
 
 static bool
 verify_update_merkle_proof(bool is_del,
-			   const UpdateMerkleProof & proof,
+			   const MerkleProof & proof,
 			   string key_target,
 			   const string & old_merkle_root,
 			   string & new_merkle_root) {
@@ -803,7 +691,7 @@ verify_update_merkle_proof(bool is_del,
     return true;
 }
 
-bool verify_ins_merkle_proof(const UpdateMerkleProof & proof,
+bool verify_ins_merkle_proof(const MerkleProof & proof,
 			string ins_target,
 			const string & old_merkle_root,
 			string & new_merkle_root) {
@@ -812,7 +700,7 @@ bool verify_ins_merkle_proof(const UpdateMerkleProof & proof,
 }
 
 bool
-verify_del_merkle_proof(const UpdateMerkleProof & proof,
+verify_del_merkle_proof(const MerkleProof & proof,
 			string del_target,
 			const string & old_merkle_root,
 			string & new_merkle_root) {
@@ -868,7 +756,7 @@ hash_match(const DelInfo & child, const DelInfo &  parent) {
     }
     
 }
-string UpdateMerkleProof::old_hash() const {
+string MerkleProof::old_hash() const {
     
     // first level
     auto it = st_before.begin();
@@ -1157,7 +1045,7 @@ smallest_in_subtree(State & st, int index) {
 // for gdb -- could not figure out how to call template funcs from
 // gdb, so the below has repetitions
 const char *
-myprint(const UpdateMerkleProof & v) {
+myprint(const MerkleProof & v) {
     stringstream out;
     out << v;
     return out.str().c_str();
@@ -1467,7 +1355,7 @@ sim_insert(State & st, ElInfo & ins_ei, int index) {
     on st_before. It turns out this is much simpler
     than trying to check if every operation the server
     did in the deletion was correct. */
-bool UpdateMerkleProof::check_ins_change(std::string ins_target) const {
+bool MerkleProof::check_ins_change(std::string ins_target) const {
 
     assert_s(false, "check ins change not implemented fully");
     /*   State st_sim = st_before;
@@ -1492,7 +1380,7 @@ bool UpdateMerkleProof::check_ins_change(std::string ins_target) const {
     on st_before. It turns out this is much simpler
     than trying to check if every operation the server
     did in the deletion was correct. */
-bool UpdateMerkleProof::check_del_change(std::string del_target) const {
+bool MerkleProof::check_del_change(std::string del_target) const {
    
     State st_sim = st_before;
     
@@ -1511,7 +1399,7 @@ bool UpdateMerkleProof::check_del_change(std::string del_target) const {
     return true;
 }
 
-string UpdateMerkleProof::new_hash() const {
+string MerkleProof::new_hash() const {
 
     if (st_after.size() == 0) {
 	return hash_empty_node;
@@ -1572,7 +1460,7 @@ void Node::update_merkle_upward() {
     }
 }
 
-bool Node::tree_insert(Elem& element, UpdateMerkleProof & p) {
+bool Node::tree_insert(Elem& element, MerkleProof & p) {
 
     Node* last_visited_ptr = this;
 
@@ -1649,7 +1537,7 @@ record_state(Node * node, State & state) {
 }
 
 bool
-Node::tree_delete(Elem & target, UpdateMerkleProof & proof) {
+Node::tree_delete(Elem & target, MerkleProof & proof) {
 
     if (DEBUG_PROOF) { cerr << "\n\n start delete\n";}
     // first find the node contain the Elem instance with the given key
@@ -1709,7 +1597,7 @@ Node::tree_delete(Elem & target, UpdateMerkleProof & proof) {
 }
 
 bool
-Node::tree_delete_help (Elem& target, UpdateMerkleProof & proof, Node * & start_node, Node * node) {
+Node::tree_delete_help (Elem& target, MerkleProof & proof, Node * & start_node, Node * node) {
 
 // target is just a package for the key value.  the reference does not
 // provide the address of the Elem instance to be deleted.
