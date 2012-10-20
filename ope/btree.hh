@@ -10,6 +10,8 @@
 #include <util/util.hh>
 #include <crypto/sha.hh>
 
+// benchmarking
+uint Merklecost = 0;
 
 
 /** Data Structures **/
@@ -21,6 +23,21 @@ class RootTracker;
 class Node;
 
 #define DEBUG_PROOF false
+
+/****** Parameters **********/
+const int invalid_index = -1;
+
+const unsigned int max_elements = 4;  // max elements in a node
+
+// size limit for the array in a vector object.  best performance was
+// at 800 bytes.
+const unsigned int max_array_bytes = 800;
+
+int num_elements();
+
+const int num_elms = num_elements();
+
+
 
 //TODO: delete and insert path should be cached because traversed four times
 
@@ -310,22 +327,10 @@ protected:
 };
 
 
-/** Parameters **/
 
 Node* invalid_ptr = reinterpret_cast<Node*> (-1);
 
 Node* null_ptr = reinterpret_cast<Node*> (0);
-
-const int invalid_index = -1;
-
-const unsigned int max_elements = 4;  // max elements in a node
-
-// size limit for the array in a vector object.  best performance was
-// at 800 bytes.
-const unsigned int max_array_bytes = 800;
-
-int num_elements();
-const int num_elms = num_elements();
 
 
 std::ostream &

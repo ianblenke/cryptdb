@@ -1,28 +1,15 @@
 /*
- * Tests search trees, AVL, scapegoat, binary, nway.
+ * Tests search trees.
  */
 
-#include "ope/btree.hh"
+
 #include <sstream>
 #include <vector>
 #include <algorithm>
 #include <util/util.hh>
+#include <ope/btree.hh>
 
 using namespace std;
-
-/*
-  static void
-  test_help(vector<uint64_t> & vals, uint no_test_vals, uint test_freq) {
-
-  AVLClass tree;
-    
-  uint counter = 0;
-    
-  for (auto val : vals) {
-  tree.insert(val);
-  }
-  }
-*/
 
 template<class T>
 static bool
@@ -238,7 +225,7 @@ public:
 	
 	int total_cost= 0;
 	for (uint i = (uint)pos; i < node->m_count; i++) {
-	    total_cost = 1 + total_cost;
+	    total_cost = 1 + total_cost; // add keys at current node
 	    if (node->m_vector[i].mp_subtree != NULL) {
 		total_cost = total_cost + cost(node->m_vector[i].mp_subtree, 0);
 	    }
@@ -250,7 +237,7 @@ public:
     // compute the cost of an insert in terms of elements that changed
     // their ope encoding
     static int
-    cost(UpdateMerkleProof & p, RootTracker & tracker, uint & merkle_cost) {
+    cost(UpdateMerkleProof & p, RootTracker & tracker) {
 
 	//check first if root grew
 	if (p.st_before.size() == p.st_after.size() -1 ) {
@@ -268,7 +255,6 @@ public:
 		desired.m_key = new_key;
 		Node * visited;
 		tracker.get_root()->search(desired, visited);
-		merkle_cost = visited->Merkle_cost();
 		return cost(visited, pos);
 	    }
 	    
@@ -293,8 +279,9 @@ public:
 	tracker.set_root(null_ptr, root_ptr);
 
 	Elem elem;
-	uint total_cost = 0;
-	uint total_merkle_cost = 0;
+	extern uint Merklecost;
+	Merklecost = 0;
+	uint ope_cost = 0;
 	uint eff_elems = 0;
 	
 	//insert values in tree
@@ -304,24 +291,18 @@ public:
 	    UpdateMerkleProof p;
 	    bool b = tracker.get_root()->tree_insert(elem, p);
 	    if (b) {
-		uint merkle_cost;
-		uint thiscost =  cost(p, tracker, merkle_cost);
-		total_merkle_cost += merkle_cost;
-		total_cost += thiscost;
-		//	cerr << "cost for this ins " << thiscost << "; ";
-		eff_elems ++;
+		eff_elems++;
+		ope_cost += cost(p, tracker);
 	    }
 	}
-
-	root_ptr->delete_all_subtrees();
-	delete root_ptr;
-
-	cerr << "total cost is " << total_cost << " for " << no_elems << " inserts from zero " <<
+	
+	cerr << "ope change cost " << ope_cost << " for " << no_elems << " inserts from zero " <<
 	    " and effective elements " << eff_elems << "\n";
-	cerr << "RATIO " << total_cost*1.0/eff_elems << "\n";
-	cerr << "total Merkle cost is " << total_merkle_cost*1.0/eff_elems << "\n";
+	cerr << "RATIO " << ope_cost*1.0/eff_elems << "\n";
+	cerr << "total Merkle cost is " << Merklecost*1.0/eff_elems << "\n";
 	cerr << "max height was " << tracker.get_root()->max_height() << "\n";
-	cerr << "minimum keys " << Node::minimum_keys() << "\n";
+	cerr << "minimum keys " << Node::minimum_keys() << " max keys " << max_elements << "\n";
+	
 
     }
 
@@ -332,16 +313,20 @@ public:
 // -- tests deletion
 // -- checks that Merkle hash tree is overall correct with some period
     static void
+    testBMerkleTree(int argc, char ** argv) {
 
-    testBMerkleTree() {
-    
-	uint no_elems = 100000;
+	if (argc != 2) {
+	    cerr << "usage: ./test_searchtree num_nodes_to_insert \n";
+	    return;
+	}
+	
+	uint no_elems = atoi(argv[1]);
 
 
 	vector<string> vals;
 	srand( time(NULL));
 
-	cerr << "- " << no_elems << " values in random order: \n";
+	cerr << "\n\n- " << no_elems << " values in random order: \n";
 	// test on random values
 	for(uint i=0; i< no_elems; i++){
 	    stringstream s;
@@ -349,16 +334,16 @@ public:
 	    vals.push_back(s.str());
 	}
 
-//	test_B_complexity(vals, no_elems);
+	test_B_complexity(vals, no_elems);
 
 	// test on values in increasing order
 	sort(vals.begin(), vals.end());
-	cerr << "- " << no_elems << " values in increasing order: \n";
+	cerr << "\n\n- " << no_elems << " values in increasing order: \n";
 	test_B_complexity(vals, no_elems); 
 
 	// test on values in decreasing order
 	reverse(vals.begin(), vals.end());
-	cerr << "- " << no_elems << " values in decreasing order: \n";
+	cerr << "\n\n- " << no_elems << " values in decreasing order: \n";
 	test_B_complexity(vals, no_elems);
 
 	cerr << "test B complexity finished OK.\n";
@@ -473,7 +458,7 @@ public:
 
 int main(int argc, char ** argv)
 {
-    Test::testBMerkleTree();
+    Test::testBMerkleTree(argc, argv);
     // Test::testMerkleProof();
 
 }
