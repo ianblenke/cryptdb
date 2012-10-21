@@ -7,14 +7,10 @@
 #include <iostream>
 #include <string>
 #include <vector>
-#include <util/util.hh>
-#include <crypto/sha.hh>
 #include <ope/merkle.hh>
 
 // benchmarking
 uint Merklecost = 0;
-
-#define DEBUG_PROOF false
 
 /** Forwarding Data Structures **/
 
@@ -23,21 +19,6 @@ typedef Element<std::string> Elem;
 
 class RootTracker;
 class Node;
-
-
-/****** Parameters **********/
-
-const int invalid_index = -1;
-
-const unsigned int max_elements = 4;  // max elements in a node
-
-// size limit for the array in a vector object.  best performance was
-// at 800 bytes.
-const unsigned int max_array_bytes = 800;
-
-int num_elements();
-
-const int num_elms = num_elements();
 
 
 
@@ -60,8 +41,8 @@ public:
     
     Node* find_root();
     Elem& search (Elem& desired, Node*& last_visited);
-    bool tree_insert (Elem& element, MerkleProof &p);
-    bool tree_delete(Elem & target, MerkleProof & m);
+    bool tree_insert (Elem& element, UpdateMerkleProof &p);
+    bool tree_delete(Elem & target, UpdateMerkleProof & m);
 
     //cleaning up
     int delete_all_subtrees();
@@ -71,7 +52,6 @@ public:
 
     void dump(bool recursive = true);
     void in_order_traverse(std::list<std::string> & res);
-    static uint minimum_keys ();
     
 protected:
 
@@ -119,7 +99,7 @@ protected:
     bool merge_into_root ();
 
     bool
-    tree_delete_help (Elem& target, MerkleProof & proof, Node* & start_node, Node * node);
+    tree_delete_help (Elem& target, UpdateMerkleProof & proof, Node* & start_node, Node * node);
 
    
 
@@ -145,7 +125,7 @@ protected:
 
     NodeInfo extract_NodeInfo(int notextract);
 
-    void finish_del(MerkleProof & proof);
+    void finish_del(UpdateMerkleProof & proof);
 
     // returns the number of nodes to be included in a Merkle proof of insertion
     uint Merkle_cost();
@@ -156,14 +136,10 @@ protected:
     uint max_height();    
     void max_height_help(uint height, uint & max_height);
 
-	
-    
-
-    /****************************/
 
     // Friends
     friend class Test;
-    friend MerklePath node_merkle_proof(Node * n);
+    friend MerkleProof node_merkle_proof(Node * n);
     friend std::ostream &
     operator<<(std::ostream & out, const Node & n);
     friend void record_state(Node * node, State & state);
@@ -217,9 +193,9 @@ public:
     }
 
     Element () { mp_subtree = null_ptr; }
-
-    void dump(); 
-
+    Element (std::string key);
+    void dump();
+    
     std::string m_key;
     Node* mp_subtree;
     bool has_subtree() const {return valid() && (mp_subtree != null_ptr) && mp_subtree; }
@@ -231,11 +207,10 @@ private:
     template<class EncT> friend class tree;
     
     //std::string m_key;
-    static const uint key_size = 20; //bytes of max size of key_size
+  
     payload m_payload;
    
-
-
+    
     /***********************
      **** Merkle-related ***/
 
@@ -245,7 +220,6 @@ private:
     
     std::string repr(); // converts to string the relevant information for Merkle
 		      // hash of this node
-    static const uint repr_size = sha256::hashsize + key_size; //bytes
 
     /*********************/
 
@@ -312,7 +286,7 @@ record_state(Node * node, State & state);
 
 
 // returns the information needed to check the validity of node n
-MerklePath
+MerkleProof
 node_merkle_proof(Node * n);
 
 
@@ -324,14 +298,14 @@ verify_merkle_proof(const MerkleProof & proof, const std::string & merkle_root);
 //verifies the merkle proof for deletion and returns true if it holds, and it
 //also sets new_merkle_root accordingly
 bool
-verify_del_merkle_proof(const MerkleProof & p,
+verify_del_merkle_proof(const UpdateMerkleProof & p,
 			std::string del_target,
 			const std::string & merkle_root,
 			std::string & new_merkle_root);
 
 
 bool
-verify_ins_merkle_proof(const MerkleProof & p,
+verify_ins_merkle_proof(const UpdateMerkleProof & p,
 			std::string ins_target,
 			const std::string & merkle_root,
 			std::string & new_merkle_root);
@@ -351,6 +325,8 @@ verify_ins_merkle_proof(const MerkleProof & p,
 // could not figure out how to call template funcs from gdb
 const char *
 myprint(const MerkleProof & v);
+const char *
+myprint(const UpdateMerkleProof & v);
 const char *
 myprint(const NodeInfo & v);
 const char *

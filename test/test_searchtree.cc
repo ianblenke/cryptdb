@@ -110,8 +110,8 @@ public:
 	check_order_and_values(vals, treeorder);
 
 	uint max_height = tracker.get_root()->max_height();
-	cout << " -- max height of tree is " << max_height << " fanout " << max_elements << "\n";
-	check_good_height(max_height, no_elems, max_elements);
+	cout << " -- max height of tree is " << max_height << " fanout " << b_max_keys << "\n";
+	check_good_height(max_height, no_elems, b_max_keys);
 
 	tracker.get_root()->check_merkle_tree();
 
@@ -192,7 +192,7 @@ public:
 	treeorder.clear();
 	tracker.get_root()->in_order_traverse(treeorder); 
 	check_order(treeorder);
-	check_good_height(tracker.get_root()->max_height(), no_elems, max_elements);
+	check_good_height(tracker.get_root()->max_height(), no_elems, b_max_keys);
 
     }
 
@@ -301,7 +301,7 @@ public:
 	cerr << "RATIO " << ope_cost*1.0/eff_elems << "\n";
 	cerr << "total Merkle cost is " << Merklecost*1.0/eff_elems << "\n";
 	cerr << "max height was " << tracker.get_root()->max_height() << "\n";
-	cerr << "minimum keys " << Node::minimum_keys() << " max keys " << max_elements << "\n";
+	cerr << "minimum keys " << b_min_keys << " max keys " << b_max_keys << "\n";
 	
 
     }
@@ -408,7 +408,7 @@ public:
 	    Elem& result = tracker.get_root()->search(desired, last);
 	    assert_s(desired.m_key == result.m_key, "could not find val that should be there");
 
-	    MerkleProof proof = get_search_merkle_proof(last);
+	    MerkleProof proof = node_merkle_proof(last);
 	    assert_s(verify_merkle_proof(proof, merkle_root), "failed to verify merkle proof");
 
 	}
@@ -429,7 +429,7 @@ public:
 	    Elem& result = tracker.get_root()->search(desired, last);
 	    assert_s(desired.m_key == result.m_key, "could not find val that should be there");
 
-	    MerkleProof proof = get_search_merkle_proof(last);
+	    MerkleProof proof = node_merkle_proof(last);
 	    assert_s(!verify_merkle_proof(proof, bad_merkle_root), "verified bad merkle proof");
 
 	}
@@ -444,7 +444,7 @@ public:
 
 	    //change an element in last
 	    change(last); 
-	    MerkleProof proof = get_search_merkle_proof(last);
+	    MerkleProof proof = node_merkle_proof(last);
 	    assert_s(!verify_merkle_proof(proof, bad_merkle_root), "verified bad merkle proof");
 
 	}
