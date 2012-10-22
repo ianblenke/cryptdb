@@ -134,15 +134,9 @@ Node::Node(RootTracker& root_track)  : m_root(root_track) {
 
  
 
-Node* Node::find_root () {
+Node* Node::get_root () {
 
-    Node* current = this;
-
-    while (current->mp_parent) {
-
-        current = current->mp_parent;
-    }
-    return current;
+    return m_root.get_root();
 
 } 
 
@@ -416,7 +410,7 @@ NodeInfo
 Node::extract_NodeInfo(int notextract = -1) {
     NodeInfo ni = NodeInfo();
 
-    if (this == find_root()) {
+    if (this == get_root()) {
 	ni.key = "";
 	ni.pos_in_parent = invalid_index;
     } else {
@@ -442,7 +436,7 @@ Node::extract_NodeInfo(int notextract = -1) {
 // or negative if this does not have a parent (is root)
 int
 Node::index_in_parent() {
-    if (this == find_root()) {
+    if (this == get_root()) {
 	    return -1;
     } else {
 	return mp_parent->index_of_child(this);
@@ -635,7 +629,7 @@ void Node::update_merkle() {
 void Node::update_merkle_upward() {
     update_merkle();
     
-    if (this != find_root()) {
+    if (this != get_root()) {
 	//update siblings
 	int parent_index_this;
 	Node * right = right_sibling(parent_index_this);
@@ -650,6 +644,42 @@ void Node::update_merkle_upward() {
     }
 }
 
+bool Node::tree_insert_help(Elem & element, UpdateMerkleProof & p) {
+    // ---- Merkle -----
+    // last_visited_ptr is the start point for the proof
+    record_state(this, p.st_before);
+    // -----------------
+
+    // ---- bench ----
+    // insert happens at last_visited_ptr
+    Merklecost += Merkle_cost();
+    //---------------
+    
+    // insert the element in last_visited_ptr if this node is not fulls
+    if (vector_insert(element)) {
+	cerr << "basic insert\n";
+        // -----Merkle ----
+	// done making the changes for insert so update merkle hash and record
+	// new state
+	update_merkle_upward();
+	record_state(this, p.st_after);
+	// ----------------
+	
+        return true;
+    }
+
+    //last_visited_ptr node is full so we will need to split
+    bool r = split_insert(element);
+    cerr << "split_insert\n";
+    // -----Merkle ----
+    // done making the changes for insert so update merkle hash and record
+    // new state
+    update_merkle_upward();
+    record_state(this, p.st_after);
+    // ----------------
+
+    return r;  
+}
 bool Node::tree_insert(Elem& element, UpdateMerkleProof & p) {
 
     Node* last_visited_ptr = this;
@@ -659,40 +689,8 @@ bool Node::tree_insert(Elem& element, UpdateMerkleProof & p) {
         return false;
     }
 
-    // ---- Merkle -----
-    // last_visited_ptr is the start point for the proof
-    record_state(last_visited_ptr, p.st_before);
-    // -----------------
+    return last_visited_ptr->tree_insert_help(element, p);
 
-    // ---- bench ----
-    // insert happens at last_visited_ptr
-    Merklecost += last_visited_ptr->Merkle_cost();
-    //---------------
-    
-    // insert the element in last_visited_ptr if this node is not fulls
-    if (last_visited_ptr->vector_insert(element)) {
-	cerr << "basic insert\n";
-        // -----Merkle ----
-	// done making the changes for insert so update merkle hash and record
-	// new state
-	last_visited_ptr->update_merkle_upward();
-	record_state(last_visited_ptr, p.st_after);
-	// ----------------
-	
-        return true;
-    }
-
-    //last_visited_ptr node is full so we will need to split
-    bool r = last_visited_ptr->split_insert(element);
-    cerr << "split_insert\n";
-    // -----Merkle ----
-    // done making the changes for insert so update merkle hash and record
-    // new state
-    last_visited_ptr->update_merkle_upward();
-    record_state(last_visited_ptr, p.st_after);
-    // ----------------
-
-    return r;
 } 
 
 
@@ -700,7 +698,7 @@ void
 record_state(Node * node, State & state) {
 
     bool is_root = false;
-    if (node != node->find_root()) {
+    if (node != node->get_root()) {
 	record_state(node->mp_parent, state);
     } else {
 	is_root = true;
@@ -827,13 +825,13 @@ Node::tree_delete_help (Elem& target, UpdateMerkleProof & proof, Node * & start_
 	    // NOTE: the "this" pointer may no longer be valid after the first
 	    // iteration of this loop!!!
 	    
-	    if (node==node->find_root() && node->is_leaf()) {
+	    if (node==node->get_root() && node->is_leaf()) {
 		cerr << "delete root \n";
 		//empty tree
 		break;
 	    }
 	    
-	    if (node==node->find_root() && !node->is_leaf()) { // sanity check
+	    if (node==node->get_root() && !node->is_leaf()) { // sanity check
 		throw "node should not be root in delete_element loop";
 	    }
 	    
@@ -980,7 +978,7 @@ Node::merge_right (int parent_index_this) {
 
     delete right_sib;
 
-    if (mp_parent==find_root() && !mp_parent->key_count()) {
+    if (mp_parent==get_root() && !mp_parent->key_count()) {
 
         m_root.set_root(m_root.get_root(), this);
 	cerr << "delete root\n";
@@ -989,7 +987,7 @@ Node::merge_right (int parent_index_this) {
 
         return null_ptr;
     }
-    else if (mp_parent==find_root() && mp_parent->key_count()) {
+    else if (mp_parent==get_root() && mp_parent->key_count()) {
         return null_ptr;
     }
     if (mp_parent && (mp_parent->key_count() >= (int)b_min_keys)) {
@@ -1025,7 +1023,7 @@ Node* Node::merge_left (int parent_index_this) {
     Node* parent_node = mp_parent;  // copy before deleting this node
 
       
-    if (mp_parent==find_root() && !mp_parent->key_count()) {
+    if (mp_parent==get_root() && !mp_parent->key_count()) {
 
         m_root.set_root(m_root.get_root(), left_sib);
 
@@ -1039,7 +1037,7 @@ Node* Node::merge_left (int parent_index_this) {
         return null_ptr;
 
     } 
-    else if (mp_parent==find_root() && mp_parent->key_count()) {
+    else if (mp_parent==get_root() && mp_parent->key_count()) {
 
         delete this;
 
@@ -1344,4 +1342,14 @@ Element<payload>::pretty() const {
     stringstream ss;
     ss << "(" << m_key << ", sub: " << mp_subtree << ")";
     return ss.str();
+}
+
+
+template<class EncT>
+BTree<EncT>::BTree(OPETable<EncT> * ot, Connect * _db) : ope_table(ot), _db(db) {
+    Node::m_failure.invalidate();
+    Node::m_failure.m_key = "";
+    RootTracker  * tracker = new RootTracker() ;  // maintains a pointer to the current root of the b-tree
+    Node* root_ptr = new Node(*tracker);
+    tracker->set_root(null_ptr, root_ptr);
 }

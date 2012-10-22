@@ -20,6 +20,14 @@ typedef Element<std::string> Elem;
 class RootTracker;
 class Node;
 
+template<class EncT>
+class BTree : public Tree {
+    RootTracker * rt;
+    
+    Node * get_root() {return rt->get_root();}
+
+    void insert(EncT ciph, OPEType ope_path, uint64_t nbits, uint64_t index);
+}
 
 
 class Node {
@@ -39,7 +47,7 @@ public:
     RootTracker& m_root;
 
     
-    Node* find_root();
+    Node* get_root();
     Elem& search (Elem& desired, Node*& last_visited);
     bool tree_insert (Elem& element, UpdateMerkleProof &p);
     bool tree_delete(Elem & target, UpdateMerkleProof & m);
