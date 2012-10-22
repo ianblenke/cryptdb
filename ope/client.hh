@@ -180,7 +180,7 @@ ope_client<V, BlockCipher>::encrypt(V det, bool imode) const{
 		std::cout << "n mode ope_fail" << std::endl;
                 nbits+=num_bits;
                 v=(v<<num_bits) | 0;
-                return (v<<(64-nbits)) | (mask<<(64-num_bits-nbits));
+                return (v<<(64-nbits)) | (s_mask<<(64-num_bits-nbits));
             }
 
         }               
@@ -240,7 +240,7 @@ ope_client<V, BlockCipher>::encrypt(V det, bool imode) const{
 		std::cout << "n mode inserting " << index << " : " << xct_vec.size() << std::endl;
                 nbits+=num_bits;
                 v = (v<<num_bits) | index;
-                return ((v<<(64-nbits)) | (mask<<(64-num_bits-nbits)));
+                return ((v<<(64-nbits)) | (s_mask<<(64-num_bits-nbits)));
             }
 
         }
@@ -272,7 +272,7 @@ ope_client<V, BlockCipher>::encrypt(V det, bool imode) const{
     return -1;
     //FL todo: s->update_table(block_encrypt(pt),v,nbits);
 /*      if(DEBUG) cout<<"Encryption of "<<pt<<" has v="<< v<<" nbits="<<nbits<<endl;
-	return (v<<(64-nbits)) | (mask<<(64-num_bits-nbits));*/
+	return (v<<(64-nbits)) | (s_mask<<(64-num_bits-nbits));*/
 }
 
 
@@ -307,7 +307,7 @@ ope_client<V, BlockCipher>::decrypt(uint64_t ct) const {
     uint64_t nbits = 64 - ffsl((uint64_t)ct);
     uint64_t v= ct>>(64-nbits); //Orig v
     uint64_t path = v>>num_bits; //Path part of v
-    int index = (int) v & mask; //Index (last num_bits) of v
+    int index = (int) v & s_mask; //Index (last num_bits) of v
     if(DEBUG) cout<<"Decrypt lookup with path="<<path<<" nbits="<<nbits-num_bits<<" index="<<index<<endl;
     //vector<V> vec = s->lookup(path, nbits- num_bits);
 
@@ -353,7 +353,7 @@ ope_client<V, BlockCipher>::delete_value(V pt){
     uint64_t nbits = 64 - ffsl((uint64_t)ct);
     uint64_t v= ct>>(64-nbits); //Orig v
     uint64_t path = v>>num_bits; //Path part of v
-    int index = (int) v & mask; //Index (last num_bits) of v
+    int index = (int) v & s_mask; //Index (last num_bits) of v
 
     ostringstream o;
     o.str("");

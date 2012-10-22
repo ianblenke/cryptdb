@@ -613,7 +613,7 @@ Stree<EncT>::find_pred(Stree_node<EncT>* node, uint64_t v, uint64_t nbits){
   return del_val;
   }
 
-  int key_index = (int) (v&(mask<<(nbits-num_bits)))>>(nbits-num_bits);
+  int key_index = (int) (v&(s_mask<<(nbits-num_bits)))>>(nbits-num_bits);
 
   EncT key;
 
@@ -743,7 +743,7 @@ Stree<EncT>::update_shifted_paths(uint index, uint64_t v, int pathlen,
 /* Extracts the first index from the last nbits of v */
 static int
 extract_index(OPEType v, uint nbits) {
-    return (int) (v&(mask<<(nbits-num_bits)))>>(nbits-num_bits);    
+    return (int) (v&(s_mask<<(nbits-num_bits)))>>(nbits-num_bits);    
 }
 
 
