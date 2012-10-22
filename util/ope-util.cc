@@ -1,6 +1,9 @@
-#include <util/ope-util.hh>
+
 
 #include <sstream>
+
+#include <util/ope-util.hh>
+#include <util/util.hh>
 
 using namespace std;
 
@@ -31,8 +34,10 @@ minimum_keys (uint max_keys) {
         ceiling_func++;
     }
 
-    return ceiling_func-1;  // for clarity, may increment then decrement
+    int res = ceiling_func-1;  // for clarity, may increment then decrement
+    assert_s(res > 0, "cannot have min nodes be 0 or less");
 
+    return res;
 } 
 
 

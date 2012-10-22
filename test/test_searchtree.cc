@@ -30,7 +30,7 @@ check_order(list<string> & vals) {
     bool first = true;
     for (auto it : vals) {
 	if (!first) {
-	    assert_s(it >= prev, "values in tree are not ordered properly: prev " + prev + " it " + it);
+	    assert_s(it > prev, "values in tree are not ordered properly: prev " + prev + " it " + it);
 	}
 	first = false;
 	prev = it;
@@ -54,46 +54,72 @@ check_good_height(uint maxheight, uint no_elems, uint breadth) {
     assert_s(maxheight <= (log(no_elems*1.0)/log(breadth*1.0)) + 1, "tree is too high");
 }
 
-/*static void
-  progress_info(string mess, uint total, uint i) {
-  if (total > 1000) {
-  if (i % (total / 10) == 0) {
-  cerr << (i*100.0/total) << "% " + mess + " \n";
-  }
-  }
-  }*/
-
 class Test {
 
 public:
 
     static void
-    test_help(vector<string> & vals, uint no_elems) {
+    check_good_tree(RootTracker & tracker) {
+	
+	tracker.get_root()->check_merkle_tree();
+	
+	// Check tree is in right order and has good height
+	list<string> treeorder;
+	tracker.get_root()->in_order_traverse(treeorder); 
+	check_order(treeorder);
+	
+	uint max_height = tracker.get_root()->max_height();
+	cout << " -- max height of tree is " << max_height << " fanout " << b_max_keys << "\n";
+	check_good_height(max_height, treeorder.size(), b_min_keys);
+	
+	treeorder.clear();
+    }
+
+    static void
+    check_good_tree(RootTracker & tracker, vector<string> & vals, uint no_elems) {
+	
+	tracker.get_root()->check_merkle_tree();
+	
+	// Check tree is in right order and has good height
+	list<string> treeorder;
+	tracker.get_root()->in_order_traverse(treeorder); 
+	check_order_and_values(vals, treeorder);
+	
+	uint max_height = tracker.get_root()->max_height();
+	cout << " -- max height of tree is " << max_height << " fanout " << b_max_keys << "\n";
+	check_good_height(max_height, no_elems, b_min_keys);
+	
+	treeorder.clear();
+    }   
     
-	uint no_inserted_checks = 100; // int(sqrt(no_elems)) + 1;
-	uint no_not_in_tree = 100; //no_inserted_checks;
-	uint no_deletes = 100; //no_inserted_checks;
-	uint period_Merkle_check = 100; //no_inserted_checks/5 + 1;
+    static void
+    test_help(vector<string> & vals, uint no_elems) {
+
+	cerr << "Testing B tree.. \n";
+
+	// Frequency of testing certain aspects
+	uint no_inserted_checks = 10; // int(sqrt(no_elems)) + 1;
+	uint no_not_in_tree = 10; //no_inserted_checks;
+	uint delete_freq = 2; //one in deletes_freq will be deleted
+	uint period_Merkle_check = 1; //no_inserted_checks/5 + 1;
 	uint period_Merkle_del_check = 1;
 
+	// Create tree
 	Node::m_failure.invalidate();
-
 	Node::m_failure.m_key = "";
-
 	RootTracker tracker;  // maintains a pointer to the current root of the b-tree
-
 	Node* root_ptr = new Node(tracker);
-
 	tracker.set_root(null_ptr, root_ptr);
 
+	// Insert into tree
 	Elem elem;
-	//insert values in tree
 	for (uint i=0; i< no_elems; i++) {
 	    elem.m_key = vals[i];
 	    elem.m_payload = vals[i]+" hi you";
 	    UpdateMerkleProof p;
-	    tracker.get_root()->tree_insert(elem, p);
-	
+	    bool inserted = tracker.get_root()->tree_insert(elem, p);
+	    assert_s(inserted, "element was not inserted");
+	    
 	    // check Merkle hash tree integrity
 	    if (i % period_Merkle_check == 0) {
 		//cerr << "checking Merkle for tree so far \n";
@@ -102,21 +128,10 @@ public:
 	    }
 	}
 
-	tracker.get_root()->check_merkle_tree();
-
-	//check tree structure is correct
-	list<string> treeorder;
-	tracker.get_root()->in_order_traverse(treeorder); 
-	check_order_and_values(vals, treeorder);
-
-	uint max_height = tracker.get_root()->max_height();
-	cout << " -- max height of tree is " << max_height << " fanout " << b_max_keys << "\n";
-	check_good_height(max_height, no_elems, b_max_keys);
-
-	tracker.get_root()->check_merkle_tree();
-
-
-//check if no_inserted random elements are indeed in the tree
+	// Check tree is correct
+	check_good_tree(tracker, vals, no_elems);
+	
+	// Check if some inserted values are indeed in the tree
 	for (uint i = 0 ; i < no_inserted_checks; i++) {
 	    string test_val = vals[rand() % no_elems];
 	    Elem desired;
@@ -124,10 +139,12 @@ public:
 	    Node * last;
 	    Elem& result = tracker.get_root()->search(desired, last);
 	    assert_s(desired.m_key == result.m_key, "could not find val that should be there");
-
 	}
+	
+	// Check tree is correct
+	check_good_tree(tracker, vals, no_elems);
 
-	//check if no_not_in_tree elements are indeed not in the tree
+	//Check that some values are indeed not in the tree
 	for (uint i = 0; i < no_not_in_tree; i++) {
 	    string test_val;
 	    uint counter = 100;
@@ -151,49 +168,55 @@ public:
 
 	}
 
+	// Check tree is correct
+	check_good_tree(tracker, vals, no_elems);
 
-	//check deletion
-	for (uint i = 0 ; i < no_deletes; i++) {
+	//Check that deletion works correctly
+	for (uint i = 0 ; i < no_elems/delete_freq; i++) {
 
 	    string old_merkle_hash = tracker.get_root()->merkle_hash;
-	    
-	    string test_val = vals[rand() % no_elems];
+
+	    // value to delete
+	    uint index_to_del = i * delete_freq;
+	    if (index_to_del >= no_elems) {
+		break;
+	    }
+	    string test_val = vals[index_to_del];
+
+	    // delete the value
 	    Elem desired;
 	    desired.m_key = test_val;
 	    //delete it
 	    UpdateMerkleProof delproof;
 	    bool deleted = tracker.get_root()->tree_delete(desired, delproof);
-
+	    assert_s(deleted, "tree delete does not delete");
+	    
+	    // check it is indeed deleted
 	    Node * last;
 	    Elem result = tracker.get_root()->search(desired, last);
 	    assert_s(result == Node::m_failure, "found element that should have been deleted");
-	
+
 	    // check Merkle hash tree integrity
 	    if (i % period_Merkle_del_check == 0) {
 		//cerr << "check Merkle \n";
 		tracker.get_root()->check_merkle_tree();
 
 		//check deletion proof only if deleted
-		if (deleted) {
-		    string new_merkle_root;
-		    bool r = verify_del_merkle_proof(delproof, test_val, old_merkle_hash, new_merkle_root);
-		    assert_s(r, "deletion proof does not verify");
-		    assert_s(new_merkle_root == tracker.get_root()->merkle_hash,
+		string new_merkle_root;
+		bool r = verify_del_merkle_proof(delproof, test_val, old_merkle_hash, new_merkle_root);
+		assert_s(r, "deletion proof does not verify");
+		assert_s(new_merkle_root == tracker.get_root()->merkle_hash,
 		    	 "verify_del gives incorrect new merkle root");
-		    cerr << "deletion proof verified\n";
-		} else {
-		    cerr << "Delete did not happen!\n";
-		}
+		cerr << "deletion proof verified\n";
+		
 	    }
 
 	}
-    
-	//check tree structure is correct after deletion
-	treeorder.clear();
-	tracker.get_root()->in_order_traverse(treeorder); 
-	check_order(treeorder);
-	check_good_height(tracker.get_root()->max_height(), no_elems, b_max_keys);
 
+
+	// Check tree is still correct
+	check_good_tree(tracker);
+	
     }
 
     static string
@@ -313,7 +336,7 @@ public:
 // -- tests deletion
 // -- checks that Merkle hash tree is overall correct with some period
     static void
-    testBMerkleTree(int argc, char ** argv) {
+    evalBMerkleTree(int argc, char ** argv) {
 
 	if (argc != 2) {
 	    cerr << "usage: ./test_searchtree num_nodes_to_insert \n";
@@ -389,7 +412,7 @@ public:
 	//insert values in tree
 	for (uint i=0; i< no_elems; i++) {
 	    elem.m_key = vals[i];
-	    elem.m_payload = vals[i]+" hi you";
+	    elem.m_payload = vals[i];
 	    UpdateMerkleProof p;
 	    tracker.get_root()->tree_insert(elem, p);
 	}
@@ -453,46 +476,74 @@ public:
 	cerr << "Test MerkleProof OK.\n";
 
     }
+
+    static bool
+    contains(const vector<string> & v, const string & x) {
+	for (auto i : v) {
+	    if (i == x){
+		return true;
+	    }
+	}
+	return false;
+    }
+    
+    // Inputs: the number of values to test the tree on and the
+    // frequency of testing (check tree every test_freq insertions)
+    //
+    // Tests the tree on three sequences of values:
+    //   -- random
+    //   -- sorted increasing
+    //   -- sorted decreasing
+    static void
+    test_search_tree() {
+
+	uint no_test_vals = 10000;
+	
+	vector<string> vals;
+
+	//to make debugging deterministic
+	srand(time(NULL));
+
+	uint elems_inserted = 0;
+	// test on random values
+	for(uint i=0; i< no_test_vals; i++){
+	    stringstream ss;
+	    ss << rand();
+	    string val = ss.str();
+	    ss.clear();
+	    // only insert unique elements
+	    if (!contains(vals, val)) {
+		vals.push_back(val);
+		elems_inserted++;
+	    }
+	}
+
+	
+	test_help(vals, elems_inserted);
+
+	//
+	cerr << "UNCOMMENT STUFF NOW\n";
+	
+	// test on values in increasing order
+	sort(vals.begin(), vals.end());
+	test_help(vals, elems_inserted);
+	
+	// test on values in decreasing order
+	reverse(vals.begin(), vals.end());
+	test_help(vals, elems_inserted);
+	
+    }
+
+
     
 }; // end of class Test
 
 int main(int argc, char ** argv)
 {
-    Test::testBMerkleTree(argc, argv);
-    // Test::testMerkleProof();
+    Test::test_search_tree();
+    //Test::evalBMerkleTree(argc, argv);
+    //Test::testMerkleProof();
 
 }
 
  
-
-
-// Inputs: the number of values to test the tree on and the
-// frequency of testing (check tree every test_freq insertions)
-//
-// Tests the tree on three sequences of values:
-//   -- random
-//   -- sorted increasing
-//   -- sorted decreasing
-/*static void
-test_search_tree(uint no_test_vals, uint test_freq) {
-
-    vector<uint64_t> vals;
-
-    srand( time(NULL));
-
-    // test on random values
-    for(int i=0; i< no_test_vals; i++){
-	vals.push_back((uint64_t) rand());
-    }
-    test_help(vals, no_test_vals, test_freq);
-    
-    // test on values in increasing order
-    sort(vals.begin(), vals.end());
-    test_help(vals, no_test_vals, test_freq);
-    
-    // test on values in decreasing order
-    reverse(vals.begin(), vals.end());
-    test_help(vals, no_test_vals, test_freq);
-    
-}
-*/

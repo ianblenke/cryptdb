@@ -52,6 +52,8 @@ public:
 
     void dump(bool recursive = true);
     void in_order_traverse(std::list<std::string> & res);
+
+    std::string pretty() const;
     
 protected:
 
@@ -82,7 +84,7 @@ protected:
     int key_count () { return m_count-1; }
 
     Elem& largest_key () { return m_vector[m_count-1]; }
-    Elem& smallest_key () { return m_vector[1]; }
+    Elem& smallest_key ();
     Elem& smallest_key_in_subtree();
     int index_has_subtree ();
 
@@ -133,9 +135,7 @@ protected:
     // Functions for testing
     void check_merkle_tree(); //checks merkle tree was computed correctly
     void recompute_merkle_subtree();
-    uint max_height();    
-    void max_height_help(uint height, uint & max_height);
-
+    uint max_height();   //height in no of edges 
 
     // Friends
     friend class Test;
@@ -195,6 +195,7 @@ public:
     Element () { mp_subtree = null_ptr; }
     Element (std::string key);
     void dump();
+    std::string pretty() const;
     
     std::string m_key;
     Node* mp_subtree;
@@ -331,6 +332,10 @@ const char *
 myprint(const NodeInfo & v);
 const char *
 myprint(const ElInfo & v);
+const char *
+myprint(const Node * v);
+const char *
+myprint(const Elem v);
 const char *
 myprint(const DelInfo & v);
 const char *

@@ -221,7 +221,7 @@ bool
 equiv(const DelInfo & sim, const DelInfo & given) {
 
     if (sim.this_was_del) {
-	if (DEBUG_PROOF) {cerr << "equals:MERGE LEFT";}
+	if (DEBUG_PROOF) {cerr << "equiv: MERGE LEFT";}
 	// there was a merge left
 	return sim.has_left_sib &&
 	    sim.left_sib == given.node;
@@ -229,11 +229,11 @@ equiv(const DelInfo & sim, const DelInfo & given) {
 
     if (sim.right_was_del) {
 	// there was a merge right
-	if (DEBUG_PROOF) { cerr << "equals:MERGE RIGHT\n";}
+	if (DEBUG_PROOF) { cerr << "equiv: MERGE RIGHT\n";}
 	return sim.node == given.node;
     }
 
-    if (DEBUG_PROOF) { cerr << "equals:BASIC DELETE OR ROTATION\n";}
+    if (DEBUG_PROOF) { cerr << "equiv: BASIC DELETE OR ROTATION\n";}
     // there were either rotations or basic deletes
     assert_s(sim.node == given.node, "node mismatch");
     assert_s(sim.has_left_sib == given.has_left_sib &&
@@ -399,17 +399,14 @@ update_node_parent(NodeInfo & node, NodeInfo & parent) {
 
 
 static void
-check_equals(const State & st1, const State & st2) {
+check_equals(const State & st_sim, const State & st_real) {
 
-    // start from the leaves because delete may remove root
-    if (st1.size() != st2.size()) {
-	assert_s(st1.size() == st2.size() + 1 && st1[0].this_was_del, "not equal states");
-    }
+    assert_s(st_sim.size() == st_real.size(), "real and simulated states differ in height");
     
-    for (int i = st2.size()-1; i >= 0; i--) {
-	if (!equiv(st1[i],st2[i])) {
-	    cerr << "difference in level " << i << "\n";
-	    cerr << "one is\n" << st1[i].pretty() << "\nthe other\n" << st2[i].pretty() << "\n";
+    for (uint i = 0; i < st_real.size(); i++) {
+	if (!equiv(st_sim[i],st_real[i])) {
+	    cerr << "difference in level " << i  << "\n";
+	    cerr << " sim is\n" << st_sim[i].pretty() << "\n real is\n" << st_real[i].pretty() << "\n";
 	    assert_s(false, "difference in level");
 	}
     }
@@ -626,6 +623,10 @@ merge_right(State & st, int index) {
 
     if (index - 1  == 0 && !parent.key_count()) {
 	sl_parent.this_was_del = true;
+	cerr << "delete root\n";
+	node.pos_in_parent = -1;
+	node.key = "";
+	st.erase(st.begin());
 	return true;
     }
     if (index - 1 == 0 && parent.key_count()) {
@@ -669,7 +670,10 @@ merge_left(State & st, int index) {
     change_key(st, index+1, "", parent_elem.key);
 
     if (index - 1  == 0 && !parent.key_count()) {
-	sl_parent.this_was_del = true;
+	cerr << "delete root\n";
+	sib.pos_in_parent = -1;
+	sib.key = "";
+	st.erase(st.begin());
 	return true;
     }
     if (index - 1 == 0 && parent.key_count()) {
@@ -725,7 +729,8 @@ sim_delete(State & st, string del_target, int index) {
 		DelInfo & sl = st[index];
 
 		if (index == 0 && st.size() == 1) {
-		    st[0].this_was_del = true;
+		    cerr << "delete root\n";
+		    st.erase(st.begin());
 		    break;
 		}
 

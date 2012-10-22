@@ -49,9 +49,11 @@ const int invalid_index = -1;
 
 const unsigned int b_max_keys = 4;  // max elements in a node
 
+// min keys in a B tree
 uint minimum_keys(uint max_keys);
 
 const unsigned int b_min_keys = minimum_keys(b_max_keys); 
+
 
 /***  Other *************/
 
