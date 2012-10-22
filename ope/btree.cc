@@ -1345,3 +1345,85 @@ Element<payload>::pretty() const {
     ss << "(" << m_key << ", sub: " << mp_subtree << ")";
     return ss.str();
 }
+
+
+Node* build_tree_wrapper(vector<string> & key_list, RootTracker & root_tracker, int start, int end){
+
+    Node* b_tree = build_tree(key_list, root_tracker, start, end);
+
+    cout<<"tree construction done: \n";
+
+    cout << b_tree->pretty() << endl;
+
+    for(int i = 0; i < (int) b_tree->m_count; i++){
+        cout << b_tree->m_vector[i].mp_subtree->pretty() << endl;
+    }
+
+    return b_tree;
+}
+
+// key_list is entire vector of sorted keys, start and end indicate the first
+// and last index of key_list in this subsection
+Node* build_tree(vector<string> & key_list, RootTracker & root_tracker, int start, int end){
+    //Avoid building a node without any values
+    int array_size = end-start +1;
+
+    if (end-start == 0) 
+      return NULL;
+
+    Node* rtn_node = new Node(root_tracker);
+
+    if ( array_size < (int) b_max_keys-1 ){
+      //Remaining keys fit in one node, return that node
+      for ( int i = 1; i < array_size; i++ ) {
+        cout<<"HERE1"<<endl;
+        rtn_node->m_vector[i].m_key = key_list[ start+i-1 ]; 
+
+      }
+      rtn_node->m_count = array_size;
+    } else {
+      //Borders to divide key_list by
+      double base = ((double) array_size)/ ((double) b_max_keys);
+
+      //Fill keys with every base-th key;
+      for(int i=1; i < (int) b_max_keys; i++){
+        cout<<"HERE2 "<<start + floor(i*base)<<endl;
+        rtn_node->m_vector[i].m_key = key_list[ start + floor(i*base)];
+        cout<<"Done with HERE2"<<endl;
+      }
+      //Handle the subvector rebuilding except for the first and last
+      for (int i=1; i < (int) b_max_keys-1; i++){
+
+          Node* tmp_child = build_tree(key_list, root_tracker,
+                                        start + floor(i*base), 
+                                        floor((i+1)*base)-1);
+          if (tmp_child!=NULL){
+            cout<<"HERE3"<<endl;            
+            rtn_node->m_vector[i].mp_subtree = tmp_child;
+          }
+      }
+
+
+      Node* tmp_child = build_tree(key_list, root_tracker,
+                                        start, 
+                                        start+floor(base)-1);
+      if(tmp_child!=NULL){
+        cout<<"HERE4"<<endl;        
+        rtn_node->m_vector[0].mp_subtree = tmp_child;
+      } 
+
+      tmp_child = build_tree(key_list, root_tracker,
+                                    start + floor((b_max_keys-1)*base), 
+                                    end);
+      if(tmp_child!=NULL){
+        cout<<"HERE5"<<endl;        
+        rtn_node->m_vector[b_max_keys-1].mp_subtree = tmp_child;
+
+      } 
+
+      rtn_node->m_count = b_max_keys;
+
+    }
+    return rtn_node;
+
+}

@@ -21,6 +21,8 @@ class RootTracker;
 class Node;
 
 
+Node* build_tree(std::vector< std::string> & key_list, RootTracker & root_tracker, int start, int end);
+Node* build_tree_wrapper(std::vector<std::string> & key_list, RootTracker & root_tracker, int start, int end);
 
 class Node {
 
@@ -143,7 +145,8 @@ protected:
     friend std::ostream &
     operator<<(std::ostream & out, const Node & n);
     friend void record_state(Node * node, State & state);
- 
+    friend Node* build_tree(std::vector<std::string> & key_list, RootTracker & root_tracker, int start, int end);
+    friend Node* build_tree_wrapper(std::vector<std::string> & key_list, RootTracker & root_tracker, int start, int end); 
 #ifdef _DEBUG
 
     Elem debug[8];
@@ -313,8 +316,6 @@ verify_ins_merkle_proof(const UpdateMerkleProof & p,
 
 
 /////////////////////////////////////////////////////////////////////////////////////
-
-
 
 
 
