@@ -1344,6 +1344,7 @@ Element<payload>::pretty() const {
     return ss.str();
 }
 
+/******** BTree ************/
 
 template<class EncT>
 BTree<EncT>::BTree(OPETable<EncT> * ot, Connect * _db) : ope_table(ot), _db(db) {
@@ -1353,3 +1354,21 @@ BTree<EncT>::BTree(OPETable<EncT> * ot, Connect * _db) : ope_table(ot), _db(db) 
     Node* root_ptr = new Node(*tracker);
     tracker->set_root(null_ptr, root_ptr);
 }
+
+template<class EncT>
+TreeNode<EncT> *
+BTree<EncT>::get_root(){
+    return (TreeNode<EncT> *)tracker->get_root();
+}
+
+template<class EncT>
+void
+BTree<EncT>::insert(EncT ciph, OPEType ope_path, uint64_t nbits, uint64_t index) {
+    Node * node = path_based_search(ope_path, nbits, index);
+
+    UpdateMerkleProof p;
+    node->tree_insert_help(Element(ciph), p);
+
+    //update ope table and DB
+}
+
