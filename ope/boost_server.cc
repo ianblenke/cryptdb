@@ -82,7 +82,7 @@ int main()
 
       RootTracker* root_tracker = new RootTracker();
 
-      build_tree_wrapper(bulk_data, *root_tracker, 0, bulk_data.size()-1);
+      build_tree_wrapper(bulk_data, *root_tracker, 0, bulk_data.size());
 
     }
   }
