@@ -26,9 +26,14 @@ template<class EncT>
 class BTree : public Tree<EncT> {
 public:
 
+
     BTree(OPETable<EncT> * ot, Connect * db);
     
     TreeNode<EncT> * get_root();
+
+Node* build_tree(std::vector< std::string> & key_list, RootTracker & root_tracker, int start, int end);
+Node* build_tree_wrapper(std::vector<std::string> & key_list, RootTracker & root_tracker, int start, int end);
+
 
     void insert(EncT ciph, OPEType ope_path, uint64_t nbits, uint64_t index);
 
@@ -71,17 +76,21 @@ public:
 
     std::string pretty() const;
     
+    std::vector<Elem> m_vector;
+
+    unsigned int m_count;
+    
 protected:
 
     // locality of reference, beneficial to effective cache utilization,
     // is provided by a "vector" container rather than a "list"
     // upon construction, m_vector is sized to max amount of elements
     // the first element is the "zero" element, empty key and points to zeroth subtree
-    std::vector<Elem> m_vector;
+    //std::vector<Elem> m_vector;
 
     // number of elements currently in m_vector, including the zeroth element
     // which has only a subtree, no key value or payload.
-    unsigned int m_count;
+    //unsigned int m_count;
     Node* mp_parent;
 
 
@@ -159,7 +168,8 @@ protected:
     friend std::ostream &
     operator<<(std::ostream & out, const Node & n);
     friend void record_state(Node * node, State & state);
- 
+    friend Node* build_tree(std::vector<std::string> & key_list, RootTracker & root_tracker, int start, int end);
+    friend Node* build_tree_wrapper(std::vector<std::string> & key_list, RootTracker & root_tracker, int start, int end); 
 #ifdef _DEBUG
 
     Elem debug[8];
@@ -345,8 +355,6 @@ struct LevelChangeInfo {
 
 
 typedef list<LevelChangeInfo> ChangeInfo;
-
-
 
 // TODO: clean these myprint vs << functions for gdb
 // functions for my gdb macro,

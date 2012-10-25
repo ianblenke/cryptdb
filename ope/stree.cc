@@ -140,11 +140,11 @@ Stree<EncT>::rebuild(vector<EncT> key_list){
 	for (int i=1; i<N-1; i++){
 	    vector<EncT> subvector;
 	    for(int j=floor(i*base)+1; j<floor((i+1)*base); j++){
-		subvector.push_back(key_list[j]);
+		    subvector.push_back(key_list[j]);
 	    }
 	    Stree_node<EncT>* tmp_child = rebuild(subvector);
 	    if (tmp_child!=NULL){
-		rtn_node->right[key_list[floor(i*base)]]=tmp_child;
+		    rtn_node->right[key_list[floor(i*base)]]=tmp_child;
 	    }
 	}
 	//First subvector rebuilding special case

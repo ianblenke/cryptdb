@@ -88,8 +88,27 @@ void Node::dump(bool recursive){
 
 // write out the keys in this node and all its subtrees, along with
 // node adresses, for debugging purposes
+    
+    assert_s(m_count>=2, "m_count isn't same as m_vector's size");
 
-    cout << "[";
+    cout<<pretty()<<endl;
+
+    if (!recursive) {
+        return;
+    }
+    
+    bool leaf = true;
+
+    for (unsigned int i=0; i<m_count; i++) {
+        if (m_vector[i].has_subtree()) {  
+            leaf = false;      
+            m_vector[i].mp_subtree->dump(true);
+        }
+    }
+
+    if(!leaf) assert_s(m_count == b_max_keys &&
+                       m_count == m_vector.size(), "nonleaf not right size");
+/*    cout << "[";
     if (this == m_root.get_root()) {
             cout << "ROOT ";
     }
@@ -115,7 +134,7 @@ void Node::dump(bool recursive){
 	    m_vector[i].mp_subtree->dump();
 	}
     }
-    cout << endl;
+    cout << endl;*/
 
 } 
 
@@ -1350,6 +1369,7 @@ Element<payload>::pretty() const {
     return ss.str();
 }
 
+
 /******** BTree ************/
 
 template<class EncT>
@@ -1394,5 +1414,83 @@ BTree<EncT>::insert(EncT ciph, OPEType ope_path, uint64_t nbits, uint64_t index)
     //update ope table and DB
     update_ope_table(ci);
     update_db(ci);
+}
+
+
+
+Node* build_tree_wrapper(vector<string> & key_list, RootTracker & root_tracker, int start, int end){
+
+    Node* b_tree = build_tree(key_list, root_tracker, start, end);
+
+    cout<<"tree construction done: \n";
+
+    b_tree->dump(true);
+
+
+    return b_tree;
+}
+
+// key_list is entire vector of sorted keys, start indicates the first
+// index of key_list in this subsection, and end is the index after subsection size
+Node* build_tree(vector<string> & key_list, RootTracker & root_tracker, int start, int end){
+    //Avoid building a node without any values
+    int array_size = end-start;
+    cout<<start<<" : "<<end<<endl;
+    assert_s(array_size > 0, "array_size not positive!");
+
+    Node* rtn_node = new Node(root_tracker);
+
+    if ( array_size < (int) b_max_keys ){
+        //Remaining keys fit in one node, return the leaf node
+        for ( int i = 0; i < array_size; i++ ) {
+            cout<<"HERE1 m_vector["<<i+1<<"] = "<<key_list[ start+i ]<<" "<<array_size<<endl;
+            rtn_node->m_vector[i+1].m_key = key_list[ start+i ]; 
+        }
+        rtn_node->m_count = array_size+1;
+    } else {
+        //Borders to divide key_list by
+        double base = ((double) array_size)/ ((double) b_max_keys);
+
+        //Fill keys with every base-th key;
+        for(int i=1; i < (int) b_max_keys; i++){
+            cout<<"HERE2 "<<start + floor(i*base)<<endl;
+            rtn_node->m_vector[i].m_key = key_list[ start + floor(i*base)];
+            cout<<"Done with HERE2"<<endl;
+        }
+        //Handle the subvector rebuilding except for the first and last
+        for (int i=1; i < (int) b_max_keys-1; i++){
+            cout<<"Recursing on "<<start + floor(i*base)<<" : "<<floor((i+1)*base)<<endl;
+            Node* tmp_child = build_tree(key_list, root_tracker,
+                                        start + floor(i*base), 
+                                        start + floor((i+1)*base));
+            if (tmp_child!=NULL){
+                cout<<"HERE3"<<endl;            
+                rtn_node->m_vector[i].mp_subtree = tmp_child;
+            }
+        }
+
+
+        Node* tmp_child = build_tree(key_list, root_tracker,
+                                        start, 
+                                        start+floor(base));
+        if(tmp_child!=NULL){
+            cout<<"HERE4"<<endl;        
+            rtn_node->m_vector[0].mp_subtree = tmp_child;
+        } 
+
+        tmp_child = build_tree(key_list, root_tracker,
+                                    start + floor((b_max_keys-1)*base), 
+                                    end);
+        if(tmp_child!=NULL){
+            cout<<"HERE5"<<endl;        
+            rtn_node->m_vector[b_max_keys-1].mp_subtree = tmp_child;
+
+        } 
+
+        rtn_node->m_count = b_max_keys;
+
+    }
+    return rtn_node;
+
 }
 
