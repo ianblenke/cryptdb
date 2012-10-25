@@ -16,6 +16,8 @@
 #define MALICIOUS 0
 #define DEBUG_PROOF 1
 
+#define BULK_LOAD 1
+
 // hardcoding passwords for our eval
 const std::string passwd = "opeope";
 

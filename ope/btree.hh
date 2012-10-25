@@ -57,17 +57,21 @@ public:
 
     std::string pretty() const;
     
+    std::vector<Elem> m_vector;
+
+    unsigned int m_count;
+    
 protected:
 
     // locality of reference, beneficial to effective cache utilization,
     // is provided by a "vector" container rather than a "list"
     // upon construction, m_vector is sized to max amount of elements
     // the first element is the "zero" element, empty key and points to zeroth subtree
-    std::vector<Elem> m_vector;
+    //std::vector<Elem> m_vector;
 
     // number of elements currently in m_vector, including the zeroth element
     // which has only a subtree, no key value or payload.
-    unsigned int m_count;
+    //unsigned int m_count;
     Node* mp_parent;
 
 

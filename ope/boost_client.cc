@@ -10,11 +10,41 @@
 
 #include <iostream>
 #include <boost/asio.hpp>
+#include <sstream>
+#include <util/ope-util.hh>
+#include <edb/Connect.hh>
 
 using boost::asio::ip::tcp;
 
 int main(int argc, char* argv[])
 {
+
+  Connect * dbconnect;
+  dbconnect = new Connect( "localhost", "root", "letmein","cryptdb", 3306);
+
+  DBResult * result;
+
+  dbconnect->execute("SELECT ope_enc FROM emp ORDER BY ope_enc", result);
+
+  ResType rt = result->unpack();
+
+  std::vector<uint64_t> values_in_db;
+  values_in_db.resize(rt.rows.size());
+
+  std::string message = "";
+
+  for ( int rc=0; rc < (int) rt.rows.size(); rc++){
+    uint64_t cur_val = 0;
+    std::stringstream ss;
+    ss << ItemToString(rt.rows[rc][0]);
+    ss >> cur_val;
+    
+    message+= ItemToString(rt.rows[rc][0]) + " ";
+    values_in_db[rc] = cur_val;
+
+  }
+
+
   try
   {
     if (argc != 2)
@@ -40,16 +70,11 @@ int main(int argc, char* argv[])
     if (error)
       throw boost::system::system_error(error);
 
-    for (;;)
-    {
-      std::string message = "0 1 2 3  5 7 8 9 10 11 12 13 14 15 16 17 18 19 110 ";
-      std::cout <<"Sending message "<<message<<std::endl;
-      boost::system::error_code ignored_error;
-      boost::asio::write(socket, boost::asio::buffer(message),
-          boost::asio::transfer_all(), ignored_error);
-      break;
+    std::cout <<"Sending message "<<message<<std::endl;
+    boost::system::error_code ignored_error;
+    boost::asio::write(socket, boost::asio::buffer(message),
+        boost::asio::transfer_all(), ignored_error);
 
-    }
   }
   catch (std::exception& e)
   {
