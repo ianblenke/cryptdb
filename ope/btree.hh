@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 #include <ope/merkle.hh>
+#include <ope/tree.hh>
 
 // benchmarking
 uint Merklecost = 0;
@@ -19,20 +20,27 @@ typedef Element<std::string> Elem;
 
 class RootTracker;
 class Node;
+struct ChangeInfo;
 
 template<class EncT>
-class BTree : public Tree {
-    RootTracker * rt;
+class BTree : public Tree<EncT> {
+public:
+
+    BTree(OPETable<EncT> * ot, Connect * db);
     
-    Node * get_root() {return rt->get_root();}
+    TreeNode<EncT> * get_root();
 
     void insert(EncT ciph, OPEType ope_path, uint64_t nbits, uint64_t index);
-}
 
+private:
+    RootTracker * tracker;
+    OPETable<EncT> * opetable;
+    Connect * db;
+};
 
-class Node {
-
-    
+template<class EncT>
+class Node : TreeNode<EncT> {
+  
 public:
 
     Node (RootTracker& root_track);
@@ -81,7 +89,7 @@ protected:
     
     bool vector_insert (Elem& element);
     bool vector_insert_for_split (Elem& element);
-    bool split_insert (Elem& element);
+    bool split_insert (Elem& element, ChangeInfo & ci);
 
     bool vector_delete (Elem& target);
     bool vector_delete (int target_pos);
@@ -323,9 +331,20 @@ verify_ins_merkle_proof(const UpdateMerkleProof & p,
 /////////////////////////////////////////////////////////////////////////////////////
 
 
+/* Contains information about
+ * a split at a level in a tree.
+ * The information is before the split.
+ * The node was split at index into itself and right.
+ * For a new root, only right is NULL and index negative.
+ */
+struct LevelChangeInfo {
+    Node * node;
+    Node * right;
+    int index;
+};
 
 
-
+typedef list<LevelChangeInfo> ChangeInfo;
 
 
 

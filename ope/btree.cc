@@ -323,7 +323,7 @@ bool Node::vector_insert_for_split (Elem& element) {
 
 
 /* split_insert should only be called if node is full */
-bool Node::split_insert (Elem& element) {
+bool Node::split_insert (Elem& element, ChangeInfo & ci) {
 
     if (m_count != m_vector.size()-1) {
         throw "bad m_count in split_insert";
@@ -340,6 +340,12 @@ bool Node::split_insert (Elem& element) {
     // new node receives the rightmost half of elements in *this node
     Node* new_node = new Node(m_root);
 
+    LevelChangeInfo lci;
+    lci.node = this;
+    lci.right = new_node;
+    lci.index = split_point;
+    ci.push_back(lci);
+    
     Elem upward_element = m_vector[split_point];
 
     new_node->insert_zeroth_subtree (upward_element.mp_subtree);
@@ -367,7 +373,7 @@ bool Node::split_insert (Elem& element) {
 	return true;
     }
 
-    else if (mp_parent && mp_parent->split_insert(upward_element))
+    else if (mp_parent && mp_parent->split_insert(upward_element, ci))
         return true;
 
     else if (!mp_parent) { // this node was the root
@@ -644,7 +650,7 @@ void Node::update_merkle_upward() {
     }
 }
 
-bool Node::tree_insert_help(Elem & element, UpdateMerkleProof & p) {
+bool Node::do_insert(Elem & element, UpdateMerkleProof & p, ChangeInfo & c) {
     // ---- Merkle -----
     // last_visited_ptr is the start point for the proof
     record_state(this, p.st_before);
@@ -1363,12 +1369,30 @@ BTree<EncT>::get_root(){
 
 template<class EncT>
 void
+BTree<EncT>::update_ot(ChangeInfo & c) {
+    //TODO
+}
+
+
+template<class EncT>
+void
+BTree<EncT>::update_db(ChangeInfo & c) {
+    //TODO
+}
+
+
+
+template<class EncT>
+void
 BTree<EncT>::insert(EncT ciph, OPEType ope_path, uint64_t nbits, uint64_t index) {
     Node * node = path_based_search(ope_path, nbits, index);
 
     UpdateMerkleProof p;
-    node->tree_insert_help(Element(ciph), p);
+    ChangeInfo ci;
+    node->do_insert(Element(ciph), p, ci);
 
     //update ope table and DB
+    update_ope_table(ci);
+    update_db(ci);
 }
 

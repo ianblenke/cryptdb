@@ -4,7 +4,7 @@
 
 using namespace std;
 
-static const int w = 4;
+static const int w = 2;
 
 struct WBNode;
 
