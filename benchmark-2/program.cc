@@ -117,7 +117,9 @@ public:
 virtual param_map get_param_map(exec_context& ctx) {
   param_map m;
   m[0] = db_elem(encrypt_string_det(ctx.crypto, "AMERICA", _FP(1), _FJ(false)));
-  m[1] = db_elem(encrypt_string_det(ctx.crypto, "PROMO ANODIZED BRASS", _FP(4), _FJ(false)));
+  m[1] = db_elem((int64_t)encrypt_date_ope(ctx.crypto, 1021473 /*1995-1-1*/, _FP(4), _FJ(false)));
+  m[2] = db_elem((int64_t)encrypt_date_ope(ctx.crypto, 1022367 /*1996-12-31*/, _FP(4), _FJ(false)));
+  m[3] = db_elem(encrypt_string_det(ctx.crypto, "PROMO ANODIZED BRASS", _FP(4), _FJ(false)));
   return m;
 }
 };
@@ -468,16 +470,8 @@ static void query_7(exec_context& ctx) {
         new local_transform_op(
           {local_transform_op::trfm_desc(std::make_pair(db_column_desc(db_elem::TYPE_INT, 2, oNONE, SECLEVEL::PLAIN, 0, false), new extract_node(new tuple_pos_node(0), extract_node::TYPE_YEAR))), local_transform_op::trfm_desc(1), local_transform_op::trfm_desc(2), },
           new local_decrypt_op(
-            {1, 2},
-            new local_filter_op(
-              new and_node(new ge_node(new tuple_pos_node(0), new date_literal_node("1995-1-1")), new le_node(new tuple_pos_node(0), new date_literal_node("1996-12-31"))),
-              new local_decrypt_op(
-                {0},
-                new remote_sql_op(new param_generator_id8, "select orders_enc_cryptdb_opt_with_det.o_orderdate_DET, lineitem_enc_cryptdb_opt_with_det.l_disc_price_DET as volume, n2.n_name_DET as nation from part_enc_cryptdb_opt_with_det, supplier_enc_cryptdb_opt_with_det, lineitem_enc_cryptdb_opt_with_det, orders_enc_cryptdb_opt_with_det, customer_enc_cryptdb_opt_with_det, nation_enc_cryptdb_opt_with_det n1, nation_enc_cryptdb_opt_with_det n2, region_enc_cryptdb_opt_with_det where (((((((((part_enc_cryptdb_opt_with_det.p_partkey_DET) = (lineitem_enc_cryptdb_opt_with_det.l_partkey_DET)) and ((supplier_enc_cryptdb_opt_with_det.s_suppkey_DET) = (lineitem_enc_cryptdb_opt_with_det.l_suppkey_DET))) and ((lineitem_enc_cryptdb_opt_with_det.l_orderkey_DET) = (orders_enc_cryptdb_opt_with_det.o_orderkey_DET))) and ((orders_enc_cryptdb_opt_with_det.o_custkey_DET) = (customer_enc_cryptdb_opt_with_det.c_custkey_DET))) and ((customer_enc_cryptdb_opt_with_det.c_nationkey_DET) = (n1.n_nationkey_DET))) and ((n1.n_regionkey_DET) = (region_enc_cryptdb_opt_with_det.r_regionkey_DET))) and ((region_enc_cryptdb_opt_with_det.r_name_DET) = (:0))) and ((supplier_enc_cryptdb_opt_with_det.s_nationkey_DET) = (n2.n_nationkey_DET))) and ((part_enc_cryptdb_opt_with_det.p_type_DET) = (:1))", {db_column_desc(db_elem::TYPE_DATE, 3, oDET, SECLEVEL::DET, 4, false), db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oDET, SECLEVEL::DET, 0, false), db_column_desc(db_elem::TYPE_STRING, 25, oDET, SECLEVEL::DET, 1, false)}, {}, util::map_from_pair_vec<std::string, physical_operator*>({})))
-              ,{
-              }
-            )
-          )
+            {0, 1, 2},
+            new remote_sql_op(new param_generator_id8, "select orders_enc_cryptdb_opt_with_det.o_orderdate_DET, lineitem_enc_cryptdb_opt_with_det.l_disc_price_DET as volume, n2.n_name_DET as nation from part_enc_cryptdb_opt_with_det, supplier_enc_cryptdb_opt_with_det, lineitem_enc_cryptdb_opt_with_det, orders_enc_cryptdb_opt_with_det, customer_enc_cryptdb_opt_with_det, nation_enc_cryptdb_opt_with_det n1, nation_enc_cryptdb_opt_with_det n2, region_enc_cryptdb_opt_with_det where (((((((((((part_enc_cryptdb_opt_with_det.p_partkey_DET) = (lineitem_enc_cryptdb_opt_with_det.l_partkey_DET)) and ((supplier_enc_cryptdb_opt_with_det.s_suppkey_DET) = (lineitem_enc_cryptdb_opt_with_det.l_suppkey_DET))) and ((lineitem_enc_cryptdb_opt_with_det.l_orderkey_DET) = (orders_enc_cryptdb_opt_with_det.o_orderkey_DET))) and ((orders_enc_cryptdb_opt_with_det.o_custkey_DET) = (customer_enc_cryptdb_opt_with_det.c_custkey_DET))) and ((customer_enc_cryptdb_opt_with_det.c_nationkey_DET) = (n1.n_nationkey_DET))) and ((n1.n_regionkey_DET) = (region_enc_cryptdb_opt_with_det.r_regionkey_DET))) and ((region_enc_cryptdb_opt_with_det.r_name_DET) = (:0))) and ((supplier_enc_cryptdb_opt_with_det.s_nationkey_DET) = (n2.n_nationkey_DET))) and ((orders_enc_cryptdb_opt_with_det.o_orderdate_OPE) >= (:1))) and ((orders_enc_cryptdb_opt_with_det.o_orderdate_OPE) <= (:2))) and ((part_enc_cryptdb_opt_with_det.p_type_DET) = (:3))", {db_column_desc(db_elem::TYPE_DATE, 3, oDET, SECLEVEL::DET, 4, false), db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oDET, SECLEVEL::DET, 0, false), db_column_desc(db_elem::TYPE_STRING, 25, oDET, SECLEVEL::DET, 1, false)}, {}, util::map_from_pair_vec<std::string, physical_operator*>({})))
         )
       )
     )

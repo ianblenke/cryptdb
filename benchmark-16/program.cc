@@ -47,8 +47,14 @@ public:
 virtual param_map get_param_map(exec_context& ctx) {
   param_map m;
   m[0] = db_elem((int64_t)encrypt_u32_det(ctx.crypto, 36, _FP(5), _FJ(false)));
-  m[1] = db_elem(encrypt_string_det(ctx.crypto, "ASIA", _FP(1), _FJ(false)));
-  m[2] = db_elem(encrypt_string_det(ctx.crypto, "ASIA", _FP(1), _FJ(false)));
+  {
+    Binary key(ctx.crypto->cm->getKey(ctx.crypto->cm->getmkey(), fieldname(_FP(4), "SWP"), SECLEVEL::SWP));
+    Token t = CryptoManager::token(key, Binary("steel"));
+    m[1] = db_elem((const char *)t.ciph.content, t.ciph.len);
+    m[2] = db_elem((const char *)t.wordKey.content, t.wordKey.len);
+  }
+  m[3] = db_elem(encrypt_string_det(ctx.crypto, "ASIA", _FP(1), _FJ(false)));
+  m[4] = db_elem(encrypt_string_det(ctx.crypto, "ASIA", _FP(1), _FJ(false)));
   return m;
 }
 };
@@ -381,20 +387,9 @@ static void query_1(exec_context& ctx) {
   physical_operator* op = new local_limit(100, 
     new local_order_by(
       {std::make_pair(0, true), std::make_pair(2, false), std::make_pair(1, false), std::make_pair(3, false)},
-      new local_transform_op(
-        {local_transform_op::trfm_desc(1), local_transform_op::trfm_desc(2), local_transform_op::trfm_desc(3), local_transform_op::trfm_desc(4), local_transform_op::trfm_desc(5), local_transform_op::trfm_desc(6), local_transform_op::trfm_desc(7), local_transform_op::trfm_desc(8), },
-        new local_decrypt_op(
-          {1, 2, 3, 4, 5, 6, 7, 8},
-          new local_filter_op(
-            new like_node(new tuple_pos_node(0), new string_literal_node("%STEEL"), false),
-            new local_decrypt_op(
-              {0},
-              new remote_sql_op(new param_generator_id1, "select part_enc_cryptdb_opt_with_det.p_type_DET, supplier_enc_cryptdb_opt_with_det.s_acctbal_DET, supplier_enc_cryptdb_opt_with_det.s_name_DET, nation_enc_cryptdb_opt_with_det.n_name_DET, part_enc_cryptdb_opt_with_det.p_partkey_DET, part_enc_cryptdb_opt_with_det.p_mfgr_DET, supplier_enc_cryptdb_opt_with_det.s_address_DET, supplier_enc_cryptdb_opt_with_det.s_phone_DET, supplier_enc_cryptdb_opt_with_det.s_comment_DET from part_enc_cryptdb_opt_with_det, supplier_enc_cryptdb_opt_with_det, partsupp_enc_cryptdb_opt_with_det, nation_enc_cryptdb_opt_with_det, region_enc_cryptdb_opt_with_det where (((((((part_enc_cryptdb_opt_with_det.p_partkey_DET) = (partsupp_enc_cryptdb_opt_with_det.ps_partkey_DET)) and ((supplier_enc_cryptdb_opt_with_det.s_suppkey_DET) = (partsupp_enc_cryptdb_opt_with_det.ps_suppkey_DET))) and ((part_enc_cryptdb_opt_with_det.p_size_DET) = (:0))) and ((supplier_enc_cryptdb_opt_with_det.s_nationkey_DET) = (nation_enc_cryptdb_opt_with_det.n_nationkey_DET))) and ((nation_enc_cryptdb_opt_with_det.n_regionkey_DET) = (region_enc_cryptdb_opt_with_det.r_regionkey_DET))) and ((region_enc_cryptdb_opt_with_det.r_name_DET) = (:1))) and ((partsupp_enc_cryptdb_opt_with_det.ps_supplycost_OPE) = ((select min(partsupp_enc_cryptdb_opt_with_det.ps_supplycost_OPE) from partsupp_enc_cryptdb_opt_with_det, supplier_enc_cryptdb_opt_with_det, nation_enc_cryptdb_opt_with_det, region_enc_cryptdb_opt_with_det where (((((part_enc_cryptdb_opt_with_det.p_partkey_DET) = (partsupp_enc_cryptdb_opt_with_det.ps_partkey_DET)) and ((supplier_enc_cryptdb_opt_with_det.s_suppkey_DET) = (partsupp_enc_cryptdb_opt_with_det.ps_suppkey_DET))) and ((supplier_enc_cryptdb_opt_with_det.s_nationkey_DET) = (nation_enc_cryptdb_opt_with_det.n_nationkey_DET))) and ((nation_enc_cryptdb_opt_with_det.n_regionkey_DET) = (region_enc_cryptdb_opt_with_det.r_regionkey_DET))) and ((region_enc_cryptdb_opt_with_det.r_name_DET) = (:2)))))", {db_column_desc(db_elem::TYPE_STRING, 25, oDET, SECLEVEL::DET, 4, false), db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oDET, SECLEVEL::DET, 5, false), db_column_desc(db_elem::TYPE_STRING, 25, oDET, SECLEVEL::DET, 1, false), db_column_desc(db_elem::TYPE_STRING, 25, oDET, SECLEVEL::DET, 1, false), db_column_desc(db_elem::TYPE_INT, 4, oDET, SECLEVEL::DETJOIN, 0, false), db_column_desc(db_elem::TYPE_STRING, 25, oDET, SECLEVEL::DET, 2, false), db_column_desc(db_elem::TYPE_STRING, 40, oDET, SECLEVEL::DET, 2, false), db_column_desc(db_elem::TYPE_STRING, 15, oDET, SECLEVEL::DET, 4, false), db_column_desc(db_elem::TYPE_STRING, 101, oDET, SECLEVEL::DET, 6, false)}, {}, util::map_from_pair_vec<std::string, physical_operator*>({})))
-            ,{
-            }
-          )
-        )
-      )
+      new local_decrypt_op(
+        {0, 1, 2, 3, 4, 5, 6, 7},
+        new remote_sql_op(new param_generator_id1, "select supplier_enc_cryptdb_opt_with_det.s_acctbal_DET, supplier_enc_cryptdb_opt_with_det.s_name_DET, nation_enc_cryptdb_opt_with_det.n_name_DET, part_enc_cryptdb_opt_with_det.p_partkey_DET, part_enc_cryptdb_opt_with_det.p_mfgr_DET, supplier_enc_cryptdb_opt_with_det.s_address_DET, supplier_enc_cryptdb_opt_with_det.s_phone_DET, supplier_enc_cryptdb_opt_with_det.s_comment_DET from part_enc_cryptdb_opt_with_det, supplier_enc_cryptdb_opt_with_det, partsupp_enc_cryptdb_opt_with_det, nation_enc_cryptdb_opt_with_det, region_enc_cryptdb_opt_with_det where ((((((((part_enc_cryptdb_opt_with_det.p_partkey_DET) = (partsupp_enc_cryptdb_opt_with_det.ps_partkey_DET)) and ((supplier_enc_cryptdb_opt_with_det.s_suppkey_DET) = (partsupp_enc_cryptdb_opt_with_det.ps_suppkey_DET))) and ((part_enc_cryptdb_opt_with_det.p_size_DET) = (:0))) and (searchSWP(:1, :2, part_enc_cryptdb_opt_with_det.p_type_SWP))) and ((supplier_enc_cryptdb_opt_with_det.s_nationkey_DET) = (nation_enc_cryptdb_opt_with_det.n_nationkey_DET))) and ((nation_enc_cryptdb_opt_with_det.n_regionkey_DET) = (region_enc_cryptdb_opt_with_det.r_regionkey_DET))) and ((region_enc_cryptdb_opt_with_det.r_name_DET) = (:3))) and ((partsupp_enc_cryptdb_opt_with_det.ps_supplycost_OPE) = ((select min(partsupp_enc_cryptdb_opt_with_det.ps_supplycost_OPE) from partsupp_enc_cryptdb_opt_with_det, supplier_enc_cryptdb_opt_with_det, nation_enc_cryptdb_opt_with_det, region_enc_cryptdb_opt_with_det where (((((part_enc_cryptdb_opt_with_det.p_partkey_DET) = (partsupp_enc_cryptdb_opt_with_det.ps_partkey_DET)) and ((supplier_enc_cryptdb_opt_with_det.s_suppkey_DET) = (partsupp_enc_cryptdb_opt_with_det.ps_suppkey_DET))) and ((supplier_enc_cryptdb_opt_with_det.s_nationkey_DET) = (nation_enc_cryptdb_opt_with_det.n_nationkey_DET))) and ((nation_enc_cryptdb_opt_with_det.n_regionkey_DET) = (region_enc_cryptdb_opt_with_det.r_regionkey_DET))) and ((region_enc_cryptdb_opt_with_det.r_name_DET) = (:4)))))", {db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oDET, SECLEVEL::DET, 5, false), db_column_desc(db_elem::TYPE_STRING, 25, oDET, SECLEVEL::DET, 1, false), db_column_desc(db_elem::TYPE_STRING, 25, oDET, SECLEVEL::DET, 1, false), db_column_desc(db_elem::TYPE_INT, 4, oDET, SECLEVEL::DETJOIN, 0, false), db_column_desc(db_elem::TYPE_STRING, 25, oDET, SECLEVEL::DET, 2, false), db_column_desc(db_elem::TYPE_STRING, 40, oDET, SECLEVEL::DET, 2, false), db_column_desc(db_elem::TYPE_STRING, 15, oDET, SECLEVEL::DET, 4, false), db_column_desc(db_elem::TYPE_STRING, 101, oDET, SECLEVEL::DET, 6, false)}, {}, util::map_from_pair_vec<std::string, physical_operator*>({})))
     )
   )
   ;
