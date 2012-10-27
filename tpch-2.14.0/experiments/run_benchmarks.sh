@@ -31,128 +31,128 @@ start_compression_channel $REMOTE_HOST
 reset_exp $REMOTE_HOST
 for i in {1..3}; do
 # benchmark 0
-/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-0/q0.time -a timeout 10m /home/stephentu/cryptdb/obj/benchmark-0/program $PROG_ARGS 0 2>&1 | tee $RESULTS_DIR/benchmark-0/q0.out
+/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-0/q0.time -a timeout 30m /home/stephentu/cryptdb/obj/benchmark-0/program $PROG_ARGS 0 2>&1 | tee $RESULTS_DIR/benchmark-0/q0.out
 if [ ${PIPESTATUS[0]} -eq 124 ]; then
   echo 'killed by timeout' >> $RESULTS_DIR/benchmark-0/q0.out
 fi
 reset_exp $REMOTE_HOST
-/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-0/q1.time -a timeout 10m /home/stephentu/cryptdb/obj/benchmark-0/program $PROG_ARGS 1 2>&1 | tee $RESULTS_DIR/benchmark-0/q1.out
+/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-0/q1.time -a timeout 30m /home/stephentu/cryptdb/obj/benchmark-0/program $PROG_ARGS 1 2>&1 | tee $RESULTS_DIR/benchmark-0/q1.out
 if [ ${PIPESTATUS[0]} -eq 124 ]; then
   echo 'killed by timeout' >> $RESULTS_DIR/benchmark-0/q1.out
 fi
 reset_exp $REMOTE_HOST
-/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-0/q2.time -a timeout 10m /home/stephentu/cryptdb/obj/benchmark-0/program $PROG_ARGS 2 2>&1 | tee $RESULTS_DIR/benchmark-0/q2.out
+/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-0/q2.time -a timeout 30m /home/stephentu/cryptdb/obj/benchmark-0/program $PROG_ARGS 2 2>&1 | tee $RESULTS_DIR/benchmark-0/q2.out
 if [ ${PIPESTATUS[0]} -eq 124 ]; then
   echo 'killed by timeout' >> $RESULTS_DIR/benchmark-0/q2.out
 fi
 reset_exp $REMOTE_HOST
-/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-0/q3.time -a timeout 10m /home/stephentu/cryptdb/obj/benchmark-0/program $PROG_ARGS 3 2>&1 | tee $RESULTS_DIR/benchmark-0/q3.out
+/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-0/q3.time -a timeout 30m /home/stephentu/cryptdb/obj/benchmark-0/program $PROG_ARGS 3 2>&1 | tee $RESULTS_DIR/benchmark-0/q3.out
 if [ ${PIPESTATUS[0]} -eq 124 ]; then
   echo 'killed by timeout' >> $RESULTS_DIR/benchmark-0/q3.out
 fi
 reset_exp $REMOTE_HOST
-/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-0/q4.time -a timeout 10m /home/stephentu/cryptdb/obj/benchmark-0/program $PROG_ARGS 4 2>&1 | tee $RESULTS_DIR/benchmark-0/q4.out
+/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-0/q4.time -a timeout 30m /home/stephentu/cryptdb/obj/benchmark-0/program $PROG_ARGS 4 2>&1 | tee $RESULTS_DIR/benchmark-0/q4.out
 if [ ${PIPESTATUS[0]} -eq 124 ]; then
   echo 'killed by timeout' >> $RESULTS_DIR/benchmark-0/q4.out
 fi
 reset_exp $REMOTE_HOST
-/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-0/q5.time -a timeout 10m /home/stephentu/cryptdb/obj/benchmark-0/program $PROG_ARGS 5 2>&1 | tee $RESULTS_DIR/benchmark-0/q5.out
+/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-0/q5.time -a timeout 30m /home/stephentu/cryptdb/obj/benchmark-0/program $PROG_ARGS 5 2>&1 | tee $RESULTS_DIR/benchmark-0/q5.out
 if [ ${PIPESTATUS[0]} -eq 124 ]; then
   echo 'killed by timeout' >> $RESULTS_DIR/benchmark-0/q5.out
 fi
 reset_exp $REMOTE_HOST
-/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-0/q6.time -a timeout 10m /home/stephentu/cryptdb/obj/benchmark-0/program $PROG_ARGS 6 2>&1 | tee $RESULTS_DIR/benchmark-0/q6.out
+/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-0/q6.time -a timeout 30m /home/stephentu/cryptdb/obj/benchmark-0/program $PROG_ARGS 6 2>&1 | tee $RESULTS_DIR/benchmark-0/q6.out
 if [ ${PIPESTATUS[0]} -eq 124 ]; then
   echo 'killed by timeout' >> $RESULTS_DIR/benchmark-0/q6.out
 fi
 reset_exp $REMOTE_HOST
-/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-0/q7.time -a timeout 10m /home/stephentu/cryptdb/obj/benchmark-0/program $PROG_ARGS 7 2>&1 | tee $RESULTS_DIR/benchmark-0/q7.out
+/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-0/q7.time -a timeout 30m /home/stephentu/cryptdb/obj/benchmark-0/program $PROG_ARGS 7 2>&1 | tee $RESULTS_DIR/benchmark-0/q7.out
 if [ ${PIPESTATUS[0]} -eq 124 ]; then
   echo 'killed by timeout' >> $RESULTS_DIR/benchmark-0/q7.out
 fi
 reset_exp $REMOTE_HOST
-/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-0/q8.time -a timeout 10m /home/stephentu/cryptdb/obj/benchmark-0/program $PROG_ARGS 8 2>&1 | tee $RESULTS_DIR/benchmark-0/q8.out
+/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-0/q8.time -a timeout 30m /home/stephentu/cryptdb/obj/benchmark-0/program $PROG_ARGS 8 2>&1 | tee $RESULTS_DIR/benchmark-0/q8.out
 if [ ${PIPESTATUS[0]} -eq 124 ]; then
   echo 'killed by timeout' >> $RESULTS_DIR/benchmark-0/q8.out
 fi
 reset_exp $REMOTE_HOST
-/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-0/q9.time -a timeout 10m /home/stephentu/cryptdb/obj/benchmark-0/program $PROG_ARGS 9 2>&1 | tee $RESULTS_DIR/benchmark-0/q9.out
+/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-0/q9.time -a timeout 30m /home/stephentu/cryptdb/obj/benchmark-0/program $PROG_ARGS 9 2>&1 | tee $RESULTS_DIR/benchmark-0/q9.out
 if [ ${PIPESTATUS[0]} -eq 124 ]; then
   echo 'killed by timeout' >> $RESULTS_DIR/benchmark-0/q9.out
 fi
 reset_exp $REMOTE_HOST
-/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-0/q10.time -a timeout 10m /home/stephentu/cryptdb/obj/benchmark-0/program $PROG_ARGS 10 2>&1 | tee $RESULTS_DIR/benchmark-0/q10.out
+/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-0/q10.time -a timeout 30m /home/stephentu/cryptdb/obj/benchmark-0/program $PROG_ARGS 10 2>&1 | tee $RESULTS_DIR/benchmark-0/q10.out
 if [ ${PIPESTATUS[0]} -eq 124 ]; then
   echo 'killed by timeout' >> $RESULTS_DIR/benchmark-0/q10.out
 fi
 reset_exp $REMOTE_HOST
-/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-0/q11.time -a timeout 10m /home/stephentu/cryptdb/obj/benchmark-0/program $PROG_ARGS 11 2>&1 | tee $RESULTS_DIR/benchmark-0/q11.out
+/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-0/q11.time -a timeout 30m /home/stephentu/cryptdb/obj/benchmark-0/program $PROG_ARGS 11 2>&1 | tee $RESULTS_DIR/benchmark-0/q11.out
 if [ ${PIPESTATUS[0]} -eq 124 ]; then
   echo 'killed by timeout' >> $RESULTS_DIR/benchmark-0/q11.out
 fi
 reset_exp $REMOTE_HOST
-/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-0/q12.time -a timeout 10m /home/stephentu/cryptdb/obj/benchmark-0/program $PROG_ARGS 12 2>&1 | tee $RESULTS_DIR/benchmark-0/q12.out
+/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-0/q12.time -a timeout 30m /home/stephentu/cryptdb/obj/benchmark-0/program $PROG_ARGS 12 2>&1 | tee $RESULTS_DIR/benchmark-0/q12.out
 if [ ${PIPESTATUS[0]} -eq 124 ]; then
   echo 'killed by timeout' >> $RESULTS_DIR/benchmark-0/q12.out
 fi
 reset_exp $REMOTE_HOST
-/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-0/q13.time -a timeout 10m /home/stephentu/cryptdb/obj/benchmark-0/program $PROG_ARGS 13 2>&1 | tee $RESULTS_DIR/benchmark-0/q13.out
+/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-0/q13.time -a timeout 30m /home/stephentu/cryptdb/obj/benchmark-0/program $PROG_ARGS 13 2>&1 | tee $RESULTS_DIR/benchmark-0/q13.out
 if [ ${PIPESTATUS[0]} -eq 124 ]; then
   echo 'killed by timeout' >> $RESULTS_DIR/benchmark-0/q13.out
 fi
 reset_exp $REMOTE_HOST
-/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-0/q14.time -a timeout 10m /home/stephentu/cryptdb/obj/benchmark-0/program $PROG_ARGS 14 2>&1 | tee $RESULTS_DIR/benchmark-0/q14.out
+/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-0/q14.time -a timeout 30m /home/stephentu/cryptdb/obj/benchmark-0/program $PROG_ARGS 14 2>&1 | tee $RESULTS_DIR/benchmark-0/q14.out
 if [ ${PIPESTATUS[0]} -eq 124 ]; then
   echo 'killed by timeout' >> $RESULTS_DIR/benchmark-0/q14.out
 fi
 reset_exp $REMOTE_HOST
-/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-0/q15.time -a timeout 10m /home/stephentu/cryptdb/obj/benchmark-0/program $PROG_ARGS 15 2>&1 | tee $RESULTS_DIR/benchmark-0/q15.out
+/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-0/q15.time -a timeout 30m /home/stephentu/cryptdb/obj/benchmark-0/program $PROG_ARGS 15 2>&1 | tee $RESULTS_DIR/benchmark-0/q15.out
 if [ ${PIPESTATUS[0]} -eq 124 ]; then
   echo 'killed by timeout' >> $RESULTS_DIR/benchmark-0/q15.out
 fi
 reset_exp $REMOTE_HOST
-/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-0/q16.time -a timeout 10m /home/stephentu/cryptdb/obj/benchmark-0/program $PROG_ARGS 16 2>&1 | tee $RESULTS_DIR/benchmark-0/q16.out
+/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-0/q16.time -a timeout 30m /home/stephentu/cryptdb/obj/benchmark-0/program $PROG_ARGS 16 2>&1 | tee $RESULTS_DIR/benchmark-0/q16.out
 if [ ${PIPESTATUS[0]} -eq 124 ]; then
   echo 'killed by timeout' >> $RESULTS_DIR/benchmark-0/q16.out
 fi
 reset_exp $REMOTE_HOST
-/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-0/q17.time -a timeout 10m /home/stephentu/cryptdb/obj/benchmark-0/program $PROG_ARGS 17 2>&1 | tee $RESULTS_DIR/benchmark-0/q17.out
+/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-0/q17.time -a timeout 30m /home/stephentu/cryptdb/obj/benchmark-0/program $PROG_ARGS 17 2>&1 | tee $RESULTS_DIR/benchmark-0/q17.out
 if [ ${PIPESTATUS[0]} -eq 124 ]; then
   echo 'killed by timeout' >> $RESULTS_DIR/benchmark-0/q17.out
 fi
 reset_exp $REMOTE_HOST
-/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-0/q18.time -a timeout 10m /home/stephentu/cryptdb/obj/benchmark-0/program $PROG_ARGS 18 2>&1 | tee $RESULTS_DIR/benchmark-0/q18.out
+/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-0/q18.time -a timeout 30m /home/stephentu/cryptdb/obj/benchmark-0/program $PROG_ARGS 18 2>&1 | tee $RESULTS_DIR/benchmark-0/q18.out
 if [ ${PIPESTATUS[0]} -eq 124 ]; then
   echo 'killed by timeout' >> $RESULTS_DIR/benchmark-0/q18.out
 fi
 reset_exp $REMOTE_HOST
 
 # benchmark 1
-/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-1/q0.time -a timeout 10m /home/stephentu/cryptdb/obj/benchmark-1/program $PROG_ARGS 0 2>&1 | tee $RESULTS_DIR/benchmark-1/q0.out
+/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-1/q0.time -a timeout 30m /home/stephentu/cryptdb/obj/benchmark-1/program $PROG_ARGS 0 2>&1 | tee $RESULTS_DIR/benchmark-1/q0.out
 if [ ${PIPESTATUS[0]} -eq 124 ]; then
   echo 'killed by timeout' >> $RESULTS_DIR/benchmark-1/q0.out
 fi
 reset_exp $REMOTE_HOST
 cp $RESULTS_DIR/benchmark-0/q1.out $RESULTS_DIR/benchmark-1/q1.out
 cp $RESULTS_DIR/benchmark-0/q1.time $RESULTS_DIR/benchmark-1/q1.time
-/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-1/q2.time -a timeout 10m /home/stephentu/cryptdb/obj/benchmark-1/program $PROG_ARGS 2 2>&1 | tee $RESULTS_DIR/benchmark-1/q2.out
+/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-1/q2.time -a timeout 30m /home/stephentu/cryptdb/obj/benchmark-1/program $PROG_ARGS 2 2>&1 | tee $RESULTS_DIR/benchmark-1/q2.out
 if [ ${PIPESTATUS[0]} -eq 124 ]; then
   echo 'killed by timeout' >> $RESULTS_DIR/benchmark-1/q2.out
 fi
 reset_exp $REMOTE_HOST
-/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-1/q3.time -a timeout 10m /home/stephentu/cryptdb/obj/benchmark-1/program $PROG_ARGS 3 2>&1 | tee $RESULTS_DIR/benchmark-1/q3.out
+/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-1/q3.time -a timeout 30m /home/stephentu/cryptdb/obj/benchmark-1/program $PROG_ARGS 3 2>&1 | tee $RESULTS_DIR/benchmark-1/q3.out
 if [ ${PIPESTATUS[0]} -eq 124 ]; then
   echo 'killed by timeout' >> $RESULTS_DIR/benchmark-1/q3.out
 fi
 reset_exp $REMOTE_HOST
 cp $RESULTS_DIR/benchmark-0/q4.out $RESULTS_DIR/benchmark-1/q4.out
 cp $RESULTS_DIR/benchmark-0/q4.time $RESULTS_DIR/benchmark-1/q4.time
-/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-1/q5.time -a timeout 10m /home/stephentu/cryptdb/obj/benchmark-1/program $PROG_ARGS 5 2>&1 | tee $RESULTS_DIR/benchmark-1/q5.out
+/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-1/q5.time -a timeout 30m /home/stephentu/cryptdb/obj/benchmark-1/program $PROG_ARGS 5 2>&1 | tee $RESULTS_DIR/benchmark-1/q5.out
 if [ ${PIPESTATUS[0]} -eq 124 ]; then
   echo 'killed by timeout' >> $RESULTS_DIR/benchmark-1/q5.out
 fi
 reset_exp $REMOTE_HOST
-/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-1/q6.time -a timeout 10m /home/stephentu/cryptdb/obj/benchmark-1/program $PROG_ARGS 6 2>&1 | tee $RESULTS_DIR/benchmark-1/q6.out
+/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-1/q6.time -a timeout 30m /home/stephentu/cryptdb/obj/benchmark-1/program $PROG_ARGS 6 2>&1 | tee $RESULTS_DIR/benchmark-1/q6.out
 if [ ${PIPESTATUS[0]} -eq 124 ]; then
   echo 'killed by timeout' >> $RESULTS_DIR/benchmark-1/q6.out
 fi
@@ -165,12 +165,12 @@ cp $RESULTS_DIR/benchmark-0/q9.out $RESULTS_DIR/benchmark-1/q9.out
 cp $RESULTS_DIR/benchmark-0/q9.time $RESULTS_DIR/benchmark-1/q9.time
 cp $RESULTS_DIR/benchmark-0/q10.out $RESULTS_DIR/benchmark-1/q10.out
 cp $RESULTS_DIR/benchmark-0/q10.time $RESULTS_DIR/benchmark-1/q10.time
-/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-1/q11.time -a timeout 10m /home/stephentu/cryptdb/obj/benchmark-1/program $PROG_ARGS 11 2>&1 | tee $RESULTS_DIR/benchmark-1/q11.out
+/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-1/q11.time -a timeout 30m /home/stephentu/cryptdb/obj/benchmark-1/program $PROG_ARGS 11 2>&1 | tee $RESULTS_DIR/benchmark-1/q11.out
 if [ ${PIPESTATUS[0]} -eq 124 ]; then
   echo 'killed by timeout' >> $RESULTS_DIR/benchmark-1/q11.out
 fi
 reset_exp $REMOTE_HOST
-/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-1/q12.time -a timeout 10m /home/stephentu/cryptdb/obj/benchmark-1/program $PROG_ARGS 12 2>&1 | tee $RESULTS_DIR/benchmark-1/q12.out
+/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-1/q12.time -a timeout 30m /home/stephentu/cryptdb/obj/benchmark-1/program $PROG_ARGS 12 2>&1 | tee $RESULTS_DIR/benchmark-1/q12.out
 if [ ${PIPESTATUS[0]} -eq 124 ]; then
   echo 'killed by timeout' >> $RESULTS_DIR/benchmark-1/q12.out
 fi
@@ -181,12 +181,12 @@ cp $RESULTS_DIR/benchmark-0/q14.out $RESULTS_DIR/benchmark-1/q14.out
 cp $RESULTS_DIR/benchmark-0/q14.time $RESULTS_DIR/benchmark-1/q14.time
 cp $RESULTS_DIR/benchmark-0/q15.out $RESULTS_DIR/benchmark-1/q15.out
 cp $RESULTS_DIR/benchmark-0/q15.time $RESULTS_DIR/benchmark-1/q15.time
-/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-1/q16.time -a timeout 10m /home/stephentu/cryptdb/obj/benchmark-1/program $PROG_ARGS 16 2>&1 | tee $RESULTS_DIR/benchmark-1/q16.out
+/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-1/q16.time -a timeout 30m /home/stephentu/cryptdb/obj/benchmark-1/program $PROG_ARGS 16 2>&1 | tee $RESULTS_DIR/benchmark-1/q16.out
 if [ ${PIPESTATUS[0]} -eq 124 ]; then
   echo 'killed by timeout' >> $RESULTS_DIR/benchmark-1/q16.out
 fi
 reset_exp $REMOTE_HOST
-/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-1/q17.time -a timeout 10m /home/stephentu/cryptdb/obj/benchmark-1/program $PROG_ARGS 17 2>&1 | tee $RESULTS_DIR/benchmark-1/q17.out
+/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-1/q17.time -a timeout 30m /home/stephentu/cryptdb/obj/benchmark-1/program $PROG_ARGS 17 2>&1 | tee $RESULTS_DIR/benchmark-1/q17.out
 if [ ${PIPESTATUS[0]} -eq 124 ]; then
   echo 'killed by timeout' >> $RESULTS_DIR/benchmark-1/q17.out
 fi
@@ -195,24 +195,24 @@ cp $RESULTS_DIR/benchmark-0/q18.out $RESULTS_DIR/benchmark-1/q18.out
 cp $RESULTS_DIR/benchmark-0/q18.time $RESULTS_DIR/benchmark-1/q18.time
 
 # benchmark 2
-/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-2/q0.time -a timeout 10m /home/stephentu/cryptdb/obj/benchmark-2/program $PROG_ARGS 0 2>&1 | tee $RESULTS_DIR/benchmark-2/q0.out
+/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-2/q0.time -a timeout 30m /home/stephentu/cryptdb/obj/benchmark-2/program $PROG_ARGS 0 2>&1 | tee $RESULTS_DIR/benchmark-2/q0.out
 if [ ${PIPESTATUS[0]} -eq 124 ]; then
   echo 'killed by timeout' >> $RESULTS_DIR/benchmark-2/q0.out
 fi
 reset_exp $REMOTE_HOST
 cp $RESULTS_DIR/benchmark-0/q1.out $RESULTS_DIR/benchmark-2/q1.out
 cp $RESULTS_DIR/benchmark-0/q1.time $RESULTS_DIR/benchmark-2/q1.time
-/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-2/q2.time -a timeout 10m /home/stephentu/cryptdb/obj/benchmark-2/program $PROG_ARGS 2 2>&1 | tee $RESULTS_DIR/benchmark-2/q2.out
+/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-2/q2.time -a timeout 30m /home/stephentu/cryptdb/obj/benchmark-2/program $PROG_ARGS 2 2>&1 | tee $RESULTS_DIR/benchmark-2/q2.out
 if [ ${PIPESTATUS[0]} -eq 124 ]; then
   echo 'killed by timeout' >> $RESULTS_DIR/benchmark-2/q2.out
 fi
 reset_exp $REMOTE_HOST
-/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-2/q3.time -a timeout 10m /home/stephentu/cryptdb/obj/benchmark-2/program $PROG_ARGS 3 2>&1 | tee $RESULTS_DIR/benchmark-2/q3.out
+/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-2/q3.time -a timeout 30m /home/stephentu/cryptdb/obj/benchmark-2/program $PROG_ARGS 3 2>&1 | tee $RESULTS_DIR/benchmark-2/q3.out
 if [ ${PIPESTATUS[0]} -eq 124 ]; then
   echo 'killed by timeout' >> $RESULTS_DIR/benchmark-2/q3.out
 fi
 reset_exp $REMOTE_HOST
-/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-2/q4.time -a timeout 10m /home/stephentu/cryptdb/obj/benchmark-2/program $PROG_ARGS 4 2>&1 | tee $RESULTS_DIR/benchmark-2/q4.out
+/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-2/q4.time -a timeout 30m /home/stephentu/cryptdb/obj/benchmark-2/program $PROG_ARGS 4 2>&1 | tee $RESULTS_DIR/benchmark-2/q4.out
 if [ ${PIPESTATUS[0]} -eq 124 ]; then
   echo 'killed by timeout' >> $RESULTS_DIR/benchmark-2/q4.out
 fi
@@ -221,14 +221,14 @@ cp $RESULTS_DIR/benchmark-1/q5.out $RESULTS_DIR/benchmark-2/q5.out
 cp $RESULTS_DIR/benchmark-1/q5.time $RESULTS_DIR/benchmark-2/q5.time
 cp $RESULTS_DIR/benchmark-1/q6.out $RESULTS_DIR/benchmark-2/q6.out
 cp $RESULTS_DIR/benchmark-1/q6.time $RESULTS_DIR/benchmark-2/q6.time
-/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-2/q7.time -a timeout 10m /home/stephentu/cryptdb/obj/benchmark-2/program $PROG_ARGS 7 2>&1 | tee $RESULTS_DIR/benchmark-2/q7.out
+/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-2/q7.time -a timeout 30m /home/stephentu/cryptdb/obj/benchmark-2/program $PROG_ARGS 7 2>&1 | tee $RESULTS_DIR/benchmark-2/q7.out
 if [ ${PIPESTATUS[0]} -eq 124 ]; then
   echo 'killed by timeout' >> $RESULTS_DIR/benchmark-2/q7.out
 fi
 reset_exp $REMOTE_HOST
 cp $RESULTS_DIR/benchmark-0/q8.out $RESULTS_DIR/benchmark-2/q8.out
 cp $RESULTS_DIR/benchmark-0/q8.time $RESULTS_DIR/benchmark-2/q8.time
-/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-2/q9.time -a timeout 10m /home/stephentu/cryptdb/obj/benchmark-2/program $PROG_ARGS 9 2>&1 | tee $RESULTS_DIR/benchmark-2/q9.out
+/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-2/q9.time -a timeout 30m /home/stephentu/cryptdb/obj/benchmark-2/program $PROG_ARGS 9 2>&1 | tee $RESULTS_DIR/benchmark-2/q9.out
 if [ ${PIPESTATUS[0]} -eq 124 ]; then
   echo 'killed by timeout' >> $RESULTS_DIR/benchmark-2/q9.out
 fi
@@ -267,12 +267,12 @@ cp $RESULTS_DIR/benchmark-1/q5.out $RESULTS_DIR/benchmark-3/q5.out
 cp $RESULTS_DIR/benchmark-1/q5.time $RESULTS_DIR/benchmark-3/q5.time
 cp $RESULTS_DIR/benchmark-1/q6.out $RESULTS_DIR/benchmark-3/q6.out
 cp $RESULTS_DIR/benchmark-1/q6.time $RESULTS_DIR/benchmark-3/q6.time
-/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-3/q7.time -a timeout 10m /home/stephentu/cryptdb/obj/benchmark-3/program $PROG_ARGS 7 2>&1 | tee $RESULTS_DIR/benchmark-3/q7.out
+/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-3/q7.time -a timeout 30m /home/stephentu/cryptdb/obj/benchmark-3/program $PROG_ARGS 7 2>&1 | tee $RESULTS_DIR/benchmark-3/q7.out
 if [ ${PIPESTATUS[0]} -eq 124 ]; then
   echo 'killed by timeout' >> $RESULTS_DIR/benchmark-3/q7.out
 fi
 reset_exp $REMOTE_HOST
-/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-3/q8.time -a timeout 10m /home/stephentu/cryptdb/obj/benchmark-3/program $PROG_ARGS 8 2>&1 | tee $RESULTS_DIR/benchmark-3/q8.out
+/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-3/q8.time -a timeout 30m /home/stephentu/cryptdb/obj/benchmark-3/program $PROG_ARGS 8 2>&1 | tee $RESULTS_DIR/benchmark-3/q8.out
 if [ ${PIPESTATUS[0]} -eq 124 ]; then
   echo 'killed by timeout' >> $RESULTS_DIR/benchmark-3/q8.out
 fi
@@ -291,7 +291,7 @@ cp $RESULTS_DIR/benchmark-0/q14.out $RESULTS_DIR/benchmark-3/q14.out
 cp $RESULTS_DIR/benchmark-0/q14.time $RESULTS_DIR/benchmark-3/q14.time
 cp $RESULTS_DIR/benchmark-0/q15.out $RESULTS_DIR/benchmark-3/q15.out
 cp $RESULTS_DIR/benchmark-0/q15.time $RESULTS_DIR/benchmark-3/q15.time
-/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-3/q16.time -a timeout 10m /home/stephentu/cryptdb/obj/benchmark-3/program $PROG_ARGS 16 2>&1 | tee $RESULTS_DIR/benchmark-3/q16.out
+/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-3/q16.time -a timeout 30m /home/stephentu/cryptdb/obj/benchmark-3/program $PROG_ARGS 16 2>&1 | tee $RESULTS_DIR/benchmark-3/q16.out
 if [ ${PIPESTATUS[0]} -eq 124 ]; then
   echo 'killed by timeout' >> $RESULTS_DIR/benchmark-3/q16.out
 fi
@@ -312,7 +312,7 @@ cp $RESULTS_DIR/benchmark-2/q3.out $RESULTS_DIR/benchmark-4/q3.out
 cp $RESULTS_DIR/benchmark-2/q3.time $RESULTS_DIR/benchmark-4/q3.time
 cp $RESULTS_DIR/benchmark-2/q4.out $RESULTS_DIR/benchmark-4/q4.out
 cp $RESULTS_DIR/benchmark-2/q4.time $RESULTS_DIR/benchmark-4/q4.time
-/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-4/q5.time -a timeout 10m /home/stephentu/cryptdb/obj/benchmark-4/program $PROG_ARGS 5 2>&1 | tee $RESULTS_DIR/benchmark-4/q5.out
+/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-4/q5.time -a timeout 30m /home/stephentu/cryptdb/obj/benchmark-4/program $PROG_ARGS 5 2>&1 | tee $RESULTS_DIR/benchmark-4/q5.out
 if [ ${PIPESTATUS[0]} -eq 124 ]; then
   echo 'killed by timeout' >> $RESULTS_DIR/benchmark-4/q5.out
 fi
@@ -381,7 +381,7 @@ cp $RESULTS_DIR/benchmark-3/q16.out $RESULTS_DIR/benchmark-5/q16.out
 cp $RESULTS_DIR/benchmark-3/q16.time $RESULTS_DIR/benchmark-5/q16.time
 cp $RESULTS_DIR/benchmark-1/q17.out $RESULTS_DIR/benchmark-5/q17.out
 cp $RESULTS_DIR/benchmark-1/q17.time $RESULTS_DIR/benchmark-5/q17.time
-/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-5/q18.time -a timeout 10m /home/stephentu/cryptdb/obj/benchmark-5/program $PROG_ARGS 18 2>&1 | tee $RESULTS_DIR/benchmark-5/q18.out
+/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-5/q18.time -a timeout 30m /home/stephentu/cryptdb/obj/benchmark-5/program $PROG_ARGS 18 2>&1 | tee $RESULTS_DIR/benchmark-5/q18.out
 if [ ${PIPESTATUS[0]} -eq 124 ]; then
   echo 'killed by timeout' >> $RESULTS_DIR/benchmark-5/q18.out
 fi
@@ -416,7 +416,7 @@ cp $RESULTS_DIR/benchmark-1/q12.out $RESULTS_DIR/benchmark-6/q12.out
 cp $RESULTS_DIR/benchmark-1/q12.time $RESULTS_DIR/benchmark-6/q12.time
 cp $RESULTS_DIR/benchmark-0/q13.out $RESULTS_DIR/benchmark-6/q13.out
 cp $RESULTS_DIR/benchmark-0/q13.time $RESULTS_DIR/benchmark-6/q13.time
-/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-6/q14.time -a timeout 10m /home/stephentu/cryptdb/obj/benchmark-6/program $PROG_ARGS 14 2>&1 | tee $RESULTS_DIR/benchmark-6/q14.out
+/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-6/q14.time -a timeout 30m /home/stephentu/cryptdb/obj/benchmark-6/program $PROG_ARGS 14 2>&1 | tee $RESULTS_DIR/benchmark-6/q14.out
 if [ ${PIPESTATUS[0]} -eq 124 ]; then
   echo 'killed by timeout' >> $RESULTS_DIR/benchmark-6/q14.out
 fi
@@ -433,7 +433,7 @@ cp $RESULTS_DIR/benchmark-5/q18.time $RESULTS_DIR/benchmark-6/q18.time
 # benchmark 7
 cp $RESULTS_DIR/benchmark-2/q0.out $RESULTS_DIR/benchmark-7/q0.out
 cp $RESULTS_DIR/benchmark-2/q0.time $RESULTS_DIR/benchmark-7/q0.time
-/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-7/q1.time -a timeout 10m /home/stephentu/cryptdb/obj/benchmark-7/program $PROG_ARGS 1 2>&1 | tee $RESULTS_DIR/benchmark-7/q1.out
+/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-7/q1.time -a timeout 30m /home/stephentu/cryptdb/obj/benchmark-7/program $PROG_ARGS 1 2>&1 | tee $RESULTS_DIR/benchmark-7/q1.out
 if [ ${PIPESTATUS[0]} -eq 124 ]; then
   echo 'killed by timeout' >> $RESULTS_DIR/benchmark-7/q1.out
 fi
@@ -458,7 +458,7 @@ cp $RESULTS_DIR/benchmark-0/q10.out $RESULTS_DIR/benchmark-7/q10.out
 cp $RESULTS_DIR/benchmark-0/q10.time $RESULTS_DIR/benchmark-7/q10.time
 cp $RESULTS_DIR/benchmark-1/q11.out $RESULTS_DIR/benchmark-7/q11.out
 cp $RESULTS_DIR/benchmark-1/q11.time $RESULTS_DIR/benchmark-7/q11.time
-/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-7/q12.time -a timeout 10m /home/stephentu/cryptdb/obj/benchmark-7/program $PROG_ARGS 12 2>&1 | tee $RESULTS_DIR/benchmark-7/q12.out
+/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-7/q12.time -a timeout 30m /home/stephentu/cryptdb/obj/benchmark-7/program $PROG_ARGS 12 2>&1 | tee $RESULTS_DIR/benchmark-7/q12.out
 if [ ${PIPESTATUS[0]} -eq 124 ]; then
   echo 'killed by timeout' >> $RESULTS_DIR/benchmark-7/q12.out
 fi
@@ -497,7 +497,7 @@ cp $RESULTS_DIR/benchmark-3/q8.out $RESULTS_DIR/benchmark-8/q8.out
 cp $RESULTS_DIR/benchmark-3/q8.time $RESULTS_DIR/benchmark-8/q8.time
 cp $RESULTS_DIR/benchmark-2/q9.out $RESULTS_DIR/benchmark-8/q9.out
 cp $RESULTS_DIR/benchmark-2/q9.time $RESULTS_DIR/benchmark-8/q9.time
-/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-8/q10.time -a timeout 10m /home/stephentu/cryptdb/obj/benchmark-8/program $PROG_ARGS 10 2>&1 | tee $RESULTS_DIR/benchmark-8/q10.out
+/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-8/q10.time -a timeout 30m /home/stephentu/cryptdb/obj/benchmark-8/program $PROG_ARGS 10 2>&1 | tee $RESULTS_DIR/benchmark-8/q10.out
 if [ ${PIPESTATUS[0]} -eq 124 ]; then
   echo 'killed by timeout' >> $RESULTS_DIR/benchmark-8/q10.out
 fi
@@ -532,7 +532,7 @@ cp $RESULTS_DIR/benchmark-2/q4.out $RESULTS_DIR/benchmark-9/q4.out
 cp $RESULTS_DIR/benchmark-2/q4.time $RESULTS_DIR/benchmark-9/q4.time
 cp $RESULTS_DIR/benchmark-4/q5.out $RESULTS_DIR/benchmark-9/q5.out
 cp $RESULTS_DIR/benchmark-4/q5.time $RESULTS_DIR/benchmark-9/q5.time
-/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-9/q6.time -a timeout 10m /home/stephentu/cryptdb/obj/benchmark-9/program $PROG_ARGS 6 2>&1 | tee $RESULTS_DIR/benchmark-9/q6.out
+/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-9/q6.time -a timeout 30m /home/stephentu/cryptdb/obj/benchmark-9/program $PROG_ARGS 6 2>&1 | tee $RESULTS_DIR/benchmark-9/q6.out
 if [ ${PIPESTATUS[0]} -eq 124 ]; then
   echo 'killed by timeout' >> $RESULTS_DIR/benchmark-9/q6.out
 fi
@@ -565,7 +565,7 @@ cp $RESULTS_DIR/benchmark-5/q18.time $RESULTS_DIR/benchmark-9/q18.time
 # benchmark 10
 cp $RESULTS_DIR/benchmark-2/q0.out $RESULTS_DIR/benchmark-10/q0.out
 cp $RESULTS_DIR/benchmark-2/q0.time $RESULTS_DIR/benchmark-10/q0.time
-/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-10/q1.time -a timeout 10m /home/stephentu/cryptdb/obj/benchmark-10/program $PROG_ARGS 1 2>&1 | tee $RESULTS_DIR/benchmark-10/q1.out
+/usr/bin/time -f '%e,%U,%S' -o $RESULTS_DIR/benchmark-10/q1.time -a timeout 30m /home/stephentu/cryptdb/obj/benchmark-10/program $PROG_ARGS 1 2>&1 | tee $RESULTS_DIR/benchmark-10/q1.out
 if [ ${PIPESTATUS[0]} -eq 124 ]; then
   echo 'killed by timeout' >> $RESULTS_DIR/benchmark-10/q1.out
 fi
