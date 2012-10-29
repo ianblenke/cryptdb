@@ -24,8 +24,10 @@ mkdir -p $RESULTS_DIR/benchmark-15
 mkdir -p $RESULTS_DIR/benchmark-16
 mkdir -p $RESULTS_DIR/benchmark-17
 mkdir -p $RESULTS_DIR/benchmark-18
+end_memory_hog $REMOTE_HOST
 throttle_bw_end $REMOTE_HOST
 end_compression_channel
+start_memory_hog $REMOTE_HOST 8589934592
 throttle_bw_start $REMOTE_HOST
 start_compression_channel $REMOTE_HOST
 reset_exp $REMOTE_HOST
