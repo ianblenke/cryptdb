@@ -67,3 +67,23 @@ start_compression_channel() {
 end_compression_channel() {
     kill `ps aux | grep 'ssh -f -N' | grep 10000 | grep -v grep | awk '{print $2}'`
 }
+
+start_memory_hog() {
+    REMOTE_HOST=$1
+    DESIRED_FREE_AMOUNT=$2
+    cat <<EOF | ssh $REMOTE_HOST 'sudo /bin/bash'
+    X=\`cat /proc/meminfo | grep MemFree | awk '{print \$2}'\`
+    Y=\`cat /proc/meminfo | grep '^Cached' | awk '{print \$2}'\`
+    Z=\$((X+Y))
+    Z=\$((Z*1024))
+    A=\$((Z-$DESIRED_FREE_AMOUNT))
+    sudo $HOME/mlock_hogger --fork \$A
+EOF
+}
+
+end_memory_hog() {
+    REMOTE_HOST=$1
+    cat <<EOF | ssh $REMOTE_HOST 'sudo /bin/bash'
+    sudo kill -9 \$(pidof mlock_hogger)
+EOF
+}
