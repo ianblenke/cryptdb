@@ -418,7 +418,9 @@ static void query_5(exec_context& ctx) {
         new and_node(new ge_node(new tuple_pos_node(0), new double_literal_node(0.040000)), new le_node(new tuple_pos_node(0), new double_literal_node(0.060000))),
         new local_decrypt_op(
           {0},
-          new remote_sql_op(new param_generator_id6, "select group_serializer(lineitem_enc_cryptdb_opt_with_det.l_discount_DET), group_serializer(lineitem_enc_cryptdb_opt_with_det.l_extendedprice_DET) from lineitem_enc_cryptdb_opt_with_det where (((lineitem_enc_cryptdb_opt_with_det.l_shipdate_OPE) >= (:0)) and ((lineitem_enc_cryptdb_opt_with_det.l_shipdate_OPE) < (:1))) and ((lineitem_enc_cryptdb_opt_with_det.l_quantity_OPE) < (:2))", {db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oDET, SECLEVEL::DET, 6, true), db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oDET, SECLEVEL::DET, 5, true)}, {}, util::map_from_pair_vec<std::string, physical_operator*>({})))
+          new local_flattener_op(
+            new remote_sql_op(new param_generator_id6, "select lineitem_enc_cryptdb_opt_with_det.l_discount_DET, lineitem_enc_cryptdb_opt_with_det.l_extendedprice_DET from lineitem_enc_cryptdb_opt_with_det where (((lineitem_enc_cryptdb_opt_with_det.l_shipdate_OPE) >= (:0)) and ((lineitem_enc_cryptdb_opt_with_det.l_shipdate_OPE) < (:1))) and ((lineitem_enc_cryptdb_opt_with_det.l_quantity_OPE) < (:2))", {db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oDET, SECLEVEL::DET, 6, false), db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oDET, SECLEVEL::DET, 5, false)}, {}, util::map_from_pair_vec<std::string, physical_operator*>({})))
+        )
         ,{
         }
       )
@@ -760,7 +762,9 @@ static void query_18(exec_context& ctx) {
                   new and_node(new gt_node(new tuple_pos_node(0), new double_literal_node(0.000000)), new in_node(new substring_node(new tuple_pos_node(1), 1, 2), {new string_literal_node("41"), new string_literal_node("26"), new string_literal_node("36"), new string_literal_node("27"), new string_literal_node("38"), new string_literal_node("37"), new string_literal_node("22")})),
                   new local_decrypt_op(
                     {0, 1},
-                    new remote_sql_op(new param_generator_id24, "select group_serializer(customer_enc_cryptdb_opt_with_det.c_acctbal_DET), array_to_string(array_agg(encode(customer_enc_cryptdb_opt_with_det.c_phone_DET, 'hex')), ',') from customer_enc_cryptdb_opt_with_det", {db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oDET, SECLEVEL::DET, 5, true), db_column_desc(db_elem::TYPE_STRING, 15, oDET, SECLEVEL::DET, 4, true)}, {}, util::map_from_pair_vec<std::string, physical_operator*>({})))
+                    new local_flattener_op(
+                      new remote_sql_op(new param_generator_id24, "select customer_enc_cryptdb_opt_with_det.c_acctbal_DET, customer_enc_cryptdb_opt_with_det.c_phone_DET from customer_enc_cryptdb_opt_with_det", {db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oDET, SECLEVEL::DET, 5, false), db_column_desc(db_elem::TYPE_STRING, 15, oDET, SECLEVEL::DET, 4, false)}, {}, util::map_from_pair_vec<std::string, physical_operator*>({})))
+                  )
                   ,{
                   }
                 )
