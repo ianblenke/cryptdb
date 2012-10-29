@@ -1464,3 +1464,50 @@ local_limit::next(exec_context& ctx, db_tuple_vec& tuples)
     i++; _i++;
   }
 }
+
+local_flattener_op::desc_vec
+local_flattener_op::tuple_desc()
+{
+  desc_vec dv = first_child()->tuple_desc();
+  desc_vec ret;
+  for (auto &d : dv) {
+    ret.push_back(d.vectorize());
+  }
+  return ret;
+}
+
+bool
+local_flattener_op::has_more(exec_context& ctx)
+{
+  return first_child()->has_more(ctx);
+}
+
+void
+local_flattener_op::next(exec_context& ctx, db_tuple_vec& tuples)
+{
+  TRACE_OPERATOR();
+  WARN_IF_NOT_EMPTY(tuples);
+
+  SANITY(has_more(ctx));
+
+  // XXX: way too much copy-ing going on here!
+
+  db_tuple_vec buf;
+  while (first_child()->has_more(ctx)) {
+    db_tuple_vec v;
+    first_child()->next(ctx, v);
+    buf.reserve(buf.size() + v.size());
+    buf.insert(buf.end(), v.begin(), v.end());
+  }
+
+  db_tuple tup;
+  for (size_t i = 0; i < buf.front().columns.size(); i++) {
+    vector<db_elem> col_elems;
+    col_elems.reserve(buf.size());
+    for (size_t j = 0; j < buf.size(); j++) {
+      col_elems.push_back(buf[j].columns[i]);
+    }
+    tup.columns.push_back(db_elem(col_elems));
+  }
+  tuples.push_back(tup);
+}
