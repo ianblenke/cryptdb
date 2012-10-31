@@ -4,12 +4,12 @@ create table partsupp_enc_cryptdb_opt (
 
   ps_suppkey_DET bigint  NOT NULL,
 
-  ps_availqty_DET bigint  NOT NULL,
+  ps_availqty_DET bigint  NOT NULL, /* could be RAND */
 
   ps_supplycost_DET bigint  NOT NULL,
   ps_supplycost_OPE bytea NOT NULL,
 
-  ps_comment_DET bytea NOT NULL,
+  ps_comment_DET bytea NOT NULL, /* could be RAND */
 
   ps_volume_DET bigint NOT NULL
 

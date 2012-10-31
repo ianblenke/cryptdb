@@ -12,11 +12,11 @@ create table lineitem_enc_cryptdb_opt (
   l_quantity_DET bigint  NOT NULL,
   l_quantity_OPE bytea NOT NULL,
 
-  l_extendedprice_DET bigint  NOT NULL,
+  l_extendedprice_DET bigint  NOT NULL, /* could be RAND */
 
   l_discount_OPE bytea NOT NULL,
 
-  l_tax_DET bigint  NOT NULL,
+  l_tax_DET bigint  NOT NULL, /* could be RAND */
 
   l_returnflag_DET smallint  NOT NULL,
 
@@ -32,7 +32,7 @@ create table lineitem_enc_cryptdb_opt (
 
   l_shipmode_DET bytea NOT NULL,
 
-  l_comment_DET bytea NOT NULL,
+  l_comment_DET bytea NOT NULL, /* could be RAND */
 
   -- pre-computed fields
 
