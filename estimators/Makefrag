@@ -1,11 +1,11 @@
 OBJDIRS	+= estimators
 
-ESTIMATORSPROGS	:= crypto
+ESTIMATORSPROGS	:= crypto hash_agg
 ESTIMATORSPROGOBJS	:= $(patsubst %,$(OBJDIR)/estimators/%,$(ESTIMATORSPROGS))
 
 all:	$(ESTIMATORSPROGOBJS) 
 
 $(ESTIMATORSPROGOBJS): %: %.o $(OBJDIR)/libedbutil.so
-	$(CXX) $< -o $@ -ledbparser  $(LDFLAGS) -ledbutil -lcryptdb -ledbcrypto -ledbcrypto2 -lmysqlclient -lpq
+	$(CXX) $< -o $@ -ledbparser  $(LDFLAGS) -ledbutil -lcryptdb -ledbcrypto -ledbcrypto2 -lmysqlclient -lpq -lexecution
 
 # vim: set noexpandtab:

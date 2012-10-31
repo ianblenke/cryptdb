@@ -7,15 +7,15 @@ create table supplier_enc_cryptdb_opt (
   -- treated as an bigint...
   s_name_OPE bigint  NOT NULL,
 
-  s_address_DET bytea NOT NULL,
+  s_address_DET bytea NOT NULL, /* could be RAND */
 
   s_nationkey_DET bigint  NOT NULL,
 
-  s_phone_DET bytea NOT NULL,
+  s_phone_DET bytea NOT NULL, /* could be RAND */
 
-  s_acctbal_DET bigint  NOT NULL,
+  s_acctbal_DET bigint  NOT NULL, /* could be RAND */
 
-  s_comment_DET bytea NOT NULL
+  s_comment_DET bytea NOT NULL /* could be RAND */
 
   --PRIMARY KEY (s_suppkey_DET)
 ) ;

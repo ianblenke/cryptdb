@@ -11,6 +11,7 @@
 #include <execution/operator_types.hh>
 #include <execution/eval_nodes.hh>
 #include <execution/query_cache.hh>
+#include <execution/commandline.hh>
 #include <util/util.hh>
 static inline size_t _FP(size_t i) {
   #ifdef ALL_SAME_KEY
@@ -283,14 +284,20 @@ static void query_0(exec_context& ctx) {
     new local_transform_op(
       {local_transform_op::trfm_desc(1), local_transform_op::trfm_desc(2), local_transform_op::trfm_desc(std::make_pair(db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oNONE, SECLEVEL::PLAIN, 0, false), new sum_node(new tuple_pos_node(3), false))), local_transform_op::trfm_desc(std::make_pair(db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oNONE, SECLEVEL::PLAIN, 0, false), new sum_node(new tuple_pos_node(4), false))), local_transform_op::trfm_desc(std::make_pair(db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oNONE, SECLEVEL::PLAIN, 0, false), new sum_node(new mult_node(new tuple_pos_node(4), new sub_node(new int_literal_node(1), new tuple_pos_node(5))), false))), local_transform_op::trfm_desc(std::make_pair(db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oNONE, SECLEVEL::PLAIN, 0, false), new sum_node(new mult_node(new mult_node(new tuple_pos_node(4), new sub_node(new int_literal_node(1), new tuple_pos_node(5))), new add_node(new int_literal_node(1), new tuple_pos_node(6))), false))), local_transform_op::trfm_desc(std::make_pair(db_column_desc(db_elem::TYPE_DOUBLE, 8, oNONE, SECLEVEL::PLAIN, 0, false), new avg_node(new tuple_pos_node(3), false))), local_transform_op::trfm_desc(std::make_pair(db_column_desc(db_elem::TYPE_DOUBLE, 8, oNONE, SECLEVEL::PLAIN, 0, false), new avg_node(new tuple_pos_node(4), false))), local_transform_op::trfm_desc(std::make_pair(db_column_desc(db_elem::TYPE_DOUBLE, 8, oNONE, SECLEVEL::PLAIN, 0, false), new avg_node(new tuple_pos_node(5), false))), local_transform_op::trfm_desc(std::make_pair(db_column_desc(db_elem::TYPE_INT, 4, oNONE, SECLEVEL::PLAIN, 0, false), new count_star_node)), },
       new local_decrypt_op(
-        {1, 2, 3, 4, 5, 6},
-        new local_filter_op(
-          new le_node(new tuple_pos_node(0), new date_literal_node("1998-1-1")),
+        {3, 4, 5, 6},
+        new local_group_by(
+          {1, 2},
           new local_decrypt_op(
-            {0},
-            new remote_sql_op(new param_generator_id0, "select group_serializer(lineitem_enc_cryptdb_opt_with_det.l_shipdate_DET), lineitem_enc_cryptdb_opt_with_det.l_returnflag_DET, lineitem_enc_cryptdb_opt_with_det.l_linestatus_DET, group_serializer(lineitem_enc_cryptdb_opt_with_det.l_quantity_DET), group_serializer(lineitem_enc_cryptdb_opt_with_det.l_extendedprice_DET), group_serializer(lineitem_enc_cryptdb_opt_with_det.l_discount_DET), group_serializer(lineitem_enc_cryptdb_opt_with_det.l_tax_DET) from lineitem_enc_cryptdb_opt_with_det group by lineitem_enc_cryptdb_opt_with_det.l_returnflag_DET, lineitem_enc_cryptdb_opt_with_det.l_linestatus_DET", {db_column_desc(db_elem::TYPE_DATE, 3, oDET, SECLEVEL::DET, 10, true), db_column_desc(db_elem::TYPE_CHAR, 1, oDET, SECLEVEL::DET, 8, false), db_column_desc(db_elem::TYPE_CHAR, 1, oDET, SECLEVEL::DET, 9, false), db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oDET, SECLEVEL::DET, 4, true), db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oDET, SECLEVEL::DET, 5, true), db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oDET, SECLEVEL::DET, 6, true), db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oDET, SECLEVEL::DET, 7, true)}, {}, util::map_from_pair_vec<std::string, physical_operator*>({})))
-          ,{
-          }
+            {1, 2},
+            new local_filter_op(
+              new le_node(new tuple_pos_node(0), new date_literal_node("1998-1-1")),
+              new local_decrypt_op(
+                {0},
+                new remote_sql_op(new param_generator_id0, "select lineitem_enc_cryptdb_opt_with_det.l_shipdate_DET, lineitem_enc_cryptdb_opt_with_det.l_returnflag_DET, lineitem_enc_cryptdb_opt_with_det.l_linestatus_DET, lineitem_enc_cryptdb_opt_with_det.l_quantity_DET, lineitem_enc_cryptdb_opt_with_det.l_extendedprice_DET, lineitem_enc_cryptdb_opt_with_det.l_discount_DET, lineitem_enc_cryptdb_opt_with_det.l_tax_DET from lineitem_enc_cryptdb_opt_with_det", {db_column_desc(db_elem::TYPE_DATE, 3, oDET, SECLEVEL::DET, 10, false), db_column_desc(db_elem::TYPE_CHAR, 1, oDET, SECLEVEL::DET, 8, false), db_column_desc(db_elem::TYPE_CHAR, 1, oDET, SECLEVEL::DET, 9, false), db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oDET, SECLEVEL::DET, 4, false), db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oDET, SECLEVEL::DET, 5, false), db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oDET, SECLEVEL::DET, 6, false), db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oDET, SECLEVEL::DET, 7, false)}, {}, util::map_from_pair_vec<std::string, physical_operator*>({})))
+              ,{
+              }
+            )
+          )
         )
       )
     )
@@ -347,16 +354,22 @@ static void query_2(exec_context& ctx) {
     new local_order_by(
       {std::make_pair(1, true), std::make_pair(2, false)},
       new local_transform_op(
-        {local_transform_op::trfm_desc(2), local_transform_op::trfm_desc(std::make_pair(db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oNONE, SECLEVEL::PLAIN, 0, false), new sum_node(new tuple_pos_node(3), false))), local_transform_op::trfm_desc(0), local_transform_op::trfm_desc(4), },
+        {local_transform_op::trfm_desc(2), local_transform_op::trfm_desc(std::make_pair(db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oNONE, SECLEVEL::PLAIN, 0, false), new sum_node(new tuple_pos_node(4), false))), local_transform_op::trfm_desc(0), local_transform_op::trfm_desc(3), },
         new local_decrypt_op(
-          {2, 3, 4},
-          new local_filter_op(
-            new and_node(new lt_node(new tuple_pos_node(0), new date_literal_node("1995-3-12")), new gt_node(new tuple_pos_node(1), new date_literal_node("1995-3-12"))),
+          {4},
+          new local_group_by(
+            {2, 0, 3},
             new local_decrypt_op(
-              {0, 1},
-              new remote_sql_op(new param_generator_id3, "select orders_enc_cryptdb_opt_with_det.o_orderdate_DET, group_serializer(lineitem_enc_cryptdb_opt_with_det.l_shipdate_DET), lineitem_enc_cryptdb_opt_with_det.l_orderkey_DET, group_serializer(lineitem_enc_cryptdb_opt_with_det.l_disc_price_DET), orders_enc_cryptdb_opt_with_det.o_shippriority_DET from customer_enc_cryptdb_opt_with_det, orders_enc_cryptdb_opt_with_det, lineitem_enc_cryptdb_opt_with_det where (((customer_enc_cryptdb_opt_with_det.c_mktsegment_DET) = (:0)) and ((customer_enc_cryptdb_opt_with_det.c_custkey_DET) = (orders_enc_cryptdb_opt_with_det.o_custkey_DET))) and ((lineitem_enc_cryptdb_opt_with_det.l_orderkey_DET) = (orders_enc_cryptdb_opt_with_det.o_orderkey_DET)) group by lineitem_enc_cryptdb_opt_with_det.l_orderkey_DET, orders_enc_cryptdb_opt_with_det.o_orderdate_DET, orders_enc_cryptdb_opt_with_det.o_shippriority_DET", {db_column_desc(db_elem::TYPE_DATE, 3, oDET, SECLEVEL::DET, 4, false), db_column_desc(db_elem::TYPE_DATE, 3, oDET, SECLEVEL::DET, 10, true), db_column_desc(db_elem::TYPE_INT, 4, oDET, SECLEVEL::DETJOIN, 0, false), db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oDET, SECLEVEL::DET, 0, true), db_column_desc(db_elem::TYPE_INT, 4, oDET, SECLEVEL::DET, 7, false)}, {}, util::map_from_pair_vec<std::string, physical_operator*>({})))
-            ,{
-            }
+              {2, 3},
+              new local_filter_op(
+                new and_node(new lt_node(new tuple_pos_node(0), new date_literal_node("1995-3-12")), new gt_node(new tuple_pos_node(1), new date_literal_node("1995-3-12"))),
+                new local_decrypt_op(
+                  {0, 1},
+                  new remote_sql_op(new param_generator_id3, "select orders_enc_cryptdb_opt_with_det.o_orderdate_DET, lineitem_enc_cryptdb_opt_with_det.l_shipdate_DET, lineitem_enc_cryptdb_opt_with_det.l_orderkey_DET, orders_enc_cryptdb_opt_with_det.o_shippriority_DET, lineitem_enc_cryptdb_opt_with_det.l_disc_price_DET from customer_enc_cryptdb_opt_with_det, orders_enc_cryptdb_opt_with_det, lineitem_enc_cryptdb_opt_with_det where (((customer_enc_cryptdb_opt_with_det.c_mktsegment_DET) = (:0)) and ((customer_enc_cryptdb_opt_with_det.c_custkey_DET) = (orders_enc_cryptdb_opt_with_det.o_custkey_DET))) and ((lineitem_enc_cryptdb_opt_with_det.l_orderkey_DET) = (orders_enc_cryptdb_opt_with_det.o_orderkey_DET))", {db_column_desc(db_elem::TYPE_DATE, 3, oDET, SECLEVEL::DET, 4, false), db_column_desc(db_elem::TYPE_DATE, 3, oDET, SECLEVEL::DET, 10, false), db_column_desc(db_elem::TYPE_INT, 4, oDET, SECLEVEL::DETJOIN, 0, false), db_column_desc(db_elem::TYPE_INT, 4, oDET, SECLEVEL::DET, 7, false), db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oDET, SECLEVEL::DET, 0, false)}, {}, util::map_from_pair_vec<std::string, physical_operator*>({})))
+                ,{
+                }
+              )
+            )
           )
         )
       )
@@ -377,24 +390,27 @@ static void query_3(exec_context& ctx) {
     {std::make_pair(0, false)},
     new local_transform_op(
       {local_transform_op::trfm_desc(2), local_transform_op::trfm_desc(std::make_pair(db_column_desc(db_elem::TYPE_INT, 4, oNONE, SECLEVEL::PLAIN, 0, false), new count_star_node)), },
-      new local_decrypt_op(
+      new local_group_by(
         {2},
-        new local_filter_op(
-          new and_node(new and_node(new ge_node(new tuple_pos_node(0), new date_literal_node("1994-11-1")), new lt_node(new tuple_pos_node(0), new date_literal_node("1995-2-1"))), new exists_node(new subselect_node(0, {new tuple_pos_node(1)}))),
-          new local_decrypt_op(
-            {0},
-            new remote_sql_op(new param_generator_id4, "select group_serializer(orders_enc_cryptdb_opt_with_det.o_orderdate_DET), group_serializer(orders_enc_cryptdb_opt_with_det.o_orderkey_DET), orders_enc_cryptdb_opt_with_det.o_orderpriority_DET from orders_enc_cryptdb_opt_with_det group by orders_enc_cryptdb_opt_with_det.o_orderpriority_DET", {db_column_desc(db_elem::TYPE_DATE, 3, oDET, SECLEVEL::DET, 4, true), db_column_desc(db_elem::TYPE_INT, 4, oDET, SECLEVEL::DETJOIN, 0, true), db_column_desc(db_elem::TYPE_STRING, 15, oDET, SECLEVEL::DET, 5, false)}, {}, util::map_from_pair_vec<std::string, physical_operator*>({})))
-          ,{
-            new local_filter_op(
-              new lt_node(new tuple_pos_node(0), new tuple_pos_node(1)),
-              new local_decrypt_op(
-                {0, 1},
-                new remote_sql_op(new param_generator_id5, "select lineitem_enc_cryptdb_opt_with_det.l_commitdate_DET, lineitem_enc_cryptdb_opt_with_det.l_receiptdate_DET from lineitem_enc_cryptdb_opt_with_det where (lineitem_enc_cryptdb_opt_with_det.l_orderkey_DET) = (:0)", {db_column_desc(db_elem::TYPE_DATE, 3, oDET, SECLEVEL::DET, 11, false), db_column_desc(db_elem::TYPE_DATE, 3, oDET, SECLEVEL::DET, 12, false)}, {}, util::map_from_pair_vec<std::string, physical_operator*>({})))
-              ,{
-              }
-            )
-            ,
-          }
+        new local_decrypt_op(
+          {2},
+          new local_filter_op(
+            new and_node(new and_node(new ge_node(new tuple_pos_node(0), new date_literal_node("1994-11-1")), new lt_node(new tuple_pos_node(0), new date_literal_node("1995-2-1"))), new exists_node(new subselect_node(0, {new tuple_pos_node(1)}))),
+            new local_decrypt_op(
+              {0},
+              new remote_sql_op(new param_generator_id4, "select orders_enc_cryptdb_opt_with_det.o_orderdate_DET, orders_enc_cryptdb_opt_with_det.o_orderkey_DET, orders_enc_cryptdb_opt_with_det.o_orderpriority_DET from orders_enc_cryptdb_opt_with_det", {db_column_desc(db_elem::TYPE_DATE, 3, oDET, SECLEVEL::DET, 4, false), db_column_desc(db_elem::TYPE_INT, 4, oDET, SECLEVEL::DETJOIN, 0, false), db_column_desc(db_elem::TYPE_STRING, 15, oDET, SECLEVEL::DET, 5, false)}, {}, util::map_from_pair_vec<std::string, physical_operator*>({})))
+            ,{
+              new local_filter_op(
+                new lt_node(new tuple_pos_node(0), new tuple_pos_node(1)),
+                new local_decrypt_op(
+                  {0, 1},
+                  new remote_sql_op(new param_generator_id5, "select lineitem_enc_cryptdb_opt_with_det.l_commitdate_DET, lineitem_enc_cryptdb_opt_with_det.l_receiptdate_DET from lineitem_enc_cryptdb_opt_with_det where (lineitem_enc_cryptdb_opt_with_det.l_orderkey_DET) = (:0)", {db_column_desc(db_elem::TYPE_DATE, 3, oDET, SECLEVEL::DET, 11, false), db_column_desc(db_elem::TYPE_DATE, 3, oDET, SECLEVEL::DET, 12, false)}, {}, util::map_from_pair_vec<std::string, physical_operator*>({})))
+                ,{
+                }
+              )
+              ,
+            }
+          )
         )
       )
     )
@@ -415,14 +431,20 @@ static void query_4(exec_context& ctx) {
     new local_transform_op(
       {local_transform_op::trfm_desc(1), local_transform_op::trfm_desc(std::make_pair(db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oNONE, SECLEVEL::PLAIN, 0, false), new sum_node(new tuple_pos_node(2), false))), },
       new local_decrypt_op(
-        {1, 2},
-        new local_filter_op(
-          new and_node(new ge_node(new tuple_pos_node(0), new date_literal_node("1993-1-1")), new lt_node(new tuple_pos_node(0), new date_literal_node("1994-1-1"))),
+        {2},
+        new local_group_by(
+          {1},
           new local_decrypt_op(
-            {0},
-            new remote_sql_op(new param_generator_id6, "select group_serializer(orders_enc_cryptdb_opt_with_det.o_orderdate_DET), nation_enc_cryptdb_opt_with_det.n_name_DET, group_serializer(lineitem_enc_cryptdb_opt_with_det.l_disc_price_DET) from customer_enc_cryptdb_opt_with_det, orders_enc_cryptdb_opt_with_det, lineitem_enc_cryptdb_opt_with_det, supplier_enc_cryptdb_opt_with_det, nation_enc_cryptdb_opt_with_det, region_enc_cryptdb_opt_with_det where (((((((customer_enc_cryptdb_opt_with_det.c_custkey_DET) = (orders_enc_cryptdb_opt_with_det.o_custkey_DET)) and ((lineitem_enc_cryptdb_opt_with_det.l_orderkey_DET) = (orders_enc_cryptdb_opt_with_det.o_orderkey_DET))) and ((lineitem_enc_cryptdb_opt_with_det.l_suppkey_DET) = (supplier_enc_cryptdb_opt_with_det.s_suppkey_DET))) and ((customer_enc_cryptdb_opt_with_det.c_nationkey_DET) = (supplier_enc_cryptdb_opt_with_det.s_nationkey_DET))) and ((supplier_enc_cryptdb_opt_with_det.s_nationkey_DET) = (nation_enc_cryptdb_opt_with_det.n_nationkey_DET))) and ((nation_enc_cryptdb_opt_with_det.n_regionkey_DET) = (region_enc_cryptdb_opt_with_det.r_regionkey_DET))) and ((region_enc_cryptdb_opt_with_det.r_name_DET) = (:0)) group by nation_enc_cryptdb_opt_with_det.n_name_DET", {db_column_desc(db_elem::TYPE_DATE, 3, oDET, SECLEVEL::DET, 4, true), db_column_desc(db_elem::TYPE_STRING, 25, oDET, SECLEVEL::DET, 1, false), db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oDET, SECLEVEL::DET, 0, true)}, {}, util::map_from_pair_vec<std::string, physical_operator*>({})))
-          ,{
-          }
+            {1},
+            new local_filter_op(
+              new and_node(new ge_node(new tuple_pos_node(0), new date_literal_node("1993-1-1")), new lt_node(new tuple_pos_node(0), new date_literal_node("1994-1-1"))),
+              new local_decrypt_op(
+                {0},
+                new remote_sql_op(new param_generator_id6, "select orders_enc_cryptdb_opt_with_det.o_orderdate_DET, nation_enc_cryptdb_opt_with_det.n_name_DET, lineitem_enc_cryptdb_opt_with_det.l_disc_price_DET from customer_enc_cryptdb_opt_with_det, orders_enc_cryptdb_opt_with_det, lineitem_enc_cryptdb_opt_with_det, supplier_enc_cryptdb_opt_with_det, nation_enc_cryptdb_opt_with_det, region_enc_cryptdb_opt_with_det where (((((((customer_enc_cryptdb_opt_with_det.c_custkey_DET) = (orders_enc_cryptdb_opt_with_det.o_custkey_DET)) and ((lineitem_enc_cryptdb_opt_with_det.l_orderkey_DET) = (orders_enc_cryptdb_opt_with_det.o_orderkey_DET))) and ((lineitem_enc_cryptdb_opt_with_det.l_suppkey_DET) = (supplier_enc_cryptdb_opt_with_det.s_suppkey_DET))) and ((customer_enc_cryptdb_opt_with_det.c_nationkey_DET) = (supplier_enc_cryptdb_opt_with_det.s_nationkey_DET))) and ((supplier_enc_cryptdb_opt_with_det.s_nationkey_DET) = (nation_enc_cryptdb_opt_with_det.n_nationkey_DET))) and ((nation_enc_cryptdb_opt_with_det.n_regionkey_DET) = (region_enc_cryptdb_opt_with_det.r_regionkey_DET))) and ((region_enc_cryptdb_opt_with_det.r_name_DET) = (:0))", {db_column_desc(db_elem::TYPE_DATE, 3, oDET, SECLEVEL::DET, 4, false), db_column_desc(db_elem::TYPE_STRING, 25, oDET, SECLEVEL::DET, 1, false), db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oDET, SECLEVEL::DET, 0, false)}, {}, util::map_from_pair_vec<std::string, physical_operator*>({})))
+              ,{
+              }
+            )
+          )
         )
       )
     )
@@ -446,7 +468,9 @@ static void query_5(exec_context& ctx) {
         new and_node(new and_node(new and_node(new ge_node(new tuple_pos_node(0), new date_literal_node("1993-1-1")), new lt_node(new tuple_pos_node(0), new date_literal_node("1994-1-1"))), new ge_node(new tuple_pos_node(1), new double_literal_node(0.040000))), new le_node(new tuple_pos_node(1), new double_literal_node(0.060000))),
         new local_decrypt_op(
           {0, 1},
-          new remote_sql_op(new param_generator_id7, "select group_serializer(lineitem_enc_cryptdb_opt_with_det.l_shipdate_DET), group_serializer(lineitem_enc_cryptdb_opt_with_det.l_discount_DET), group_serializer(lineitem_enc_cryptdb_opt_with_det.l_extendedprice_DET) from lineitem_enc_cryptdb_opt_with_det where (lineitem_enc_cryptdb_opt_with_det.l_quantity_OPE) < (:0)", {db_column_desc(db_elem::TYPE_DATE, 3, oDET, SECLEVEL::DET, 10, true), db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oDET, SECLEVEL::DET, 6, true), db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oDET, SECLEVEL::DET, 5, true)}, {}, util::map_from_pair_vec<std::string, physical_operator*>({})))
+          new local_flattener_op(
+            new remote_sql_op(new param_generator_id7, "select lineitem_enc_cryptdb_opt_with_det.l_shipdate_DET, lineitem_enc_cryptdb_opt_with_det.l_discount_DET, lineitem_enc_cryptdb_opt_with_det.l_extendedprice_DET from lineitem_enc_cryptdb_opt_with_det where (lineitem_enc_cryptdb_opt_with_det.l_quantity_OPE) < (:0)", {db_column_desc(db_elem::TYPE_DATE, 3, oDET, SECLEVEL::DET, 10, false), db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oDET, SECLEVEL::DET, 6, false), db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oDET, SECLEVEL::DET, 5, false)}, {}, util::map_from_pair_vec<std::string, physical_operator*>({})))
+        )
         ,{
         }
       )
@@ -569,16 +593,22 @@ static void query_9(exec_context& ctx) {
     new local_order_by(
       {std::make_pair(2, true)},
       new local_transform_op(
-        {local_transform_op::trfm_desc(1), local_transform_op::trfm_desc(2), local_transform_op::trfm_desc(std::make_pair(db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oNONE, SECLEVEL::PLAIN, 0, false), new sum_node(new tuple_pos_node(3), false))), local_transform_op::trfm_desc(4), local_transform_op::trfm_desc(5), local_transform_op::trfm_desc(6), local_transform_op::trfm_desc(7), local_transform_op::trfm_desc(8), },
+        {local_transform_op::trfm_desc(1), local_transform_op::trfm_desc(2), local_transform_op::trfm_desc(std::make_pair(db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oNONE, SECLEVEL::PLAIN, 0, false), new sum_node(new tuple_pos_node(8), false))), local_transform_op::trfm_desc(3), local_transform_op::trfm_desc(5), local_transform_op::trfm_desc(6), local_transform_op::trfm_desc(4), local_transform_op::trfm_desc(7), },
         new local_decrypt_op(
-          {1, 2, 3, 4, 5, 6, 7, 8},
-          new local_filter_op(
-            new and_node(new ge_node(new tuple_pos_node(0), new date_literal_node("1994-8-1")), new lt_node(new tuple_pos_node(0), new date_literal_node("1994-11-1"))),
+          {8},
+          new local_group_by(
+            {1, 2, 3, 4, 5, 6, 7},
             new local_decrypt_op(
-              {0},
-              new remote_sql_op(new param_generator_id11, "select group_serializer(orders_enc_cryptdb_opt_with_det.o_orderdate_DET), customer_enc_cryptdb_opt_with_det.c_custkey_DET, customer_enc_cryptdb_opt_with_det.c_name_DET, group_serializer(lineitem_enc_cryptdb_opt_with_det.l_disc_price_DET), customer_enc_cryptdb_opt_with_det.c_acctbal_DET, nation_enc_cryptdb_opt_with_det.n_name_DET, customer_enc_cryptdb_opt_with_det.c_address_DET, customer_enc_cryptdb_opt_with_det.c_phone_DET, customer_enc_cryptdb_opt_with_det.c_comment_DET from customer_enc_cryptdb_opt_with_det, orders_enc_cryptdb_opt_with_det, lineitem_enc_cryptdb_opt_with_det, nation_enc_cryptdb_opt_with_det where ((((customer_enc_cryptdb_opt_with_det.c_custkey_DET) = (orders_enc_cryptdb_opt_with_det.o_custkey_DET)) and ((lineitem_enc_cryptdb_opt_with_det.l_orderkey_DET) = (orders_enc_cryptdb_opt_with_det.o_orderkey_DET))) and ((lineitem_enc_cryptdb_opt_with_det.l_returnflag_DET) = (:0))) and ((customer_enc_cryptdb_opt_with_det.c_nationkey_DET) = (nation_enc_cryptdb_opt_with_det.n_nationkey_DET)) group by customer_enc_cryptdb_opt_with_det.c_custkey_DET, customer_enc_cryptdb_opt_with_det.c_name_DET, customer_enc_cryptdb_opt_with_det.c_acctbal_DET, customer_enc_cryptdb_opt_with_det.c_phone_DET, nation_enc_cryptdb_opt_with_det.n_name_DET, customer_enc_cryptdb_opt_with_det.c_address_DET, customer_enc_cryptdb_opt_with_det.c_comment_DET", {db_column_desc(db_elem::TYPE_DATE, 3, oDET, SECLEVEL::DET, 4, true), db_column_desc(db_elem::TYPE_INT, 4, oDET, SECLEVEL::DETJOIN, 0, false), db_column_desc(db_elem::TYPE_STRING, 25, oDET, SECLEVEL::DET, 1, false), db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oDET, SECLEVEL::DET, 0, true), db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oDET, SECLEVEL::DET, 5, false), db_column_desc(db_elem::TYPE_STRING, 25, oDET, SECLEVEL::DET, 1, false), db_column_desc(db_elem::TYPE_STRING, 40, oDET, SECLEVEL::DET, 2, false), db_column_desc(db_elem::TYPE_STRING, 15, oDET, SECLEVEL::DET, 4, false), db_column_desc(db_elem::TYPE_STRING, 117, oDET, SECLEVEL::DET, 7, false)}, {}, util::map_from_pair_vec<std::string, physical_operator*>({})))
-            ,{
-            }
+              {1, 2, 3, 4, 5, 6, 7},
+              new local_filter_op(
+                new and_node(new ge_node(new tuple_pos_node(0), new date_literal_node("1994-8-1")), new lt_node(new tuple_pos_node(0), new date_literal_node("1994-11-1"))),
+                new local_decrypt_op(
+                  {0},
+                  new remote_sql_op(new param_generator_id11, "select orders_enc_cryptdb_opt_with_det.o_orderdate_DET, customer_enc_cryptdb_opt_with_det.c_custkey_DET, customer_enc_cryptdb_opt_with_det.c_name_DET, customer_enc_cryptdb_opt_with_det.c_acctbal_DET, customer_enc_cryptdb_opt_with_det.c_phone_DET, nation_enc_cryptdb_opt_with_det.n_name_DET, customer_enc_cryptdb_opt_with_det.c_address_DET, customer_enc_cryptdb_opt_with_det.c_comment_DET, lineitem_enc_cryptdb_opt_with_det.l_disc_price_DET from customer_enc_cryptdb_opt_with_det, orders_enc_cryptdb_opt_with_det, lineitem_enc_cryptdb_opt_with_det, nation_enc_cryptdb_opt_with_det where ((((customer_enc_cryptdb_opt_with_det.c_custkey_DET) = (orders_enc_cryptdb_opt_with_det.o_custkey_DET)) and ((lineitem_enc_cryptdb_opt_with_det.l_orderkey_DET) = (orders_enc_cryptdb_opt_with_det.o_orderkey_DET))) and ((lineitem_enc_cryptdb_opt_with_det.l_returnflag_DET) = (:0))) and ((customer_enc_cryptdb_opt_with_det.c_nationkey_DET) = (nation_enc_cryptdb_opt_with_det.n_nationkey_DET))", {db_column_desc(db_elem::TYPE_DATE, 3, oDET, SECLEVEL::DET, 4, false), db_column_desc(db_elem::TYPE_INT, 4, oDET, SECLEVEL::DETJOIN, 0, false), db_column_desc(db_elem::TYPE_STRING, 25, oDET, SECLEVEL::DET, 1, false), db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oDET, SECLEVEL::DET, 5, false), db_column_desc(db_elem::TYPE_STRING, 15, oDET, SECLEVEL::DET, 4, false), db_column_desc(db_elem::TYPE_STRING, 25, oDET, SECLEVEL::DET, 1, false), db_column_desc(db_elem::TYPE_STRING, 40, oDET, SECLEVEL::DET, 2, false), db_column_desc(db_elem::TYPE_STRING, 117, oDET, SECLEVEL::DET, 7, false), db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oDET, SECLEVEL::DET, 0, false)}, {}, util::map_from_pair_vec<std::string, physical_operator*>({})))
+                ,{
+                }
+              )
+            )
           )
         )
       )
@@ -635,14 +665,20 @@ static void query_11(exec_context& ctx) {
     new local_transform_op(
       {local_transform_op::trfm_desc(3), local_transform_op::trfm_desc(std::make_pair(db_column_desc(db_elem::TYPE_INT, 8, oNONE, SECLEVEL::PLAIN, 0, false), new sum_node(new case_when_node({new case_expr_case_node(new or_node(new eq_node(new tuple_pos_node(4), new string_literal_node("1-URGENT")), new eq_node(new tuple_pos_node(4), new string_literal_node("2-HIGH"))), new int_literal_node(1))}, new int_literal_node(0)), false))), local_transform_op::trfm_desc(std::make_pair(db_column_desc(db_elem::TYPE_INT, 8, oNONE, SECLEVEL::PLAIN, 0, false), new sum_node(new case_when_node({new case_expr_case_node(new and_node(new neq_node(new tuple_pos_node(4), new string_literal_node("1-URGENT")), new neq_node(new tuple_pos_node(4), new string_literal_node("2-HIGH"))), new int_literal_node(1))}, new int_literal_node(0)), false))), },
       new local_decrypt_op(
-        {3, 4},
-        new local_filter_op(
-          new and_node(new and_node(new and_node(new lt_node(new tuple_pos_node(0), new tuple_pos_node(1)), new lt_node(new tuple_pos_node(2), new tuple_pos_node(0))), new ge_node(new tuple_pos_node(1), new date_literal_node("1993-1-1"))), new lt_node(new tuple_pos_node(1), new date_literal_node("1994-1-1"))),
+        {4},
+        new local_group_by(
+          {3},
           new local_decrypt_op(
-            {0, 1, 2},
-            new remote_sql_op(new param_generator_id14, "select group_serializer(lineitem_enc_cryptdb_opt_with_det.l_commitdate_DET), group_serializer(lineitem_enc_cryptdb_opt_with_det.l_receiptdate_DET), group_serializer(lineitem_enc_cryptdb_opt_with_det.l_shipdate_DET), lineitem_enc_cryptdb_opt_with_det.l_shipmode_DET, array_to_string(array_agg(encode(orders_enc_cryptdb_opt_with_det.o_orderpriority_DET, 'hex')), ',') from orders_enc_cryptdb_opt_with_det, lineitem_enc_cryptdb_opt_with_det where ((orders_enc_cryptdb_opt_with_det.o_orderkey_DET) = (lineitem_enc_cryptdb_opt_with_det.l_orderkey_DET)) and (lineitem_enc_cryptdb_opt_with_det.l_shipmode_DET in ( :0, :1 )) group by lineitem_enc_cryptdb_opt_with_det.l_shipmode_DET", {db_column_desc(db_elem::TYPE_DATE, 3, oDET, SECLEVEL::DET, 11, true), db_column_desc(db_elem::TYPE_DATE, 3, oDET, SECLEVEL::DET, 12, true), db_column_desc(db_elem::TYPE_DATE, 3, oDET, SECLEVEL::DET, 10, true), db_column_desc(db_elem::TYPE_STRING, 10, oDET, SECLEVEL::DET, 14, false), db_column_desc(db_elem::TYPE_STRING, 15, oDET, SECLEVEL::DET, 5, true)}, {}, util::map_from_pair_vec<std::string, physical_operator*>({})))
-          ,{
-          }
+            {3},
+            new local_filter_op(
+              new and_node(new and_node(new and_node(new lt_node(new tuple_pos_node(0), new tuple_pos_node(1)), new lt_node(new tuple_pos_node(2), new tuple_pos_node(0))), new ge_node(new tuple_pos_node(1), new date_literal_node("1993-1-1"))), new lt_node(new tuple_pos_node(1), new date_literal_node("1994-1-1"))),
+              new local_decrypt_op(
+                {0, 1, 2},
+                new remote_sql_op(new param_generator_id14, "select lineitem_enc_cryptdb_opt_with_det.l_commitdate_DET, lineitem_enc_cryptdb_opt_with_det.l_receiptdate_DET, lineitem_enc_cryptdb_opt_with_det.l_shipdate_DET, lineitem_enc_cryptdb_opt_with_det.l_shipmode_DET, orders_enc_cryptdb_opt_with_det.o_orderpriority_DET from orders_enc_cryptdb_opt_with_det, lineitem_enc_cryptdb_opt_with_det where ((orders_enc_cryptdb_opt_with_det.o_orderkey_DET) = (lineitem_enc_cryptdb_opt_with_det.l_orderkey_DET)) and (lineitem_enc_cryptdb_opt_with_det.l_shipmode_DET in ( :0, :1 ))", {db_column_desc(db_elem::TYPE_DATE, 3, oDET, SECLEVEL::DET, 11, false), db_column_desc(db_elem::TYPE_DATE, 3, oDET, SECLEVEL::DET, 12, false), db_column_desc(db_elem::TYPE_DATE, 3, oDET, SECLEVEL::DET, 10, false), db_column_desc(db_elem::TYPE_STRING, 10, oDET, SECLEVEL::DET, 14, false), db_column_desc(db_elem::TYPE_STRING, 15, oDET, SECLEVEL::DET, 5, false)}, {}, util::map_from_pair_vec<std::string, physical_operator*>({})))
+              ,{
+              }
+            )
+          )
         )
       )
     )
@@ -666,7 +702,9 @@ static void query_12(exec_context& ctx) {
         new and_node(new ge_node(new tuple_pos_node(0), new date_literal_node("1996-7-1")), new lt_node(new tuple_pos_node(0), new date_literal_node("1996-8-1"))),
         new local_decrypt_op(
           {0},
-          new remote_sql_op(new param_generator_id15, "select group_serializer(lineitem_enc_cryptdb_opt_with_det.l_shipdate_DET), array_to_string(array_agg(encode(part_enc_cryptdb_opt_with_det.p_type_DET, 'hex')), ','), group_serializer(lineitem_enc_cryptdb_opt_with_det.l_extendedprice_DET), group_serializer(lineitem_enc_cryptdb_opt_with_det.l_discount_DET) from lineitem_enc_cryptdb_opt_with_det, part_enc_cryptdb_opt_with_det where (lineitem_enc_cryptdb_opt_with_det.l_partkey_DET) = (part_enc_cryptdb_opt_with_det.p_partkey_DET)", {db_column_desc(db_elem::TYPE_DATE, 3, oDET, SECLEVEL::DET, 10, true), db_column_desc(db_elem::TYPE_STRING, 25, oDET, SECLEVEL::DET, 4, true), db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oDET, SECLEVEL::DET, 5, true), db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oDET, SECLEVEL::DET, 6, true)}, {}, util::map_from_pair_vec<std::string, physical_operator*>({})))
+          new local_flattener_op(
+            new remote_sql_op(new param_generator_id15, "select lineitem_enc_cryptdb_opt_with_det.l_shipdate_DET, part_enc_cryptdb_opt_with_det.p_type_DET, lineitem_enc_cryptdb_opt_with_det.l_extendedprice_DET, lineitem_enc_cryptdb_opt_with_det.l_discount_DET from lineitem_enc_cryptdb_opt_with_det, part_enc_cryptdb_opt_with_det where (lineitem_enc_cryptdb_opt_with_det.l_partkey_DET) = (part_enc_cryptdb_opt_with_det.p_partkey_DET)", {db_column_desc(db_elem::TYPE_DATE, 3, oDET, SECLEVEL::DET, 10, false), db_column_desc(db_elem::TYPE_STRING, 25, oDET, SECLEVEL::DET, 4, false), db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oDET, SECLEVEL::DET, 5, false), db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oDET, SECLEVEL::DET, 6, false)}, {}, util::map_from_pair_vec<std::string, physical_operator*>({})))
+        )
         ,{
         }
       )
@@ -759,27 +797,33 @@ static void query_16(exec_context& ctx) {
         new local_filter_op(
           new gt_node(new tuple_pos_node(1), new mult_node(new double_literal_node(0.500000), new tuple_pos_node(2))),
           new local_transform_op(
-            {local_transform_op::trfm_desc(1), local_transform_op::trfm_desc(std::make_pair(db_column_desc(db_elem::TYPE_INT, 4, oNONE, SECLEVEL::PLAIN, 2, false), new min_node(new tuple_pos_node(2)))), local_transform_op::trfm_desc(std::make_pair(db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oNONE, SECLEVEL::PLAIN, 0, false), new sum_node(new tuple_pos_node(3), false))), },
+            {local_transform_op::trfm_desc(2), local_transform_op::trfm_desc(std::make_pair(db_column_desc(db_elem::TYPE_INT, 4, oNONE, SECLEVEL::PLAIN, 2, false), new min_node(new tuple_pos_node(3)))), local_transform_op::trfm_desc(std::make_pair(db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oNONE, SECLEVEL::PLAIN, 0, false), new sum_node(new tuple_pos_node(4), false))), },
             new local_decrypt_op(
-              {1, 2, 3},
-              new local_filter_op(
-                new and_node(new ge_node(new tuple_pos_node(0), new date_literal_node("1997-1-1")), new lt_node(new tuple_pos_node(0), new date_literal_node("1998-1-1"))),
+              {3, 4},
+              new local_group_by(
+                {1, 2},
                 new local_decrypt_op(
-                  {0},
-                  new remote_sql_op(new param_generator_id21, "select group_serializer(lineitem_enc_cryptdb_opt_with_det.l_shipdate_DET), partsupp_enc_cryptdb_opt_with_det.ps_suppkey_DET, group_serializer(partsupp_enc_cryptdb_opt_with_det.ps_availqty_DET), group_serializer(lineitem_enc_cryptdb_opt_with_det.l_quantity_DET) from partsupp_enc_cryptdb_opt_with_det, lineitem_enc_cryptdb_opt_with_det where (((lineitem_enc_cryptdb_opt_with_det.l_partkey_DET) = (partsupp_enc_cryptdb_opt_with_det.ps_partkey_DET)) and ((lineitem_enc_cryptdb_opt_with_det.l_suppkey_DET) = (partsupp_enc_cryptdb_opt_with_det.ps_suppkey_DET))) and (partsupp_enc_cryptdb_opt_with_det.ps_partkey_DET in ( :_subselect$1 )) group by partsupp_enc_cryptdb_opt_with_det.ps_partkey_DET, partsupp_enc_cryptdb_opt_with_det.ps_suppkey_DET", {db_column_desc(db_elem::TYPE_DATE, 3, oDET, SECLEVEL::DET, 10, true), db_column_desc(db_elem::TYPE_INT, 4, oDET, SECLEVEL::DETJOIN, 1, false), db_column_desc(db_elem::TYPE_INT, 4, oDET, SECLEVEL::DET, 2, true), db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oDET, SECLEVEL::DET, 4, true)}, {}, util::map_from_pair_vec<std::string, physical_operator*>({std::pair<std::string, physical_operator*>("_subselect$1", new local_transform_op(
-                    {local_transform_op::trfm_desc(1), },
-                    new local_filter_op(
-                      new like_node(new tuple_pos_node(0), new string_literal_node("%khaki%"), false),
-                      new local_decrypt_op(
-                        {0},
-                        new remote_sql_op(new param_generator_id20, "select part_enc_cryptdb_opt_with_det.p_name_DET, part_enc_cryptdb_opt_with_det.p_partkey_DET from part_enc_cryptdb_opt_with_det", {db_column_desc(db_elem::TYPE_STRING, 55, oDET, SECLEVEL::DET, 1, false), db_column_desc(db_elem::TYPE_INT, 4, oDET, SECLEVEL::DETJOIN, 0, false)}, {}, util::map_from_pair_vec<std::string, physical_operator*>({})))
-                      ,{
-                      }
-                    )
+                  {1, 2},
+                  new local_filter_op(
+                    new and_node(new ge_node(new tuple_pos_node(0), new date_literal_node("1997-1-1")), new lt_node(new tuple_pos_node(0), new date_literal_node("1998-1-1"))),
+                    new local_decrypt_op(
+                      {0},
+                      new remote_sql_op(new param_generator_id21, "select lineitem_enc_cryptdb_opt_with_det.l_shipdate_DET, partsupp_enc_cryptdb_opt_with_det.ps_partkey_DET, partsupp_enc_cryptdb_opt_with_det.ps_suppkey_DET, partsupp_enc_cryptdb_opt_with_det.ps_availqty_DET, lineitem_enc_cryptdb_opt_with_det.l_quantity_DET from partsupp_enc_cryptdb_opt_with_det, lineitem_enc_cryptdb_opt_with_det where (((lineitem_enc_cryptdb_opt_with_det.l_partkey_DET) = (partsupp_enc_cryptdb_opt_with_det.ps_partkey_DET)) and ((lineitem_enc_cryptdb_opt_with_det.l_suppkey_DET) = (partsupp_enc_cryptdb_opt_with_det.ps_suppkey_DET))) and (partsupp_enc_cryptdb_opt_with_det.ps_partkey_DET in ( :_subselect$1 ))", {db_column_desc(db_elem::TYPE_DATE, 3, oDET, SECLEVEL::DET, 10, false), db_column_desc(db_elem::TYPE_INT, 4, oDET, SECLEVEL::DETJOIN, 0, false), db_column_desc(db_elem::TYPE_INT, 4, oDET, SECLEVEL::DETJOIN, 1, false), db_column_desc(db_elem::TYPE_INT, 4, oDET, SECLEVEL::DET, 2, false), db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oDET, SECLEVEL::DET, 4, false)}, {}, util::map_from_pair_vec<std::string, physical_operator*>({std::pair<std::string, physical_operator*>("_subselect$1", new local_transform_op(
+                        {local_transform_op::trfm_desc(1), },
+                        new local_filter_op(
+                          new like_node(new tuple_pos_node(0), new string_literal_node("%khaki%"), false),
+                          new local_decrypt_op(
+                            {0},
+                            new remote_sql_op(new param_generator_id20, "select part_enc_cryptdb_opt_with_det.p_name_DET, part_enc_cryptdb_opt_with_det.p_partkey_DET from part_enc_cryptdb_opt_with_det", {db_column_desc(db_elem::TYPE_STRING, 55, oDET, SECLEVEL::DET, 1, false), db_column_desc(db_elem::TYPE_INT, 4, oDET, SECLEVEL::DETJOIN, 0, false)}, {}, util::map_from_pair_vec<std::string, physical_operator*>({})))
+                          ,{
+                          }
+                        )
+                      )
+                      )})))
+                    ,{
+                    }
                   )
-                  )})))
-                ,{
-                }
+                )
               )
             )
           )
@@ -805,24 +849,27 @@ static void query_17(exec_context& ctx) {
       {std::make_pair(1, true), std::make_pair(0, false)},
       new local_transform_op(
         {local_transform_op::trfm_desc(4), local_transform_op::trfm_desc(std::make_pair(db_column_desc(db_elem::TYPE_INT, 4, oNONE, SECLEVEL::PLAIN, 0, false), new count_star_node)), },
-        new local_decrypt_op(
+        new local_group_by(
           {4},
-          new local_filter_op(
-            new and_node(new gt_node(new tuple_pos_node(0), new tuple_pos_node(1)), new not_node(new exists_node(new subselect_node(0, {new tuple_pos_node(2), new tuple_pos_node(3)})))),
-            new local_decrypt_op(
-              {0, 1},
-              new remote_sql_op(new param_generator_id23, "select group_serializer(l1.l_receiptdate_DET), group_serializer(l1.l_commitdate_DET), group_serializer(l1.l_orderkey_DET), group_serializer(l1.l_suppkey_DET), supplier_enc_cryptdb_opt_with_det.s_name_DET from supplier_enc_cryptdb_opt_with_det, lineitem_enc_cryptdb_opt_with_det l1, orders_enc_cryptdb_opt_with_det, nation_enc_cryptdb_opt_with_det where ((((((supplier_enc_cryptdb_opt_with_det.s_suppkey_DET) = (l1.l_suppkey_DET)) and ((orders_enc_cryptdb_opt_with_det.o_orderkey_DET) = (l1.l_orderkey_DET))) and ((orders_enc_cryptdb_opt_with_det.o_orderstatus_DET) = (:0))) and (exists ( (select 1 from lineitem_enc_cryptdb_opt_with_det l2 where ((l2.l_orderkey_DET) = (l1.l_orderkey_DET)) and ((l2.l_suppkey_DET) <> (l1.l_suppkey_DET))) ))) and ((supplier_enc_cryptdb_opt_with_det.s_nationkey_DET) = (nation_enc_cryptdb_opt_with_det.n_nationkey_DET))) and ((nation_enc_cryptdb_opt_with_det.n_name_DET) = (:1)) group by supplier_enc_cryptdb_opt_with_det.s_name_DET", {db_column_desc(db_elem::TYPE_DATE, 3, oDET, SECLEVEL::DET, 12, true), db_column_desc(db_elem::TYPE_DATE, 3, oDET, SECLEVEL::DET, 11, true), db_column_desc(db_elem::TYPE_INT, 4, oDET, SECLEVEL::DETJOIN, 0, true), db_column_desc(db_elem::TYPE_INT, 4, oDET, SECLEVEL::DET, 2, true), db_column_desc(db_elem::TYPE_STRING, 25, oDET, SECLEVEL::DET, 1, false)}, {}, util::map_from_pair_vec<std::string, physical_operator*>({})))
-            ,{
-              new local_filter_op(
-                new gt_node(new tuple_pos_node(0), new tuple_pos_node(1)),
-                new local_decrypt_op(
-                  {0, 1},
-                  new remote_sql_op(new param_generator_id24, "select l3.l_receiptdate_DET, l3.l_commitdate_DET from lineitem_enc_cryptdb_opt_with_det l3 where ((l3.l_orderkey_DET) = (:0)) and ((l3.l_suppkey_DET) <> (:1))", {db_column_desc(db_elem::TYPE_DATE, 3, oDET, SECLEVEL::DET, 12, false), db_column_desc(db_elem::TYPE_DATE, 3, oDET, SECLEVEL::DET, 11, false)}, {}, util::map_from_pair_vec<std::string, physical_operator*>({})))
-                ,{
-                }
-              )
-              ,
-            }
+          new local_decrypt_op(
+            {4},
+            new local_filter_op(
+              new and_node(new gt_node(new tuple_pos_node(0), new tuple_pos_node(1)), new not_node(new exists_node(new subselect_node(0, {new tuple_pos_node(2), new tuple_pos_node(3)})))),
+              new local_decrypt_op(
+                {0, 1},
+                new remote_sql_op(new param_generator_id23, "select l1.l_receiptdate_DET, l1.l_commitdate_DET, l1.l_orderkey_DET, l1.l_suppkey_DET, supplier_enc_cryptdb_opt_with_det.s_name_DET from supplier_enc_cryptdb_opt_with_det, lineitem_enc_cryptdb_opt_with_det l1, orders_enc_cryptdb_opt_with_det, nation_enc_cryptdb_opt_with_det where ((((((supplier_enc_cryptdb_opt_with_det.s_suppkey_DET) = (l1.l_suppkey_DET)) and ((orders_enc_cryptdb_opt_with_det.o_orderkey_DET) = (l1.l_orderkey_DET))) and ((orders_enc_cryptdb_opt_with_det.o_orderstatus_DET) = (:0))) and (exists ( (select 1 from lineitem_enc_cryptdb_opt_with_det l2 where ((l2.l_orderkey_DET) = (l1.l_orderkey_DET)) and ((l2.l_suppkey_DET) <> (l1.l_suppkey_DET))) ))) and ((supplier_enc_cryptdb_opt_with_det.s_nationkey_DET) = (nation_enc_cryptdb_opt_with_det.n_nationkey_DET))) and ((nation_enc_cryptdb_opt_with_det.n_name_DET) = (:1))", {db_column_desc(db_elem::TYPE_DATE, 3, oDET, SECLEVEL::DET, 12, false), db_column_desc(db_elem::TYPE_DATE, 3, oDET, SECLEVEL::DET, 11, false), db_column_desc(db_elem::TYPE_INT, 4, oDET, SECLEVEL::DETJOIN, 0, false), db_column_desc(db_elem::TYPE_INT, 4, oDET, SECLEVEL::DET, 2, false), db_column_desc(db_elem::TYPE_STRING, 25, oDET, SECLEVEL::DET, 1, false)}, {}, util::map_from_pair_vec<std::string, physical_operator*>({})))
+              ,{
+                new local_filter_op(
+                  new gt_node(new tuple_pos_node(0), new tuple_pos_node(1)),
+                  new local_decrypt_op(
+                    {0, 1},
+                    new remote_sql_op(new param_generator_id24, "select l3.l_receiptdate_DET, l3.l_commitdate_DET from lineitem_enc_cryptdb_opt_with_det l3 where ((l3.l_orderkey_DET) = (:0)) and ((l3.l_suppkey_DET) <> (:1))", {db_column_desc(db_elem::TYPE_DATE, 3, oDET, SECLEVEL::DET, 12, false), db_column_desc(db_elem::TYPE_DATE, 3, oDET, SECLEVEL::DET, 11, false)}, {}, util::map_from_pair_vec<std::string, physical_operator*>({})))
+                  ,{
+                  }
+                )
+                ,
+              }
+            )
           )
         )
       )
@@ -859,7 +906,9 @@ static void query_18(exec_context& ctx) {
                   new and_node(new gt_node(new tuple_pos_node(0), new double_literal_node(0.000000)), new in_node(new substring_node(new tuple_pos_node(1), 1, 2), {new string_literal_node("41"), new string_literal_node("26"), new string_literal_node("36"), new string_literal_node("27"), new string_literal_node("38"), new string_literal_node("37"), new string_literal_node("22")})),
                   new local_decrypt_op(
                     {0, 1},
-                    new remote_sql_op(new param_generator_id26, "select group_serializer(customer_enc_cryptdb_opt_with_det.c_acctbal_DET), array_to_string(array_agg(encode(customer_enc_cryptdb_opt_with_det.c_phone_DET, 'hex')), ',') from customer_enc_cryptdb_opt_with_det", {db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oDET, SECLEVEL::DET, 5, true), db_column_desc(db_elem::TYPE_STRING, 15, oDET, SECLEVEL::DET, 4, true)}, {}, util::map_from_pair_vec<std::string, physical_operator*>({})))
+                    new local_flattener_op(
+                      new remote_sql_op(new param_generator_id26, "select customer_enc_cryptdb_opt_with_det.c_acctbal_DET, customer_enc_cryptdb_opt_with_det.c_phone_DET from customer_enc_cryptdb_opt_with_det", {db_column_desc(db_elem::TYPE_DECIMAL_15_2, 15, oDET, SECLEVEL::DET, 5, false), db_column_desc(db_elem::TYPE_STRING, 15, oDET, SECLEVEL::DET, 4, false)}, {}, util::map_from_pair_vec<std::string, physical_operator*>({})))
+                  )
                   ,{
                   }
                 )
@@ -882,14 +931,17 @@ static void query_18(exec_context& ctx) {
   delete op;
 }
 int main(int argc, char **argv) {
-  if (argc != 2) {
-    std::cerr << "[Usage]: " << argv[0] << " [query num]" << std::endl;
+  command_line_opts opts(DB_HOSTNAME, DB_USERNAME, DB_PASSWORD, DB_DATABASE, DB_PORT);
+  command_line_opts::parse_options(argc, argv, opts);
+  std::cerr << opts << std::endl;
+  if ((optind + 1) != argc) {
+    std::cerr << "[Usage]: " << argv[0] << " [options] [query num]" << std::endl;
     return 1;
   }
-  int q = atoi(argv[1]);
+  int q = atoi(argv[optind]);
   CryptoManager cm("12345");
   crypto_manager_stub cm_stub(&cm, CRYPTO_USE_OLD_OPE);
-  PGConnect pg(DB_HOSTNAME, DB_USERNAME, DB_PASSWORD, DB_DATABASE, DB_PORT, true);
+  PGConnect pg(opts.db_hostname, opts.db_username, opts.db_passwd, opts.db_database, opts.db_port, true);
   paillier_cache pp_cache;
   query_cache cache;
   exec_context ctx(&pg, &cm_stub, &pp_cache, NULL, &cache);

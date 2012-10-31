@@ -216,3 +216,14 @@ protected:
   size_t _i;
   size_t _n;
 };
+
+class local_flattener_op : public physical_operator {
+public:
+  local_flattener_op(
+      physical_operator* child)
+    : physical_operator({child}) {}
+
+  virtual desc_vec tuple_desc();
+
+  DECL_PHY_OP_ITER_IFACE;
+};

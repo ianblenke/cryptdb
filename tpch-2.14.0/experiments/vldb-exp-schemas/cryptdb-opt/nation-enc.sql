@@ -10,7 +10,7 @@ create table nation_enc_cryptdb_opt (
 
   n_regionkey_DET bigint  NOT NULL,
 
-  n_comment_DET bytea
+  n_comment_DET bytea /* could be RAND */
 
   --PRIMARY KEY (n_nationkey_DET)
 

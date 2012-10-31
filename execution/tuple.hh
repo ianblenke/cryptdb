@@ -422,7 +422,7 @@ public:
 namespace std {
   template <>
   struct hash<db_tuple> {
-    inline bool operator()(const db_tuple& t) const {
+    inline int64_t operator()(const db_tuple& t) const {
       return t.hash();
     }
   };
