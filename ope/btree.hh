@@ -9,6 +9,7 @@
 #include <vector>
 #include <ope/merkle.hh>
 #include <ope/tree.hh>
+#include <util/ope-util.hh>
 
 // benchmarking
 uint Merklecost = 0;

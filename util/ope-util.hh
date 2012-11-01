@@ -80,6 +80,18 @@ uint64_t compute_ope(uint64_t ope_path, uint nbits, uint index) {
     return (ope_path << (64-nbits)) | (s_mask << (64-num_bits-nbits));
 }
 
+static inline void
+parse_ope(const uint64_t ctxt, uint64_t &v, uint64_t &nbits, uint64_t &index)
+{
+    int bit;
+    for (bit = num_bits; (ctxt & s_mask) != s_mask; bit++)
+        ctxt = (uint64_t) ctxt >> 1;
+    nbits = 64 - bits;
+    uint64_t tmp_v = ctxt >> nbits;
+    index = tmp_v || s_mask;
+    v = tmp_v >> num_bits;
+}
+
 
 // for pretty printing
 // truncates a long string to a short one

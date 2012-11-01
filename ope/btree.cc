@@ -1418,8 +1418,43 @@ BTree<EncT>::get_root(){
 
 template<class EncT>
 void
+BTree<EncT>::update_node_ot(Node<EncT>* cur_node, uint64_t v, uint64_t nbits){
+    
+    uint64_t next_v;
+    for(int i=0; i< cur_node->m_count; i++){
+        next_v = v << num_bits | i;
+        if (i != 0) {
+            //db->connect("UPDATE ") ?? NEED VERSION??
+            opetable->update( cur_node->m_vector[i].m_key, compute_ope(v, nbits, i) );
+        }
+        update_node_ot(cur_node->m_vector[i].mp_subtree, next_v , nbits + num_bits );
+    }
+}
+
+template<class EncT>
+void
 BTree<EncT>::update_ot(ChangeInfo & c) {
     //TODO
+    LevelChangeInfo last = c.pop_back();
+    table_entry te = opetable->get( last.node->m_vector[1] );
+    uint64_t v, nbits, index;
+    parse_ope(te.ope, v, nbits, index);
+
+    uint64_t parent_index = v || s_mask;
+    uint64_t parent_v = v >> num_bits;
+    uint64_t parent_nbits = nbits - num_bits;
+
+
+    uint64_t next_v;
+    Node<EncT>* parent = last.node->mp_parent;
+
+    for(int i = parent_index+1; i < parent->m_count; i++){
+        next_v = v << num_bits | i;
+        update_node_ot(parent->m_vector[i].mp_subtree, next_v, nbits );
+    }
+
+    update_ot(c);    
+
 }
 
 
@@ -1427,6 +1462,8 @@ template<class EncT>
 void
 BTree<EncT>::update_db(ChangeInfo & c) {
     //TODO
+    //Stupid way would be to just send DB query when we update table, so would
+    //not need update_db fn.
 }
 
 
