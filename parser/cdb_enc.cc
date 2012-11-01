@@ -1942,6 +1942,18 @@ static const vector<int> PartOnions = {
   ONION_DET,
 };
 
+static const vector<int> PartMonomiOnions = {
+  ONION_DETJOIN,
+  ONION_DET | ONION_SEARCH,
+  ONION_DET,
+  ONION_DET,
+  ONION_DET | ONION_SEARCH,
+  ONION_DET | ONION_OPE,
+  ONION_DET,
+  ONION_DET,
+  ONION_DET,
+};
+
 //----------------------------------------------------------------------------
 // region
 
@@ -2019,8 +2031,8 @@ static map<string, table_encryptor *> EncryptorMap = {
   // -- part -------------------------------------------------------------
 
   {"part-none", new table_encryptor(PartSchema, PartOnions, false, true)},
-  {"part-monomi", new table_encryptor(PartSchema, PartOnions, false, true)},
-  {"part-monomi-with-det", new table_encryptor(PartSchema, PartOnions, false, true)},
+  {"part-monomi", new table_encryptor(PartSchema, PartMonomiOnions, false, true)},
+  {"part-monomi-with-det", new table_encryptor(PartSchema, PartMonomiOnions, false, true)},
 
   // -- region -------------------------------------------------------------
 

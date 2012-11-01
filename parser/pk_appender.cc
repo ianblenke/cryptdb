@@ -31,9 +31,16 @@ static void process_input(const string& s) {
 
   for (size_t i = 0; i < positions.size(); i++) {
     bool isBin = false;
+#ifdef ALL_SAME_KEY
+    size_t field_pos_key = 0;
+    SECLEVEL field_sec_level = SECLEVEL::DET;
+#else
+    size_t field_pos_key = positions[i];
+    SECLEVEL field_sec_level = SECLEVEL::DETJOIN;
+#endif /* ALL_SAME_KEY */
     string ct0 =
       stub.crypt<4>(cm.getmkey(), tokens[positions[i]], TYPE_INTEGER,
-                    fieldname(positions[i], "DET"), SECLEVEL::PLAIN_DET, SECLEVEL::DETJOIN,
+                    fieldname(field_pos_key, "DET"), SECLEVEL::PLAIN_DET, field_sec_level,
                     isBin, 12345);
     tokens.push_back(ct0);
   }
