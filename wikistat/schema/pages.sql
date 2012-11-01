@@ -1,0 +1,6 @@
+CREATE TABLE pages (
+  id INTEGER NOT NULL,
+  page VARCHAR(1024) NOT NULL
+);
+
+-- ALTER TABLE pages ADD PRIMARY KEY (id)
