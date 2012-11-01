@@ -15,12 +15,55 @@ uint Merklecost = 0;
 
 /** Forwarding Data Structures **/
 
-template<class payload> class Element;
-typedef Element<std::string> Elem;
+template<class payload, class EncT> class Element;
+typedef Element<std::string, uint64_t> Elem;
 
-class RootTracker;
-class Node;
+template<class EncT> class RootTracker;
+
+template<class EncT> class Node;
+
 struct ChangeInfo;
+
+
+/**  Merkle Proof and verification **/
+
+template<class EncT>
+void
+record_state(Node<EncT> * node, State & state);
+
+
+// returns the information needed to check the validity of node n
+template<class EncT>
+MerkleProof
+node_merkle_proof(Node<EncT> * n);
+
+
+// verifies that the merkle information corresponding to a node matches the
+// overall root merkle hash
+template<class EncT>
+bool
+verify_merkle_proof(const MerkleProof & proof, const std::string & merkle_root);
+
+//verifies the merkle proof for deletion and returns true if it holds, and it
+//also sets new_merkle_root accordingly
+template<class EncT>
+bool
+verify_del_merkle_proof(const UpdateMerkleProof & p,
+            std::string del_target,
+            const std::string & merkle_root,
+            std::string & new_merkle_root);
+
+template<class EncT>
+bool
+verify_ins_merkle_proof(const UpdateMerkleProof & p,
+            std::string ins_target,
+            const std::string & merkle_root,
+            std::string & new_merkle_root);
+
+/////////////////////////////////////////////////////////////////////////////
+
+
+
 
 template<class EncT>
 class BTree : public Tree<EncT> {
@@ -31,14 +74,17 @@ public:
     
     TreeNode<EncT> * get_root();
 
-Node* build_tree(std::vector< std::string> & key_list, RootTracker & root_tracker, int start, int end);
-Node* build_tree_wrapper(std::vector<std::string> & key_list, RootTracker & root_tracker, int start, int end);
-
+//    Node<EncT>* build_tree(std::vector< std::string> & key_list, RootTracker & root_tracker, int start, int end);
+//    Node<EncT>* build_tree_wrapper(std::vector<std::string> & key_list, RootTracker & root_tracker, int start, int end);
 
     void insert(EncT ciph, OPEType ope_path, uint64_t nbits, uint64_t index);
 
+    void update_ot(ChangeInfo & c);
+
+    void update_db(ChangeInfo & c);
+
 private:
-    RootTracker * tracker;
+    RootTracker<EncT> * tracker;
     OPETable<EncT> * opetable;
     Connect * db;
 };
@@ -48,7 +94,7 @@ class Node : TreeNode<EncT> {
   
 public:
 
-    Node (RootTracker& root_track);
+    Node (RootTracker<EncT>& root_track);
 
     // to return a reference when a search fails.
     static Elem m_failure;
@@ -57,7 +103,7 @@ public:
     std::string merkle_hash;
  
     // the root of the tree may change.  this attribute keeps it accessible.
-    RootTracker& m_root;
+    RootTracker<EncT>& m_root;
 
     
     Node* get_root();
@@ -79,6 +125,8 @@ public:
     std::vector<Elem> m_vector;
 
     unsigned int m_count;
+
+    bool do_insert(Elem & element, UpdateMerkleProof & p, ChangeInfo & c);
     
 protected:
 
@@ -164,12 +212,11 @@ protected:
 
     // Friends
     friend class Test;
-    friend MerkleProof node_merkle_proof(Node * n);
-    friend std::ostream &
-    operator<<(std::ostream & out, const Node & n);
-    friend void record_state(Node * node, State & state);
-    friend Node* build_tree(std::vector<std::string> & key_list, RootTracker & root_tracker, int start, int end);
-    friend Node* build_tree_wrapper(std::vector<std::string> & key_list, RootTracker & root_tracker, int start, int end); 
+    friend MerkleProof node_merkle_proof<EncT>(Node<EncT> * n);
+    friend std::ostream & operator <<(std::ostream & out, const Node<EncT> & n)<EncT>;
+    friend void record_state<EncT>(Node<EncT> * node, State & state);
+//    friend Node* build_tree(std::vector<std::string> & key_list, RootTracker & root_tracker, int start, int end);
+//    friend Node* build_tree_wrapper(std::vector<std::string> & key_list, RootTracker & root_tracker, int start, int end); 
 #ifdef _DEBUG
 
     Elem debug[8];
@@ -178,15 +225,15 @@ protected:
     
 };
 
+//???
 
+Node<uint64_t>* invalid_ptr = reinterpret_cast<Node<uint64_t>* > (-1);
 
-Node* invalid_ptr = reinterpret_cast<Node*> (-1);
+Node<uint64_t>* null_ptr = reinterpret_cast<Node<uint64_t>* > (0);
 
-Node* null_ptr = reinterpret_cast<Node*> (0);
-
-
+template <class EncT>
 std::ostream &
-operator<<(std::ostream & out, const Node & n);
+operator<<(std::ostream & out, const Node<EncT> & n);
 
 	
 /*
@@ -194,7 +241,7 @@ operator<<(std::ostream & out, const Node & n);
  * containing key values greater than this->m_key but lower than the
  * key value of the next element to the right
  */
-template<class payload> class Element {
+template<class payload, class EncT> class Element {
 
 public:
 
@@ -224,15 +271,14 @@ public:
     std::string pretty() const;
     
     std::string m_key;
-    Node* mp_subtree;
+    Node<EncT>* mp_subtree;
     bool has_subtree() const {return valid() && (mp_subtree != null_ptr) && mp_subtree; }
 private:
-    friend class Node;
+    friend class Node<EncT>;
     friend class NodeMerkleInfo;
     friend class NodeInfo;
     friend class Test;
-    template<class EncT> friend class tree;
-    
+
     //std::string m_key;
   
     payload m_payload;
@@ -256,6 +302,7 @@ private:
 std::ostream&
 operator<<(std::ostream & out, const Elem & e);
 
+template <class EncT>
 class RootTracker {
 
 // all the node instances that belong to a given tree have a reference to one
@@ -267,13 +314,13 @@ class RootTracker {
 
 protected:
 
-    Node* mp_root;
+    Node<EncT>* mp_root;
 
 public:
 
     RootTracker() { mp_root = null_ptr; }
 
-    void set_root (Node* old_root, Node* new_root) {
+    void set_root (Node<EncT>* old_root, Node<EncT>* new_root) {
 
         // ensure that the root is only being changed by a node belonging to the
         // same tree as the current root
@@ -285,7 +332,7 @@ public:
 	}
     }
 
-    Node* get_root () { return mp_root; }
+    Node<EncT>* get_root () { return mp_root; }
 
     ~RootTracker () {
 
@@ -304,40 +351,6 @@ public:
 
 
 
-
-/**  Merkle Proof and verification **/
-
-
-void
-record_state(Node * node, State & state);
-
-
-// returns the information needed to check the validity of node n
-MerkleProof
-node_merkle_proof(Node * n);
-
-
-// verifies that the merkle information corresponding to a node matches the
-// overall root merkle hash
-bool
-verify_merkle_proof(const MerkleProof & proof, const std::string & merkle_root);
-
-//verifies the merkle proof for deletion and returns true if it holds, and it
-//also sets new_merkle_root accordingly
-bool
-verify_del_merkle_proof(const UpdateMerkleProof & p,
-			std::string del_target,
-			const std::string & merkle_root,
-			std::string & new_merkle_root);
-
-
-bool
-verify_ins_merkle_proof(const UpdateMerkleProof & p,
-			std::string ins_target,
-			const std::string & merkle_root,
-			std::string & new_merkle_root);
-
-
 /////////////////////////////////////////////////////////////////////////////////////
 
 
@@ -347,14 +360,14 @@ verify_ins_merkle_proof(const UpdateMerkleProof & p,
  * The node was split at index into itself and right.
  * For a new root, only right is NULL and index negative.
  */
+template <class EncT>
 struct LevelChangeInfo {
-    Node * node;
-    Node * right;
+    Node<EncT> * node;
+    Node<EncT> * right;
     int index;
 };
 
-
-typedef list<LevelChangeInfo> ChangeInfo;
+typedef list<LevelChangeInfo > ChangeInfo;
 
 // TODO: clean these myprint vs << functions for gdb
 // functions for my gdb macro,
@@ -367,14 +380,16 @@ const char *
 myprint(const NodeInfo & v);
 const char *
 myprint(const ElInfo & v);
+template < class EncT>
 const char *
-myprint(const Node * v);
+myprint(const Node<EncT> * v);
 const char *
 myprint(const Elem v);
 const char *
 myprint(const DelInfo & v);
 const char *
 myprint(const Elem & v);
+template < class EncT>
 const char *
-myprint(const Node & v);
+myprint(const Node<EncT> & v);
 
