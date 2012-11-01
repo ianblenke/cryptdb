@@ -1,0 +1,12 @@
+CREATE TABLE customer ( 
+  C_CUSTKEY     INTEGER NOT NULL,
+  C_NAME        VARCHAR(25) NOT NULL,
+  C_ADDRESS     VARCHAR(25) NOT NULL,
+  C_CITY     CHAR(10) NOT NULL,
+  C_NATION     CHAR(15) NOT NULL,
+  C_REGION     CHAR(12) NOT NULL,
+  C_PHONE       CHAR(15) NOT NULL,
+  C_MKTSEGMENT  CHAR(10) NOT NULL
+);
+
+-- alter table customer add primary key (C_CUSTKEY);
