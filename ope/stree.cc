@@ -666,7 +666,6 @@ Stree<EncT>::insert(EncT encval, uint64_t v, uint64_t nbits, uint64_t index){
 
     Elem elem;
     elem.m_key = encval_str;
-    elem.m_payload = encval_str+" hi you";
     UpdateMerkleProof imp;
     tracker.get_root()->tree_insert(elem, imp);
 

@@ -10,8 +10,8 @@
 
 using namespace std;
 
-template<class payload, class EncT>
-void Element<payload, EncT>::dump () {
+template<class EncT>
+void Element<EncT>::dump () {
     std::cout << " (key = " <<  m_key << "\n" << " mhash = ";
     if (has_subtree()) {
 	cout << read_short(short_string(mp_subtree->merkle_hash)) << ") "; 
@@ -422,9 +422,9 @@ bool Node<EncT>::split_insert (Elem& element, ChangeInfo & ci) {
     return true;
 }
 
-template<class payload, class EncT>
+template<class EncT>
 string
-Element<payload, EncT>::get_subtree_merkle() {
+Element<EncT>::get_subtree_merkle() {
     if (has_subtree()) {
 	return mp_subtree->merkle_hash;
     } else {
@@ -803,8 +803,6 @@ Node<EncT>::tree_delete(Elem & target, UpdateMerkleProof & proof) {
 	// -----------------
 
         found.m_key = smallest_in_subtree.m_key;
-
-        found.m_payload = smallest_in_subtree.m_payload;
 	
         r = found.mp_subtree->tree_delete_help(smallest_in_subtree, proof, start_node, node2);
 	
@@ -952,7 +950,6 @@ Node<EncT>::rotate_from_right(int parent_index_this){
 
     (*right_sib)[0].m_key = "";
 
-    (*right_sib)[0].m_payload = "";
 
     // parent node still has same element count
 
@@ -1351,14 +1348,14 @@ operator<<(ostream & out, const Elem & e) {
 }
 
 
-template<class payload, class EncT>
+template<class EncT>
 string
-Element<payload, EncT>::repr() {
+Element<EncT>::repr() {
     return format_concat(m_key, b_key_size, get_subtree_merkle(), sha256::hashsize);
 }
 
-template<class payload, class EncT>
-Element<payload, EncT>::Element(string key) {
+template<class EncT>
+Element<EncT>::Element(string key) {
     assert_s(key.size() < b_key_size, "given key to element is larger than key_size");
     this.key = key;
     mp_subtree = NULL;
@@ -1390,9 +1387,9 @@ Node<EncT>::pretty() const {
     return ss.str();
 }
 
-template<class payload, class EncT>
+template<class EncT>
 string
-Element<payload, EncT>::pretty() const {
+Element<EncT>::pretty() const {
     stringstream ss;
     ss << "(" << m_key << ", sub: " << mp_subtree << ")";
     return ss.str();

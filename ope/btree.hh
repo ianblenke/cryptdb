@@ -16,8 +16,10 @@ uint Merklecost = 0;
 
 /** Forwarding Data Structures **/
 
-template<class payload, class EncT> class Element;
-typedef Element<std::string, uint64_t> Elem;
+template<class EncT> class Element;
+
+template<class EncT>
+typedef Element<EncT> Elem<EncT>;
 
 template<class EncT> class RootTracker;
 
@@ -242,7 +244,7 @@ operator<<(std::ostream & out, const Node<EncT> & n);
  * containing key values greater than this->m_key but lower than the
  * key value of the next element to the right
  */
-template<class payload, class EncT> class Element {
+template<class EncT> class Element {
 
 public:
 
@@ -260,7 +262,6 @@ public:
     Element& operator= (const Element& other) {
 
         m_key = other.m_key;
-        m_payload = other.m_payload;
         mp_subtree = other.mp_subtree;
 
         return *this;
@@ -281,9 +282,6 @@ private:
     friend class Test;
 
     //std::string m_key;
-  
-    payload m_payload;
-   
     
     /***********************
      **** Merkle-related ***/
@@ -299,9 +297,9 @@ private:
 
 }; 
 
-
+template<class EncT> 
 std::ostream&
-operator<<(std::ostream & out, const Elem & e);
+operator<<(std::ostream & out, const Elem<EncT> & e);
 
 template <class EncT>
 class RootTracker {
