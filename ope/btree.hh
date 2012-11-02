@@ -16,10 +16,7 @@ uint Merklecost = 0;
 
 /** Forwarding Data Structures **/
 
-template<class EncT> class Element;
-
-template<class EncT>
-typedef Element<EncT> Elem<EncT>;
+template<class EncT> class Elem;
 
 template<class EncT> class RootTracker;
 
@@ -82,6 +79,7 @@ public:
 
     void insert(EncT ciph, OPEType ope_path, uint64_t nbits, uint64_t index);
 
+    void update_node_ot(Node<EncT>* cur_node, uint64_t v, uint64_t nbits);
     void update_ot(ChangeInfo & c);
 
     void update_db(ChangeInfo & c);
@@ -100,7 +98,7 @@ public:
     Node (RootTracker<EncT>& root_track);
 
     // to return a reference when a search fails.
-    static Elem m_failure;
+    static Elem<EncT> m_failure;
 
     // the merkle hash of this node
     std::string merkle_hash;
@@ -110,14 +108,14 @@ public:
 
     
     Node* get_root();
-    Elem& search (Elem& desired, Node*& last_visited);
-    bool tree_insert (Elem& element, UpdateMerkleProof &p);
-    bool tree_delete(Elem & target, UpdateMerkleProof & m);
+    Elem<EncT>& search (Elem<EncT>& desired, Node*& last_visited);
+    bool tree_insert (Elem<EncT>& element, UpdateMerkleProof &p);
+    bool tree_delete(Elem<EncT> & target, UpdateMerkleProof & m);
 
     //cleaning up
     int delete_all_subtrees();
 
-    Elem& operator[] (int i) { return m_vector[i]; }
+    Elem<EncT>& operator[] (int i) { return m_vector[i]; }
     // node cannot be instantiated without a root tracker
 
     void dump(bool recursive = true);
@@ -125,11 +123,11 @@ public:
 
     std::string pretty() const;
     
-    std::vector<Elem> m_vector;
+    std::vector<Elem<EncT> > m_vector;
 
     unsigned int m_count;
 
-    bool do_insert(Elem & element, UpdateMerkleProof & p, ChangeInfo & c);
+    bool do_insert(Elem<EncT> & element, UpdateMerkleProof & p, ChangeInfo & c);
     
 protected:
 
@@ -147,11 +145,11 @@ protected:
 
     bool is_leaf();
     
-    bool vector_insert (Elem& element);
-    bool vector_insert_for_split (Elem& element);
-    bool split_insert (Elem& element, ChangeInfo & ci);
+    bool vector_insert (Elem<EncT>& element);
+    bool vector_insert_for_split (Elem<EncT>& element);
+    bool split_insert (Elem<EncT>& element, ChangeInfo & ci);
 
-    bool vector_delete (Elem& target);
+    bool vector_delete (Elem<EncT>& target);
     bool vector_delete (int target_pos);
 
     void insert_zeroth_subtree (Node* subtree);
@@ -159,9 +157,9 @@ protected:
     void set_debug();
     int key_count () { return m_count-1; }
 
-    Elem& largest_key () { return m_vector[m_count-1]; }
-    Elem& smallest_key ();
-    Elem& smallest_key_in_subtree();
+    Elem<EncT>& largest_key () { return m_vector[m_count-1]; }
+    Elem<EncT>& smallest_key ();
+    Elem<EncT>& smallest_key_in_subtree();
     int index_has_subtree ();
 
     Node* right_sibling (int& parent_index_this);
@@ -177,7 +175,7 @@ protected:
     bool merge_into_root ();
 
     bool
-    tree_delete_help (Elem& target, UpdateMerkleProof & proof, Node* & start_node, Node * node);
+    tree_delete_help (Elem<EncT>& target, UpdateMerkleProof & proof, Node* & start_node, Node * node);
 
    
 
@@ -222,7 +220,7 @@ protected:
 //    friend Node* build_tree_wrapper(std::vector<std::string> & key_list, RootTracker & root_tracker, int start, int end); 
 #ifdef _DEBUG
 
-    Elem debug[8];
+    Elem<EncT> debug[8];
 
 #endif
     
@@ -244,22 +242,22 @@ operator<<(std::ostream & out, const Node<EncT> & n);
  * containing key values greater than this->m_key but lower than the
  * key value of the next element to the right
  */
-template<class EncT> class Element {
+template<class EncT> class Elem {
 
 public:
 
-    bool operator>   (Element& other) const { return m_key.compare(other.m_key) > 0; }
-    bool operator<   (Element& other) const { return m_key.compare(other.m_key) < 0; }
-    bool operator>=  (Element& other) const { return m_key.compare(other.m_key) >= 0; }
-    bool operator<=  (Element& other) const { return m_key.compare(other.m_key) <= 0; }
-    bool operator==  (Element& other) const { return m_key.compare(other.m_key) == 0; }
+    bool operator>   (Elem& other) const { return m_key.compare(other.m_key) > 0; }
+    bool operator<   (Elem& other) const { return m_key.compare(other.m_key) < 0; }
+    bool operator>=  (Elem& other) const { return m_key.compare(other.m_key) >= 0; }
+    bool operator<=  (Elem& other) const { return m_key.compare(other.m_key) <= 0; }
+    bool operator==  (Elem& other) const { return m_key.compare(other.m_key) == 0; }
 
     bool valid () const { return mp_subtree != invalid_ptr; }
 
  
     void invalidate () { mp_subtree = invalid_ptr; }
 
-    Element& operator= (const Element& other) {
+    Elem& operator= (const Elem& other) {
 
         m_key = other.m_key;
         mp_subtree = other.mp_subtree;
@@ -267,8 +265,8 @@ public:
         return *this;
     }
 
-    Element () { mp_subtree = null_ptr; }
-    Element (std::string key);
+    Elem () { mp_subtree = null_ptr; }
+    Elem (std::string key);
     void dump();
     std::string pretty() const;
     
@@ -382,12 +380,14 @@ myprint(const ElInfo & v);
 template < class EncT>
 const char *
 myprint(const Node<EncT> * v);
+template<class EncT>
 const char *
-myprint(const Elem v);
+myprint(const Elem<EncT> v);
 const char *
 myprint(const DelInfo & v);
+template<class EncT>
 const char *
-myprint(const Elem & v);
+myprint(const Elem<EncT> & v);
 template < class EncT>
 const char *
 myprint(const Node<EncT> & v);

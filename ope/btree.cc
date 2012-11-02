@@ -11,7 +11,7 @@
 using namespace std;
 
 template<class EncT>
-void Element<EncT>::dump () {
+void Elem<EncT>::dump () {
     std::cout << " (key = " <<  m_key << "\n" << " mhash = ";
     if (has_subtree()) {
 	cout << read_short(short_string(mp_subtree->merkle_hash)) << ") "; 
@@ -202,7 +202,7 @@ int Node<EncT>::delete_all_subtrees () {
 
  
 template<class EncT>
-bool Node<EncT>::vector_insert (Elem& element) {
+bool Node<EncT>::vector_insert (Elem<EncT>& element) {
 
 // this method merely tries to insert the argument into the current node.
 // it does not concern itself with the entire tree.
@@ -236,7 +236,7 @@ bool Node<EncT>::vector_insert (Elem& element) {
 
  
 template<class EncT>
-bool Node<EncT>::vector_delete (Elem& target) {
+bool Node<EncT>::vector_delete (Elem<EncT>& target) {
 
 // delete a single element in the vector belonging to *this node.
 // if the target is not found, do not look in subtrees, just return false.
@@ -308,7 +308,7 @@ bool Node<EncT>::vector_delete (int target_pos) {
 } 
 
 template<class EncT> 
-bool Node<EncT>::vector_insert_for_split (Elem& element) {
+bool Node<EncT>::vector_insert_for_split (Elem<EncT>& element) {
 
 // this method insert an element that is in excess of the nominal capacity of
 // the node, using the extra slot that always remains unused during normal
@@ -346,7 +346,7 @@ bool Node<EncT>::vector_insert_for_split (Elem& element) {
 
 /* split_insert should only be called if node is full */
 template<class EncT>
-bool Node<EncT>::split_insert (Elem& element, ChangeInfo & ci) {
+bool Node<EncT>::split_insert (Elem<EncT>& element, ChangeInfo & ci) {
 
     if (m_count != m_vector.size()-1) {
         throw "bad m_count in split_insert";
@@ -369,7 +369,7 @@ bool Node<EncT>::split_insert (Elem& element, ChangeInfo & ci) {
     lci.index = split_point;
     ci.push_back(lci);
     
-    Elem upward_element = m_vector[split_point];
+    Elem<EncT> upward_element = m_vector[split_point];
 
     new_node->insert_zeroth_subtree (upward_element.mp_subtree);
 
@@ -424,7 +424,7 @@ bool Node<EncT>::split_insert (Elem& element, ChangeInfo & ci) {
 
 template<class EncT>
 string
-Element<EncT>::get_subtree_merkle() {
+Elem<EncT>::get_subtree_merkle() {
     if (has_subtree()) {
 	return mp_subtree->merkle_hash;
     } else {
@@ -451,7 +451,7 @@ Node<EncT>::extract_NodeInfo(int notextract = -1) {
     ni.childr.resize(m_count);
 
     for (int i = 0; i < (int)m_count; i++) {
-	Elem e = m_vector[i];
+	Elem<EncT> e = m_vector[i];
 	if (i == notextract) {
 	    ni.childr[i] = ElInfo(e.m_key, hash_not_extracted);	    
 	} else {
@@ -610,8 +610,9 @@ const char *
 myprint(const Node<EncT> * n) {
     return n->pretty().c_str();
 }
+template<class EncT>
 const char *
-myprint(const Elem & e) {
+myprint(const Elem<EncT> & e) {
     return e.pretty().c_str();
 }
 
@@ -640,7 +641,7 @@ Node<EncT>::hash_node(){
     string hashes_concat = string(m_count * repr_size, 0);
 
     for (uint i = 0 ; i < m_count ; i++) {
-	Elem e = m_vector[i];
+	Elem<EncT> e = m_vector[i];
 	hashes_concat.replace(i*repr_size, repr_size, e.repr());
     }
     
@@ -684,7 +685,7 @@ void Node<EncT>::update_merkle_upward() {
 }
 
 template<class EncT>
-bool Node<EncT>::do_insert(Elem & element, UpdateMerkleProof & p, ChangeInfo & c) {
+bool Node<EncT>::do_insert(Elem<EncT> & element, UpdateMerkleProof & p, ChangeInfo & c) {
     // ---- Merkle -----
     // last_visited_ptr is the start point for the proof
     record_state(this, p.st_before);
@@ -722,7 +723,7 @@ bool Node<EncT>::do_insert(Elem & element, UpdateMerkleProof & p, ChangeInfo & c
 }
 
 template<class EncT>
-bool Node<EncT>::tree_insert(Elem& element, UpdateMerkleProof & p) {
+bool Node<EncT>::tree_insert(Elem<EncT>& element, UpdateMerkleProof & p) {
 
     Node* last_visited_ptr = this;
 
@@ -769,7 +770,7 @@ record_state(Node<EncT> * node, State & state) {
 
 template<class EncT>
 bool
-Node<EncT>::tree_delete(Elem & target, UpdateMerkleProof & proof) {
+Node<EncT>::tree_delete(Elem<EncT> & target, UpdateMerkleProof & proof) {
 
     if (DEBUG_PROOF) { cerr << "\n\n start delete\n";}
     // first find the node contain the Elem instance with the given key
@@ -777,7 +778,7 @@ Node<EncT>::tree_delete(Elem & target, UpdateMerkleProof & proof) {
     Node* node = 0;
     Node* start_node = 0;
 
-    Elem& found = search(target, node);
+    Elem<EncT>& found = search(target, node);
 
     if (!found.valid()) {
         return false;
@@ -789,10 +790,10 @@ Node<EncT>::tree_delete(Elem & target, UpdateMerkleProof & proof) {
 
 	if (DEBUG_PROOF) { cerr << "not leaf\n";}
 
-	Elem& smallest_in_subtree = found.mp_subtree->smallest_key_in_subtree();
+	Elem<EncT>& smallest_in_subtree = found.mp_subtree->smallest_key_in_subtree();
 
 	Node * node2 = 0;
-	Elem& found2 = found.mp_subtree->search(smallest_in_subtree, node2);
+	Elem<EncT>& found2 = found.mp_subtree->search(smallest_in_subtree, node2);
 
 	assert_s(found2.valid(), "should have found it");
 
@@ -828,7 +829,7 @@ Node<EncT>::tree_delete(Elem & target, UpdateMerkleProof & proof) {
 
 template<class EncT>
 bool
-Node<EncT>::tree_delete_help (Elem& target, UpdateMerkleProof & proof, Node * & start_node, Node * node) {
+Node<EncT>::tree_delete_help (Elem<EncT>& target, UpdateMerkleProof & proof, Node * & start_node, Node * node) {
 
 // target is just a package for the key value.  the reference does not
 // provide the address of the Elem instance to be deleted.
@@ -928,7 +929,7 @@ void
 Node<EncT>::rotate_from_right(int parent_index_this){
 
     // new element to be added to this node
-    Elem underflow_filler = (*mp_parent)[parent_index_this+1];
+    Elem<EncT> underflow_filler = (*mp_parent)[parent_index_this+1];
 
     // right sibling of this node
 
@@ -963,7 +964,7 @@ Node<EncT>::rotate_from_left(int parent_index_this){
 
     // new element to be added to this node
 
-    Elem underflow_filler = (*mp_parent)[parent_index_this];
+    Elem<EncT> underflow_filler = (*mp_parent)[parent_index_this];
 
     // left sibling of this node
 
@@ -1003,7 +1004,7 @@ Node<EncT>::merge_right (int parent_index_this) {
 // the right sibling and that parent element are then deleted
 
 
-    Elem parent_elem = (*mp_parent)[parent_index_this+1];
+    Elem<EncT> parent_elem = (*mp_parent)[parent_index_this+1];
 
     Node* right_sib = (*mp_parent)[parent_index_this+1].mp_subtree;
 
@@ -1047,7 +1048,7 @@ Node<EncT>* Node<EncT>::merge_left (int parent_index_this) {
 // element in the parent node vector that has this node as its subtree.
 // this node and its parent element are then deleted.
 
-    Elem parent_elem = (*mp_parent)[parent_index_this];
+    Elem<EncT> parent_elem = (*mp_parent)[parent_index_this];
 
     parent_elem.mp_subtree = (*this)[0].mp_subtree;
 
@@ -1141,7 +1142,7 @@ Node<EncT>* Node<EncT>::left_sibling (int& parent_index_this) {
 } //____________________________________________________________________________
 
 template<class EncT> 
-Elem &
+Elem<EncT> &
 Node<EncT>::smallest_key() {
     assert_s(m_count > 0, "node is empty so not smallest key");
     return m_vector[1];
@@ -1192,7 +1193,7 @@ int Node<EncT>::index_has_subtree () {
 } 
 
 template<class EncT>
-Elem& Node<EncT>::smallest_key_in_subtree () {
+Elem<EncT>& Node<EncT>::smallest_key_in_subtree () {
     
     if (is_leaf()) {	
         return m_vector[1];
@@ -1204,7 +1205,7 @@ Elem& Node<EncT>::smallest_key_in_subtree () {
 
  
 template<class EncT>
-Elem& Node<EncT>::search (Elem& desired, Node*& last_visited_ptr) {
+Elem<EncT>& Node<EncT>::search (Elem<EncT>& desired, Node*& last_visited_ptr) {
 
     // the zeroth element of the vector is a special case (no key value or
     // payload, just a subtree).  the seach starts at the *this node, not
@@ -1268,7 +1269,7 @@ Elem& Node<EncT>::search (Elem& desired, Node*& last_visited_ptr) {
 
 // initialize static data at file scope
 template<class EncT>
-Elem Node<EncT>::m_failure = Elem();
+Elem<EncT> Node<EncT>::m_failure = Elem<EncT>();
 
 template<class EncT> 
 void Node<EncT>::check_merkle_tree() {
@@ -1310,7 +1311,7 @@ Node<EncT>::max_height() {
 
     uint maxh = 0;
     for (uint i = 0; i < m_count; i++) {
-	Elem e = m_vector[i];
+	Elem<EncT> e = m_vector[i];
 	if (e.has_subtree()) {
 	    uint child_height = e.mp_subtree->max_height();
 	    if (child_height + 1 > maxh) {
@@ -1336,7 +1337,7 @@ Node<EncT>::in_order_traverse(list<string> & result) {
 
 
 ostream&
-operator<<(ostream & out, const Elem & e) {
+operator<<(ostream & out, const Elem<EncT> & e) {
     out << "Elem: (" << e.m_key << ", ";
     if (e.has_subtree()) {
 	out << read_short(short_string(e.mp_subtree->merkle_hash)); 
@@ -1350,12 +1351,12 @@ operator<<(ostream & out, const Elem & e) {
 
 template<class EncT>
 string
-Element<EncT>::repr() {
+Elem<EncT>::repr() {
     return format_concat(m_key, b_key_size, get_subtree_merkle(), sha256::hashsize);
 }
 
 template<class EncT>
-Element<EncT>::Element(string key) {
+Elem<EncT>::Elem(string key) {
     assert_s(key.size() < b_key_size, "given key to element is larger than key_size");
     this.key = key;
     mp_subtree = NULL;
@@ -1365,7 +1366,7 @@ template<class EncT>
 int
 Node<EncT>::index_of_child(Node * child) {
     for (uint i = 0 ; i < m_count ; i++) {
-	Elem e = m_vector[i];
+	Elem<EncT> e = m_vector[i];
 	if (e.has_subtree() && child == e.mp_subtree) {
 	    return i;
 	}
@@ -1389,7 +1390,7 @@ Node<EncT>::pretty() const {
 
 template<class EncT>
 string
-Element<EncT>::pretty() const {
+Elem<EncT>::pretty() const {
     stringstream ss;
     ss << "(" << m_key << ", sub: " << mp_subtree << ")";
     return ss.str();
@@ -1472,7 +1473,7 @@ BTree<EncT>::insert(EncT ciph, OPEType ope_path, uint64_t nbits, uint64_t index)
 
     UpdateMerkleProof p;
     ChangeInfo ci;
-    node->do_insert(Element<EncT>(ciph), p, ci);
+    node->do_insert(Elem<EncT>(ciph), p, ci);
 
     //update ope table and DB
     update_ot(ci);
