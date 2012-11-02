@@ -1419,11 +1419,12 @@ void
 BTree<EncT>::update_node_ot(Node<EncT>* cur_node, uint64_t v, uint64_t nbits){
     
     uint64_t next_v;
-    for(int i=0; i< cur_node->m_count; i++){
+    for(uint i=0; i< cur_node->m_count; i++){
         next_v = v << num_bits | i;
         if (i != 0) {
             //db->connect("UPDATE ") ?? NEED VERSION??
-            opetable->update( cur_node->m_vector[i].m_key, compute_ope(v, nbits, i) );
+            uint64_t new_ope =  compute_ope<EncT>(v, nbits, i);
+            opetable->update( cur_node->m_vector[i].m_key, new_ope);
         }
         update_node_ot(cur_node->m_vector[i].mp_subtree, next_v , nbits + num_bits );
     }
@@ -1433,7 +1434,7 @@ template<class EncT>
 void
 BTree<EncT>::update_ot(ChangeInfo & c) {
     //TODO
-    LevelChangeInfo last = c.pop_back();
+    LevelChangeInfo<EncT> last = c.pop_back();
     table_entry te = opetable->get( last.node->m_vector[1] );
     uint64_t v, nbits, index;
     parse_ope(te.ope, v, nbits, index);
