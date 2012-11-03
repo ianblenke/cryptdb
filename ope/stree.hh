@@ -26,6 +26,9 @@ struct predecessor;
 template<class EncT>
 struct successor;
 
+
+
+
 template<class EncT>
 class Stree : public Tree<EncT> {
 
@@ -54,7 +57,7 @@ public:
      * the position where it should be inserted
      * Requires that encval is not in tree.
      */
-    void insert(EncT encval, OPEType v, uint64_t nbits, uint64_t index);
+    void insert(EncT encval, TreeNode<EncT> * tnode, OPEType v, uint64_t nbits, uint64_t index);
 
 
     /*********** Helper methods **************/

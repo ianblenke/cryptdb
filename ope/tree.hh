@@ -28,13 +28,14 @@ public:
 
     virtual TreeNode<EncT> * get_root() = 0;
 
-    /* Inserts ciph in the tree; the position of insert is at given node, at
+    /* Inserts ciph in the tree; the position of insert is given node at
      * position indicated by index.
      * ope_path and nbits indicate path to this node in the tree.
      * Requires that node has no subtree at index.
      * Updates ope_table and DB. 
      */ 
     virtual void insert(EncT ciph,
+			TreeNode<EncT> * node,
 			OPEType ope_path, uint64_t nbits, uint64_t index) = 0;
 
 };

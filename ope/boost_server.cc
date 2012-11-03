@@ -8,15 +8,16 @@
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 //
 
-#include "btree.hh"
+#include <ope/btree.hh>
 
-#include <boost/asio.hpp>
-#include <boost/array.hpp>
 #include <ctime>
 #include <iostream>
 #include <string>
 #include <sstream>
 #include <vector>
+
+#include <boost/asio.hpp>
+#include <boost/array.hpp>
 #include <util/ope-util.hh>
 
 using boost::asio::ip::tcp;

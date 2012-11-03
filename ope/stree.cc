@@ -652,8 +652,9 @@ trigger(uint height, uint num_nodes, double alpha) {
 // index is position in node where insertion should happen
 template<class EncT>
 void
-Stree<EncT>::insert(EncT encval, uint64_t v, uint64_t nbits, uint64_t index){
+Stree<EncT>::insert(EncT encval, TreeNode<EncT> * tnode, uint64_t v, uint64_t nbits, uint64_t index){
     bool node_inserted;
+    //todo: use tnode directly rather than searching for the node with v
     vector<Stree_node<EncT> * > path = tree_insert(root, v, nbits, index,
 						  encval, nbits, node_inserted);
 

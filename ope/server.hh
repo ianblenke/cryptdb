@@ -39,8 +39,9 @@ public:
      * ope path of node, nbits being bits ob this path,
      * a flag, equals, indicating if node is the element at index is equal to
      * underlying val of ciph
+     * Returns the tree last tree node on the path. 
      */
-    void interaction(EncT ciph,
+    TreeNode<EncT> * interaction(EncT ciph,
 		     uint & rindex, uint & nbits,
 		     uint64_t & ope_path,
 		     bool & requals);

@@ -12,7 +12,7 @@ using std::map;
 
 
 template<class EncT>
-void
+TreeNode<EncT> *
 Server<EncT>::interaction(EncT ciph,
 			  uint & rindex, uint & nbits,
 			  uint64_t & ope_path,
@@ -53,14 +53,14 @@ Server<EncT>::interaction(EncT ciph,
 
 	if (equals) {
 	    rindex = index;
-	    return;
+	    return curr;
 	}
 
 	TreeNode<EncT> * subtree = curr->get_subtree(index);
 	if (!subtree) {
 	    cerr << "no subtree at index " << index << "\n";
 	    rindex = index;
-	    return;
+	    return curr;
 	}
 	
 	curr = subtree;
@@ -97,7 +97,7 @@ Server<EncT>::handle_enc(int csock, istringstream & iss, bool do_ins) {
     	bool equals = false;
     	uint nbits = 0;
 
-    	interaction(ciph, index, nbits, ope_path, equals);
+    	TreeNode<EncT> * tnode = interaction(ciph, index, nbits, ope_path, equals);
 
         assert_s(!equals, "equals should always be false");
     	
@@ -106,7 +106,7 @@ Server<EncT>::handle_enc(int csock, istringstream & iss, bool do_ins) {
     	if (do_ins) {
     	    // insert in OPE Tree
             // ope_insert also updates ope_table
-    	    ope_tree->insert(ciph, ope_path, nbits, index);
+    	    ope_tree->insert(ciph, tnode, ope_path, nbits, index);
 
             table_entry te = ope_table->get(ciph); // ciph must be in ope_table
             ope = opeToStr(te.ope);            

@@ -22,7 +22,7 @@ template<class EncT> class RootTracker;
 
 template<class EncT> class Node;
 
-struct ChangeInfo;
+template<class EncT> struct ChangeInfo;
 
 
 /**  Merkle Proof and verification **/
@@ -77,12 +77,12 @@ public:
 //    Node<EncT>* build_tree(std::vector< std::string> & key_list, RootTracker & root_tracker, int start, int end);
 //    Node<EncT>* build_tree_wrapper(std::vector<std::string> & key_list, RootTracker & root_tracker, int start, int end);
 
-    void insert(EncT ciph, OPEType ope_path, uint64_t nbits, uint64_t index);
+    void insert(EncT ciph, TreeNode<EncT> * tnode, OPEType ope_path, uint64_t nbits, uint64_t index);
 
     void update_node_ot(Node<EncT>* cur_node, uint64_t v, uint64_t nbits);
-    void update_ot(ChangeInfo & c);
+    void update_ot(ChangeInfo<EncT> & c);
 
-    void update_db(ChangeInfo & c);
+    void update_db(ChangeInfo<EncT> & c);
 
 private:
     RootTracker<EncT> * tracker;
@@ -127,9 +127,10 @@ public:
 
     unsigned int m_count;
 
-    bool do_insert(Elem<EncT> & element, UpdateMerkleProof & p, ChangeInfo & c);
+    bool do_insert(Elem<EncT> & element, UpdateMerkleProof & p, ChangeInfo<EncT> & c);
     
-protected:
+
+    /***** HELPER FUNCTIONS ***************/
 
     // locality of reference, beneficial to effective cache utilization,
     // is provided by a "vector" container rather than a "list"
@@ -147,7 +148,7 @@ protected:
     
     bool vector_insert (Elem<EncT>& element);
     bool vector_insert_for_split (Elem<EncT>& element);
-    bool split_insert (Elem<EncT>& element, ChangeInfo & ci);
+    bool split_insert (Elem<EncT>& element, ChangeInfo<EncT> & ci);
 
     bool vector_delete (Elem<EncT>& target);
     bool vector_delete (int target_pos);
@@ -211,13 +212,6 @@ protected:
     void recompute_merkle_subtree();
     uint max_height();   //height in no of edges 
 
-    // Friends
-    friend class Test;
-    friend MerkleProof node_merkle_proof<EncT>(Node<EncT> * n);
-    friend std::ostream & operator <<(std::ostream & out, const Node<EncT> & n)<EncT>;
-    friend void record_state<EncT>(Node<EncT> * node, State & state);
-//    friend Node* build_tree(std::vector<std::string> & key_list, RootTracker & root_tracker, int start, int end);
-//    friend Node* build_tree_wrapper(std::vector<std::string> & key_list, RootTracker & root_tracker, int start, int end); 
 #ifdef _DEBUG
 
     Elem<EncT> debug[8];
@@ -364,7 +358,11 @@ struct LevelChangeInfo {
     int index;
 };
 
-typedef list<LevelChangeInfo > ChangeInfo;
+template <class EncT>
+struct ChangeInfo {
+    std::list<LevelChangeInfo<EncT> > l;
+};
+
 
 // TODO: clean these myprint vs << functions for gdb
 // functions for my gdb macro,

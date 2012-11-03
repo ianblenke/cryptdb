@@ -346,7 +346,7 @@ bool Node<EncT>::vector_insert_for_split (Elem<EncT>& element) {
 
 /* split_insert should only be called if node is full */
 template<class EncT>
-bool Node<EncT>::split_insert (Elem<EncT>& element, ChangeInfo & ci) {
+bool Node<EncT>::split_insert (Elem<EncT>& element, ChangeInfo<EncT> & ci) {
 
     if (m_count != m_vector.size()-1) {
         throw "bad m_count in split_insert";
@@ -367,7 +367,7 @@ bool Node<EncT>::split_insert (Elem<EncT>& element, ChangeInfo & ci) {
     lci.node = this;
     lci.right = new_node;
     lci.index = split_point;
-    ci.push_back(lci);
+    ci.l.push_back(lci);
     
     Elem<EncT> upward_element = m_vector[split_point];
 
@@ -649,9 +649,9 @@ Node<EncT>::hash_node(){
  
 }
 
-
+template <class EncT>
 ostream &
-operator<<(ostream & out, const Node & n) {
+operator<<(ostream & out, const Node<EncT> & n) {
     out << "(Node m_ct " << n.m_count << " m_vec ";
     for (uint i = 0; i < n.m_count; i++) {
 	out << n.m_vector[i] <<  " ";
@@ -685,7 +685,7 @@ void Node<EncT>::update_merkle_upward() {
 }
 
 template<class EncT>
-bool Node<EncT>::do_insert(Elem<EncT> & element, UpdateMerkleProof & p, ChangeInfo & c) {
+bool Node<EncT>::do_insert(Elem<EncT> & element, UpdateMerkleProof & p, ChangeInfo<EncT> & c) {
     // ---- Merkle -----
     // last_visited_ptr is the start point for the proof
     record_state(this, p.st_before);
@@ -1335,7 +1335,7 @@ Node<EncT>::in_order_traverse(list<string> & result) {
     }
 }
 
-
+template <class EncT>
 ostream&
 operator<<(ostream & out, const Elem<EncT> & e) {
     out << "Elem: (" << e.m_key << ", ";
@@ -1432,7 +1432,7 @@ BTree<EncT>::update_node_ot(Node<EncT>* cur_node, uint64_t v, uint64_t nbits){
 
 template<class EncT>
 void
-BTree<EncT>::update_ot(ChangeInfo & c) {
+BTree<EncT>::update_ot(ChangeInfo<EncT> & c) {
     //TODO
     LevelChangeInfo<EncT> last = c.pop_back();
     table_entry te = opetable->get( last.node->m_vector[1] );
@@ -1459,7 +1459,7 @@ BTree<EncT>::update_ot(ChangeInfo & c) {
 
 template<class EncT>
 void
-BTree<EncT>::update_db(ChangeInfo & c) {
+BTree<EncT>::update_db(ChangeInfo<EncT> & c) {
     //TODO
     //Stupid way would be to just send DB query when we update table, so would
     //not need update_db fn.
@@ -1467,13 +1467,15 @@ BTree<EncT>::update_db(ChangeInfo & c) {
 
 
 
+
+
 template<class EncT>
 void
-BTree<EncT>::insert(EncT ciph, OPEType ope_path, uint64_t nbits, uint64_t index) {
-    Node<EncT> * node = path_based_search(ope_path, nbits, index);
+BTree<EncT>::insert(EncT ciph, TreeNode<EncT> * tnode, OPEType ope_path, uint64_t nbits, uint64_t index) {
+    Node<EncT> * node = (Node<EncT> *) tnode;
 
     UpdateMerkleProof p;
-    ChangeInfo ci;
+    ChangeInfo<EncT> ci;
     node->do_insert(Elem<EncT>(ciph), p, ci);
 
     //update ope table and DB
