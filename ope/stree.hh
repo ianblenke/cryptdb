@@ -30,7 +30,7 @@ struct successor;
 
 
 template<class EncT>
-class Stree : public Tree<EncT> {
+class Stree : public Tree {
 
 public:
 
@@ -57,7 +57,7 @@ public:
      * the position where it should be inserted
      * Requires that encval is not in tree.
      */
-    void insert(EncT encval, TreeNode<EncT> * tnode, OPEType v, uint64_t nbits, uint64_t index);
+    void insert(std::string encval, TreeNode * tnode, OPEType v, uint64_t nbits, uint64_t index);
 
 
     /*********** Helper methods **************/
@@ -107,7 +107,7 @@ public:
 };
 
 template<class EncT>
-struct Stree_node : public TreeNode<EncT>
+struct Stree_node : public TreeNode
 {
     uint num_nodes; //the number of nodes in the subtree rooted in this node -->
 		    //these are tree nodes, not keys
@@ -125,7 +125,7 @@ struct Stree_node : public TreeNode<EncT>
     }
 
     //returns set of keys at this node
-    std::vector<EncT> get_keys();
+    std::vector<std::string> get_keys();
     
     // Returns the subtree to the right of key if there is such a subtree, else
     // returns null 

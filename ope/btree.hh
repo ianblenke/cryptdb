@@ -16,44 +16,38 @@ uint Merklecost = 0;
 
 /** Forwarding Data Structures **/
 
-template<class EncT> class Elem;
+class Elem;
 
-template<class EncT> class RootTracker;
+class RootTracker;
 
-template<class EncT> class Node;
-
-template<class EncT> struct ChangeInfo;
+class Node;
 
 
 /**  Merkle Proof and verification **/
 
-template<class EncT>
 void
-record_state(Node<EncT> * node, State & state);
+record_state(Node * node, State & state);
 
 
 // returns the information needed to check the validity of node n
-template<class EncT>
 MerkleProof
-node_merkle_proof(Node<EncT> * n);
+node_merkle_proof(Node * n);
 
 
 // verifies that the merkle information corresponding to a node matches the
 // overall root merkle hash
-template<class EncT>
 bool
 verify_merkle_proof(const MerkleProof & proof, const std::string & merkle_root);
 
 //verifies the merkle proof for deletion and returns true if it holds, and it
 //also sets new_merkle_root accordingly
-template<class EncT>
 bool
 verify_del_merkle_proof(const UpdateMerkleProof & p,
             std::string del_target,
             const std::string & merkle_root,
             std::string & new_merkle_root);
 
-template<class EncT>
+
 bool
 verify_ins_merkle_proof(const UpdateMerkleProof & p,
             std::string ins_target,
@@ -61,73 +55,87 @@ verify_ins_merkle_proof(const UpdateMerkleProof & p,
             std::string & new_merkle_root);
 
 /////////////////////////////////////////////////////////////////////////////
+///// Helper data structures //////
+
+/* Contains information about
+ * a split at a level in a tree.
+ * The information is before the split.
+ * The node was split at index into itself and right.
+ * For a new root, only right is NULL and index negative.
+ */
+
+struct LevelChangeInfo {
+    Node * node;
+    Node * right;
+    int index;
+};
 
 
+typedef std::list<LevelChangeInfo > ChangeInfo;
 
 
-template<class EncT>
-class BTree : public Tree<EncT> {
+//////////////////////////////////////
+
+class BTree : public Tree {
 public:
 
 
-    BTree(OPETable<EncT> * ot, Connect * db);
+    BTree(OPETable<std::string> * ot, Connect * db);
     
-    TreeNode<EncT> * get_root();
+    TreeNode * get_root();
 
-//    Node<EncT>* build_tree(std::vector< std::string> & key_list, RootTracker & root_tracker, int start, int end);
-//    Node<EncT>* build_tree_wrapper(std::vector<std::string> & key_list, RootTracker & root_tracker, int start, int end);
+//    Node* build_tree(std::vector< std::string> & key_list, RootTracker & root_tracker, int start, int end);
+//    Node* build_tree_wrapper(std::vector<std::string> & key_list, RootTracker & root_tracker, int start, int end);
 
-    void insert(EncT ciph, TreeNode<EncT> * tnode, OPEType ope_path, uint64_t nbits, uint64_t index);
+    void insert(std::string ciph, TreeNode * tnode, OPEType ope_path, uint64_t nbits, uint64_t index);
 
-    void update_node_ot(Node<EncT>* cur_node, uint64_t v, uint64_t nbits);
-    void update_ot(ChangeInfo<EncT> & c);
+    void update_node_ot(Node* cur_node, uint64_t v, uint64_t nbits);
+    void update_ot(ChangeInfo & c);
 
-    void update_db(ChangeInfo<EncT> & c);
+    void update_db(ChangeInfo & c);
 
 private:
-    RootTracker<EncT> * tracker;
-    OPETable<EncT> * opetable;
+    RootTracker * tracker;
+    OPETable<std::string> * opetable;
     Connect * db;
 };
 
-template<class EncT>
-class Node : TreeNode<EncT> {
+
+class Node : public TreeNode {
   
 public:
 
-    Node (RootTracker<EncT>& root_track);
+    Node (RootTracker& root_track);
 
     // to return a reference when a search fails.
-    static Elem<EncT> m_failure;
+    static Elem m_failure;
 
     // the merkle hash of this node
     std::string merkle_hash;
  
     // the root of the tree may change.  this attribute keeps it accessible.
-    RootTracker<EncT>& m_root;
+    RootTracker& m_root;
 
     
     Node* get_root();
-    Elem<EncT>& search (Elem<EncT>& desired, Node*& last_visited);
-    bool tree_insert (Elem<EncT>& element, UpdateMerkleProof &p);
-    bool tree_delete(Elem<EncT> & target, UpdateMerkleProof & m);
-
-    //cleaning up
-    int delete_all_subtrees();
-
-    Elem<EncT>& operator[] (int i) { return m_vector[i]; }
+    Elem& search (Elem& desired, Node*& last_visited);
+ 
+    Elem& operator[] (int i) { return m_vector[i]; }
     // node cannot be instantiated without a root tracker
 
-    void dump(bool recursive = true);
-    void in_order_traverse(std::list<std::string> & res);
+    // return all keys at the node -- do not return the "" key
+    std::vector<std::string> get_keys();
+    TreeNode * get_subtree(uint index);
+
+    
 
     std::string pretty() const;
     
-    std::vector<Elem<EncT> > m_vector;
-
+    std::vector<Elem > m_vector;
+    // number of elements currently in m_vector, including the zeroth element
+    // which has only a subtree, no key value or payload.
     unsigned int m_count;
-
-    bool do_insert(Elem<EncT> & element, UpdateMerkleProof & p, ChangeInfo<EncT> & c);
+    Node* mp_parent;
     
 
     /***** HELPER FUNCTIONS ***************/
@@ -138,19 +146,27 @@ public:
     // the first element is the "zero" element, empty key and points to zeroth subtree
     //std::vector<Elem> m_vector;
 
-    // number of elements currently in m_vector, including the zeroth element
-    // which has only a subtree, no key value or payload.
-    //unsigned int m_count;
-    Node* mp_parent;
+    
+    bool tree_insert (Elem& element, UpdateMerkleProof &p);
+    bool tree_delete(Elem & target, UpdateMerkleProof & m);
+
+    void dump(bool recursive = true);
+    void in_order_traverse(std::list<std::string> & res);
+
+    
+    bool do_insert(Elem & element, UpdateMerkleProof & p, ChangeInfo & c);
+
+    //cleaning up
+    int delete_all_subtrees();
 
 
     bool is_leaf();
     
-    bool vector_insert (Elem<EncT>& element);
-    bool vector_insert_for_split (Elem<EncT>& element);
-    bool split_insert (Elem<EncT>& element, ChangeInfo<EncT> & ci);
+    bool vector_insert (Elem& element);
+    bool vector_insert_for_split (Elem& element);
+    bool split_insert (Elem& element, ChangeInfo & ci);
 
-    bool vector_delete (Elem<EncT>& target);
+    bool vector_delete (Elem& target);
     bool vector_delete (int target_pos);
 
     void insert_zeroth_subtree (Node* subtree);
@@ -158,9 +174,9 @@ public:
     void set_debug();
     int key_count () { return m_count-1; }
 
-    Elem<EncT>& largest_key () { return m_vector[m_count-1]; }
-    Elem<EncT>& smallest_key ();
-    Elem<EncT>& smallest_key_in_subtree();
+    Elem& largest_key () { return m_vector[m_count-1]; }
+    Elem& smallest_key ();
+    Elem& smallest_key_in_subtree();
     int index_has_subtree ();
 
     Node* right_sibling (int& parent_index_this);
@@ -176,7 +192,7 @@ public:
     bool merge_into_root ();
 
     bool
-    tree_delete_help (Elem<EncT>& target, UpdateMerkleProof & proof, Node* & start_node, Node * node);
+    tree_delete_help (Elem& target, UpdateMerkleProof & proof, Node* & start_node, Node * node);
 
    
 
@@ -214,21 +230,20 @@ public:
 
 #ifdef _DEBUG
 
-    Elem<EncT> debug[8];
+    Elem debug[8];
 
 #endif
     
 };
 
-//???
 
-Node<uint64_t>* invalid_ptr = reinterpret_cast<Node<uint64_t>* > (-1);
+Node * invalid_ptr = reinterpret_cast<Node* > (-1);
 
-Node<uint64_t>* null_ptr = reinterpret_cast<Node<uint64_t>* > (0);
+Node * null_ptr = reinterpret_cast<Node* > (0);
 
-template <class EncT>
+
 std::ostream &
-operator<<(std::ostream & out, const Node<EncT> & n);
+operator<<(std::ostream & out, const Node & n);
 
 	
 /*
@@ -236,7 +251,7 @@ operator<<(std::ostream & out, const Node<EncT> & n);
  * containing key values greater than this->m_key but lower than the
  * key value of the next element to the right
  */
-template<class EncT> class Elem {
+class Elem {
 
 public:
 
@@ -265,10 +280,10 @@ public:
     std::string pretty() const;
     
     std::string m_key;
-    Node<EncT>* mp_subtree;
+    Node* mp_subtree;
     bool has_subtree() const {return valid() && (mp_subtree != null_ptr) && mp_subtree; }
 private:
-    friend class Node<EncT>;
+    friend class Node;
     friend class NodeMerkleInfo;
     friend class NodeInfo;
     friend class Test;
@@ -289,11 +304,10 @@ private:
 
 }; 
 
-template<class EncT> 
 std::ostream&
-operator<<(std::ostream & out, const Elem<EncT> & e);
+operator<<(std::ostream & out, const Elem & e);
 
-template <class EncT>
+
 class RootTracker {
 
 // all the node instances that belong to a given tree have a reference to one
@@ -305,13 +319,13 @@ class RootTracker {
 
 protected:
 
-    Node<EncT>* mp_root;
+    Node* mp_root;
 
 public:
 
     RootTracker() { mp_root = null_ptr; }
 
-    void set_root (Node<EncT>* old_root, Node<EncT>* new_root) {
+    void set_root (Node* old_root, Node* new_root) {
 
         // ensure that the root is only being changed by a node belonging to the
         // same tree as the current root
@@ -323,7 +337,7 @@ public:
 	}
     }
 
-    Node<EncT>* get_root () { return mp_root; }
+    Node* get_root () { return mp_root; }
 
     ~RootTracker () {
 
@@ -345,24 +359,6 @@ public:
 /////////////////////////////////////////////////////////////////////////////////////
 
 
-/* Contains information about
- * a split at a level in a tree.
- * The information is before the split.
- * The node was split at index into itself and right.
- * For a new root, only right is NULL and index negative.
- */
-template <class EncT>
-struct LevelChangeInfo {
-    Node<EncT> * node;
-    Node<EncT> * right;
-    int index;
-};
-
-template <class EncT>
-struct ChangeInfo {
-    std::list<LevelChangeInfo<EncT> > l;
-};
-
 
 // TODO: clean these myprint vs << functions for gdb
 // functions for my gdb macro,
@@ -375,18 +371,14 @@ const char *
 myprint(const NodeInfo & v);
 const char *
 myprint(const ElInfo & v);
-template < class EncT>
 const char *
-myprint(const Node<EncT> * v);
-template<class EncT>
+myprint(const Node * v);
 const char *
-myprint(const Elem<EncT> v);
+myprint(const Elem v);
 const char *
 myprint(const DelInfo & v);
-template<class EncT>
 const char *
-myprint(const Elem<EncT> & v);
-template < class EncT>
+myprint(const Elem & v);
 const char *
-myprint(const Node<EncT> & v);
+myprint(const Node & v);
 
