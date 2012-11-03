@@ -1375,43 +1375,63 @@ BTree::get_root(){
     return (TreeNode *)tracker->get_root();
 }
 
+
 void
 BTree::update_node_ot(Node* cur_node, uint64_t v, uint64_t nbits){
     
     uint64_t next_v;
     for(uint i=0; i< cur_node->m_count; i++){
-        next_v = v << num_bits | i;
         if (i != 0) {
             //db->connect("UPDATE ") ?? NEED VERSION??
             uint64_t new_ope =  compute_ope(v, nbits, i);
             opetable->update( cur_node->m_vector[i].m_key, new_ope);
         }
-        update_node_ot(cur_node->m_vector[i].mp_subtree, next_v , nbits + num_bits );
+        if (cur_node->m_vector[i].has_subtree() ){
+            next_v = (v << num_bits) | i;
+            update_node_ot(cur_node->m_vector[i].mp_subtree, next_v , nbits + num_bits );
+        }
     }
 }
 
 void
 BTree::update_ot(ChangeInfo & c) {
     //TODO
+
     LevelChangeInfo last = c.pop_back();
     table_entry te = opetable->get( last.node->m_vector[1] );
     uint64_t v, nbits, index;
     parse_ope(te.ope, v, nbits, index);
 
-    uint64_t parent_index = v || s_mask;
-    uint64_t parent_v = v >> num_bits;
-    uint64_t parent_nbits = nbits - num_bits;
-
+    Node<EncT>* cur_node = last.node;
 
     uint64_t next_v;
     Node* parent = last.node->mp_parent;
 
-    for(int i = parent_index+1; i < parent->m_count; i++){
-        next_v = v << num_bits | i;
-        update_node_ot(parent->m_vector[i].mp_subtree, next_v, nbits );
+
+    table_entry te = opetable->get( parent->m_vector[1].m_key );
+    uint64_t parent_v, parent_nbits, index;
+    parse_ope(te.ope, parent_v, parent_nbits, index);
+
+    int parent_index = cur_node->index_in_parent();
+    uint64_t next_v, nbits = parent_nbits + num_bits;
+
+    if (  !cur_node->is_leaf() ){
+        index = parent_index + 1;
+    }else{
+        index = parent_index;
     }
 
-    update_ot(c);    
+    for(int i = (int) index; i < parent->m_count; i++){
+        if (parent->m_vector[i].has_subtree() ){
+            next_v = (parent_v << num_bits) | i;
+            update_node_ot(parent->m_vector[i].mp_subtree, next_v, nbits );
+        }
+
+    }
+
+    if ( !cur_node->is_leaf() ){
+        update_ot(c);    
+    }
 
 }
 
@@ -1439,7 +1459,7 @@ BTree::insert(string ciph, TreeNode * tnode, OPEType ope_path, uint64_t nbits, u
 
 
 /*
-
+  
 Node* build_tree_wrapper(vector<string> & key_list, RootTracker & root_tracker, int start, int end){
 
     Node* b_tree = build_tree(key_list, root_tracker, start, end);
