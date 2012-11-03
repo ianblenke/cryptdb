@@ -70,8 +70,16 @@ path_append(uint64_t v, uint index);
 
 
 // Compute the ope encoding out of an ope path, nbits (no of bits of ope_path),
-// and index being the index in the last node on the path
-uint64_t compute_ope(uint64_t ope_path, uint nbits, uint index);
+// and index being the index in the last node on the path. Note that
+// index is 1 less than index into Node's m_vector! 
+// E.g If index = 0, accessing m_vector[1]
+static inline
+uint64_t compute_ope(uint64_t ope_path, uint nbits, uint index) {
+    ope_path = (ope_path << num_bits) | index;
+    nbits+=num_bits;
+
+    return (ope_path << (64-nbits)) | (s_mask << (64-num_bits-nbits));
+}
 
 static inline void
 parse_ope(const uint64_t ctxt, uint64_t &v, uint64_t &nbits, uint64_t &index)

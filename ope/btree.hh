@@ -89,9 +89,10 @@ public:
 
     void insert(std::string ciph, TreeNode * tnode, OPEType ope_path, uint64_t nbits, uint64_t index);
 
+
     void update_node_ot(Node* cur_node, uint64_t v, uint64_t nbits);
     void update_ot(ChangeInfo & c);
-
+    void update_leaf_ot(Node* leaf_node);
     void update_db(ChangeInfo & c);
 
 private:
