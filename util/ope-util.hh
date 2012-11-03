@@ -71,14 +71,7 @@ path_append(uint64_t v, uint index);
 
 // Compute the ope encoding out of an ope path, nbits (no of bits of ope_path),
 // and index being the index in the last node on the path
-template<class EncT>
-static
-uint64_t compute_ope(uint64_t ope_path, uint nbits, uint index) {
-    ope_path = (ope_path << num_bits) | index;
-    nbits+=num_bits;
-
-    return (ope_path << (64-nbits)) | (s_mask << (64-num_bits-nbits));
-}
+uint64_t compute_ope(uint64_t ope_path, uint nbits, uint index);
 
 static inline void
 parse_ope(const uint64_t ctxt, uint64_t &v, uint64_t &nbits, uint64_t &index)

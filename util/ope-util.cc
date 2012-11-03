@@ -21,6 +21,14 @@ path_append(uint64_t v, uint index) {
     return (v << num_bits | index);
 }
 
+uint64_t compute_ope(uint64_t ope_path, uint nbits, uint index) {
+    ope_path = (ope_path << num_bits) | index;
+    nbits+=num_bits;
+
+    return (ope_path << (64-nbits)) | (s_mask << (64-num_bits-nbits));
+}
+
+
 uint
 minimum_keys (uint max_keys) {
 

@@ -648,15 +648,27 @@ trigger(uint height, uint num_nodes, double alpha) {
     return height > (1.0 * log(num_nodes*1.0)/log(((double)1.0)/alpha) + 1);
 }
 
+template<class EncT>
+static EncT TFromString(string s) {
+    istringstream ss(s);
+    EncT e;
+    ss >> e;
+    return e;
+    
+}
+
 // v is path to node where the insertion should happen; nbits is len of v
 // index is position in node where insertion should happen
 template<class EncT>
 void
-Stree<EncT>::insert(EncT encval, TreeNode<EncT> * tnode, uint64_t v, uint64_t nbits, uint64_t index){
+Stree<EncT>::insert(string encval, TreeNode * tnode, uint64_t v, uint64_t nbits, uint64_t index){
     bool node_inserted;
+
+    EncT eval = TFromString<EncT>(encval);
+    
     //todo: use tnode directly rather than searching for the node with v
     vector<Stree_node<EncT> * > path = tree_insert(root, v, nbits, index,
-						  encval, nbits, node_inserted);
+						   eval, nbits, node_inserted);
 
 #if MALICIOUS
     
@@ -731,7 +743,7 @@ Stree<EncT>::update_shifted_paths(uint index, uint64_t v, int pathlen,
     for(int i=(int)index; i< (int) node->keys.size(); i++) {
 	EncT ckey = node->keys[i];
 	
-	OPEType newope = compute_ope<EncT>(v, pathlen, i);
+	OPEType newope = compute_ope(v, pathlen, i);
 	OPEType oldope = this->ope_table->get(ckey).ope;
 	
 	this->ope_table->update(ckey, newope);
@@ -796,7 +808,7 @@ Stree<EncT>::tree_insert(Stree_node<EncT>* node,
 	node->keys.insert(it+index, encval);
 
 	// update ope table and db
-	assert_s(this->ope_table->insert(encval, compute_ope<EncT>(v, pathlen, index)),
+	assert_s(this->ope_table->insert(encval, compute_ope(v, pathlen, index)),
 		 "did not insert new entry in ope_table");
 	update_shifted_paths(index+1, v, pathlen, node);
 	clear_db_version();
@@ -923,9 +935,23 @@ Stree_node<EncT>::height() {
 }
 
 template<class EncT>
-vector<EncT>
+static string
+TToString(EncT et) {
+    ostringstream ss;
+    ss << et;
+
+    return ss.str();
+}
+
+
+template<class EncT>
+vector<string>
 Stree_node<EncT>::get_keys() {
-    return keys;
+    vector<string> res;
+    for (auto k : keys) {
+	res.push_back(TToString<EncT>(k));
+    }
+    return res;
 }
 
 template<class EncT>

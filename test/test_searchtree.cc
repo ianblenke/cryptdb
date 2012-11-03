@@ -59,7 +59,7 @@ class Test {
 public:
 
     static void
-    check_good_tree(RootTracker & tracker) {
+    check_good_tree(RootTracker<string> & tracker) {
 	
 	tracker.get_root()->check_merkle_tree();
 	
@@ -76,7 +76,7 @@ public:
     }
 
     static void
-    check_good_tree(RootTracker & tracker, vector<string> & vals, uint no_elems) {
+    check_good_tree(RootTracker<string> & tracker, vector<string> & vals, uint no_elems) {
 	
 	tracker.get_root()->check_merkle_tree();
 	
@@ -105,10 +105,10 @@ public:
 	uint period_Merkle_del_check = 1;
 
 	// Create tree
-	Node::m_failure.invalidate();
-	Node::m_failure.m_key = "";
-	RootTracker tracker;  // maintains a pointer to the current root of the b-tree
-	Node* root_ptr = new Node(tracker);
+	Node<string>::m_failure.invalidate();
+	Node<string>::m_failure.m_key = "";
+	RootTracker<string> tracker;  // maintains a pointer to the current root of the b-tree
+	Node<string>* root_ptr = new Node<string>(tracker);
 	tracker.set_root(null_ptr, root_ptr);
 
 	// Insert into tree
@@ -242,7 +242,7 @@ public:
     }
 
     static int
-    cost(Node * node, int pos) {
+    cost(Node<string> * node, int pos) {
 	assert_s(pos >=0 , "error somewhere in logic");
 	assert_s(pos < (int)node->m_count , "error somewhere in logic");
 	
@@ -260,7 +260,7 @@ public:
     // compute the cost of an insert in terms of elements that changed
     // their ope encoding
     static int
-    cost(UpdateMerkleProof & p, RootTracker & tracker) {
+    cost(UpdateMerkleProof & p, RootTracker<string> & tracker) {
 
 	//check first if root grew
 	if (p.st_before.size() == p.st_after.size() -1 ) {
@@ -377,7 +377,7 @@ public:
     static void change(string & s) {
 	s[0] = (char)((int)s[0] + 1 % 200);
     }
-    static void change(Node * last) {
+    static void change(Node<string> * last) {
 	change(last->m_vector[0].m_key); 
     }
     
