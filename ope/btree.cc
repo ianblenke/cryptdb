@@ -1465,6 +1465,9 @@ BTree<EncT>::update_ot(ChangeInfo<EncT> & c) {
 
     }
 
+    if( c.back().node->mp_parent == last.right)
+        return;
+
     if ( !cur_node->is_leaf() ){
         update_ot(c);    
     }
