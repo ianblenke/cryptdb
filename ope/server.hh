@@ -11,19 +11,21 @@
 #include <sys/types.h>
 
 #include <edb/Connect.hh>
+#include <ope/tree.hh>
 #include <ope/stree.hh>
-//#include <ope/btree.hh>
+#include <ope/btree.hh>
 
 
 
-template<class EncT>
+
 class Server {
 public:
     int sock_cl; //socket to client; server connects thru it
     int sock_udf; //socket to udfs; server listens on it
 
-    Tree<EncT> * ope_tree;
-    OPETable<EncT> * ope_table;
+    Tree * ope_tree;
+
+    OPETable<std::string> * ope_table;
     Connect * db; 
    
     Server();
@@ -41,7 +43,7 @@ public:
      * underlying val of ciph
      * Returns the tree last tree node on the path. 
      */
-    TreeNode<EncT> * interaction(EncT ciph,
+    TreeNode * interaction(std::string ciph,
 		     uint & rindex, uint & nbits,
 		     uint64_t & ope_path,
 		     bool & requals);

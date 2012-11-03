@@ -16,10 +16,13 @@ struct table_entry {
     //int version;
 };
 
-template <class EncT>
-struct OPETable {
-    std::map<EncT, table_entry> table;
 
+
+template <class EncT>
+class OPETable {
+public:
+    std::map<EncT, table_entry> table;
+    
     // returns a pointer to the table_entry for encval
     // or NULL if it does not exist
     table_entry * find(EncT encval);

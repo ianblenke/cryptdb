@@ -11,17 +11,17 @@ using std::cerr;
 using std::map;
 
 
-template<class EncT>
-TreeNode<EncT> *
-Server<EncT>::interaction(EncT ciph,
-			  uint & rindex, uint & nbits,
-			  uint64_t & ope_path,
-			  bool & equals) {
+
+TreeNode *
+Server::interaction(string ciph,
+		    uint & rindex, uint & nbits,
+		    uint64_t & ope_path,
+		    bool & equals) {
 
     cerr << "\n\n Start Interaction\n";
-    TreeNode<EncT> * root = ope_tree->get_root();
+    TreeNode * root = ope_tree->get_root();
     assert_s(root != NULL, "root is null");
-    TreeNode<EncT> * curr = root;
+    TreeNode * curr = root;
 
     ope_path = 0;
     nbits = 0;
@@ -34,7 +34,7 @@ Server<EncT>::interaction(EncT ciph,
     	msg << MsgType::INTERACT_FOR_LOOKUP << " ";
     	msg << ciph << " ";
 
-	vector<EncT> keys = curr->get_keys();
+	vector<string> keys = curr->get_keys();
     	uint len = keys.size();
     	msg << len << " ";
 
@@ -56,7 +56,7 @@ Server<EncT>::interaction(EncT ciph,
 	    return curr;
 	}
 
-	TreeNode<EncT> * subtree = curr->get_subtree(index);
+	TreeNode * subtree = curr->get_subtree(index);
 	if (!subtree) {
 	    cerr << "no subtree at index " << index << "\n";
 	    rindex = index;
@@ -70,11 +70,10 @@ Server<EncT>::interaction(EncT ciph,
     
 }
 
-template<class EncT>
 void 
-Server<EncT>::handle_enc(int csock, istringstream & iss, bool do_ins) {
+Server::handle_enc(int csock, istringstream & iss, bool do_ins) {
    
-    uint64_t ciph;
+    string ciph;
     iss >> ciph;
     if(DEBUG_COMM) cout<< "ciph: "<< ciph << endl;
 
@@ -97,7 +96,7 @@ Server<EncT>::handle_enc(int csock, istringstream & iss, bool do_ins) {
     	bool equals = false;
     	uint nbits = 0;
 
-    	TreeNode<EncT> * tnode = interaction(ciph, index, nbits, ope_path, equals);
+    	TreeNode * tnode = interaction(ciph, index, nbits, ope_path, equals);
 
         assert_s(!equals, "equals should always be false");
     	
@@ -112,7 +111,7 @@ Server<EncT>::handle_enc(int csock, istringstream & iss, bool do_ins) {
             ope = opeToStr(te.ope);            
         } else{
 
-            uint64_t ope_enc = compute_ope<EncT>(ope_path, nbits, index);
+            uint64_t ope_enc = compute_ope(ope_path, nbits, index);
 
             //Subtract 1 b/c if ope points to existing value in tree, want this ope value
             //to be less than 
@@ -125,9 +124,8 @@ Server<EncT>::handle_enc(int csock, istringstream & iss, bool do_ins) {
     
 }
 
-template<class EncT>
 void
-Server<EncT>::dispatch(int csock, istringstream & iss) {
+Server::dispatch(int csock, istringstream & iss) {
    
     MsgType msgtype;
     iss >> msgtype;
@@ -148,19 +146,18 @@ Server<EncT>::dispatch(int csock, istringstream & iss) {
     
 }
 
-template<class EncT>
-Server<EncT>::Server() {
-    ope_table = new OPETable<EncT>();
+Server::Server() {
+   
     db = new Connect( "localhost", "root", "letmein","cryptdb", 3306);
 
-    ope_tree = (Tree<EncT> *) new Stree<EncT>(ope_table, db);
+    ope_table = new OPETable<string>();
+    ope_tree = (Tree *) new BTree(ope_table, db);
 
     sock_cl = create_and_connect(OPE_CLIENT_HOST, OPE_CLIENT_PORT);
     sock_udf = create_and_bind(OPE_SERVER_PORT);
 }
 
-template<class EncT>
-Server<EncT>::~Server() {
+Server::~Server() {
     close(sock_cl);
     close(sock_udf);
 }
@@ -169,7 +166,7 @@ Server<EncT>::~Server() {
 int main(int argc, char **argv){
 
     cerr<<"Starting tree server \n";
-    Server<uint64_t> server;
+    Server server;
     
     //Start listening
     int listen_rtn = listen(server.sock_udf, 10);
@@ -209,4 +206,3 @@ int main(int argc, char **argv){
     cerr << "Server exits!\n";
 }
 
-template class Server<uint64_t>;
