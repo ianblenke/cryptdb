@@ -139,7 +139,7 @@ int main(int argc, char* argv[])
       }
       enc_vals.push_back(det);*/
 
-      std::cout << det.size() << " " << det << " " << strings_in_db[rc].second << std::endl;
+      //std::cout << det.size() << " " << det << " " << strings_in_db[rc].second << std::endl;
 
       ss << det.size() << " " << det << " " << strings_in_db[rc].second;
       

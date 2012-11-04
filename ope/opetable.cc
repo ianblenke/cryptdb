@@ -69,4 +69,4 @@ OPETable<EncT>::update(EncT encval, uint64_t newope) {
 template struct OPETable<uint64_t>;
 template struct OPETable<uint32_t>;
 template struct OPETable<uint16_t>;
-template struct OPETable<string>;
+template struct OPETable<std::string>;

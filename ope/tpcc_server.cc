@@ -32,21 +32,24 @@ struct sort_second {
     }
 };
 
-template <class EncT>
 void
-update_entries(OPETable<EncT> & ope_table, Node* curr_node, uint64_t v, uint64_t nbits);
+update_entries_int(OPETable<uint64_t> & ope_table, Node* curr_node, uint64_t v, uint64_t nbits);
 
-template <class EncT>
 void
-update_table(OPETable<EncT> & ope_table, Node* btree);
+update_table_int(OPETable<uint64_t> & ope_table, Node* btree);
+
+void
+update_entries_str(OPETable<std::string> & ope_table, Node* curr_node, uint64_t v, uint64_t nbits);
+
+void
+update_table_str(OPETable<std::string> & ope_table, Node* btree);
 
 void parse_int_message(std::stringstream & ss, std::vector<int>& indexed_data, std::vector<std::string> & unique_data, std::vector<std::string> & bulk_data);
 
 void parse_string_message(std::stringstream & ss, std::vector<int>& indexed_data, std::vector<std::string> & unique_data, std::vector<std::string> & bulk_data);
 
-template <class EncT>
 void
-update_entries(OPETable<EncT> & ope_table, Node* curr_node, uint64_t v, uint64_t nbits){
+update_entries_int(OPETable<uint64_t> & ope_table, Node* curr_node, uint64_t v, uint64_t nbits){
 
     assert_s(nbits < (uint64_t) 64 - num_bits, "ciphertext too long!");
     bool leaf = true;
@@ -56,7 +59,7 @@ update_entries(OPETable<EncT> & ope_table, Node* curr_node, uint64_t v, uint64_t
             leaf = false;   
             //std::cout<<"Recursing "   <<curr_node->m_vector[i]<< " on "<<i <<" v="<<v<<std::endl;
             //std::cout<<" new v: "<<((v << num_bits) | i)<< " new nbits"<<nbits+num_bits<<std::endl;
-            update_entries(ope_table, curr_node->m_vector[i].mp_subtree, 
+            update_entries_int(ope_table, curr_node->m_vector[i].mp_subtree, 
               (v << num_bits) | i, 
               nbits+num_bits);
         }
@@ -69,30 +72,63 @@ update_entries(OPETable<EncT> & ope_table, Node* curr_node, uint64_t v, uint64_t
           ope_enc = compute_ope(v, nbits, i-1);
 
           //std::cout<<"ope_enc for "<<curr_node->m_vector[i] << " is "<< ope_enc<< " w/ "<<v<<" : "<<nbits<<std::endl;
+          uint64_t orig_val;
+          std::stringstream ss;
+          ss << curr_node->m_vector[i].m_key;
+          ss >> orig_val; 
+          //std::cout<<"Inserting ("<<orig_val<<", "<<ope_enc<<") into ope_table"<<std::endl;
+          assert_s(ope_table.insert( orig_val, ope_enc), "inserted table value already existing!");            
 
-          if(ope_type == "INT"){
-            EncT orig_val;
-            std::stringstream ss;
-            ss << curr_node->m_vector[i].m_key;
-            ss >> orig_val; 
-            std::cout<<"Inserting ("<<orig_val<<", "<<ope_enc<<") into ope_table"<<std::endl;
-            assert_s(ope_table.insert( orig_val, ope_enc), "inserted table value already existing!");            
-          }else if (ope_type == "STRING"){
-            std::string orig_val = curr_node->m_vector[i].m_key;
-            std::cout<<"Inserting ("<<orig_val<<", "<<ope_enc<<") into ope_table"<<std::endl;
-            assert_s(ope_table.insert( orig_val, ope_enc), "inserted table value already existing!");            
-          }
       }
 
     }
 
 }
 
-template <class EncT>
 void
-update_table(OPETable<EncT> & ope_table, Node* btree){
+update_entries_str(OPETable<std::string> & ope_table, Node* curr_node, uint64_t v, uint64_t nbits){
 
-  update_entries(ope_table, btree, 0, 0);
+    assert_s(nbits < (uint64_t) 64 - num_bits, "ciphertext too long!");
+    bool leaf = true;
+
+    for (unsigned int i=0; i<curr_node->m_count; i++) {
+        if (curr_node->m_vector[i].has_subtree()) {  
+            leaf = false;   
+            //std::cout<<"Recursing "   <<curr_node->m_vector[i]<< " on "<<i <<" v="<<v<<std::endl;
+            //std::cout<<" new v: "<<((v << num_bits) | i)<< " new nbits"<<nbits+num_bits<<std::endl;
+            update_entries_str(ope_table, curr_node->m_vector[i].mp_subtree, 
+              (v << num_bits) | i, 
+              nbits+num_bits);
+        }
+    }
+
+    if(leaf){
+
+      uint64_t ope_enc;
+      for (unsigned int i=1; i<curr_node->m_count; i++) {
+          ope_enc = compute_ope(v, nbits, i-1);
+
+          //std::cout<<"ope_enc for "<<curr_node->m_vector[i] << " is "<< ope_enc<< " w/ "<<v<<" : "<<nbits<<std::endl;
+          std::string orig_val = curr_node->m_vector[i].m_key;
+          //std::cout<<"Inserting ("<<orig_val<<", "<<ope_enc<<") into ope_table"<<std::endl;
+          assert_s(ope_table.insert( orig_val, ope_enc), "inserted table value already existing!");            
+      }
+
+    }
+
+}
+
+void
+update_table_int(OPETable<uint64_t> & ope_table, Node* btree){
+
+  update_entries_int(ope_table, btree, 0, 0);
+
+}
+
+void
+update_table_str(OPETable<std::string> & ope_table, Node* btree){
+
+  update_entries_str(ope_table, btree, 0, 0);
 
 }
 
@@ -152,7 +188,7 @@ void parse_string_message(std::stringstream & ss, std::vector<int>& indexed_data
       int index;
       ss >> index;
 
-      std::cout << len << " " << str_data << " " << index << std::endl;
+      //std::cout << len << " " << str_data << " " << index << std::endl;
 
       indexed_data.push_back( index );
       bulk_data.push_back( str_data );
@@ -225,10 +261,10 @@ int main()
 
     RootTracker* root_tracker = new RootTracker();
 
-    std::cout<<"Unique: "<<std::endl;
-    for(int i=0; i< (int) unique_data.size(); i++){
+    //std::cout<<"Unique: "<<std::endl;
+/*    for(int i=0; i< (int) unique_data.size(); i++){
       std::cout<<unique_data[i].size()<<": " <<unique_data[i]<<std::endl;
-    }
+    }*/
 
     Node* b_tree = build_tree_wrapper(unique_data, *root_tracker, 0, unique_data.size());
 
@@ -236,7 +272,7 @@ int main()
 
     if (ope_type == "INT"){
       OPETable<uint64_t>* ope_lookup_table = new OPETable<uint64_t>();
-      update_table(*ope_lookup_table, b_tree);
+      update_table_int(*ope_lookup_table, b_tree);
       for(int j = 0; j < (int) bulk_data.size(); j++){
         uint64_t key;
         std::stringstream map_key;
@@ -247,7 +283,7 @@ int main()
 
     }else if (ope_type == "STRING"){
       OPETable<std::string >* ope_lookup_table = new OPETable<std::string>();
-      update_table(*ope_lookup_table, b_tree);    
+      update_table_str(*ope_lookup_table, b_tree);    
       for(int j = 0; j < (int) bulk_data.size(); j++){
         std::string key = bulk_data[j];
         db_data.push_back( std::make_pair( ope_lookup_table->get(key).ope, indexed_data[j]) );
