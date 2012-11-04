@@ -22,6 +22,9 @@ class RootTracker;
 
 class Node;
 
+Node* build_tree(std::vector< std::string> & key_list, RootTracker & root_tracker, int start, int end);
+Node* build_tree_wrapper(std::vector<std::string> & key_list, RootTracker & root_tracker, int start, int end);
+
 
 /**  Merkle Proof and verification **/
 
