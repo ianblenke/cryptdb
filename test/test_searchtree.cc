@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <util/util.hh>
 #include <ope/btree.hh>
+#include <ope/transform.hh>
 
 using namespace std;
 
@@ -483,6 +484,59 @@ public:
 	}
 	return false;
     }
+
+    static string
+    ope_t_print(OPETransform t, vector<uint> path) {
+	OPEType val = vec_to_enc(path);
+	vector<uint> str = enc_to_vec(t.transform(val));
+	return pretty_path(str);
+    }
+
+    static bool
+    check_equals(vector<uint> v1, vector<uint> v2) {
+	if (v1.size() != v2.size()) {
+	    return false;
+	}
+
+	for (uint i = 0; i < v1.size(); i++) {
+	    if (v1[i] != v2[i]) {
+		return false;
+	    }
+	}
+
+	return true;
+    }
+    
+    static void
+    ope_transform_check(OPETransform & t, vector<uint> ope_path, vector<uint> new_path){
+	cerr << "test on " << pretty_path(ope_path) << " vec to enc " << vec_to_enc(ope_path) << " "
+	     << "enc to vec back " << pretty_path(enc_to_vec(vec_to_enc(ope_path))) << "\n";
+	vector<uint> compute_path = enc_to_vec(t.transform(vec_to_enc(ope_path)));
+	if (!check_equals(compute_path, new_path)) {
+	    cerr << "expected " << pretty_path(new_path) << " computed " << pretty_path(compute_path) << "\n";
+	    assert_s(false, "");
+	}
+    }
+
+    static void
+    test_transform() {
+	OPETransform t;
+	t.push_change(vec_to_path({2, 1, 5}), 3, 1, 1);
+	t.push_change(vec_to_path({2, 1}), 2,    6, 3);
+	t.push_change(vec_to_path({2}), 1,       2, 3);
+	t.push_change(vec_to_path({}), 0,        3, -1);
+
+	ope_transform_check(t, {0}, {0});
+	ope_transform_check(t, {3,5, 6} ,{4, 5, 6} );
+	ope_transform_check(t, {2, 2}, {2, 3});
+	ope_transform_check(t, {0, 5, 6}, {0, 5, 6});
+	cerr << " 2,1,5,0 " << ope_t_print(t, {2, 1, 5, 0}) << "\n";
+	cerr << "2, 8  " << ope_t_print(t, {2, 8}) << "\n";
+	cerr << "2, 1, 1, 5  " << ope_t_print(t, {2, 1, 1, 5}) << "\n";
+
+	cerr << "Ok -- not root case!\n";
+	
+    }
     
     // Inputs: the number of values to test the tree on and the
     // frequency of testing (check tree every test_freq insertions)
@@ -537,10 +591,10 @@ public:
 
 int main(int argc, char ** argv)
 {
-    Test::test_search_tree();
+    //Test::test_search_tree();
     //Test::evalBMerkleTree(argc, argv);
     //Test::testMerkleProof();
-
+    Test::test_transform();
 }
 
  

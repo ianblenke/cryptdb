@@ -22,6 +22,76 @@ path_append(uint64_t v, uint index) {
 }
 
 
+//takes a ope path with no padding of
+// num units and transforms it in vec
+std::vector<uint>
+path_to_vec(OPEType val, int num) {
+    vector<uint> res = std::vector<uint>(num);
+    for (int i = num-1; i>=0; i--) {
+	res[i] = val % UNIT_VAL;
+	val = val >> num_bits;
+    }
+
+    return res;
+
+}
+
+// takes a normal ope encoding with mask and
+// transforms it in a path 
+std::vector<uint>
+enc_to_vec(OPEType val) {
+    uint64_t v, nbits, index;
+    
+    parse_ope(val, v, nbits, index);
+
+    v = (v << num_bits) + index;
+
+    uint num = 1 + nbits/num_bits;
+
+    return path_to_vec(v, num);
+ }
+
+
+OPEType
+vec_to_path(const std::vector<uint> & path) {
+    OPEType val = 0;
+    for (uint i = 0; i < path.size(); i++) {
+	val = (val << num_bits) + path[i];
+    }
+
+    return val;
+}
+
+
+OPEType
+vec_to_enc(const std::vector<uint> & path) {
+  
+    return compute_ope(vec_to_path(path), path.size() * num_bits);
+}
+
+
+string
+pretty_path(vector<uint> v) {
+    stringstream ss;
+    for (uint i : v) {
+	ss << i << " ";
+    }
+    return ss.str();
+}
+
+
+
+
+bool
+match(const std::vector<uint> & ope_path, const std::vector<uint> & path) {
+    for (uint i = 0; i < ope_path.size();i++){
+	if (ope_path[i] != path[i]) {
+	    return false;
+	}
+    }
+    return true;
+}
+
 uint
 minimum_keys (uint max_keys) {
 

@@ -1,5 +1,5 @@
 OBJDIRS     += ope
-OPESRC  := merkle.cc opetable.cc stree.cc btree.cc
+OPESRC  := merkle.cc opetable.cc stree.cc btree.cc transform.cc
 
 
 all:    $(OBJDIR)/libope.so $(OBJDIR)/libcryptdb.so
