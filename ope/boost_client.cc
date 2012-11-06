@@ -51,15 +51,22 @@ int main(int argc, char* argv[])
     std::stringstream ss;
     ss << ItemToString(rt.rows[rc][0]);
 
-    uint64_t ope_enc;
     if (ope_type == "INT"){
       int cur_val = 0;
       ss >> cur_val;
       NTL::ZZ enc = ope->encrypt(NTL::to_ZZ(cur_val));
-      ope_enc = uint64FromZZ(enc);
-      std::cout << cur_val << ope_enc << std::endl;
+      uint64_t ope_enc = uint64FromZZ(enc);
+      //std::cout << cur_val << ope_enc << std::endl;
 
       assert_s(ope->decrypt(enc) == NTL::to_ZZ(cur_val), "encryption for int not right");
+
+      ss.clear();
+      ss.str("");
+
+      ss << ope_enc;
+
+      message += ss.str() + " ";
+
 
     }else if (ope_type == "STRING") {
       std::string cur_val = ss.str();
@@ -76,21 +83,17 @@ int main(int argc, char* argv[])
         pv = pv * 256;
       }
       
-      NTL::ZZ enc = ope->encrypt(pv);
+      NTL::ZZ ope_enc = ope->encrypt(pv);
 
-      assert_s(ope->decrypt(enc) == pv, "encryption for int not right");
+      assert_s(ope->decrypt(ope_enc) == pv, "encryption for int not right");
 
-      ope_enc = uint64FromZZ(enc);
+      ss.clear();
+      ss.str("");
 
-      std::cout<<pv<<" : "<<enc <<" : "<<ope_enc << std::endl;
+      ss << ope_enc;
+
+      message += ss.str() + " ";
     }
-
-    ss.clear();
-    ss.str("");
-
-    ss << ope_enc;
-
-    message += ss.str() + " ";
 
   }
 

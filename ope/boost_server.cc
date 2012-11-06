@@ -80,7 +80,13 @@ int main()
 
     dbconnect->execute("DROP TABLE "+ope_table);
 
-    assert_s(dbconnect->execute("CREATE TABLE "+ope_table+" ("+ope_row+" BIGINT(64) UNSIGNED NOT NULL)"), "table creation failed");
+    std::string type;
+
+    if (ope_type == "INT")
+      type = "BIGINT(64) UNSIGNED";
+    else if (ope_type == "STRING")
+      type = "VARBINARY(78)";
+    assert_s(dbconnect->execute("CREATE TABLE "+ope_table+" ("+ope_row+" "+type+" NOT NULL)"), "table creation failed");
 
     assert_s(dbconnect->execute("LOAD DATA INFILE 'bulk_load.txt' INTO TABLE "+ope_table+ " LINES TERMINATED BY '\n' ("+ope_row+ ")"), "updating ope_table failed");    
 
