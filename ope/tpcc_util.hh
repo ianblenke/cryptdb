@@ -2,8 +2,8 @@
 #include <sys/time.h>
 #include <unistd.h>
 
-std::string ope_row = "c_first";
-std::string ope_table = "customer";
+std::string ope_row = "val";
+std::string ope_table = "test";
 std::string ope_type = "STRING";
 
 /*

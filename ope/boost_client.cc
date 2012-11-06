@@ -37,6 +37,7 @@ int main(int argc, char* argv[])
 
   ResType rt = result->unpack();
 
+  std::cout << rt.rows.size()<< std::endl;
 
   OPE* ope;
   if (ope_type == "INT")
@@ -56,6 +57,7 @@ int main(int argc, char* argv[])
       ss >> cur_val;
       NTL::ZZ enc = ope->encrypt(NTL::to_ZZ(cur_val));
       ope_enc = uint64FromZZ(enc);
+      std::cout << cur_val << ope_enc << std::endl;
 
       assert_s(ope->decrypt(enc) == NTL::to_ZZ(cur_val), "encryption for int not right");
 
@@ -63,13 +65,15 @@ int main(int argc, char* argv[])
       std::string cur_val = ss.str();
       std::transform( cur_val.begin(), cur_val.end(), cur_val.begin(), ::tolower);
       int plain_size = 16;
-      if ((int) cur_val.size() < plain_size)
-          cur_val = cur_val + std::string(plain_size - cur_val.size(), 0);
 
       NTL::ZZ pv;
 
-      for (uint i = 0; i < (uint) plain_size; i++) {
+      for (uint i = 0; i < (uint) cur_val.size(); i++) {
         pv = pv * 256 + (int)cur_val[i];
+      }
+
+      for(uint i = cur_val.size(); i < (uint) plain_size; i++){
+        pv = pv * 256;
       }
       
       NTL::ZZ enc = ope->encrypt(pv);
@@ -77,6 +81,8 @@ int main(int argc, char* argv[])
       assert_s(ope->decrypt(enc) == pv, "encryption for int not right");
 
       ope_enc = uint64FromZZ(enc);
+
+      std::cout<<pv<<" : "<<enc <<" : "<<ope_enc << std::endl;
     }
 
     ss.clear();
@@ -119,7 +125,6 @@ int main(int argc, char* argv[])
     boost::system::error_code ignored_error;
     boost::asio::write(socket, boost::asio::buffer(message),
         boost::asio::transfer_all(), ignored_error);
-
   }
   catch (std::exception& e)
   {
