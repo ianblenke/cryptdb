@@ -5,7 +5,8 @@ CXX	 := g++
 CXXFLAGS :=  -O0 -g -fno-strict-aliasing -fno-rtti -fwrapv -fPIC \
 	    -Wall -Werror -Wpointer-arith -Wendif-labels -Wformat=2  \
 	    -Wextra -Wmissing-noreturn -Wwrite-strings -Wno-unused-parameter \
-	    -Wmissing-declarations -Woverloaded-virtual  \
+	    -Wmissing-declarations -Woverloaded-virtual \
+	    -Wno-error=deprecated \
 	    -Wunreachable-code -D_GNU_SOURCE -std=c++0x -I$(TOP)
 LDFLAGS	 := -lz -llua5.1 -lcrypto -lntl \
 	    -L$(TOP)/$(OBJDIR) -Wl,-rpath=$(TOP)/$(OBJDIR) -Wl,-rpath=$(TOP)

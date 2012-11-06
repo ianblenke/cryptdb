@@ -115,11 +115,11 @@ struct Stree_node : public TreeNode
     std::map<EncT, Stree_node<EncT> *> right; // right has one more element than keys, the 0
 				  // element represents the leftmost subtree
 
-    Stree_node(){
+    Stree_node() {
 	num_nodes = 1;
     }
 
-    ~Stree_node(){
+    virtual ~Stree_node() {
 	keys.clear();
 	right.clear();
     }
