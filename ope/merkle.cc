@@ -217,8 +217,8 @@ MerkleProof::pretty() const {
 
 // checks if the information in sim and given is
 // equivalent, even if not equal
-bool
-equiv(const DelInfo & sim, const DelInfo & given) {
+static bool
+equiv_del(const UpInfo & sim, const UpInfo & given) {
 
     if (sim.this_was_del) {
 	if (DEBUG_PROOF) {cerr << "equiv: MERGE LEFT";}
@@ -243,8 +243,22 @@ equiv(const DelInfo & sim, const DelInfo & given) {
     return true;
 }
 
+
+// checks if the information in sim and given is
+// equivalent, considering an insert has happened
+static bool
+equiv_ins(const UpInfo & sim, const UpInfo & given) {
+
+    assert_s(sim.node == given.node, "node mismatch");
+    assert_s(sim.has_left_sib == given.has_left_sib &&
+	     (!sim.has_left_sib || sim.left_sib == given.left_sib), "left sib mismatch");
+    assert_s(sim.has_right_sib == sim.has_right_sib &&
+	     (!sim.has_right_sib || sim.right_sib == given.right_sib), "right sib mismatch");
+    return true;
+}
+
 std::ostream&
-DelInfo::operator>>(std::ostream &out) {
+UpInfo::operator>>(std::ostream &out) {
     out << has_left_sib << " ";
     left_sib >> out;
     out << " " << has_right_sib << " ";
@@ -256,7 +270,7 @@ DelInfo::operator>>(std::ostream &out) {
 }
 
 std::istream&
-DelInfo::operator<<(std::istream &is) {
+UpInfo::operator<<(std::istream &is) {
     is >> has_left_sib;
     left_sib << is;
     is >> has_right_sib;
@@ -268,9 +282,9 @@ DelInfo::operator<<(std::istream &is) {
 }
 
 std::string
-DelInfo::pretty() const {
+UpInfo::pretty() const {
     stringstream ss;
-    ss << "{ DelInfo: node " << node.pretty() << "\n"
+    ss << "{ UpInfo: node " << node.pretty() << "\n"
        << " \t\t has_left_sib " << has_left_sib
        << " left_sib " << left_sib.pretty() << "\n"
        << " \t\t has_right_sib " << has_right_sib
@@ -303,7 +317,7 @@ operator>>(istream & is, State & st) {
     st.clear();
     
     for (uint i = 0; i < size; i++) {
-	DelInfo di;
+	UpInfo di;
 	di << is;
 	st.push_back(di);
     }
@@ -330,7 +344,7 @@ hash_match(NodeInfo child, NodeInfo parent) {
     assert_s(child.hash() == parent.childr[child.pos_in_parent].hash, "hash mismatch parent and child");
 }
 static void
-hash_match(const DelInfo & child, const DelInfo &  parent) {
+hash_match(const UpInfo & child, const UpInfo &  parent) {
     
     hash_match(child.node, parent.node);
     if (child.has_left_sib) {
@@ -399,15 +413,23 @@ update_node_parent(NodeInfo & node, NodeInfo & parent) {
 
 
 static void
-check_equals(const State & st_sim, const State & st_real) {
+check_equals(bool is_ins, const State & st_sim, const State & st_real) {
 
     assert_s(st_sim.size() == st_real.size(), "real and simulated states differ in height");
     
     for (uint i = 0; i < st_real.size(); i++) {
-	if (!equiv(st_sim[i],st_real[i])) {
-	    cerr << "difference in level " << i  << "\n";
-	    cerr << " sim is\n" << st_sim[i].pretty() << "\n real is\n" << st_real[i].pretty() << "\n";
-	    assert_s(false, "difference in level");
+	if (is_ins) {
+	    if (!equiv_ins(st_sim[i],st_real[i])) {
+		cerr << "difference in level " << i  << "\n";
+		cerr << " sim is\n" << st_sim[i].pretty() << "\n real is\n" << st_real[i].pretty() << "\n";
+		assert_s(false, "difference in level");
+	    }
+	} else {
+	    if (!equiv_del(st_sim[i],st_real[i])) {
+		cerr << "difference in level " << i  << "\n";
+		cerr << " sim is\n" << st_sim[i].pretty() << "\n real is\n" << st_real[i].pretty() << "\n";
+		assert_s(false, "difference in level");
+	    }
 	}
     }
 }
@@ -420,8 +442,8 @@ recomp_hash_pos(State & st) {
     // compute hashes for nodes in a level and update the parent
     
     for (int i = st.size()-1; i > 0; i--) {
-	DelInfo & sl = st[i];
-	DelInfo & sl_parent = st[i-1];
+	UpInfo & sl = st[i];
+	UpInfo & sl_parent = st[i-1];
       
 	if (!sl.this_was_del) {
 	    if (sl_parent.this_was_del) {
@@ -455,11 +477,11 @@ UpdateMerkleProof::old_hash() const {
     // first level
     auto it = st_before.begin();
     assert_s(it != st_before.end(), "levels in del proof empty");
-    DelInfo di_parent = *it;
+    UpInfo di_parent = *it;
     it++;
     
     for (; it != st_before.end(); it++) {
-	DelInfo di_child = *it;
+	UpInfo di_child = *it;
 
 	hash_match(di_child, di_parent);
 	
@@ -527,7 +549,7 @@ static void
 rotate_from_right(State & st, int index) {
 
     if (DEBUG_PROOF) { cerr << "rotate right\n";}
-    DelInfo & sl = st[index];
+    UpInfo & sl = st[index];
 
     NodeInfo & node = sl.node;
     NodeInfo & sib = sl.right_sib;
@@ -552,7 +574,7 @@ rotate_from_right(State & st, int index) {
 static void
 change_key(State & st, int index, string oldkey, string newkey) {
     if (index <= (int)st.size()-1) {
-	DelInfo & sl = st[index];
+	UpInfo & sl = st[index];
 	if (sl.node.key == oldkey) {
 	    sl.node.key = newkey;
 	}
@@ -568,7 +590,7 @@ change_key(State & st, int index, string oldkey, string newkey) {
 static void
 rotate_from_left(State & st, int index) {
     if (DEBUG_PROOF) { cerr << "rotate left\n";}
-    DelInfo & sl = st[index];
+    UpInfo & sl = st[index];
 
     NodeInfo & node = sl.node;
     NodeInfo & sib = sl.left_sib;
@@ -598,8 +620,8 @@ rotate_from_left(State & st, int index) {
 static bool
 merge_right(State & st, int index) {
     if (DEBUG_PROOF) { cerr << "merge right\n";}
-    DelInfo & sl = st[index];
-    DelInfo & sl_parent = st[index-1];
+    UpInfo & sl = st[index];
+    UpInfo & sl_parent = st[index-1];
     
     NodeInfo & node = sl.node;
     NodeInfo & sib = sl.right_sib;
@@ -643,8 +665,8 @@ merge_right(State & st, int index) {
 static bool
 merge_left(State & st, int index) {
     if (DEBUG_PROOF) { cerr << "merge left\n";}
-    DelInfo & sl = st[index];
-    DelInfo & sl_parent = st[index-1];
+    UpInfo & sl = st[index];
+    UpInfo & sl_parent = st[index-1];
 
     NodeInfo & node = sl.node;
     NodeInfo & sib = sl.left_sib;
@@ -691,7 +713,7 @@ merge_left(State & st, int index) {
 static ElInfo &
 smallest_in_subtree(State & st, int index) {
    
-    DelInfo & sl = st[index];
+    UpInfo & sl = st[index];
     assert_s(sl.node.childr.size() >= 2, "too few children"); // first is empty child
     ElInfo & el = sl.node.childr[1];
     
@@ -726,7 +748,7 @@ sim_delete(State & st, string del_target, int index) {
 	    bool done = false;
 
 	    while (!done) {
-		DelInfo & sl = st[index];
+		UpInfo & sl = st[index];
 
 		if (index == 0 && st.size() == 1) {
 		    cerr << "delete root\n";
@@ -776,20 +798,26 @@ sim_delete(State & st, string del_target, int index) {
 
 
 
-/*
+
 static void
 vector_insert_for_split(NodeInfo & node, ElInfo & ins_ei) {
     assert_s(false, "vector insert for split no implemented");
 }
-*/
-/*
+
+static void
+insert_zeroth_subtree(NodeInfo & node, string hash) {
+    assert_s(node.childr.size() == 0, "expecting empty node");
+    ElInfo ei = ElInfo("", hash);
+    node.childr.push_back(ei);
+}
+
 static void
 split_insert(State & st, int index, ElInfo & ins_ei) {
     NodeInfo & node = st[index].node;
 
     int m_count = node.childr.size();
     
-    assert_s(m_count != num_elms - 1, "split insert should not have been called");
+    assert_s(m_count != b_max_keys-1, "split insert should not have been called");
 
     vector_insert_for_split(node, ins_ei);
 
@@ -803,44 +831,46 @@ split_insert(State & st, int index, ElInfo & ins_ei) {
 
     ElInfo upward_elm = node.childr[split_point];
 
-    insert_zeroth_subtree(node, upward_elm.hash);
+    insert_zeroth_subtree(new_node, upward_elm.hash);
 
     new_node.key = index > 0 ? st[index-1].node.key : "";
     node.key = upward_elm.key;
 
     for (int i = 1; i < (int) (m_count - split_point); i++) {
-	ins_elinfo(new_node.childr, node.childr[split_point+i]);
+	ins_elinfo(node.childr[split_point+i], new_node.childr);
     }
 
-    if (index > 0 && ins_elinfo(st[index-1].node.childr, upward_elm)) { // this node has a parent
+    if (index > 0 && ins_elinfo(upward_elm, st[index-1].node.childr)) { // this node has a parent
 	return;
     }
-    else if (index > 0 && split_insert(st, index-1, upward_elm)) {
-	return true;
+    else if (index > 0) {
+	split_insert(st, index-1, upward_elm);
+	return;
     } 
-    else if (index == 0) { need to move stuff around
+    else if (index == 0) { // this node was the root
 	NodeInfo new_root = NodeInfo();
 	node.key = "";
-	DelInfo new_di = DelInfo();
+	UpInfo new_di = UpInfo();
 	new_node.key = "";
-	ins_elinfo(new_root.childr, upward_elm);
-	di.node = new_root;
-	st.insert(new_di, 0);
+	ins_elinfo(upward_elm, new_root.childr);
+	new_di.node = new_root;
+	st.insert(st.begin(), new_di);
     }
    
-    }*/
-/*
-static void
-sim_insert(State & st, ElInfo & ins_ei, int index) {
-    assert_s(false, "impl not finished");
-    find(st, ins_ei.key, index);
+}
 
-    if (ins_elinfo(ins_target, st[index].node.childr)) {
+static void
+sim_insert(State & st, ElInfo & ins_ei) {
+    assert_s(false, "impl not finished");
+    //find(st, ins_ei.key, index);
+    int index = st.size() - 1;
+    
+    if (ins_elinfo(ins_ei, st[index].node.childr)) {
 	return; //done
     }
 
     split_insert(st, index, ins_ei);
-}*/
+}
 
 /*  We check the change by rerunning the insertion
     on st_before. It turns out this is much simpler
@@ -849,10 +879,11 @@ sim_insert(State & st, ElInfo & ins_ei, int index) {
 bool UpdateMerkleProof::check_ins_change(std::string ins_target) const {
 
     assert_s(false, "check ins change not implemented fully");
-    /*   State st_sim = st_before;
-    
-       // simulate insertion
-    sim_insert(st_sim, ElInfo(ins_target, ""), 0);
+    State st_sim = st_before;
+
+    ElInfo ei = ElInfo(ins_target, "");
+    // simulate insertion
+    sim_insert(st_sim, ei);
     // keys and childr are up to date and
     // hashes of subtrees not involved in the delete;
     // other hashes in pos in parent may be stale
@@ -861,8 +892,8 @@ bool UpdateMerkleProof::check_ins_change(std::string ins_target) const {
     recomp_hash_pos(st_sim);
 
     // compare new state to the one from the server
-    check_equals(st_sim, st_after);
-    */
+    check_equals(true, st_sim, st_after);
+    
     return true;
 }
 
@@ -885,7 +916,7 @@ bool UpdateMerkleProof::check_del_change(std::string del_target) const {
     recomp_hash_pos(st_sim);
 
     // compare new state to the one from the server
-    check_equals(st_sim, st_after);
+    check_equals(false, st_sim, st_after);
     
     return true;
 }
@@ -895,7 +926,7 @@ string UpdateMerkleProof::new_hash() const {
     if (st_after.size() == 0) {
 	return hash_empty_node;
     }
-    DelInfo root = st_after[0];
+    UpInfo root = st_after[0];
     if (!root.this_was_del) {
 	return root.node.hash();
     } else {

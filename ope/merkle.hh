@@ -65,8 +65,8 @@ struct MerkleProof {
 };
 
     
-// Information needed about a delete on a level
-struct DelInfo  {
+// Information needed about a delete or insert on a level
+struct UpInfo  {
     NodeInfo node;
     
     bool has_left_sib;
@@ -79,7 +79,7 @@ struct DelInfo  {
     bool this_was_del;
     bool right_was_del;
     
-    DelInfo() {
+    UpInfo() {
 	has_left_sib = false;
 	has_right_sib = false;
 	this_was_del = false;
@@ -93,11 +93,11 @@ struct DelInfo  {
     
 };
 
-// checks if two DelInfo are equivalent
+// checks if two UpInfo are equivalent
 bool
-equiv(const DelInfo & sim, const DelInfo & given);
+equiv(const UpInfo & sim, const UpInfo & given);
 
-typedef std::vector<DelInfo> State;
+typedef std::vector<UpInfo> State;
 
 struct PrettyPrinter {
     static std::string pretty(const State & st);
@@ -117,11 +117,12 @@ struct PrettyPrinter {
  * 2. Insertion Merkle Proof
  *
  * - Changes only the nodes on a path from a node up to root
- *
+ * - UpdateMerkleProof st_before and after start from root and go
+ * down to the lowest level affected by insert
  *
  * UpdateMerkleProof:
- * ``old'' information in DelInfo is before delete/insert
- * ``new'' is after delete/insert
+ * ``before'' information in UpInfo is before delete/insert
+ * ``after'' is after delete/insert
  */
 struct UpdateMerkleProof {
     // vector is from root to leaf

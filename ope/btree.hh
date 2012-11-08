@@ -380,7 +380,7 @@ myprint(const Node * v);
 const char *
 myprint(const Elem v);
 const char *
-myprint(const DelInfo & v);
+myprint(const UpInfo & v);
 const char *
 myprint(const Elem & v);
 const char *

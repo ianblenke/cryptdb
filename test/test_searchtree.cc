@@ -104,6 +104,7 @@ public:
 	uint delete_freq = 2; //one in deletes_freq will be deleted
 	uint period_Merkle_check = 1; //no_inserted_checks/5 + 1;
 	uint period_Merkle_del_check = 1;
+	uint period_Merkle_insert_check = 1;
 
 	// Create tree
 	Node::m_failure.invalidate();
@@ -117,6 +118,7 @@ public:
 	for (uint i=0; i< no_elems; i++) {
 	    elem.m_key = vals[i];
 	    UpdateMerkleProof p;
+	    string merkle_root_before = tracker.get_root()->merkle_hash;
 	    bool inserted = tracker.get_root()->tree_insert(elem, p);
 	    assert_s(inserted, "element was not inserted");
 	    
@@ -125,6 +127,12 @@ public:
 		//cerr << "checking Merkle for tree so far \n";
 		tracker.get_root()->check_merkle_tree();
 		//cerr << "passed check\n";
+	    }
+	    if (i % period_Merkle_insert_check == 0) {
+		string merkle_after;
+		assert_s(verify_ins_merkle_proof(p, elem.m_key, merkle_root_before, merkle_after),
+			 "insert merkle proof not verified");
+		assert_s(merkle_after == tracker.get_root()->merkle_hash, "verify insert does not give correct merkle proof");
 	    }
 	}
 
@@ -171,6 +179,7 @@ public:
 	// Check tree is correct
 	check_good_tree(tracker, vals, no_elems);
 
+		
 	//Check that deletion works correctly
 	for (uint i = 0 ; i < no_elems/delete_freq; i++) {
 
@@ -220,7 +229,7 @@ public:
     }
 
     static string
-    inserted_here(DelInfo before, DelInfo after, int & pos) {
+    inserted_here(UpInfo before, UpInfo after, int & pos) {
 	NodeInfo node1 = before.node;
 	NodeInfo node2 = after.node;
 
@@ -334,6 +343,46 @@ public:
 // -- searches for existing elements, searches for nonexistin elements
 // -- tests deletion
 // -- checks that Merkle hash tree is overall correct with some period
+    static void
+    testBMerkleTree(int argc, char ** argv) {
+
+	if (argc != 2) {
+	    cerr << "usage: ./test_searchtree num_nodes_to_insert \n";
+	    return;
+	}
+	
+	uint no_elems = atoi(argv[1]);
+
+
+	vector<string> vals;
+	srand( time(NULL));
+
+	cerr << "\n\n- " << no_elems << " values in random order: \n";
+	// test on random values
+	for(uint i=0; i< no_elems; i++){
+	    stringstream s;
+	    s << rand();
+	    vals.push_back(s.str());
+	}
+
+	test_help(vals, no_elems);
+
+	// test on values in increasing order
+	sort(vals.begin(), vals.end());
+	cerr << "\n\n- " << no_elems << " values in increasing order: \n";
+	test_help(vals, no_elems); 
+
+	// test on values in decreasing order
+	reverse(vals.begin(), vals.end());
+	cerr << "\n\n- " << no_elems << " values in decreasing order: \n";
+	test_help(vals, no_elems);
+
+	cerr << "test B complexity finished OK.\n";
+ 
+    }
+
+
+
     static void
     evalBMerkleTree(int argc, char ** argv) {
 
@@ -534,7 +583,7 @@ public:
 	cerr << "2, 8  " << ope_t_print(t, {2, 8}) << "\n";
 	cerr << "2, 1, 1, 5  " << ope_t_print(t, {2, 1, 1, 5}) << "\n";
 
-	cerr << "Ok -- not root case!\n";
+	cerr << "Ok -- not root case and test interval!\n";
 	
     }
     

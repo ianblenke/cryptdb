@@ -598,7 +598,7 @@ myprint(const ElInfo & v) {
     return v.pretty().c_str();
 }
 const char *
-myprint(const DelInfo & v) {
+myprint(const UpInfo & v) {
     return v.pretty().c_str();
 }
 
@@ -717,7 +717,7 @@ record_state(Node * node, State & state) {
 	is_root = true;
     }
 
-    DelInfo di;
+    UpInfo di;
     di.node = node->extract_NodeInfo();
     if (is_root) {
 	di.has_left_sib = false;
@@ -829,7 +829,7 @@ Node::tree_delete_help (Elem& target, UpdateMerkleProof & proof, Node * & start_
 	// element count.
 	
 	
-	DelInfo di_parent;
+	UpInfo di_parent;
 	
 	while (node) {
 	    
