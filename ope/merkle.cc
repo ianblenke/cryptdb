@@ -737,7 +737,7 @@ sim_delete(State & st, string del_target, int index) {
     
     if (index == (int)st.size()-1) { // leaf
 	
-	if ((int)node.key_count() > b_min_keys) {
+	if ((uint)node.key_count() > b_min_keys) {
 	    if (DEBUG_PROOF) { cerr << "basic del enough elems; my key count " << node.key_count()
 			      << " min " << b_min_keys << "\n"; }
 	    del_elinfo(del_target, node.childr);

@@ -351,6 +351,8 @@ std::string processParen(std::list<std::string>::iterator & it, const std::list<
 //returns the contents of str before the first encounter with c
 std::string getBeforeChar(const std::string &str, char c);
 
+bool equalsIgnoreCase(const std::string &s1, const std::string &s2);
+
 //performs a case insensitive search
 template<class T>
 bool contains(const std::string &token, const T &values)
@@ -375,9 +377,6 @@ std::string homomorphicAdd(const std::string &val1, const std::string &val2,
                       const std::string &valN2);
 
 std::string toLowerCase(const std::string &token);
-
-bool equalsIgnoreCase(const std::string &s1, const std::string &s2);
-
 
 /**** HELPERS FOR EVAL **************/
 

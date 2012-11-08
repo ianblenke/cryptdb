@@ -20,6 +20,7 @@ public:
      * or NULL if there is no such subtree */
     virtual TreeNode * get_subtree(uint index) = 0;
     
+    virtual ~TreeNode() {}
 };    
 
 class Tree {

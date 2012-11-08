@@ -13,36 +13,90 @@
 #include <sstream>
 #include <util/ope-util.hh>
 #include <edb/Connect.hh>
+#include <crypto/ope.hh>
+#include "tpcc_util.hh"
+#include <NTL/ZZ.h>
 
 using boost::asio::ip::tcp;
 
 int main(int argc, char* argv[])
 {
 
+  struct timeval start_time;
+
+  gettimeofday(&start_time, 0);
+  std::cout<<start_time.tv_sec<<std::endl;
+  std::cout<<start_time.tv_usec<<std::endl;
+
   Connect * dbconnect;
-  dbconnect = new Connect( "localhost", "root", "letmein","cryptdb", 3306);
+  dbconnect = new Connect( "localhost", "root", "letmein","tpcc", 3306);
 
   DBResult * result;
 
-  dbconnect->execute("SELECT ope_enc FROM emp ORDER BY ope_enc", result);
+  assert_s(dbconnect->execute("SELECT "+ope_row+" FROM " + ope_table, result), "getting orig vals failed");
 
   ResType rt = result->unpack();
 
-  std::vector<uint64_t> values_in_db;
-  values_in_db.resize(rt.rows.size());
+  std::cout << rt.rows.size()<< std::endl;
+
+  OPE* ope;
+  if (ope_type == "INT")
+    ope = new OPE(passwd, 32, 64);
+  else if (ope_type == "STRING")
+    ope = new OPE(passwd, 128, 256);
 
   std::string message = "";
 
   for ( int rc=0; rc < (int) rt.rows.size(); rc++){
-    uint64_t cur_val = 0;
     std::stringstream ss;
     ss << ItemToString(rt.rows[rc][0]);
-    ss >> cur_val;
-    
-    message+= ItemToString(rt.rows[rc][0]) + " ";
-    values_in_db[rc] = cur_val;
+
+    if (ope_type == "INT"){
+      int cur_val = 0;
+      ss >> cur_val;
+      NTL::ZZ enc = ope->encrypt(NTL::to_ZZ(cur_val));
+      uint64_t ope_enc = uint64FromZZ(enc);
+      //std::cout << cur_val << ope_enc << std::endl;
+
+      assert_s(ope->decrypt(enc) == NTL::to_ZZ(cur_val), "encryption for int not right");
+
+      ss.clear();
+      ss.str("");
+
+      ss << ope_enc;
+
+      message += ss.str() + " ";
+
+
+    }else if (ope_type == "STRING") {
+      std::string cur_val = ss.str();
+      std::transform( cur_val.begin(), cur_val.end(), cur_val.begin(), ::tolower);
+      int plain_size = 16;
+
+      NTL::ZZ pv;
+
+      for (uint i = 0; i < (uint) cur_val.size(); i++) {
+        pv = pv * 256 + (int)cur_val[i];
+      }
+
+      for(uint i = cur_val.size(); i < (uint) plain_size; i++){
+        pv = pv * 256;
+      }
+      
+      NTL::ZZ ope_enc = ope->encrypt(pv);
+
+      assert_s(ope->decrypt(ope_enc) == pv, "encryption for int not right");
+
+      ss.clear();
+      ss.str("");
+
+      ss << ope_enc;
+
+      message += ss.str() + " ";
+    }
 
   }
+
 
 
   try
@@ -70,11 +124,10 @@ int main(int argc, char* argv[])
     if (error)
       throw boost::system::system_error(error);
 
-    std::cout <<"Sending message "<<message<<std::endl;
+    //std::cout <<"Sending message "<<message<<std::endl;
     boost::system::error_code ignored_error;
     boost::asio::write(socket, boost::asio::buffer(message),
         boost::asio::transfer_all(), ignored_error);
-
   }
   catch (std::exception& e)
   {
