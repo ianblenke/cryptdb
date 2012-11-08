@@ -119,6 +119,7 @@ public:
 	    elem.m_key = vals[i];
 	    UpdateMerkleProof p;
 	    string merkle_root_before = tracker.get_root()->merkle_hash;
+	    cerr << "merkle root before " << merkle_root_before << "\n";
 	    bool inserted = tracker.get_root()->tree_insert(elem, p);
 	    assert_s(inserted, "element was not inserted");
 	    
@@ -641,9 +642,9 @@ public:
 int main(int argc, char ** argv)
 {
     //Test::test_search_tree();
-    //Test::evalBMerkleTree(argc, argv);
+    Test::testBMerkleTree(argc, argv);
     //Test::testMerkleProof();
-    Test::test_transform();
+    //Test::test_transform();
 }
 
  

@@ -142,10 +142,10 @@ Node::Node(RootTracker& root_track)  : m_root(root_track) {
     m_count = 0;
     
     mp_parent = 0;
-
-    merkle_hash = hash_empty_node; 
     
     insert_zeroth_subtree (0);
+
+    merkle_hash = hash_node();
 }
 
  
@@ -420,7 +420,7 @@ Elem::get_subtree_merkle() {
 
 // notextract is a position for which we should
 // not extract the hash because it may have changed from the
-// time we want to snaposhot
+// time we want to snapshot
 NodeInfo
 Node::extract_NodeInfo(int notextract = -1) {
     NodeInfo ni = NodeInfo();
@@ -525,6 +525,7 @@ verify_update_merkle_proof(bool is_del,
 
     if (old_merkle_root != proof.old_hash()) {
 	cerr << "merkle hash of old state does not verify \n";
+	cerr << "hash of old state is " << proof.old_hash() << "\n";
 	return false;
     }
 
@@ -612,7 +613,7 @@ myprint(const Node & v) {
 string
 Node::hash_node(){
     uint repr_size = ElInfo::repr_size;
- 
+    cerr << "Node m_count " << m_count << "\n";
     string hashes_concat = string(m_count * repr_size, 0);
 
     for (uint i = 0 ; i < m_count ; i++) {
@@ -707,9 +708,11 @@ bool Node::tree_insert(Elem& element, UpdateMerkleProof & p) {
 
 } 
 
+
 void
 record_state(Node * node, State & state) {
 
+    cerr << "Called record state \n";
     bool is_root = false;
     if (node != node->get_root()) {
 	record_state(node->mp_parent, state);
@@ -736,6 +739,8 @@ record_state(Node * node, State & state) {
 	}
     }
     state.push_back(di);
+    cerr << "state is " << PrettyPrinter::pretty(state) << "\n";
+
 }
 
 bool

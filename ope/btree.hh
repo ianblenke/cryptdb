@@ -28,11 +28,12 @@ Node* build_tree_wrapper(std::vector<std::string> & key_list, RootTracker & root
 
 /**  Merkle Proof and verification **/
 
+// records state of tree starting from node up to root
 void
 record_state(Node * node, State & state);
 
 
-// returns the information needed to check the validity of node n
+// returns the information needed to check the validity of node 
 MerkleProof
 node_merkle_proof(Node * n);
 

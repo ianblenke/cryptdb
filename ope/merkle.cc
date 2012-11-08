@@ -150,7 +150,9 @@ format_concat(const string & key, uint key_size, const string & hash, uint hash_
 
 string
 NodeInfo::hash() const {
+
     uint repr_size = ElInfo::repr_size;
+    cerr << "NodeInfo childrsize " << childr.size() << "\n";
     string concat = string(childr.size() * repr_size, 0);
 
     uint count = 0;
@@ -473,7 +475,8 @@ recomp_hash_pos(State & st) {
 
 string
 UpdateMerkleProof::old_hash() const {
-    
+
+    cerr << "computing old hash on " << PrettyPrinter::pretty(st_before)<<"\n";
     // first level
     auto it = st_before.begin();
     assert_s(it != st_before.end(), "levels in del proof empty");
@@ -878,7 +881,6 @@ sim_insert(State & st, ElInfo & ins_ei) {
     did in the deletion was correct. */
 bool UpdateMerkleProof::check_ins_change(std::string ins_target) const {
 
-    assert_s(false, "check ins change not implemented fully");
     State st_sim = st_before;
 
     ElInfo ei = ElInfo(ins_target, "");
@@ -908,11 +910,11 @@ bool UpdateMerkleProof::check_del_change(std::string del_target) const {
     
     // simulate deletion
     sim_delete(st_sim, del_target, 0);
-    // keys and childr are up to date and hashes of subtrees not involved in the
-    // delete
+    // keys and childr are up to date and
+    // hashes of subtrees not involved in the delete
     // other hashes in pos in parent may be stale
 
-    // recompute all hashes
+    // recompute all hashes - this makes all hashes fresh now
     recomp_hash_pos(st_sim);
 
     // compare new state to the one from the server
