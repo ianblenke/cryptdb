@@ -9,6 +9,13 @@
 #include <string>
 #include <vector>
 
+//whether we run with a database or not
+#define WITH_DB 0
+
+// if ope mode is true then trees can no longer use the order operation
+// among keys because the real keys are encrypted
+#define OPE_MODE 0
+
 // Controls debugging output
 #define DEBUG 1
 #define DEBUG_COMM 1

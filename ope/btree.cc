@@ -195,7 +195,7 @@ int Node::delete_all_subtrees () {
 } 
 
  
-bool Node::vector_insert (Elem& element) {
+bool Node::vector_insert (Elem& element, int index) {
 
 // this method merely tries to insert the argument into the current node.
 // it does not concern itself with the entire tree.
@@ -211,11 +211,19 @@ bool Node::vector_insert (Elem& element) {
 
     int i = m_count;
 
-    while (i>0 && m_vector[i-1]>element) {
-        m_vector[i] = m_vector[i-1];
-        i--;
+    if (OPE_MODE) {
+	assert_s(index >= 0, "invalid index");
+	while (i>index) {
+	    m_vector[i] = m_vector[i-1];
+	    i--;
+	}
+    } else {
+	while (i>0 && m_vector[i-1]>element) {
+	    m_vector[i] = m_vector[i-1];
+	    i--;
+	}
     }
-
+    
     if (element.mp_subtree)
         element.mp_subtree->mp_parent = this;
 
@@ -298,7 +306,7 @@ bool Node::vector_delete (int target_pos) {
 
 } 
 
-bool Node::vector_insert_for_split (Elem& element) {
+bool Node::vector_insert_for_split (Elem& element, int index) {
 
 // this method insert an element that is in excess of the nominal capacity of
 // the node, using the extra slot that always remains unused during normal
@@ -310,14 +318,17 @@ bool Node::vector_insert_for_split (Elem& element) {
 
     int i = m_count;
 
-   
-
-    while (i>0 && m_vector[i-1]>element) {
-
-        m_vector[i] = m_vector[i-1];
-
-        i--;
-
+    if (OPE_MODE) {
+	assert_s(index >= 0, "invalid index");
+	while (i>index) {
+	    m_vector[i] = m_vector[i-1];
+	    i--;
+	}
+    } else {
+	   while (i>0 && m_vector[i-1]>element) {
+	       m_vector[i] = m_vector[i-1];
+	       i--;
+	   }
     }
 
     if (element.mp_subtree)
@@ -335,13 +346,13 @@ bool Node::vector_insert_for_split (Elem& element) {
 
 
 /* split_insert should only be called if node is full */
-bool Node::split_insert (Elem& element, ChangeInfo & ci) {
+bool Node::split_insert (Elem& element, ChangeInfo & ci, int index) {
 
     if (m_count != m_vector.size()-1) {
         throw "bad m_count in split_insert";
     }
  
-    vector_insert_for_split(element);
+    vector_insert_for_split(element, index);
 
     unsigned int split_point = m_count/2;
 
@@ -366,7 +377,7 @@ bool Node::split_insert (Elem& element, ChangeInfo & ci) {
 
     // element that gets added to the parent of this node
     for (int i=1; i< (int)(m_count-split_point); i++) {
-        new_node->vector_insert(m_vector[split_point+i]);
+        new_node->vector_insert(m_vector[split_point+i], i);
     }
     
     new_node->m_count = m_count-split_point;
@@ -379,13 +390,15 @@ bool Node::split_insert (Elem& element, ChangeInfo & ci) {
     new_node->update_merkle();
     update_merkle_upward();
     //-----------------------------
-
+    
+    uint upward_index = index_has_subtree() + 1;
+    
     // now insert the upward_element into the parent, splitting it if necessary
-    if (mp_parent && mp_parent->vector_insert(upward_element)) {
+    if (mp_parent && mp_parent->vector_insert(upward_element, upward_index)) {
 	return true;
     }
 
-    else if (mp_parent && mp_parent->split_insert(upward_element, ci))
+    else if (mp_parent && mp_parent->split_insert(upward_element, ci, upward_index))
         return true;
 
     else if (!mp_parent) { // this node was the root
@@ -397,7 +410,7 @@ bool Node::split_insert (Elem& element, ChangeInfo & ci) {
 
         new_node->mp_parent = new_root;
 
-        new_root->vector_insert (upward_element);
+        new_root->vector_insert (upward_element, 1);
 
         m_root.set_root (m_root.get_root(),  new_root);
 
@@ -665,7 +678,7 @@ void Node::update_merkle_upward() {
     }
 }
 
-bool Node::do_insert(Elem & element, UpdateMerkleProof & p, ChangeInfo & c) {
+bool Node::do_insert(Elem & element, UpdateMerkleProof & p, ChangeInfo & c, int index) {
     // ---- Merkle -----
     // last_visited_ptr is the start point for the proof
     record_state(this, p.st_before);
@@ -677,7 +690,7 @@ bool Node::do_insert(Elem & element, UpdateMerkleProof & p, ChangeInfo & c) {
     //---------------
     
     // insert the element in last_visited_ptr if this node is not fulls
-    if (vector_insert(element)) {
+    if (vector_insert(element, index)) {
 	cerr << "basic insert\n";
         // -----Merkle ----
 	// done making the changes for insert so update merkle hash and record
@@ -690,7 +703,7 @@ bool Node::do_insert(Elem & element, UpdateMerkleProof & p, ChangeInfo & c) {
     }
 
     //last_visited_ptr node is full so we will need to split
-    bool r = split_insert(element, c);
+    bool r = split_insert(element, c, index);
     cerr << "split_insert\n";
     // -----Merkle ----
     // done making the changes for insert so update merkle hash and record
@@ -704,6 +717,8 @@ bool Node::do_insert(Elem & element, UpdateMerkleProof & p, ChangeInfo & c) {
 
 bool Node::tree_insert(Elem& element, UpdateMerkleProof & p) {
 
+    assert_s(!OPE_MODE, "cannot call tree_insert in OPE_MODE");
+    
     Node* last_visited_ptr = this;
 
     if (search(element, last_visited_ptr).valid()) { // element already in tree
@@ -1482,12 +1497,14 @@ BTree::insert(string ciph, TreeNode * tnode, OPEType ope_path, uint64_t nbits, u
     UpdateMerkleProof p;
     ChangeInfo ci;
     Elem* ciph_elem = new Elem(ciph);
-    node->do_insert(*ciph_elem, p, ci);
+    node->do_insert(*ciph_elem, p, ci, index);
 
     //update ope table and DB
     update_ot(ci);
     update_leaf_ot(node);
-    update_db(ci);
+    if (WITH_DB) {
+	update_db(ci);
+    }
 }
 
 

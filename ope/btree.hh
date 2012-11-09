@@ -159,7 +159,7 @@ public:
     void in_order_traverse(std::list<std::string> & res);
 
     
-    bool do_insert(Elem & element, UpdateMerkleProof & p, ChangeInfo & c);
+    bool do_insert(Elem & element, UpdateMerkleProof & p, ChangeInfo & c, int index = -1);
 
     //cleaning up
     int delete_all_subtrees();
@@ -167,9 +167,9 @@ public:
 
     bool is_leaf();
     
-    bool vector_insert (Elem& element);
-    bool vector_insert_for_split (Elem& element);
-    bool split_insert (Elem& element, ChangeInfo & ci);
+    bool vector_insert (Elem& element, int index = -1);
+    bool vector_insert_for_split (Elem& element, int index = -1);
+    bool split_insert (Elem& element, ChangeInfo & ci, int index = -1);
 
     bool vector_delete (Elem& target);
     bool vector_delete (int target_pos);
