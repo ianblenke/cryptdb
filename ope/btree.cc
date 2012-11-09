@@ -613,7 +613,7 @@ myprint(const Node & v) {
 string
 Node::hash_node(){
     uint repr_size = ElInfo::repr_size;
-    cerr << "Node m_count " << m_count << "\n";
+    //cerr << "Node m_count " << m_count << "\n";
     string hashes_concat = string(m_count * repr_size, 0);
 
     for (uint i = 0 ; i < m_count ; i++) {
@@ -1530,7 +1530,7 @@ Node* build_tree(vector<string> & key_list, RootTracker & root_tracker, int star
         for (int i=1; i < (int) b_max_keys-1; i++){
             //cout<<"Recursing on "<<start + floor(i*base)<<" : "<<floor((i+1)*base)<<endl;
             Node* tmp_child = build_tree(key_list, root_tracker,
-                                        start + floor(i*base), 
+                                        start + floor(i*base)+1, 
                                         start + floor((i+1)*base));
             if (tmp_child!=NULL){
               //  cout<<"HERE3"<<endl;            
@@ -1548,7 +1548,7 @@ Node* build_tree(vector<string> & key_list, RootTracker & root_tracker, int star
         } 
 
         tmp_child = build_tree(key_list, root_tracker,
-                                    start + floor((b_max_keys-1)*base), 
+                                    start + floor((b_max_keys-1)*base)+1, 
                                     end);
         if(tmp_child!=NULL){
             //cout<<"HERE5"<<endl;        

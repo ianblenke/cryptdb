@@ -29,7 +29,7 @@ int main(int argc, char* argv[])
   std::cout<<start_time.tv_usec<<std::endl;
 
   Connect * dbconnect;
-  dbconnect = new Connect( "localhost", "root", "letmein","tpcc", 3306);
+  dbconnect = new Connect( "localhost", "root", "letmein",ope_db, 3306);
 
   DBResult * result;
 
