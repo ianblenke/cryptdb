@@ -137,6 +137,8 @@ void Node::dump(bool recursive){
 
 Node::Node(RootTracker& root_track)  : m_root(root_track) {
 
+    m_vector.clear();
+    
     m_vector.resize(b_max_keys);
     
     m_count = 0;
@@ -718,7 +720,6 @@ bool Node::tree_insert(Elem& element, UpdateMerkleProof & p) {
 void
 record_state(Node * node, State & state) {
 
-    cerr << "Called record state \n";
     bool is_root = false;
     if (node != node->get_root()) {
 	record_state(node->mp_parent, state);
@@ -745,8 +746,7 @@ record_state(Node * node, State & state) {
 	}
     }
     state.push_back(di);
-    cerr << "state is " << PrettyPrinter::pretty(state) << "\n";
-
+  
 }
 
 bool

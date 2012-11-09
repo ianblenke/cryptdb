@@ -102,9 +102,9 @@ public:
 	// Frequency of testing certain aspects
 	uint no_inserted_checks = 10; // int(sqrt(no_elems)) + 1;
 	uint no_not_in_tree = 10; //no_inserted_checks;
-	uint delete_freq = 2; //one in deletes_freq will be deleted
+	//uint delete_freq = 2; //one in deletes_freq will be deleted
 	uint period_Merkle_check = 1; //no_inserted_checks/5 + 1;
-	uint period_Merkle_del_check = 1;
+	//uint period_Merkle_del_check = 1;
 	uint period_Merkle_insert_check = 1;
 
 	// Create tree
@@ -180,7 +180,7 @@ public:
 
 	// Check tree is correct
 	check_good_tree(tracker, vals, no_elems);
-
+/*
 		
 	//Check that deletion works correctly
 	for (uint i = 0 ; i < no_elems/delete_freq; i++) {
@@ -227,7 +227,7 @@ public:
 
 	// Check tree is still correct
 	check_good_tree(tracker);
-	
+*/	
     }
 
     static string
