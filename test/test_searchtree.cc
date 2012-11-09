@@ -60,16 +60,16 @@ class Test {
 public:
 
     static void
-    check_good_tree(RootTracker & tracker) {
+    check_good_tree(RootTracker * tracker) {
 	
-	tracker.get_root()->check_merkle_tree();
+	tracker->get_root()->check_merkle_tree();
 	
 	// Check tree is in right order and has good height
 	list<string> treeorder;
-	tracker.get_root()->in_order_traverse(treeorder); 
+	tracker->get_root()->in_order_traverse(treeorder); 
 	check_order(treeorder);
 	
-	uint max_height = tracker.get_root()->max_height();
+	uint max_height = tracker->get_root()->max_height();
 	cout << " -- max height of tree is " << max_height << " fanout " << b_max_keys << "\n";
 	check_good_height(max_height, treeorder.size(), b_min_keys);
 	
@@ -77,17 +77,17 @@ public:
     }
 
     static void
-    check_good_tree(RootTracker & tracker, vector<string> & vals, uint no_elems) {
+    check_good_tree(RootTracker * tracker, vector<string> & vals, uint no_elems) {
 	
-	tracker.get_root()->check_merkle_tree();
+	tracker->get_root()->check_merkle_tree();
 	cerr << "merkle tree verifies after insert\n";
 	
 	// Check tree is in right order and has good height
 	list<string> treeorder;
-	tracker.get_root()->in_order_traverse(treeorder); 
+	tracker->get_root()->in_order_traverse(treeorder); 
 	check_order_and_values(vals, treeorder);
 	
-	uint max_height = tracker.get_root()->max_height();
+	uint max_height = tracker->get_root()->max_height();
 	cout << " -- max height of tree is " << max_height << " fanout " << b_max_keys << "\n";
 	check_good_height(max_height, no_elems, b_min_keys);
 	
@@ -110,31 +110,31 @@ public:
 	// Create tree
 	Node::m_failure.invalidate();
 	Node::m_failure.m_key = "";
-	RootTracker tracker;  // maintains a pointer to the current root of the b-tree
+	RootTracker * tracker = new RootTracker();  // maintains a pointer to the current root of the b-tree
 	Node* root_ptr = new Node(tracker);
-	tracker.set_root(null_ptr, root_ptr);
+	tracker->set_root(null_ptr, root_ptr);
 
 	// Insert into tree
 	Elem elem;
 	for (uint i=0; i< no_elems; i++) {
 	    elem.m_key = vals[i];
 	    UpdateMerkleProof p;
-	    string merkle_root_before = tracker.get_root()->merkle_hash;
+	    string merkle_root_before = tracker->get_root()->merkle_hash;
 	    cerr << "merkle root before " << merkle_root_before << "\n";
-	    bool inserted = tracker.get_root()->tree_insert(elem, p);
+	    bool inserted = tracker->get_root()->tree_insert(elem, p);
 	    assert_s(inserted, "element was not inserted");
 	    
 	    // check Merkle hash tree integrity
 	    if (i % period_Merkle_check == 0) {
 		//cerr << "checking Merkle for tree so far \n";
-		tracker.get_root()->check_merkle_tree();
+		tracker->get_root()->check_merkle_tree();
 		//cerr << "passed check\n";
 	    }
 	    if (i % period_Merkle_insert_check == 0) {
 		string merkle_after;
 		assert_s(verify_ins_merkle_proof(p, elem.m_key, merkle_root_before, merkle_after),
 			 "insert merkle proof not verified");
-		assert_s(merkle_after == tracker.get_root()->merkle_hash, "verify insert does not give correct merkle proof");
+		assert_s(merkle_after == tracker->get_root()->merkle_hash, "verify insert does not give correct merkle proof");
 	    }
 	}
 
@@ -147,7 +147,7 @@ public:
 	    Elem desired;
 	    desired.m_key = test_val;
 	    Node * last;
-	    Elem& result = tracker.get_root()->search(desired, last);
+	    Elem& result = tracker->get_root()->search(desired, last);
 	    assert_s(desired.m_key == result.m_key, "could not find val that should be there");
 	}
 	
@@ -173,7 +173,7 @@ public:
 	    Elem desired;
 	    desired.m_key = test_val;
 	    Node * last;
-	    Elem& result = tracker.get_root()->search(desired, last);
+	    Elem& result = tracker->get_root()->search(desired, last);
 	    assert_s(result == Node::m_failure, "found elem that does not exist");
 
 	}
@@ -271,11 +271,11 @@ public:
     // compute the cost of an insert in terms of elements that changed
     // their ope encoding
     static int
-    cost(UpdateMerkleProof & p, RootTracker & tracker) {
+    cost(UpdateMerkleProof & p, RootTracker * tracker) {
 
 	//check first if root grew
 	if (p.st_before.size() == p.st_after.size() -1 ) {
-	    return cost(tracker.get_root(), 0);
+	    return cost(tracker->get_root(), 0);
 	}
 
 	assert_s(p.st_before.size() == p.st_after.size(), "should be same height!");
@@ -288,7 +288,7 @@ public:
 		Elem desired;
 		desired.m_key = new_key;
 		Node * visited;
-		tracker.get_root()->search(desired, visited);
+		tracker->get_root()->search(desired, visited);
 		return cost(visited, pos);
 	    }
 	    
@@ -306,11 +306,9 @@ public:
 
 	Node::m_failure.m_key = "";
 
-	RootTracker tracker;  // maintains a pointer to the current root of the b-tree
-
+	RootTracker * tracker = new RootTracker();  // maintains a pointer to the current root of the b-tree
 	Node* root_ptr = new Node(tracker);
-
-	tracker.set_root(null_ptr, root_ptr);
+	tracker->set_root(null_ptr, root_ptr);
 
 	Elem elem;
 	extern uint Merklecost;
@@ -322,7 +320,7 @@ public:
 	for (uint i=0; i< no_elems; i++) {
 	    elem.m_key = vals[i];
 	    UpdateMerkleProof p;
-	    bool b = tracker.get_root()->tree_insert(elem, p);
+	    bool b = tracker->get_root()->tree_insert(elem, p);
 	    if (b) {
 		eff_elems++;
 		ope_cost += cost(p, tracker);
@@ -333,7 +331,7 @@ public:
 	    " and effective elements " << eff_elems << "\n";
 	cerr << "RATIO " << ope_cost*1.0/eff_elems << "\n";
 	cerr << "total Merkle cost is " << Merklecost*1.0/eff_elems << "\n";
-	cerr << "max height was " << tracker.get_root()->max_height() << "\n";
+	cerr << "max height was " << tracker->get_root()->max_height() << "\n";
 	cerr << "minimum keys " << b_min_keys << " max keys " << b_max_keys << "\n";
 	
 
@@ -452,21 +450,21 @@ public:
 
 	Node::m_failure.m_key = "";
 
-	RootTracker tracker;  // maintains a pointer to the current root of the b-tree
+	RootTracker * tracker =  new RootTracker();  // maintains a pointer to the current root of the b-tree
 
 	Node* root_ptr = new Node(tracker);
 
-	tracker.set_root(null_ptr, root_ptr);
+	tracker->set_root(null_ptr, root_ptr);
 
 	Elem elem;
 	//insert values in tree
 	for (uint i=0; i< no_elems; i++) {
 	    elem.m_key = vals[i];
 	    UpdateMerkleProof p;
-	    tracker.get_root()->tree_insert(elem, p);
+	    tracker->get_root()->tree_insert(elem, p);
 	}
 
-	string merkle_root = tracker.get_root()->merkle_hash;
+	string merkle_root = tracker->get_root()->merkle_hash;
 
 	// Correct proof: pick elements at random and check proofs for them
 	
@@ -477,7 +475,7 @@ public:
 	    Elem desired;
 	    desired.m_key = test_val;
 	    Node * last;
-	    Elem& result = tracker.get_root()->search(desired, last);
+	    Elem& result = tracker->get_root()->search(desired, last);
 	    assert_s(desired.m_key == result.m_key, "could not find val that should be there");
 
 	    MerkleProof proof = node_merkle_proof(last);
@@ -498,7 +496,7 @@ public:
 	    Elem desired;
 	    desired.m_key = test_val;
 	    Node * last;
-	    Elem& result = tracker.get_root()->search(desired, last);
+	    Elem& result = tracker->get_root()->search(desired, last);
 	    assert_s(desired.m_key == result.m_key, "could not find val that should be there");
 
 	    MerkleProof proof = node_merkle_proof(last);
@@ -511,7 +509,7 @@ public:
 	    Elem desired;
 	    desired.m_key = test_val;
 	    Node * last;
-	    Elem& result = tracker.get_root()->search(desired, last);
+	    Elem& result = tracker->get_root()->search(desired, last);
 	    assert_s(desired.m_key == result.m_key, "could not find val that should be there");
 
 	    //change an element in last

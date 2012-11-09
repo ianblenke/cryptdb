@@ -15,13 +15,11 @@ ffsl(uint64_t ct)
 }
 
 int main(int argc, char ** argv){
-
     
     blowfish * bc = new blowfish(passwd);
     
     ope_client<uint64_t, blowfish> * ope_cl = new ope_client<uint64_t, blowfish>(bc);
     
-
     ope_cl->encrypt(5, true);
 }
 

@@ -220,7 +220,7 @@ int main()
       std::cout<<unique_data[i].size()<<": " <<unique_data[i]<<std::endl;
     }*/
 
-    Node* b_tree = build_tree_wrapper(unique_data, *root_tracker, 0, unique_data.size());
+    Node* b_tree = build_tree_wrapper(unique_data, root_tracker, 0, unique_data.size());
 
     std::vector< std::pair<uint64_t, int> > db_data;
 

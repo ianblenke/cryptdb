@@ -22,8 +22,8 @@ class RootTracker;
 
 class Node;
 
-Node* build_tree(std::vector< std::string> & key_list, RootTracker & root_tracker, int start, int end);
-Node* build_tree_wrapper(std::vector<std::string> & key_list, RootTracker & root_tracker, int start, int end);
+Node* build_tree(std::vector< std::string> & key_list, RootTracker * root_tracker, int start, int end);
+Node* build_tree_wrapper(std::vector<std::string> & key_list, RootTracker * root_tracker, int start, int end);
 
 
 /**  Merkle Proof and verification **/
@@ -110,7 +110,7 @@ class Node : public TreeNode {
   
 public:
 
-    Node (RootTracker& root_track);
+    Node (RootTracker * root_track);
 
     // to return a reference when a search fails.
     static Elem m_failure;
@@ -119,7 +119,7 @@ public:
     std::string merkle_hash;
  
     // the root of the tree may change.  this attribute keeps it accessible.
-    RootTracker& m_root;
+    RootTracker * m_root;
 
     
     Node* get_root();

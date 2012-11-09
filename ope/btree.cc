@@ -135,7 +135,7 @@ void Node::dump(bool recursive){
 
 } 
 
-Node::Node(RootTracker& root_track)  : m_root(root_track) {
+Node::Node(RootTracker * root_track)  : m_root(root_track) {
 
     m_vector.clear();
     
@@ -153,7 +153,7 @@ Node::Node(RootTracker& root_track)  : m_root(root_track) {
  
 Node* Node::get_root () {
 
-    return m_root.get_root();
+    return m_root->get_root();
 
 } 
 
@@ -412,7 +412,7 @@ bool Node::split_insert (Elem& element, ChangeInfo & ci, int index) {
 
         new_root->vector_insert (upward_element, 1);
 
-        m_root.set_root (m_root.get_root(),  new_root);
+        m_root->set_root (m_root->get_root(),  new_root);
 
         new_root->mp_parent = 0;
 
@@ -1013,7 +1013,7 @@ Node::merge_right (int parent_index_this) {
 
     if (mp_parent==get_root() && !mp_parent->key_count()) {
 
-        m_root.set_root(m_root.get_root(), this);
+        m_root->set_root(m_root->get_root(), this);
 	cerr << "delete root\n";
         delete mp_parent;
         mp_parent = 0;
@@ -1057,7 +1057,7 @@ Node* Node::merge_left (int parent_index_this) {
       
     if (mp_parent==get_root() && !mp_parent->key_count()) {
 
-        m_root.set_root(m_root.get_root(), left_sib);
+        m_root->set_root(m_root->get_root(), left_sib);
 
 	cerr << "delete root\n";
         delete mp_parent;
@@ -1392,7 +1392,7 @@ BTree::BTree(OPETable<string> * ot, Connect * _db) : opetable(ot), db(db) {
     Node::m_failure.invalidate();
     Node::m_failure.m_key = "";
     RootTracker  * tracker = new RootTracker () ;  // maintains a pointer to the current root of the b-tree
-    Node * root_ptr = new Node (*tracker);
+    Node * root_ptr = new Node (tracker);
     tracker->set_root(null_ptr, root_ptr);
 }
 
@@ -1509,7 +1509,7 @@ BTree::insert(string ciph, TreeNode * tnode, OPEType ope_path, uint64_t nbits, u
 
 
 
-Node* build_tree_wrapper(vector<string> & key_list, RootTracker & root_tracker, int start, int end){
+Node* build_tree_wrapper(vector<string> & key_list, RootTracker * root_tracker, int start, int end){
 
     Node* b_tree = build_tree(key_list, root_tracker, start, end);
 
@@ -1524,7 +1524,7 @@ Node* build_tree_wrapper(vector<string> & key_list, RootTracker & root_tracker, 
 
 // key_list is entire vector of sorted keys, start indicates the first
 // index of key_list in this subsection, and end is the index after subsection size
-Node* build_tree(vector<string> & key_list, RootTracker & root_tracker, int start, int end){
+Node* build_tree(vector<string> & key_list, RootTracker * root_tracker, int start, int end){
     //Avoid building a node without any values
     int array_size = end-start;
     //cout<<start<<" : "<<end<<endl;

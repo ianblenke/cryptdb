@@ -208,8 +208,8 @@ ope_client<V, BlockCipher>::ope_client(BlockCipher * bc) {
     cerr << "accepted connection (from server hopefully)\n";
 
     while ((sock_query = create_and_connect(OPE_SERVER_HOST, OPE_SERVER_PORT, false)) < 0) {
-	cerr << "server still not up";
-	sleep(1000);
+	cerr << "server still not up\n";
+	sleep(1);
     }
     
     this->bc = bc;
@@ -220,8 +220,8 @@ ope_client<V, BlockCipher>::ope_client(BlockCipher * bc) {
 #endif
 
     int rc = pthread_create(&net_thread, NULL, comm_thread<V, BlockCipher>, (void *)this);
-    if (rc <= 0) {
-	cerr << "error: cannot create thread " << rc << "\n";
+    if (rc < 0) {
+	cerr << "error: cannot create thread: " << rc << "\n";
 	exit(1);
     }
 	 

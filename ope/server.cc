@@ -147,9 +147,10 @@ Server::dispatch(int csock, istringstream & iss) {
 }
 
 Server::Server() {
-   
-    db = new Connect( "localhost", "root", "letmein","cryptdb", 3306);
-
+    if (WITH_DB) {  
+	db = new Connect( "localhost", "root", "letmein","cryptdb", 3306);
+    }
+    
     ope_table = new OPETable<string>();
     ope_tree = (Tree *) new BTree(ope_table, db);
 
