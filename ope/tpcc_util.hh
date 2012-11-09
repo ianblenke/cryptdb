@@ -2,9 +2,10 @@
 #include <sys/time.h>
 #include <unistd.h>
 
-std::string ope_row = "val";
-std::string ope_table = "test";
-std::string ope_type = "STRING";
+std::string ope_table = "new_order";
+std::string ope_row = "no_o_id";
+std::string ope_type = "INT";
+std::string ope_db = "tpcc";
 
 /*
 

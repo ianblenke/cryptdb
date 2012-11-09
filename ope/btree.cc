@@ -1511,7 +1511,9 @@ Node* build_tree(vector<string> & key_list, RootTracker & root_tracker, int star
     //Avoid building a node without any values
     int array_size = end-start;
     //cout<<start<<" : "<<end<<endl;
-    assert_s(array_size > 0, "array_size not positive!");
+    if(array_size <= 0) return NULL;
+
+    //assert_s(array_size > 0, "array_size not positive!");
 
     Node* rtn_node = new Node(root_tracker);
 
@@ -1536,7 +1538,7 @@ Node* build_tree(vector<string> & key_list, RootTracker & root_tracker, int star
         for (int i=1; i < (int) b_max_keys-1; i++){
             //cout<<"Recursing on "<<start + floor(i*base)<<" : "<<floor((i+1)*base)<<endl;
             Node* tmp_child = build_tree(key_list, root_tracker,
-                                        start + floor(i*base), 
+                                        start + floor(i*base)+1, 
                                         start + floor((i+1)*base));
             if (tmp_child!=NULL){
               //  cout<<"HERE3"<<endl;            
@@ -1554,7 +1556,7 @@ Node* build_tree(vector<string> & key_list, RootTracker & root_tracker, int star
         } 
 
         tmp_child = build_tree(key_list, root_tracker,
-                                    start + floor((b_max_keys-1)*base), 
+                                    start + floor((b_max_keys-1)*base)+1, 
                                     end);
         if(tmp_child!=NULL){
             //cout<<"HERE5"<<endl;        
