@@ -20,8 +20,8 @@
 
 class Server {
 public:
-    int sock_cl; //socket to client; server connects thru it
-    int sock_udf; //socket to udfs; server listens on it
+    int sock_cl; //socket to client; server sends request to clients thru it
+    int sock_udf; //socket on which server receives requests from udfs or clients
 
     Tree * ope_tree;
 

@@ -19,7 +19,7 @@
 #include <util/static_assert.hh>
 #include <util/ope-util.hh>
 
-
+#include <pthread.h>
 
 using std::cout;
 using std::endl;
@@ -49,69 +49,188 @@ std::string cur_merkle_hash;
 template<class V, class BlockCipher>
 class ope_client {
 public:
-    int hsock;
-    struct sockaddr_in my_addr;
-	
-
+  	
     ope_client(BlockCipher *bc);
     ~ope_client();
-  
-
-    /* Determines the index of pt's predecesor given a node's key vector
-     * Returns -1 if pt is in the vector, 0 is if is smaller than all
-     * elements in the vector, or 1+index where index is the pred's index
-     * in the vector (1 is added due to my protocol, where 0 represents null)
-     */
-    static int predIndex(std::vector<V> vec, V pt);
-  
+ 
     /* Encryption is the path bits (aka v) bitwise left shifted by num_bits
      * so that the last num_bits can indicate the index of the value pt at
      * at the node found by the path
      */
+ 
+    uint64_t encrypt(V det, bool do_insert) const;
+
+
+
+    /* OLD Determines the index of pt's predecesor given a node's key vector
+     * Returns -1 if pt is in the vector, 0 is if is smaller than all
+     * elements in the vector, or 1+index where index is the pred's index
+     * in the vector (1 is added due to my protocol, where 0 represents null)
+     */
+    //static int predIndex(std::vector<V> vec, V pt);
+    
     /*Server protocol code:
      * lookup(encrypted_plaintext) = 1
      * lookup(v, nbits) = 2
      * insert(v, nbits, index, encrypted_plaintext) = 3
      * delete(v, nbits, index) = 4
      */
-
-    uint64_t encrypt(V det, bool imode) const;
-    V decrypt(uint64_t ct) const;
     
-    void delete_value(V pt);
+    
+/*   V decrypt(uint64_t ct) const;
+     
+     void delete_value(V pt);
+     
+     //Function to tell tree server to insert plaintext pt w/ v, nbits
+     void insert(uint64_t v, uint64_t nbits, uint64_t index, V pt, V det) const;
+*/
 
-    //Function to tell tree server to insert plaintext pt w/ v, nbits
-    void insert(uint64_t v, uint64_t nbits, uint64_t index, V pt, V det) const;
-
-
-private:
+    // encryption
     V block_decrypt(V ct) const;
-
     V block_encrypt(V pt) const;
+    BlockCipher *bc;
 
-    BlockCipher *b;
-    
+    // network
+    pthread_t net_thread;
+    //void * comm_thread(void *);
+    int sock; //socked on which client listens for connections
+    int csock; //socket to server on which client answers to interactions
+    int sock_query; // socket to send queries to server
+    struct sockaddr_in my_addr;
+    string handle_interaction(istringstream & iss);   
+
 };
 
+
+
+template<class V, class BC>
+string
+ope_client<V, BC>::handle_interaction(istringstream & iss){
+    cerr<<"Called handle_interaction"<<endl;
+
+    MsgType func_d;
+    iss>>func_d;
+  
+    assert_s(func_d == MsgType::INTERACT_FOR_LOOKUP, "Incorrect function type in handle_server!");
+    if (func_d == MsgType::INTERACT_FOR_LOOKUP){
+        
+        uint64_t det, pt, tmp_pt;
+        int size, index;
+
+        iss >> det >> size;
+
+        bc->block_decrypt((const uint8_t *) &det, (uint8_t *) &pt);
+
+        for(index=0; index<size; index++){
+	    uint64_t tmp_key;
+	    iss >> tmp_key;
+            bc->block_decrypt((const uint8_t *) &tmp_key, (uint8_t *) &tmp_pt);
+
+            if (tmp_pt >= pt){
+                break;
+            }
+
+        }
+
+        stringstream o;
+        o << index << " " << (tmp_pt==pt);
+        return o.str();
+        
+    }
+    
+    return "";
+  
+}
+
+template<class V, class BlockCipher>
+static void *
+comm_thread(void * p) {
+
+    ope_client<V, BlockCipher> * oc = (ope_client<V, BlockCipher> *) p;
+    
+    int buflen = 1024;
+    char buffer[buflen];
+
+    string interaction_rslt="";
+
+    while (true) {
+
+        memset(buffer, 0, buflen);
+	
+	cerr << "waiting to receive \n";
+        //Receive message to process
+        assert_s(recv(oc->csock, buffer, buflen, 0) > 0, "receive gets  <=0 bytes");
+	
+	cerr << "received " << buffer << "\n";
+        istringstream iss(buffer);
+	
+        interaction_rslt = oc->handle_interaction(iss);
+
+        assert_s(interaction_rslt!="", "interaction error");
+
+	cerr << "sending " << interaction_rslt << "\n";
+        assert_s(send(oc->csock, interaction_rslt.c_str(), interaction_rslt.size(),0)
+		 == (int)interaction_rslt.size(),
+		 "send failed");
+
+        interaction_rslt = "";
+    }
+  
+    close(oc->csock);    
+    cerr<<"Done with client, closing now\n";
+    close(oc->sock);
+    delete oc->bc;
+    pthread_exit(NULL);
+    return NULL;
+
+}
 // must define here these few functions if we want to call them from other files..
 
 template<class V, class BlockCipher>
-ope_client<V, BlockCipher>::ope_client(BlockCipher * bc) : b(bc) {
+ope_client<V, BlockCipher>::ope_client(BlockCipher * bc) {
     assert_s(BlockCipher::blocksize == sizeof(V), "problem with block cipher size");
 
-    hsock = create_and_connect(OPE_SERVER_HOST, OPE_SERVER_PORT);
+    //Socket connection
+    sock = create_and_bind(OPE_CLIENT_PORT);
+
+    //Start listening
+    int listen_rtn = listen(sock, 10);
+    if (listen_rtn < 0) {
+	cerr << "Error listening to socket" << endl;
+    }
+    cerr << "Listening \n";
+
+    socklen_t addr_size = sizeof(sockaddr_in);
+    struct sockaddr_in sadr;
+
+    int csock = accept(sock, (struct sockaddr*) &sadr, &addr_size);    
+    assert_s(csock >= 0, "Client failed to accept connection");
+    cerr << "accepted connection (from server hopefully)\n";
+
+    while ((sock_query = create_and_connect(OPE_SERVER_HOST, OPE_SERVER_PORT, false)) < 0) {
+	cerr << "server still not up";
+	sleep(1000);
+    }
+    
+    this->bc = bc;
+    
 
 #if MALICIOUS        
     cur_merkle_hash="";
 #endif
 
-    	
+    int rc = pthread_create(&net_thread, NULL, comm_thread<V, BlockCipher>, (void *)this);
+    if (rc <= 0) {
+	cerr << "error: cannot create thread " << rc << "\n";
+	exit(1);
+    }
+	 
 }
 
 
 template<class V, class BlockCipher>
 ope_client<V, BlockCipher>::~ope_client(){
-    close(hsock);
+    close(sock_query);
 }
 
 
@@ -121,162 +240,46 @@ ope_client<V, BlockCipher>::~ope_client(){
  * at the node found by the path
  */
 
-/*Server protocol code:
+/*OLD: Server protocol code:
  * lookup(encrypted_plaintext) = 1
  * lookup(v, nbits) = 2
  * insert(v, nbits, index, encrypted_laintext) = 3
  * delete(v, nbits, index) = 4
  */
 
+template<class V>
+V VFromString(string s){
+    V ret;
+    istringstream ss(s);
+    ss >> ret;
+    return ret;
+}
+
 template<class V, class BlockCipher>
 uint64_t
-ope_client<V, BlockCipher>::encrypt(V det, bool imode) const{
+ope_client<V, BlockCipher>::encrypt(V pt, bool imode) const{
 
     if (imode==false) {
 	std::cout<< "IMODE FALSE!" << std::endl;
     }
     
-    uint64_t v = 0;
-    uint64_t nbits = 0;
-
-    V pt = block_decrypt(det);
-
-    if(DEBUG_COMM || !imode) std::cout << "Encrypting pt: " << pt << " det: " << det << std::endl;
-
-    char buffer[10240];
-    memset(buffer, '\0', 10240);
-
-    //table_storage test = s->lookup(pt);
-    std::ostringstream o;
-    std::string msg;
-
-    for (;;) {
-        if (DEBUG) {
-	    std::cout<<"Do lookup for "<<pt<<" with det: "<< det<<" v: "<< v <<" nbits: "<< nbits << std::endl;
-	}
-        //vector<V> xct = s->lookup(v, nbits);
-        o.str("");
-        o.clear();
-        o<<"2 "<<v<<" "<<nbits;
-        msg = o.str();
-        if (DEBUG_COMM) {
-	    std::cout << "Sending msg: " << msg << std::endl;
-	}
-        if(send(hsock, msg.c_str(), msg.size(), 0)!= (int)msg.size()){
-            assert_s(false, "encrypt 1 send failed");
-        }
-        memset(buffer, 0, 10240);
-        if(recv(hsock, buffer, 10240, 0)<=0){
-            assert_s(false, "encrypt 1 recv failed");
-        }
-        if(DEBUG_COMM || DEBUG_BTREE) std::cout << "Received during iterative lookup: " << buffer << std::endl;
-	std::string check(buffer);           
-
-        if(check=="ope_fail"){
-            if(imode){
-                insert(v, nbits, 0, pt, det);
-                return 0;
-            }else{
-		std::cout << "n mode ope_fail" << std::endl;
-                nbits+=num_bits;
-                v=(v<<num_bits) | 0;
-                return (v<<(64-nbits)) | (s_mask<<(64-num_bits-nbits));
-            }
-
-        }               
-
-	std::stringstream iss_tmp(buffer);
-	std::vector<V> xct_vec;
-        V xct;
-	std::string checker="";
-        while(true){
-            iss_tmp >> checker;
-
-	    if(checker==";")
-		break;
-
-	    if(DEBUG_BTREE)
-		std::cout << "xct_vec: " << checker << std::endl;
-	    
-	    std::stringstream tmpss;
-
-	    tmpss<<checker;
-            tmpss>>xct;
-            
-
-            //predIndex later assumes vector is of original plaintext vals
-            xct_vec.push_back(block_decrypt(xct));
-        }
-
-#if MALICIOUS
-        MerkleProof mp;
-
-	if(DEBUG_BTREE) cout<<"Remaining mp info = "<<iss_tmp.str()<<endl;
-
-        for(int i=0; i<(int) xct_vec.size(); i++){
-            iss_tmp >> mp;
-            if(DEBUG_BTREE) cout<<"MP "<<i<<"="<<mp<<endl;
-            const std::string tmp_merkle_hash = cur_merkle_hash;
-            assert_s(verify_merkle_proof(mp, tmp_merkle_hash),
-		     "Merkle hash during lookup didn't match!");
-	    
-            if(DEBUG_BTREE) std::cout << "MP "<< i <<" succeeded" << std::endl;
-        }
-#endif
-
-        //Throws ope_lookup_failure if xct size < N, meaning can insert at node
-        int pi;
-        try{
-            pi = predIndex(xct_vec, pt);
-        }catch(ope_lookup_failure&){
-            int index;
-            for (index=0; index<(int) xct_vec.size(); index++){
-                if(pt<xct_vec[index]) break;
-            }
-            if (imode){
-                insert(v, nbits, index, pt, det);
-                return 0;                
-            }else{
-		std::cout << "n mode inserting " << index << " : " << xct_vec.size() << std::endl;
-                nbits+=num_bits;
-                v = (v<<num_bits) | index;
-                return ((v<<(64-nbits)) | (s_mask<<(64-num_bits-nbits)));
-            }
-
-        }
-        nbits+=num_bits;
-        if (pi==-1) {
-            //pt already exists at node
-            int index;
-            for(index=0; index< (int) xct_vec.size(); index++){
-                //Last num_bits are set to represent index of pt at node
-                if(xct_vec[index]==pt) v = (v<<num_bits) | index;
-            }
-            break;
-        } else {
-            v = (v<<num_bits) | pi;
-        }
-        //Check that we don't run out of bits!
-        if(nbits > 63) {
-	    std::cout<<"nbits larger than 64 bits!!!!"<< std::endl;
-	    assert_s(false, "nbits > 63");
-        }           
+    ostringstream msg;
+    if (imode) {
+	msg << MsgType::ENC_INS << " ";
+    } else {
+	msg << MsgType::QUERY << " ";
     }
-    
-    /* If value was inserted previously, then should get result
-     * from server ope_table. If not, then it will insert. So never
-     * should reach this point (which means no ope_table result or insertion)
-     */
-    assert_s(false, "SHOULD NEVER REACH HERE!");
 
-    return -1;
-    //FL todo: s->update_table(block_encrypt(pt),v,nbits);
-/*      if(DEBUG) cout<<"Encryption of "<<pt<<" has v="<< v<<" nbits="<<nbits<<endl;
-	return (v<<(64-nbits)) | (s_mask<<(64-num_bits-nbits));*/
+    msg << block_encrypt(pt);
+
+    string res = send_receive(sock_query, msg.str());
+    cerr << "Result for " << pt << " is " << res << endl;
+
+    return VFromString<V>(res);
 }
 
 
-
+/*
 template<class V, class BlockCipher>
 int
 ope_client<V, BlockCipher>::predIndex(vector<V> vec, V pt){
@@ -467,12 +470,12 @@ ope_client<V, BlockCipher>::insert(uint64_t v, uint64_t nbits, uint64_t index, V
     //return encrypt(pt);
 
 }
-
+*/
 template<class V, class BlockCipher>
 V
 ope_client<V, BlockCipher>::block_decrypt(V ct) const {
     V pt;
-    b->block_decrypt((const uint8_t *) &ct, (uint8_t *) &pt);
+    bc->block_decrypt((const uint8_t *) &ct, (uint8_t *) &pt);
     return pt;
 }
 
@@ -480,7 +483,7 @@ template<class V, class BlockCipher>
 V
 ope_client<V, BlockCipher>::block_encrypt(V pt) const {
     V ct;
-    b->block_encrypt((const uint8_t *) &pt, (uint8_t *) &ct);
+    bc->block_encrypt((const uint8_t *) &pt, (uint8_t *) &ct);
     return ct;
 }
 

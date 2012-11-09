@@ -24,8 +24,10 @@ int
 create_and_bind(int host_port);
 
 // creates a socket and connects through it
+// if fail is true, then upon connection failure it throws exception
+// otherwise it returns negative
 int
-create_and_connect(std::string host_name, int host_port);
+create_and_connect(std::string host_name, int host_port, bool fail = true);
 
 std::string
 send_receive(int sock, const std::string & msg);

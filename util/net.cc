@@ -33,7 +33,7 @@ create_and_bind(int host_port) {
 }
 
 int
-create_and_connect(string host_name, int host_port) {
+create_and_connect(string host_name, int host_port, bool fail) {
     cerr << "Create and connect \n";
     int hsock = socket(AF_INET, SOCK_STREAM,0);
     assert_s(hsock>=0, "Error initializing socket!");
@@ -46,7 +46,11 @@ create_and_connect(string host_name, int host_port) {
 
     cerr << "trying to connect to " << host_name << " " << host_port << "\n";
     if (connect(hsock, (struct sockaddr*) &my_addr, sizeof(my_addr))<0){
-	assert_s(false, "cannot connect");
+	if (fail) {
+	    assert_s(false, "cannot connect");
+	} else {
+	    return -1;
+	}
     }
 
     return hsock;
