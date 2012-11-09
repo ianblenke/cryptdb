@@ -1,7 +1,8 @@
 OBJDIRS	+= test
 
 TEST_SRCS   :=  TestCrypto.cc \
-		test_searchtree.cc 
+		test_searchtree.cc \
+		test_system.cc
 
 		
 all:	$(OBJDIR)/test/test_searchtree

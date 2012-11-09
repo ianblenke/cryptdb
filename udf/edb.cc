@@ -65,6 +65,7 @@ extern "C" {
     long long ope_enc(UDF_INIT *initid, UDF_ARGS *args,
 		      char *is_null, char *error){
 
+	
 	int sock_server = create_and_connect(OPE_SERVER_HOST, OPE_SERVER_PORT);
 	
 	uint64_t det_val = getui(args, 0);

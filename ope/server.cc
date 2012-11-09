@@ -175,11 +175,17 @@ Server::~Server() {
 
 int main(int argc, char **argv){
 
-    cerr<<"Starting tree server \n";
+    cerr<< " Starting tree server \n";
     Server server;
-    
+
     socklen_t addr_size = sizeof(sockaddr_in);
     struct sockaddr_in sadr;
+
+    assert_s(!WITH_DB, "for UDF the server should accept a few times");
+    int csock = accept(server.sock_req, (struct sockaddr*) &sadr, &addr_size);
+    assert_s(csock >= 0, "Server accept failed!");
+    cerr << "Server received request \n";
+    
        
     uint buflen = 10240;
     char buffer[buflen];
@@ -187,10 +193,6 @@ int main(int argc, char **argv){
     while (true) {
     	cerr<<"Waiting for connection..."<<endl;
 
-	int csock = accept(server.sock_req, (struct sockaddr*) &sadr, &addr_size);
-	assert_s(csock >= 0, "Server accept failed!");
-	cerr << "Server received request \n";
-	
         memset(buffer, 0, buflen);
 	
 	uint len;
@@ -201,10 +203,9 @@ int main(int argc, char **argv){
 	
 	//Pass connection and messages received to handle_client
 	server.dispatch(csock, iss);
-
-	close(csock);
     }
 
+    close(csock);
     cerr << "Server exits!\n";
 }
 
