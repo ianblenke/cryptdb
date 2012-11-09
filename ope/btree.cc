@@ -1505,7 +1505,9 @@ Node* build_tree(vector<string> & key_list, RootTracker & root_tracker, int star
     //Avoid building a node without any values
     int array_size = end-start;
     //cout<<start<<" : "<<end<<endl;
-    assert_s(array_size > 0, "array_size not positive!");
+    if(array_size <= 0) return NULL;
+
+    //assert_s(array_size > 0, "array_size not positive!");
 
     Node* rtn_node = new Node(root_tracker);
 
