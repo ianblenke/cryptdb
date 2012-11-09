@@ -31,7 +31,7 @@ public:
     // if a table_entry for encval does not exist, it throws exception
     table_entry get(EncT encval);
 
-    // returns true if new table entry was
+    // returns true if new table entry was not in the table and was inserted
     // returns false if encval existed (in which case refcount is incremented)
     bool insert(EncT encval, uint64_t ope);
 

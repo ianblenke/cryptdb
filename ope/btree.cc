@@ -363,11 +363,7 @@ bool Node::split_insert (Elem& element, ChangeInfo & ci, int index) {
     // new node receives the rightmost half of elements in *this node
     Node* new_node = new Node(m_root);
 
-    LevelChangeInfo lci;
-    lci.node = this;
-    lci.right = new_node;
-    lci.index = split_point;
-    ci.push_back(lci);
+    ci.push_back(LevelChangeInfo(this, new_node, split_point));
     
     Elem upward_element = m_vector[split_point];
 
@@ -415,6 +411,8 @@ bool Node::split_insert (Elem& element, ChangeInfo & ci, int index) {
         m_root->set_root (m_root->get_root(),  new_root);
 
         new_root->mp_parent = 0;
+
+	ci.push_back(LevelChangeInfo(new_root, NULL, -1));
 
 	//----Merkle----------
 	update_merkle_upward();
@@ -691,6 +689,8 @@ bool Node::do_insert(Elem & element, UpdateMerkleProof & p, ChangeInfo & c, int 
     
     // insert the element in last_visited_ptr if this node is not fulls
     if (vector_insert(element, index)) {
+	c.push_back(LevelChangeInfo(this, NULL, -1));
+	
 	cerr << "basic insert\n";
         // -----Merkle ----
 	// done making the changes for insert so update merkle hash and record
@@ -1135,7 +1135,7 @@ Node::smallest_key() {
     return m_vector[1];
 }
 
-int Node::index_has_subtree () {
+int Node::index_has_subtree() {
 
 // return the element in this node's parent that has the "this" pointer as its subtree
 
@@ -1402,61 +1402,50 @@ BTree::get_root(){
 }
 
 
-void
-BTree::update_node_ot(Node* cur_node, uint64_t v, uint64_t nbits){
-    
-    uint64_t next_v;
-    for(uint i=0; i< cur_node->m_count; i++){
-        if (i != 0) {
-            //db->connect("UPDATE ") ?? NEED VERSION??
-            uint64_t new_ope =  compute_ope(v, nbits, i-1);
-            opetable->update( cur_node->m_vector[i].m_key, new_ope);
-        }
-        if (cur_node->m_vector[i].has_subtree() ){
-            next_v = (v << num_bits) | i;
-            update_node_ot(cur_node->m_vector[i].mp_subtree, next_v , nbits + num_bits );
-        }
+static void
+update_ot_help(OPETable<string> * ope_table, const Node * n, OPEType path, uint nbits) {
+    for (uint i = 0; i < n->m_count; i++) {
+	Elem e = n->m_vector[i];
+	if (i) {
+	    OPEType new_ope = compute_ope(path, nbits, i);
+	    bool r = ope_table->update(e.m_key, new_ope);
+	    if (!r) {
+		assert_s(ope_table->insert(e.m_key, new_ope), "could not insert in ope table");
+	    }
+	}
+	if (e.mp_subtree) {
+	    update_ot_help(ope_table, e.mp_subtree, (path << num_bits) + i, nbits+1);
+	}
     }
 }
 
-void
-BTree::update_ot(ChangeInfo & c) {
-    //TODO
 
-    if (c.size() == 0) return;
-
-    LevelChangeInfo last = c.back();
-
-    Node* cur_node = last.node;
-
-    Node* parent = last.node->mp_parent;
-
-
-    table_entry te = opetable->get( parent->m_vector[1].m_key );
-    uint64_t parent_v, parent_nbits, index;
-    parse_ope(te.ope, parent_v, parent_nbits, index);
-
-    int parent_index = cur_node->index_in_parent();
-    uint64_t next_v, nbits = parent_nbits + num_bits;
-
-    index = parent_index + 1;    
-
-    for(uint i = index; i < parent->m_count; i++){
-        if (parent->m_vector[i].has_subtree() ){
-            next_v = (parent_v << num_bits) | i;
-            update_node_ot(parent->m_vector[i].mp_subtree, next_v, nbits );
-        }
-
+static void
+get_ope_path(Node * n, OPEType & opepath, uint & nbits) {
+    if (n->mp_parent) {
+	OPEType opepath;
+	uint nbits; 
+	get_ope_path(n->mp_parent, opepath, nbits);
+	nbits++;
+	opepath = (opepath << num_bits) + n->index_has_subtree();
+    } else {
+	nbits = 0;
+	opepath = 0;
     }
+}
 
-    c.pop_back();
-    if( c.size() > 0 && c.back().node->mp_parent == last.right)
-        return;
+/*
+ * Updates ope table after a change. 
+ * Receives highest node in the tree affected by the change.
+ * Could be optimized..
+ */
+static void
+update_ot(OPETable<string> * ope_table, Node * n) {
+    uint nbits;
+    OPEType opepath;
+    get_ope_path(n, opepath, nbits);
 
-    if ( !cur_node->is_leaf() ){
-        update_ot(c);    
-    }
-
+    update_ot_help(ope_table, n, opepath, nbits);
 }
 
 
@@ -1469,39 +1458,18 @@ BTree::update_db(ChangeInfo & c) {
 
 
 void
-BTree::update_leaf_ot(Node* leaf_node){
-
-    Node* parent = leaf_node->mp_parent;
-
-    table_entry te = opetable->get( parent->m_vector[1].m_key );
-    uint64_t parent_v, parent_nbits, index;
-    parse_ope(te.ope, parent_v, parent_nbits, index);
-
-    index = leaf_node->index_in_parent();
-    uint64_t v = (parent_v << num_bits) || index;
-    uint64_t nbits = parent_nbits + num_bits;
-
-    for(int i = 1; i <  (int) leaf_node->m_count; i++){
-        uint64_t new_ope =  compute_ope(v, nbits, i-1);
-        opetable->update( leaf_node->m_vector[i].m_key, new_ope);
-
-    }
-
-}
-
-
-void
 BTree::insert(string ciph, TreeNode * tnode, OPEType ope_path, uint64_t nbits, uint64_t index) {
     Node * node = (Node *) tnode;
 
+    
     UpdateMerkleProof p;
     ChangeInfo ci;
     Elem* ciph_elem = new Elem(ciph);
     node->do_insert(*ciph_elem, p, ci, index);
 
     //update ope table and DB
-    update_ot(ci);
-    update_leaf_ot(node);
+    update_ot(opetable, ci.back().node);
+ 
     if (WITH_DB) {
 	update_db(ci);
     }

@@ -63,18 +63,29 @@ verify_ins_merkle_proof(const UpdateMerkleProof & p,
 
 /* Contains information about
  * a split at a level in a tree.
- * The information is before the split.
  * The node was split at index into itself and right.
- * For a new root, only right is NULL and index negative.
+ * index is negative if there was no split
  */
 
 struct LevelChangeInfo {
     Node * node;
     Node * right;
     int index;
+
+
+    LevelChangeInfo() {
+	node = right = NULL;
+	index = -1;
+    }
+
+    LevelChangeInfo(Node * _node, Node * _right, int _index): node(_node),
+							      right(_right),
+							      index(_index) {}
 };
 
 
+// list of LevelChangeInfo where first is a leaf and last is the last
+// node affected by an insert
 typedef std::list<LevelChangeInfo > ChangeInfo;
 
 
@@ -93,10 +104,6 @@ public:
 
     void insert(std::string ciph, TreeNode * tnode, OPEType ope_path, uint64_t nbits, uint64_t index);
 
-
-    void update_node_ot(Node* cur_node, uint64_t v, uint64_t nbits);
-    void update_ot(ChangeInfo & c);
-    void update_leaf_ot(Node* leaf_node);
     void update_db(ChangeInfo & c);
 
 private:
@@ -177,12 +184,12 @@ public:
     void insert_zeroth_subtree (Node* subtree);
 
     void set_debug();
-    int key_count () { return m_count-1; }
+    int key_count () const { return m_count-1; }
 
     Elem& largest_key () { return m_vector[m_count-1]; }
     Elem& smallest_key ();
     Elem& smallest_key_in_subtree();
-    int index_has_subtree ();
+    int index_has_subtree();
 
     Node* right_sibling (int& parent_index_this);
     Node* left_sibling (int& parent_index_this);
