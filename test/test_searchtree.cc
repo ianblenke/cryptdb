@@ -80,6 +80,7 @@ public:
     check_good_tree(RootTracker & tracker, vector<string> & vals, uint no_elems) {
 	
 	tracker.get_root()->check_merkle_tree();
+	cerr << "merkle tree verifies after insert\n";
 	
 	// Check tree is in right order and has good height
 	list<string> treeorder;

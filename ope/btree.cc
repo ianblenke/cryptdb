@@ -610,10 +610,16 @@ myprint(const Node & v) {
     return out.str().c_str();
 }
 
+const char *
+myprint(const State & st) {
+    stringstream out;
+    out << PrettyPrinter::pretty(st);
+    return out.str().c_str();
+}
+
 string
 Node::hash_node(){
     uint repr_size = ElInfo::repr_size;
-    cerr << "Node m_count " << m_count << "\n";
     string hashes_concat = string(m_count * repr_size, 0);
 
     for (uint i = 0 ; i < m_count ; i++) {

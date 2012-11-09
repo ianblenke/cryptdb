@@ -106,8 +106,13 @@ minimum_keys (uint max_keys) {
     }
 
     int res = ceiling_func-1;  // for clarity, may increment then decrement
-    assert_s(res > 0, "cannot have min nodes be 0 or less");
 
+    assert_s(res >= 0, "cannot have negative min keys");
+    if (res <= 1){
+	res++;
+	assert_s((uint)res < max_keys, "cannot have min keys be the same as max_keys");
+    }
+    
     return res;
 } 
 

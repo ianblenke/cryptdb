@@ -152,7 +152,6 @@ string
 NodeInfo::hash() const {
 
     uint repr_size = ElInfo::repr_size;
-    cerr << "NodeInfo childrsize " << childr.size() << "\n";
     string concat = string(childr.size() * repr_size, 0);
 
     uint count = 0;
@@ -246,19 +245,6 @@ equiv_del(const UpInfo & sim, const UpInfo & given) {
 }
 
 
-// checks if the information in sim and given is
-// equivalent, considering an insert has happened
-static bool
-equiv_ins(const UpInfo & sim, const UpInfo & given) {
-
-    assert_s(sim.node == given.node, "node mismatch");
-    assert_s(sim.has_left_sib == given.has_left_sib &&
-	     (!sim.has_left_sib || sim.left_sib == given.left_sib), "left sib mismatch");
-    assert_s(sim.has_right_sib == sim.has_right_sib &&
-	     (!sim.has_right_sib || sim.right_sib == given.right_sib), "right sib mismatch");
-    return true;
-}
-
 std::ostream&
 UpInfo::operator>>(std::ostream &out) {
     out << has_left_sib << " ";
@@ -293,6 +279,7 @@ UpInfo::pretty() const {
        << " right_sib " << right_sib.pretty()
        << " this del " << this_was_del
        << " right del " << right_was_del
+       << " (left, node, right moved right, path): " << left_moved_right << node_moved_right << right_moved_right << " " << path_moved_right
        << "}";
 
     return ss.str();
@@ -362,6 +349,7 @@ hash_match(const UpInfo & child, const UpInfo &  parent) {
 // Should return the position pos where v[pos] <= target < v[pos+1]
 static ElInfo &
 binary_search(vector<ElInfo> & v, string target, bool & matched, int & pos) {
+    
     int first = 0;
     int last = v.size() -1;
     while (last - first > 1) {
@@ -399,7 +387,7 @@ binary_search(vector<ElInfo> & v, string target, bool & matched, int & pos) {
 }
 static void
 update_node_parent(NodeInfo & node, NodeInfo & parent) {
-    if (node.pos_in_parent>=0 &&
+    if (node.pos_in_parent >= 0 &&
 	parent.childr.size() > (uint)node.pos_in_parent &&
 	parent.childr[node.pos_in_parent].key == node.key) {
 	// pos is correct
@@ -415,31 +403,41 @@ update_node_parent(NodeInfo & node, NodeInfo & parent) {
 
 
 static void
-check_equals(bool is_ins, const State & st_sim, const State & st_real) {
+check_equals_del(const State & st_sim, const State & st_real) {
 
     assert_s(st_sim.size() == st_real.size(), "real and simulated states differ in height");
     
     for (uint i = 0; i < st_real.size(); i++) {
-	if (is_ins) {
-	    if (!equiv_ins(st_sim[i],st_real[i])) {
-		cerr << "difference in level " << i  << "\n";
-		cerr << " sim is\n" << st_sim[i].pretty() << "\n real is\n" << st_real[i].pretty() << "\n";
-		assert_s(false, "difference in level");
-	    }
-	} else {
-	    if (!equiv_del(st_sim[i],st_real[i])) {
-		cerr << "difference in level " << i  << "\n";
-		cerr << " sim is\n" << st_sim[i].pretty() << "\n real is\n" << st_real[i].pretty() << "\n";
-		assert_s(false, "difference in level");
-	    }
-	}
+	if (!equiv_del(st_sim[i],st_real[i])) {
+	    cerr << "difference in level " << i  << "\n";
+	    cerr << " sim is\n" << st_sim[i].pretty() << "\n real is\n" << st_real[i].pretty() << "\n";
+	    assert_s(false, "difference in level");
+	}	
     }
 }
 
 
+
+static void
+check_equals_ins(const State & st_sim, const State & st_real) {
+
+    assert_s(st_sim.size() == st_real.size(), "real and simulated states differ in height");
+    
+    for (uint i = 0; i < st_real.size(); i++) {
+	UpInfo sim = st_sim[i];
+	UpInfo given = st_real[i];
+	
+	if (sim.path_moved_right) {
+	    assert_s(sim.right_sib  == given.node, "node mismatch");
+	} else {
+	    assert_s(sim.node == given.node, "node mismatch");
+	}
+    }
+}
+
 // recomputes hashes and positions
 static void
-recomp_hash_pos(State & st) {
+recomp_hash_pos_del(State & st) {
 
     // compute hashes for nodes in a level and update the parent
     
@@ -473,10 +471,45 @@ recomp_hash_pos(State & st) {
     }
 }
 
+
+
+// recomputes hashes and positions
+static void
+recomp_hash_pos_ins(State & st) {
+
+    // compute hashes for nodes in a level and update the parent
+    
+    for (int i = st.size()-1; i > 0; i--) {
+	UpInfo & sl = st[i];
+	UpInfo & sl_parent = st[i-1];
+
+	if (sl.node_moved_right) {
+	    update_node_parent(sl.node, sl_parent.right_sib);
+	} else {
+	    update_node_parent(sl.node, sl_parent.node);
+	}
+
+	if (sl.has_left_sib) {
+	    if (sl.left_moved_right) {
+		update_node_parent(sl.left_sib, sl_parent.right_sib);
+	    } else {
+		update_node_parent(sl.left_sib, sl_parent.node);
+	    }
+	}
+	
+	if (sl.has_right_sib) {
+	    if (sl.right_moved_right) {
+		update_node_parent(sl.right_sib, sl_parent.right_sib);
+	    } else {
+		update_node_parent(sl.right_sib, sl_parent.node);
+	    }
+	}
+    }
+}
+
 string
 UpdateMerkleProof::old_hash() const {
 
-    cerr << "computing old hash on " << PrettyPrinter::pretty(st_before)<<"\n";
     // first level
     auto it = st_before.begin();
     assert_s(it != st_before.end(), "levels in del proof empty");
@@ -536,9 +569,16 @@ ins_elinfo(ElInfo ei, vector<ElInfo> & v) {
     }
     bool matched;
     int pos;
-    binary_search(v, ei.key, matched, pos);
+    if (v.size() == 0) {
+	pos = -1;
+	matched = false;
+    } else {
+	binary_search(v, ei.key, matched, pos);
+    }
+    
     v.resize(v.size()+1);
     assert_s(!matched, "del_elinfo received key to insert that already existsin vector");
+    
     // must insert on pos + 1
     for (int i = (int)v.size()-2; i> pos ; i-- ) {
 	v[i+1] = v[i];
@@ -804,9 +844,20 @@ sim_delete(State & st, string del_target, int index) {
 
 static void
 vector_insert_for_split(NodeInfo & node, ElInfo & ins_ei) {
-    assert_s(false, "vector insert for split no implemented");
+
+    int i = node.childr.size();
+    node.childr.resize(node.childr.size() + 1);
+    
+    while ((i > 0) && (node.childr[i-1].key > ins_ei.key)) {
+	node.childr[i] = node.childr[i-1];
+	i--;
+    }
+
+    node.childr[i] = ins_ei;
+    
 }
 
+// assumes node is newly created and contains nothing
 static void
 insert_zeroth_subtree(NodeInfo & node, string hash) {
     assert_s(node.childr.size() == 0, "expecting empty node");
@@ -815,34 +866,77 @@ insert_zeroth_subtree(NodeInfo & node, string hash) {
 }
 
 static void
-split_insert(State & st, int index, ElInfo & ins_ei) {
-    NodeInfo & node = st[index].node;
+update_child(NodeInfo & ni, int split_point) {
+    if (ni.pos_in_parent == split_point) {
+	ni.key = "";
+    }
 
-    int m_count = node.childr.size();
+    ni.pos_in_parent = ni.pos_in_parent - split_point;
+}
+
+static void
+split_insert(State & st, int index, ElInfo & ins_ei) {
+    UpInfo & ui = st[index];
+    NodeInfo & node = st[index].node;
     
-    assert_s(m_count != b_max_keys-1, "split insert should not have been called");
+
+    int keys_at_node = node.childr.size();
+    
+    assert_s(keys_at_node == b_max_keys-1, "split insert should not have been called");
 
     vector_insert_for_split(node, ins_ei);
+    keys_at_node++;
 
-    unsigned int split_point = m_count/2;
+    unsigned int split_point = keys_at_node/2;
 
-    if (2 * split_point < (uint) m_count) {
+    if (2 * split_point < (uint) keys_at_node) {
 	split_point++;
     }
 
     NodeInfo new_node = NodeInfo();
 
     ElInfo upward_elm = node.childr[split_point];
-
+ 
     insert_zeroth_subtree(new_node, upward_elm.hash);
+ 
+    upward_elm.hash = hash_not_extracted; 
+    new_node.key = upward_elm.key;
+    new_node.pos_in_parent = node.pos_in_parent+1;
 
-    new_node.key = index > 0 ? st[index-1].node.key : "";
-    node.key = upward_elm.key;
-
-    for (int i = 1; i < (int) (m_count - split_point); i++) {
+    for (int i = 1; i < (int) (keys_at_node - split_point); i++) {
 	ins_elinfo(node.childr[split_point+i], new_node.childr);
     }
 
+    node.childr.resize(split_point);
+
+    ui.has_right_sib = 1;
+    ui.right_sib = new_node;
+
+
+    // these changes may affect nodes on level index+1
+    if (index +1 <  (int)st.size()) {
+	UpInfo & ui_child = st[index+1];
+
+	if (ui_child.node.pos_in_parent >= (int)split_point) {
+	    ui_child.node_moved_right = true;
+	    update_child(ui_child.node, split_point);
+	}
+
+	if (ui_child.has_left_sib && ui_child.left_sib.pos_in_parent >= (int)split_point) {
+	    ui_child.left_moved_right = true;
+	    update_child(ui_child.left_sib, split_point);
+	}
+	if (ui_child.has_right_sib && ui_child.right_sib.pos_in_parent >= (int)split_point) {
+	    ui_child.right_moved_right = true;
+	    update_child(ui_child.right_sib, split_point);
+	}
+
+	// determine if main path moves to right node
+	if (ui_child.node_moved_right || (ui_child.path_moved_right && ui_child.right_moved_right)) {
+	    ui.path_moved_right = true;
+	}
+    }
+    
     if (index > 0 && ins_elinfo(upward_elm, st[index-1].node.childr)) { // this node has a parent
 	return;
     }
@@ -852,10 +946,13 @@ split_insert(State & st, int index, ElInfo & ins_ei) {
     } 
     else if (index == 0) { // this node was the root
 	NodeInfo new_root = NodeInfo();
+	insert_zeroth_subtree(new_root, hash_not_extracted);
 	node.key = "";
-	UpInfo new_di = UpInfo();
-	new_node.key = "";
+	node.pos_in_parent = 0;
+	new_node.pos_in_parent = 1;
 	ins_elinfo(upward_elm, new_root.childr);
+	
+	UpInfo new_di = UpInfo();
 	new_di.node = new_root;
 	st.insert(st.begin(), new_di);
     }
@@ -864,7 +961,7 @@ split_insert(State & st, int index, ElInfo & ins_ei) {
 
 static void
 sim_insert(State & st, ElInfo & ins_ei) {
-    assert_s(false, "impl not finished");
+
     //find(st, ins_ei.key, index);
     int index = st.size() - 1;
     
@@ -889,12 +986,12 @@ bool UpdateMerkleProof::check_ins_change(std::string ins_target) const {
     // keys and childr are up to date and
     // hashes of subtrees not involved in the delete;
     // other hashes in pos in parent may be stale
-
-    // recompute all hashes
-    recomp_hash_pos(st_sim);
+  
+    // recompute all hashes - this makes all hashes fresh now
+    recomp_hash_pos_ins(st_sim);
 
     // compare new state to the one from the server
-    check_equals(true, st_sim, st_after);
+    check_equals_ins(st_sim, st_after);
     
     return true;
 }
@@ -915,10 +1012,10 @@ bool UpdateMerkleProof::check_del_change(std::string del_target) const {
     // other hashes in pos in parent may be stale
 
     // recompute all hashes - this makes all hashes fresh now
-    recomp_hash_pos(st_sim);
+    recomp_hash_pos_del(st_sim);
 
     // compare new state to the one from the server
-    check_equals(false, st_sim, st_after);
+    check_equals_del(st_sim, st_after);
     
     return true;
 }

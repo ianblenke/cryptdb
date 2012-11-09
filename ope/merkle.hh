@@ -35,7 +35,7 @@ struct ElInfo {
 
 // Records information at a B tree node; key of node, children, etc.
 struct NodeInfo {
-    std::string key;
+    std::string key; // the key (in parent) whose subtree is this node
     int pos_in_parent;
     std::vector<ElInfo> childr;
 
@@ -75,15 +75,23 @@ struct UpInfo  {
     bool has_right_sib;
     NodeInfo right_sib;
 
-    // info added by client during verification
+    // info added by client during verification for del
     bool this_was_del;
     bool right_was_del;
+
+    //info added by client during verif for insert
+    bool node_moved_right;
+    bool left_moved_right;
+    bool right_moved_right;
+    bool path_moved_right;
     
     UpInfo() {
 	has_left_sib = false;
 	has_right_sib = false;
 	this_was_del = false;
 	right_was_del = false;
+	node_moved_right = left_moved_right = right_moved_right = false;
+	path_moved_right = false;
     }
 
     std::ostream& operator>>(std::ostream &out);
@@ -143,7 +151,7 @@ struct UpdateMerkleProof {
 
 // Two special values of the hash,
 // it is unlikely a real hash will take them
-const std::string hash_empty_node = "0";
+const std::string hash_empty_node = "";
 const std::string hash_not_extracted = "1";
 
 
