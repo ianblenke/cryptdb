@@ -1391,7 +1391,7 @@ Elem::pretty() const {
 BTree::BTree(OPETable<string> * ot, Connect * _db) : opetable(ot), db(db) {
     Node::m_failure.invalidate();
     Node::m_failure.m_key = "";
-    RootTracker  * tracker = new RootTracker () ;  // maintains a pointer to the current root of the b-tree
+    tracker = new RootTracker ();  // maintains a pointer to the current root of the b-tree
     Node * root_ptr = new Node (tracker);
     tracker->set_root(null_ptr, root_ptr);
 }

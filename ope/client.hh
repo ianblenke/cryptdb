@@ -157,7 +157,7 @@ comm_thread(void * p) {
 
         memset(buffer, 0, buflen);
 	
-	cerr << "waiting to receive \n";
+	cerr << "comm_th: waiting to receive \n";
         //Receive message to process
         assert_s(recv(oc->csock, buffer, buflen, 0) > 0, "receive gets  <=0 bytes");
 	
@@ -203,7 +203,7 @@ ope_client<V, BlockCipher>::ope_client(BlockCipher * bc) {
     socklen_t addr_size = sizeof(sockaddr_in);
     struct sockaddr_in sadr;
 
-    int csock = accept(sock, (struct sockaddr*) &sadr, &addr_size);    
+    csock = accept(sock, (struct sockaddr*) &sadr, &addr_size);    
     assert_s(csock >= 0, "Client failed to accept connection");
     cerr << "accepted connection (from server hopefully)\n";
 
@@ -233,12 +233,6 @@ ope_client<V, BlockCipher>::~ope_client(){
     close(sock_query);
 }
 
-
-
-/* Encryption is the path bits (aka v) bitwise left shifted by num_bits
- * so that the last num_bits can indicate the index of the value pt at
- * at the node found by the path
- */
 
 /*OLD: Server protocol code:
  * lookup(encrypted_plaintext) = 1

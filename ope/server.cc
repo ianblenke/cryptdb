@@ -42,6 +42,8 @@ Server::interaction(string ciph,
     	    msg << keys[i] << " ";
     	}
 
+	cerr << "sending " << msg.str() << "\n";
+
     	string _reply = send_receive(sock_cl, msg.str());
     	istringstream reply(_reply);
 
@@ -155,12 +157,19 @@ Server::Server() {
     ope_tree = (Tree *) new BTree(ope_table, db);
 
     sock_cl = create_and_connect(OPE_CLIENT_HOST, OPE_CLIENT_PORT);
-    sock_udf = create_and_bind(OPE_SERVER_PORT);
+    sock_req = create_and_bind(OPE_SERVER_PORT);
+    int listen_rtn = listen(sock_req, 10);
+    if (listen_rtn < 0) {
+	cerr<<"Error listening to socket"<<endl;
+    }
+    cerr<<"Listening \n";
+    
+  
 }
 
 Server::~Server() {
     close(sock_cl);
-    close(sock_udf);
+    close(sock_req);
 }
 
 
@@ -169,32 +178,24 @@ int main(int argc, char **argv){
     cerr<<"Starting tree server \n";
     Server server;
     
-    //Start listening
-    int listen_rtn = listen(server.sock_udf, 10);
-    if (listen_rtn < 0) {
-	cerr<<"Error listening to socket"<<endl;
-    }
-    cerr<<"Listening \n";
-    
     socklen_t addr_size = sizeof(sockaddr_in);
     struct sockaddr_in sadr;
-    
-   
+       
     uint buflen = 10240;
     char buffer[buflen];
 
     while (true) {
     	cerr<<"Waiting for connection..."<<endl;
 
-	 int csock = accept(server.sock_udf, (struct sockaddr*) &sadr, &addr_size);
-	 assert_s(csock >= 0, "Server accept failed!");
-	 cerr << "Server accepted connection with udf \n";
-
+	int csock = accept(server.sock_req, (struct sockaddr*) &sadr, &addr_size);
+	assert_s(csock >= 0, "Server accept failed!");
+	cerr << "Server received request \n";
+	
         memset(buffer, 0, buflen);
-
+	
 	uint len;
         assert_s((len = recv(csock, buffer, buflen, 0)) > 0, "received 0 bytes");
-
+	
         if (DEBUG_COMM) {cerr << "received msg " << buffer << endl;}
         istringstream iss(buffer);
 	
