@@ -31,7 +31,7 @@ public:
     Server();
     ~Server();
 
-    void work() __attribute__((noreturn));
+    void work();
     
     /*************** helper functions *****************************/
 

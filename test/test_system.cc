@@ -26,6 +26,12 @@ static blowfish * bc = new blowfish(passwd);
 
 static void
 check_order(OPETable<string> * ot, list<string> & vals) {
+
+    /* cerr << "here is ot:\n";
+    for (auto p : ot->table) {
+	cerr << "(" << bc->decrypt(valFromStr(p.first)) << "," << p.second.ope << ") \n";
+	}*/
+    
     string prev;
     bool first = true;
     for (auto it : vals) {
@@ -45,11 +51,13 @@ static void
 check_order_and_values(OPETable<string> * ot, vector<uint64_t> & input_vals,
 		       list<string> & tree_vals) {
 
+    cerr << "-- check values\n";
     for (string tree_val : tree_vals) {
 	int val = bc->decrypt(valFromStr(tree_val));
 	assert_s(mcontains(input_vals, val), "val  not found in tree");
     }
 
+    cerr << "-- check order in tree and ope table\n";
     // check tree vals are in order
     check_order(ot, tree_vals);
 }
@@ -57,6 +65,8 @@ check_order_and_values(OPETable<string> * ot, vector<uint64_t> & input_vals,
 
 static void
 check_correct(Server * s, vector<uint64_t> & vals) {
+
+    cerr << "checking sever state is correct: \n";
     //s->tracker->get_root()->check_merkle_tree();
 
     BTree * bt = (BTree *) s->ope_tree;
@@ -65,13 +75,13 @@ check_correct(Server * s, vector<uint64_t> & vals) {
     bt->tracker->get_root()->in_order_traverse(treeorder); 
     check_order_and_values(bt->opetable, vals, treeorder);
 
+    cerr <<"-- check height\n";
     uint max_height = bt->tracker->get_root()->max_height();
     cout << " -- max height of tree is " << max_height << " fanout " << b_max_keys << "\n";
     check_good_height(max_height, treeorder.size(), b_min_keys);
 
 }
 
-static int num_vals = 0;
 static vector<uint64_t> vals;
 
 static void *
@@ -79,18 +89,18 @@ client_thread(void * ) {
 
     cerr << "creating client...";
     ope_client<uint64_t, blowfish> * ope_cl = new ope_client<uint64_t, blowfish>(bc);
-    cerr << " done \n";
+    cerr << "client created \n";
     
-    for (int i = 0; i < num_vals; i++) {
+    for (uint i = 0; i < vals.size(); i++) {
 	ope_cl->encrypt(vals[i], true);
     }
- 
+
     return NULL;
 }
 
 static void *
 server_thread(void *s) {
-  
+
     Server * serv = (Server *)s;
       
     serv->work();
@@ -99,13 +109,8 @@ server_thread(void *s) {
 }
 
 static void
-runtest(int argc, char ** argv) {
-    if (argc != 2) {
-	cerr << "usage test no_vals\n";
-	exit(1);
-    }
-    uint num_tests = atoi(argv[1]);
-    
+runtest(uint num_tests) {
+       
     vals = get_random(num_tests);
     
     pid_t pid = fork();
@@ -116,12 +121,12 @@ runtest(int argc, char ** argv) {
     }
     // parent
     
-    sleep(5);
+    sleep(2);
     
     pthread_t server_thd;
     cerr << "creating server ... ";
     Server * s = new Server();
-    cerr << " done \n";
+    cerr << "server created \n";
     
     int r = pthread_create(&server_thd, NULL, server_thread, (void *)s);
     if (r) {
@@ -132,9 +137,12 @@ runtest(int argc, char ** argv) {
 
     pid_t pid2 = wait(&status);
 
+    assert_s(WIFEXITED(status),"client terminated abnormally");
     assert_s(pid == pid2, "incorrect pid");
     
     check_correct(s, vals);
+
+    cerr << "OK!\n";
 
 }
 
@@ -145,9 +153,11 @@ run_client() {
   ope_client<uint64_t, blowfish> * ope_cl = new ope_client<uint64_t, blowfish>(bc);
   cerr << " done \n";
   
-  for (int i = 0; i < 9; i++) {
+  for (int i = 0; i < 100; i++) {
       ope_cl->encrypt(i, true);
   }
+
+  delete ope_cl;
  
 }
 
@@ -156,6 +166,8 @@ run_server() {
     Server * serv = new Server();
     
     serv->work();
+
+    delete serv;
 }
 
 
@@ -169,9 +181,14 @@ int main(int argc, char ** argv)
 	run_server();
 	return 0;
     }
-    
+
+    if (argc == 3 && string(argv[1]) == "sys") {
+	runtest(atoi(argv[2]));
+	return 0;
+    }
+  
     //Test::test_search_tree();
-    runtest(argc, argv);
+    cerr << "invalid options; nothing to run; options are: client OR server OR sys N \n";
     //Test::testMerkleProof();
     //Test::test_transform();
 }

@@ -88,23 +88,18 @@ void Node::dump(bool recursive){
     
     assert_s(m_count>=2, "m_count isn't same as m_vector's size");
 
-    cout<<pretty()<<endl;
+    cerr<<pretty()<<endl;
 
     if (!recursive) {
         return;
     }
     
-    bool leaf = true;
-
     for (unsigned int i=0; i<m_count; i++) {
         if (m_vector[i].has_subtree()) {  
-            leaf = false;      
             m_vector[i].mp_subtree->dump(true);
         }
     }
 
-    if(!leaf) assert_s(m_count == b_max_keys &&
-                       m_count == m_vector.size(), "nonleaf not right size");
 /*    cout << "[";
     if (this == m_root.get_root()) {
             cout << "ROOT ";
@@ -195,7 +190,7 @@ int Node::delete_all_subtrees () {
 } 
 
  
-bool Node::vector_insert (Elem& element, int index) {
+bool Node::vector_insert (Elem & element, int index) {
 
 // this method merely tries to insert the argument into the current node.
 // it does not concern itself with the entire tree.
@@ -677,7 +672,7 @@ void Node::update_merkle_upward() {
     }
 }
 
-bool Node::do_insert(Elem & element, UpdateMerkleProof & p, ChangeInfo & c, int index) {
+bool Node::do_insert(Elem element, UpdateMerkleProof & p, ChangeInfo & c, int index) {
     // ---- Merkle -----
     // last_visited_ptr is the start point for the proof
     record_state(this, p.st_before);
@@ -716,7 +711,7 @@ bool Node::do_insert(Elem & element, UpdateMerkleProof & p, ChangeInfo & c, int 
     return r;  
 }
 
-bool Node::tree_insert(Elem& element, UpdateMerkleProof & p) {
+bool Node::tree_insert(Elem element, UpdateMerkleProof & p) {
 
     assert_s(!OPE_MODE, "cannot call tree_insert in OPE_MODE");
     
@@ -1144,36 +1139,48 @@ int Node::index_has_subtree() {
 	return invalid_index;
     }
     
-    if (key_count() > 0) { //binary search
-	int first = 0;
-	int last = mp_parent->m_count-1;
-	
-	while (last-first > 1) {
-	    int mid = first+(last-first)/2;
-	    
-	    if (smallest_key()>=mp_parent->m_vector[mid])
-		first = mid;
-	    else
-		last = mid;
-	}
-	
-	if (mp_parent->m_vector[first].mp_subtree == this) {
-	    return first;
-	}
-	else if (mp_parent->m_vector[last].mp_subtree == this) {
-	    return last;
-	}
-	else {
-	    throw "error in index_has_subtree";
-	}
-    } else {//exhaustive search because there is no key
+    if (OPE_MODE) {
+	//  cannot do binary search because comparisons are not valid in ope
+	//  mode
 	for (uint i = 0; i < mp_parent->m_count; i++) {
 	    if (this == mp_parent->m_vector[i].mp_subtree) {
 	        return i;
 	    }
 	}
+    } else {
+	// do binary search based on key order relations
+	if (key_count() > 0) { //binary search
+	    int first = 0;
+	    int last = mp_parent->m_count-1;
+	    
+	    while (last-first > 1) {
+		int mid = first+(last-first)/2;
+		
+		if (smallest_key()>=mp_parent->m_vector[mid])
+		    first = mid;
+		else
+		    last = mid;
+	    }
+	
+	    if (mp_parent->m_vector[first].mp_subtree == this) {
+		return first;
+	    }
+	    else if (mp_parent->m_vector[last].mp_subtree == this) {
+		return last;
+	    }
+	    else {
+		throw "error in index_has_subtree";
+	    }
+	} else {
+	assert_s(false, "there must be at least two keys");
+//exhaustive search because there is no key
+	for (uint i = 0; i < mp_parent->m_count; i++) {
+	    if (this == mp_parent->m_vector[i].mp_subtree) {
+	        return i;
+	    }
+	}
+	}
     }
-    
     assert_s(false, "node not found in parent");
     return 0;
    
@@ -1405,18 +1412,19 @@ BTree::get_root(){
 
 static void
 update_ot_help(OPETable<string> * ope_table, const Node * n, OPEType path, uint nbits) {
+    cerr << "update node " << n << "\n";
     for (uint i = 0; i < n->m_count; i++) {
 	Elem e = n->m_vector[i];
 	if (i) {
-	    OPEType new_ope = compute_ope(path, nbits, i);
-	    cerr << "update ot " << e.m_key << " --> " << new_ope << "\n";
+	    OPEType new_ope = compute_ope(path, nbits, i-1);
+	    //cerr << "update ot " << e.m_key << " -->  path, nbits, index " << path << "," << nbits << "," << i-1 << "=" << new_ope << "\n";
 	    bool r = ope_table->update(e.m_key, new_ope);
 	    if (!r) {
 		assert_s(ope_table->insert(e.m_key, new_ope), "could not insert in ope table");
 	    }
 	}
 	if (e.mp_subtree) {
-	    update_ot_help(ope_table, e.mp_subtree, (path << num_bits) + i, nbits+1);
+	    update_ot_help(ope_table, e.mp_subtree, (path << num_bits) + i, nbits+num_bits);
 	}
     }
 }
@@ -1425,10 +1433,8 @@ update_ot_help(OPETable<string> * ope_table, const Node * n, OPEType path, uint 
 static void
 get_ope_path(Node * n, OPEType & opepath, uint & nbits) {
     if (n->mp_parent) {
-	OPEType opepath;
-	uint nbits; 
 	get_ope_path(n->mp_parent, opepath, nbits);
-	nbits++;
+	nbits = nbits+ num_bits;
 	opepath = (opepath << num_bits) + n->index_has_subtree();
     } else {
 	nbits = 0;
@@ -1443,8 +1449,8 @@ get_ope_path(Node * n, OPEType & opepath, uint & nbits) {
  */
 static void
 update_ot(OPETable<string> * ope_table, Node * n) {
-    uint nbits;
-    OPEType opepath;
+    uint nbits = 0;
+    OPEType opepath = 0;
     get_ope_path(n, opepath, nbits);
 
     update_ot_help(ope_table, n, opepath, nbits);
@@ -1466,8 +1472,11 @@ BTree::insert(string ciph, TreeNode * tnode, OPEType ope_path, uint64_t nbits, u
     UpdateMerkleProof p;
     ChangeInfo ci;
     Elem ciph_elem = Elem(ciph);
-    node->do_insert(ciph_elem, p, ci, index);
-
+    //cerr << "to insert "<< ciph_elem.pretty() <<"\n";
+    assert_s(node->m_vector[index].mp_subtree == NULL, "node is not terminal node!");
+    node->do_insert(ciph_elem, p, ci, index+1);
+    //cerr << "tree after insert is "; node->get_root()->dump(true); cerr << "\n";
+    //cerr << "highest node in change log is " << ci.back().node->pretty() << "\n";
     //update ope table and DB
     update_ot(opetable, ci.back().node);
  

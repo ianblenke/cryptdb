@@ -165,6 +165,11 @@ Server::Server() {
 Server::~Server() {
     close(sock_cl);
     close(sock_req);
+    delete ope_tree;
+    delete ope_table;
+    if (WITH_DB) {
+	delete db;
+    }
 }
 
 void Server::work() {
@@ -192,8 +197,12 @@ void Server::work() {
 
         memset(buffer, 0, buflen);
 	
-	uint len;
-        assert_s((len = recv(csock, buffer, buflen, 0)) > 0, "received 0 bytes");
+	uint len = recv(csock, buffer, buflen, 0);
+	if (len  == 0) {
+	    cerr << "client closed connection\n";
+	    close(csock);
+	    break;
+	}
 	
         if (DEBUG_COMM) {cerr << "received msg " << buffer << endl;}
         istringstream iss(buffer);
@@ -202,7 +211,6 @@ void Server::work() {
 	dispatch(csock, iss);
     }
 
-    close(csock);
     cerr << "Server exits!\n";
 
 }

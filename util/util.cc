@@ -517,7 +517,7 @@ get_random(uint no_test_vals) {
     uint elems_inserted = 0;
     // test on random values
     for(uint i=0; i< no_test_vals; i++){
-	uint64_t val = rand();
+	uint64_t val = rand() % 10000;
 	// only insert unique elements
 	if (!mcontains(vals, val)) {
 	    vals.push_back(val);

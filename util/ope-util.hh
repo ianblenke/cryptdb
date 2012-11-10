@@ -9,12 +9,14 @@
 #include <string>
 #include <vector>
 
+#include <util/util.hh>
+
 //whether we run with a database or not
 #define WITH_DB 0
 
 // if ope mode is true then trees can no longer use the order operation
 // among keys because the real keys are encrypted
-#define OPE_MODE 0
+#define OPE_MODE 1
 
 // Controls debugging output
 #define DEBUG 1
@@ -57,6 +59,8 @@ const unsigned int num_bits = (int)ceil(log2(b_max_keys+1.0));
 // min keys in a B tree
 uint minimum_keys(uint max_keys);
 
+// the number of keys at a node that does not include the ""key
+// therefore, there are b_min_keys+1 subtrees from this node
 const unsigned int b_min_keys = minimum_keys(b_max_keys); 
 
 
@@ -120,6 +124,7 @@ path_append(uint64_t v, uint index);
 
 static inline
 uint64_t compute_ope(uint64_t ope_path, uint nbits) {
+    assert_s(nbits < 64, " too many values considering ope size");
     return (ope_path << (64-nbits)) | (s_mask << (64-num_bits-nbits)); 
 }
 // Compute the ope encoding out of an ope path, nbits (no of bits of ope_path),

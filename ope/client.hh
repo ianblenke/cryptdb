@@ -19,6 +19,7 @@
 #include <util/static_assert.hh>
 #include <util/ope-util.hh>
 
+
 #include <pthread.h>
 
 using std::cout;
@@ -174,11 +175,6 @@ comm_thread(void * p) {
         interaction_rslt = "";
     }
   
-    close(oc->csock);    
-    cerr<<"Done with client, closing now\n";
-    close(oc->sock);
-    delete oc->bc;
-    pthread_exit(NULL);
     return NULL;
 
 }
@@ -229,6 +225,10 @@ ope_client<V, BlockCipher>::ope_client(BlockCipher * bc) {
 template<class V, class BlockCipher>
 ope_client<V, BlockCipher>::~ope_client(){
     close(sock_query);
+    close(csock);    
+    close(sock);
+    cerr<<"Done with client, closing now\n";
+    delete bc;
 }
 
 
@@ -264,8 +264,9 @@ ope_client<V, BlockCipher>::encrypt(V pt, bool imode) const{
 
     msg << block_encrypt(pt);
 
+    cerr << "cl: sending message to server " << msg.str() <<"\n";
     string res = send_receive(sock_query, msg.str());
-    cerr << "Result for " << pt << " is " << res << endl;
+    cerr << "Result for " << pt << " is " << res << endl << endl;
 
     return VFromString<V>(res);
 }

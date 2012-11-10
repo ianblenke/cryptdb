@@ -30,6 +30,8 @@ public:
 
     /* Inserts ciph in the tree; the position of insert is given node at
      * position indicated by index.
+     * Index is: consider all keys at node. Index is position w.r.t them (e.g.,
+     * 0 before all of them)
      * ope_path and nbits indicate path to this node in the tree.
      * Requires that node has no subtree at index.
      * Updates ope_table and DB. 

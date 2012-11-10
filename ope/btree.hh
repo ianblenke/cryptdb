@@ -161,14 +161,14 @@ public:
     //std::vector<Elem> m_vector;
 
     
-    bool tree_insert (Elem& element, UpdateMerkleProof &p);
+    bool tree_insert (Elem element, UpdateMerkleProof &p);
     bool tree_delete(Elem & target, UpdateMerkleProof & m);
 
     void dump(bool recursive = true);
     void in_order_traverse(std::list<std::string> & res);
 
     
-    bool do_insert(Elem & element, UpdateMerkleProof & p, ChangeInfo & c, int index = -1);
+    bool do_insert(Elem element, UpdateMerkleProof & p, ChangeInfo & c, int index = -1);
 
     //cleaning up
     int delete_all_subtrees();
@@ -176,7 +176,7 @@ public:
 
     bool is_leaf();
     
-    bool vector_insert (Elem& element, int index = -1);
+    bool vector_insert (Elem & element, int index = -1);
     bool vector_insert_for_split (Elem& element, int index = -1);
     bool split_insert (Elem& element, ChangeInfo & ci, int index = -1);
 
