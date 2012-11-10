@@ -353,7 +353,7 @@ bool Node::split_insert (Elem& element, ChangeInfo & ci, int index) {
     }
  
     vector_insert_for_split(element, index);
-
+    
     unsigned int split_point = m_count/2;
 
     if (2*split_point < m_count) { // perform the "ceiling function"
@@ -391,6 +391,7 @@ bool Node::split_insert (Elem& element, ChangeInfo & ci, int index) {
     
     // now insert the upward_element into the parent, splitting it if necessary
     if (mp_parent && mp_parent->vector_insert(upward_element, upward_index)) {
+	ci.push_back(LevelChangeInfo(mp_parent, NULL, -1));
 	return true;
     }
 
@@ -684,7 +685,7 @@ bool Node::do_insert(Elem & element, UpdateMerkleProof & p, ChangeInfo & c, int 
 
     // ---- bench ----
     // insert happens at last_visited_ptr
-    Merklecost += Merkle_cost();
+    //Merklecost += Merkle_cost();
     //---------------
     
     // insert the element in last_visited_ptr if this node is not fulls
@@ -1349,7 +1350,7 @@ Elem::repr() {
 }
 
 Elem::Elem(string key) {
-    assert_s(key.size() < b_key_size, "given key to element is larger than key_size");
+    assert_s(key.size() <= b_key_size, "given key to element is larger than key_size");
     this->m_key = key;
     mp_subtree = NULL;
 }
@@ -1408,6 +1409,7 @@ update_ot_help(OPETable<string> * ope_table, const Node * n, OPEType path, uint 
 	Elem e = n->m_vector[i];
 	if (i) {
 	    OPEType new_ope = compute_ope(path, nbits, i);
+	    cerr << "update ot " << e.m_key << " --> " << new_ope << "\n";
 	    bool r = ope_table->update(e.m_key, new_ope);
 	    if (!r) {
 		assert_s(ope_table->insert(e.m_key, new_ope), "could not insert in ope table");
@@ -1461,11 +1463,10 @@ void
 BTree::insert(string ciph, TreeNode * tnode, OPEType ope_path, uint64_t nbits, uint64_t index) {
     Node * node = (Node *) tnode;
 
-    
     UpdateMerkleProof p;
     ChangeInfo ci;
-    Elem* ciph_elem = new Elem(ciph);
-    node->do_insert(*ciph_elem, p, ci, index);
+    Elem ciph_elem = Elem(ciph);
+    node->do_insert(ciph_elem, p, ci, index);
 
     //update ope table and DB
     update_ot(opetable, ci.back().node);

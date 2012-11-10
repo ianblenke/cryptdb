@@ -31,6 +31,8 @@ public:
     Server();
     ~Server();
 
+    void work() __attribute__((noreturn));
+    
     /*************** helper functions *****************************/
 
     void handle_enc(int csock, std::istringstream & iss, bool do_ins);

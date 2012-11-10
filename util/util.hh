@@ -412,3 +412,37 @@ class Timer {
 
     uint64_t start;
 };
+
+// Various test OPE stuff
+
+
+std::vector<uint64_t>
+get_random(uint no_test_vals);
+
+void
+check_good_height(uint maxheight, uint no_elems, uint breadth);
+
+template<class T>
+static bool
+mcontains(const T & vals, uint64_t  test_val) {
+    for (auto it : vals) {
+	if (it == test_val) {
+	    return true;
+	}
+    }
+    
+    return false;
+}
+
+
+template<class T>
+static bool
+mcontains(const T & vals, std::string  test_val) {
+    for (auto it : vals) {
+	if (it == test_val) {
+	    return true;
+	}
+    }
+    
+    return false;
+}

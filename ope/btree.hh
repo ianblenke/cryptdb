@@ -11,8 +11,7 @@
 #include <ope/tree.hh>
 #include <util/ope-util.hh>
 
-// benchmarking
-uint Merklecost = 0;
+// uint Merklecost = 0;
 
 /** Forwarding Data Structures **/
 
@@ -24,6 +23,10 @@ class Node;
 
 Node* build_tree(std::vector< std::string> & key_list, RootTracker * root_tracker, int start, int end);
 Node* build_tree_wrapper(std::vector<std::string> & key_list, RootTracker * root_tracker, int start, int end);
+
+
+#define invalid_ptr  reinterpret_cast<Node*>(-1)
+#define null_ptr  reinterpret_cast<Node*>(0)
 
 
 /**  Merkle Proof and verification **/
@@ -106,7 +109,7 @@ public:
 
     void update_db(ChangeInfo & c);
 
-private:
+    
     RootTracker * tracker;
     OPETable<std::string> * opetable;
     Connect * db;
@@ -127,7 +130,6 @@ public:
  
     // the root of the tree may change.  this attribute keeps it accessible.
     RootTracker * m_root;
-
     
     Node* get_root();
     Elem& search (Elem& desired, Node*& last_visited);
@@ -248,10 +250,6 @@ public:
     
 };
 
-
-Node * invalid_ptr = reinterpret_cast<Node* > (-1);
-
-Node * null_ptr = reinterpret_cast<Node* > (0);
 
 
 std::ostream &

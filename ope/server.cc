@@ -158,11 +158,6 @@ Server::Server() {
 
     sock_cl = create_and_connect(OPE_CLIENT_HOST, OPE_CLIENT_PORT);
     sock_req = create_and_bind(OPE_SERVER_PORT);
-    int listen_rtn = listen(sock_req, 10);
-    if (listen_rtn < 0) {
-	cerr<<"Error listening to socket"<<endl;
-    }
-    cerr<<"Listening \n";
     
   
 }
@@ -172,17 +167,19 @@ Server::~Server() {
     close(sock_req);
 }
 
-
-int main(int argc, char **argv){
-
-    cerr<< " Starting tree server \n";
-    Server server;
-
+void Server::work() {
     socklen_t addr_size = sizeof(sockaddr_in);
     struct sockaddr_in sadr;
-
+ 
     assert_s(!WITH_DB, "for UDF the server should accept a few times");
-    int csock = accept(server.sock_req, (struct sockaddr*) &sadr, &addr_size);
+    int listen_rtn = listen(sock_req, 10);
+    if (listen_rtn < 0) {
+	cerr<<"Error listening to socket"<<endl;
+    }
+    cerr<<"Listening \n";
+  
+
+    int csock = accept(sock_req, (struct sockaddr*) &sadr, &addr_size);
     assert_s(csock >= 0, "Server accept failed!");
     cerr << "Server received request \n";
     
@@ -202,10 +199,12 @@ int main(int argc, char **argv){
         istringstream iss(buffer);
 	
 	//Pass connection and messages received to handle_client
-	server.dispatch(csock, iss);
+	dispatch(csock, iss);
     }
 
     close(csock);
     cerr << "Server exits!\n";
+
 }
+
 

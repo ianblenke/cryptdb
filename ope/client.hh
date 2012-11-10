@@ -38,8 +38,6 @@ bool test_order(int num_vals, int sorted, bool deletes);
 
 void handle_udf(void* lp);
 
-class ope_lookup_failure {};
-
 
 #if MALICIOUS
 std::string cur_merkle_hash;
@@ -220,7 +218,7 @@ ope_client<V, BlockCipher>::ope_client(BlockCipher * bc) {
 #endif
 
     int rc = pthread_create(&net_thread, NULL, comm_thread<V, BlockCipher>, (void *)this);
-    if (rc < 0) {
+    if (rc) {
 	cerr << "error: cannot create thread: " << rc << "\n";
 	exit(1);
     }

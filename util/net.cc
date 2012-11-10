@@ -8,7 +8,7 @@ using namespace std;
 int
 create_and_bind(int host_port) {
 
-    cerr << "Create and bind\n";
+    cerr << "Create and bind on port " << host_port << "\n";
 
     int hsock = socket(AF_INET, SOCK_STREAM, 0);
     assert_s(hsock >= 0, "Error initializing socket");
@@ -35,7 +35,7 @@ create_and_bind(int host_port) {
 int
 create_and_connect(string host_name, int host_port, bool fail) {
     cerr << "Create and connect \n";
-    int hsock = socket(AF_INET, SOCK_STREAM,0);
+    int hsock = socket(AF_INET, SOCK_STREAM, 0);
     assert_s(hsock>=0, "Error initializing socket!");
     
     struct sockaddr_in my_addr;
@@ -52,6 +52,7 @@ create_and_connect(string host_name, int host_port, bool fail) {
 	    return -1;
 	}
     }
+    cerr << "connected \n";
 
     return hsock;
 }

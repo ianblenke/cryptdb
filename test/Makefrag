@@ -9,6 +9,10 @@ all:	$(OBJDIR)/test/test_searchtree
 $(OBJDIR)/test/test_searchtree: $(OBJDIR)/test/test_searchtree.o $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbutil.so $(OBJDIR)/libope.so
 	$(CXX) $< -o $@ $(LDFLAGS) -ledbutil -lope -lcryptdb
 
+all:	$(OBJDIR)/test/test_system
+$(OBJDIR)/test/test_system: $(OBJDIR)/test/test_system.o $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbutil.so $(OBJDIR)/libope.so
+	$(CXX) $< -o $@ $(LDFLAGS) -ledbutil -lope -lcryptdb
+
 #all:	$(OBJDIR)/test/test
 
 #TEST_OBJS := $(patsubst %.cc,$(OBJDIR)/test/%.o,$(TEST_SRCS))

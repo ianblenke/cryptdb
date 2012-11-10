@@ -1,5 +1,5 @@
 OBJDIRS     += ope
-OPESRC  := merkle.cc opetable.cc stree.cc btree.cc transform.cc
+OPESRC  := merkle.cc opetable.cc stree.cc btree.cc transform.cc server.cc client.cc
 
 
 all:    $(OBJDIR)/libope.so $(OBJDIR)/libcryptdb.so
@@ -20,13 +20,6 @@ all:	$(OBJDIR)/ope/bench
 $(OBJDIR)/ope/bench: $(OBJDIR)/ope/bench.o $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbutil.so $(OBJDIR)/libope.so
 	$(CXX) $< -o $@ $(LDFLAGS) -ledbutil -lope -lcryptdb
 
-all:	$(OBJDIR)/ope/client
-$(OBJDIR)/ope/client: $(OBJDIR)/ope/client.o $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbutil.so $(OBJDIR)/libope.so
-	$(CXX) $< -o $@ $(LDFLAGS) -ledbutil -lope -lcryptdb
-	
-all:	$(OBJDIR)/ope/server
-$(OBJDIR)/ope/server: $(OBJDIR)/ope/server.o $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbutil.so $(OBJDIR)/libope.so
-	$(CXX) $< -o $@ $(LDFLAGS) -ledbutil -lope -lcryptdb
 
 all:    $(OBJDIR)/ope/tpcc_server
 $(OBJDIR)/ope/tpcc_server: $(OBJDIR)/ope/tpcc_server.o $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbutil.so $(OBJDIR)/libope.so

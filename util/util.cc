@@ -504,3 +504,32 @@ equalsIgnoreCase(const string &s1, const string &s2)
 {
     return toLowerCase(s1) == toLowerCase(s2);
 }
+
+// Various test OPE stuff
+
+
+vector<uint64_t>
+get_random(uint no_test_vals) {
+    vector<uint64_t> vals;
+    //to make debugging deterministic
+    srand(time(NULL));
+    
+    uint elems_inserted = 0;
+    // test on random values
+    for(uint i=0; i< no_test_vals; i++){
+	uint64_t val = rand();
+	// only insert unique elements
+	if (!mcontains(vals, val)) {
+	    vals.push_back(val);
+		elems_inserted++;
+	}
+    }
+    
+    return vals;    
+}
+
+ void
+check_good_height(uint maxheight, uint no_elems, uint breadth) {
+    assert_s(maxheight <= (log(no_elems*1.0)/log(breadth*1.0)) + 1, "tree is too high");
+}
+

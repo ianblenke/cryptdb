@@ -14,14 +14,3 @@ ffsl(uint64_t ct)
     return (bit+num_bits-1);
 }
 
-int main(int argc, char ** argv){
-    
-    blowfish * bc = new blowfish(passwd);
-    
-    ope_client<uint64_t, blowfish> * ope_cl = new ope_client<uint64_t, blowfish>(bc);
-    
-    ope_cl->encrypt(5, true);
-    ope_cl->encrypt(6, true);
-    ope_cl->encrypt(8, true);
-}
-

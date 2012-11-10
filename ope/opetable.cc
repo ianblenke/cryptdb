@@ -28,7 +28,11 @@ template <class EncT>
 table_entry 
 OPETable<EncT>::get(EncT encval) {
     auto p = find(encval);
-    assert_s(p, "key for ope_table.get not found");
+    if (!p) {
+	stringstream ss;
+	ss << encval;
+	assert_s(false, "key " + ss.str() + "for ope_table.get not found");	
+    }
     return *p;
 }
 

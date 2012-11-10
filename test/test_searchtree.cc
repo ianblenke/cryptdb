@@ -12,19 +12,6 @@
 
 using namespace std;
 
-template<class T>
-static bool
-mcontains(const T & vals, const string & test_val) {
-    for (auto it : vals) {
-	if (it == test_val) {
-	    return true;
-	}
-    }
-    
-    return false;
-}
-
-
 static void
 check_order(list<string> & vals) {
     string prev;
@@ -43,16 +30,11 @@ check_order_and_values(vector<string> & input_vals,
 		       list<string> & tree_vals) {
 
     for (string input_val: input_vals) {
-	assert_s(mcontains(tree_vals, input_val), "val " + input_val + " not found in tree");
+	assert_s(mcontains(tree_vals, input_val), "val  not found in tree");
     }
 
     // check tree vals are in order
     check_order(tree_vals);
-}
-
-static void
-check_good_height(uint maxheight, uint no_elems, uint breadth) {
-    assert_s(maxheight <= (log(no_elems*1.0)/log(breadth*1.0)) + 1, "tree is too high");
 }
 
 class Test {
