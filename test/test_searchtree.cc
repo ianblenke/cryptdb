@@ -88,6 +88,7 @@ public:
     }
     static void
     test_serialize(UpdateMerkleProof & p) {
+	cerr << "\n-------------------\n";
 	stringstream ss;
 	ss << "hello" << " ";
 	p >> ss;
@@ -101,6 +102,9 @@ public:
 
 	check_equals(p.st_before, p2.st_before);
 	check_equals(p.st_after, p2.st_after);
+
+	cerr << "update proof serialization works\n";
+	cerr << "---------------------------\n";
     }
 
     static void
@@ -111,13 +115,22 @@ public:
 	auto i2 = s2.begin();
 	
 	for (; i1 != s1.end(); i1++, i2++) {
-	    assert_s(*i1==*i2, "states are not equal");
+	    if (!(*i1 == *i2)) {
+		cerr << "i1 is ";
+		*i1 >> cerr;
+		cerr << "\n i2 is\n";
+		*i2 >> cerr;
+		cerr << "\n";
+	    }
+		    
+	    assert_s(*i1==*i2, "NodeInfo are not equal");
 	}
     }
   
 
     static void
     test_serialize(MerkleProof & p) {
+	cerr << "===============\n";
 	stringstream ss;
 	ss << "hello" << " ";
 	p >> ss;
@@ -130,6 +143,9 @@ public:
 	p2 << ss2;
 
 	check_equals(p.path, p2.path);
+
+	cerr << "node proof serialization works\n";
+	cerr << "==============\n";
     }
     
     static void

@@ -9,8 +9,13 @@ using namespace std;
 
 static ostream &
 marshall_binary(ostream & o, string & hash) {
-    o << hash.size() << " ";
-    o << hash;
+    uint len = hash.size();
+    
+    o << len << " ";
+
+    for (uint i = 0; i < len; i++) {
+	o << (int)hash[i] << " ";
+    }
 
     return o;
 }
@@ -23,9 +28,9 @@ unmarshall_binary(istream & o) {
     char h[size];
     
     for (uint i = 0 ; i < size; i++) {
-	char c;
+	int c;
 	o >> c;
-	h[i] = c;
+	h[i] = (char)c;
     }
     return string(h, size);    
 }
@@ -34,7 +39,11 @@ unmarshall_binary(istream & o) {
 
 ostream &
 ElInfo::operator>>(std::ostream &out) {
-    out << key << " ";
+    if (key == "") {
+	out << "NULL ";
+    } else {
+	out << key << " ";
+    }
     marshall_binary(out, hash);
     return out;
 }
@@ -42,6 +51,9 @@ ElInfo::operator>>(std::ostream &out) {
 istream &
 ElInfo::operator<<(std::istream & is) {
     is >> key;
+    if (key == "NULL") {
+	key = "";
+    }
     hash = unmarshall_binary(is);
     return is;
 }
@@ -88,7 +100,13 @@ operator==(const vector<ElInfo> & v1, const vector<ElInfo> & v2) {
    
 std::ostream&
 NodeInfo::operator>>(std::ostream &out) {
-    out << key << " " << pos_in_parent << " ";
+
+    if (key == "") {
+	out << "NULL" << " ";
+    } else {
+	out << key << " ";
+    }
+    out << pos_in_parent << " ";
 
     out << childr.size() << " ";
 
@@ -103,14 +121,19 @@ NodeInfo::operator>>(std::ostream &out) {
 
 std::istream&
 NodeInfo::operator<<(std::istream & is) {
+
     is >> key >> pos_in_parent;
 
-    uint size;
+    if (key == "NULL") {
+	key = "";
+    }
+
+    int size;
     is >> size;
 
     childr = vector<ElInfo>(size);
 
-    for (uint i = 0; i < size; i++) {
+    for (int i = 0; i < size; i++) {
 	childr[i] << is;
     }
 
@@ -221,25 +244,39 @@ MerkleProof::pretty() const {
 
 bool
 UpInfo::equals(UpInfo ui) {
-    return (node == ui.node) &&
+    bool ret = (node == ui.node) &&
 	(has_left_sib == ui.has_left_sib) &&
 	(left_sib == ui.left_sib) &&
 	(has_right_sib == ui.has_right_sib) &&
 	(right_sib == ui.right_sib);
+
+    if (!ret) {
+	cerr << "differ; first \n";
+	*this >> cerr;
+	cerr << "\n second \n";
+	ui >> cerr;
+	cerr << "\n";
+    }
+
+    return ret;
 }
 
 std::ostream&
 UpInfo::operator>>(std::ostream &out) {
+    out << " ";
+    node >> out;
+    out << " ";
     out << has_left_sib << " ";
     left_sib >> out;
     out << " " << has_right_sib << " ";
     right_sib >> out;
-
+    out << " ";
     return out;
 }
 
 std::istream&
 UpInfo::operator<<(std::istream &is) {
+    node << is;
     is >> has_left_sib;
     left_sib << is;
     is >> has_right_sib;
@@ -270,7 +307,7 @@ UpInfo::pretty() const {
 
 static ostream&
 operator<<(ostream & out, const State & st) {
-    out << st.size() << " ";
+    out << " " << st.size() << " ";
     for (auto di : st) {
 	di >> out;
 	out << " ";
