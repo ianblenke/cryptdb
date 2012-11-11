@@ -18,7 +18,6 @@
 #include <crypto/skip32.hh>
 #include <crypto/cbcmac.hh>
 #include <crypto/ffx.hh>
-#include <crypto/online_ope.hh>
 #include <crypto/padding.hh>
 #include <crypto/mont.hh>
 #include <util/timer.hh>
@@ -437,79 +436,6 @@ test_ffx()
 }
 
 static void
-test_online_ope()
-{
-    cerr << "test online ope .. \n";
-    urandom u;
-    blowfish bf(u.rand_string(128));
-    ffx2_block_cipher<blowfish, 16> fk(&bf, {});
-
-    ope_server<uint16_t> ope_serv;
-    ope_client<uint16_t, ffx2_block_cipher<blowfish, 16>> ope_clnt(&fk, &ope_serv);
-
-    for (uint i = 0; i < 1000; i++) {
-	// cerr << "============= i = " << i << "========" << "\n";
-
-        uint64_t pt = u.rand<uint16_t>();
-        // cout << "online-ope pt:  " << pt << endl;
-
-        auto ct = ope_clnt.encrypt(pt);
-        // cout << "online-ope ct:  " << hex << ct << dec << endl;
-
-	//print_tree(ope_serv.root);
-	
-        auto pt2 = ope_clnt.decrypt(ct);
-        // cout << "online-ope pt2: " << pt2 << endl;
-
-        assert(pt == pt2);
-    }
-
-    for (uint i = 0; i < 1000; i++) {
-        uint8_t a = u.rand<uint8_t>();
-        uint8_t b = u.rand<uint8_t>();
-
-        ope_clnt.encrypt(a);
-        ope_clnt.encrypt(b);
-
-	auto ac = ope_clnt.encrypt(a);
-	auto bc = ope_clnt.encrypt(b);
-
-        //cout << "a=" << hex << (uint64_t) a << ", ac=" << ac << dec << endl;
-        //cout << "b=" << hex << (uint64_t) b << ", bc=" << bc << dec << endl;
-
-        if (a == b)
-            assert(ac == bc);
-        else if (a > b)
-            assert(ac > bc);
-        else
-            assert(ac < bc);
-    }
-}
-
-static void
-test_online_ope_rebalance()
-{
-    urandom u;
-    blowfish bf(u.rand_string(128));
-    ffx2_block_cipher<blowfish, 16> fk(&bf, {});
-
-    ope_server<uint16_t> ope_serv;
-    ope_client<uint16_t, ffx2_block_cipher<blowfish, 16>> ope_clnt(&fk, &ope_serv);
-
-    // only manual testing so far -- when balancing is implemented this will be automated
-    ope_clnt.encrypt(10);
-    ope_clnt.encrypt(20);
-    ope_clnt.encrypt(30);
-    ope_clnt.encrypt(5);
-    ope_clnt.encrypt(1);
-    ope_clnt.encrypt(8);
-    ope_clnt.encrypt(3);
-    ope_clnt.encrypt(200);
-
-    cerr << "test online ope rebalance OK \n";
-}
-
-static void
 test_padding()
 {
     urandom u;
@@ -533,8 +459,6 @@ main(int ac, char **av)
     urandom u;
     cout << u.rand<uint64_t>() << endl;
     cout << u.rand<int64_t>() << endl;
-
-    test_online_ope_rebalance();
     
     test_padding();
     test_bn();
@@ -544,7 +468,6 @@ main(int ac, char **av)
     // test_paillier_packing();
     test_montgomery();
     test_skip32();
-    test_online_ope();
     test_ffx();
 
     AES aes128(u.rand_string(16));

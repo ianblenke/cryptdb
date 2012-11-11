@@ -8,15 +8,16 @@
 
 #include <crypto/BasicCrypto.hh>
 
-struct aes_cbc {
-
+class aes_cbc {
+public:
     // if det is set this will be deterministic encryption
     // else, it will be random (salt prepended to ciphertext)
     aes_cbc(std::string passwd, bool det);
 
     std::string encrypt(std::string pt);
     std::string decrypt(std::string ct);
-    
+
+private:
     AES_KEY * enc_key;
     AES_KEY * dec_key;
     bool is_det;

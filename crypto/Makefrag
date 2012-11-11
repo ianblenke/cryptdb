@@ -1,6 +1,6 @@
 OBJDIRS     += crypto
 CRYPTOSRC  := paillier.cc urandom.cc arc4.cc hgd.cc pbkdf2.cc \
-	       ecjoin.cc search.cc skip32.cc ffx.cc online_ope.cc mont.cc \
+	       ecjoin.cc search.cc skip32.cc ffx.cc mont.cc \
 	       prng.cc ope.cc BasicCrypto.cc aes_cbc.cc
 
 all:    $(OBJDIR)/libedbcrypto.so

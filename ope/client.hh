@@ -86,17 +86,17 @@ ope_client<V, BC>::handle_interaction(istringstream & iss){
     assert_s(func_d == MsgType::INTERACT_FOR_LOOKUP, "Incorrect function type in handle_server!");
     if (func_d == MsgType::INTERACT_FOR_LOOKUP){
         
-        uint64_t det, pt, tmp_pt;
+        V det, pt, tmp_pt;
         int size, index;
 
         iss >> det >> size;
 
-        bc->block_decrypt((const uint8_t *) &det, (uint8_t *) &pt);
+        pt = bc->decrypt(det);
 
         for(index=0; index<size; index++){
-	    uint64_t tmp_key;
+	    V tmp_key;
 	    iss >> tmp_key;
-            bc->block_decrypt((const uint8_t *) &tmp_key, (uint8_t *) &tmp_pt);
+            tmp_pt = bc->decrypt(tmp_key);
 
             if (tmp_pt >= pt){
                 break;
