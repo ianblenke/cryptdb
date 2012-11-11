@@ -204,6 +204,12 @@ StrFromType(V v) {
     return ss.str();
 }
 
+std::string
+TypeFromStr(std::string v);
+
+std::string
+StrFromType(std::string v);
+
 
 bool
 IsMySQLTypeNumeric(enum_field_types t);

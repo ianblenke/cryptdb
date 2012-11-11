@@ -214,16 +214,16 @@ ope_client<V, BlockCipher>::~ope_client(){
  * delete(v, nbits, index) = 4
  */
 
-template<class V>
+template<class V, class BC>
 static void
 check_proof(stringstream & ss, MsgType optype, V ins,
-	    const string & old_mroot, string & new_mroot) {
+	    const string & old_mroot, string & new_mroot, BC * bc) {
 
     string inserted = StrFromType<V>(ins);
     if (optype == MsgType::ENC_INS) {
 	UpdateMerkleProof p;
 	p << ss;
-	verify_ins_merkle_proof(p, inserted, old_mroot, new_mroot);
+	verify_ins_merkle_proof<V, BC>(p, inserted, old_mroot, new_mroot, bc);
 	return;
     }
     if (optype == MsgType::QUERY) {
@@ -265,7 +265,7 @@ ope_client<V, BlockCipher>::encrypt(V pt, bool imode) {
     
     if (MALICIOUS) { // check Merkle proofs
 	string new_mroot;
-	check_proof<V>(ss, optype, ct, merkle_root, new_mroot);
+	check_proof<V, BlockCipher>(ss, optype, ct, merkle_root, new_mroot, bc);
 	merkle_root = new_mroot;
     }
     

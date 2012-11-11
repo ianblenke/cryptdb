@@ -55,12 +55,15 @@ verify_del_merkle_proof(const UpdateMerkleProof & p,
             const std::string & merkle_root,
             std::string & new_merkle_root);
 
-
+// Verifies insertion Merkle proof
+// bc is the block cipher to use for decryption 
+template<class V, class BC>
 bool
 verify_ins_merkle_proof(const UpdateMerkleProof & p,
-            std::string ins_target,
-            const std::string & merkle_root,
-            std::string & new_merkle_root);
+			std::string ins_target,
+			const std::string & merkle_root,
+			std::string & new_merkle_root,
+			BC * bc = NULL);
 
 /////////////////////////////////////////////////////////////////////////////
 ///// Helper data structures //////
@@ -368,6 +371,64 @@ public:
 
 };
 
+////////////////////////////////////////////////////////////////////////////////////
+/* Function definitions for templated functions */
+
+template<class V, class BC>
+bool verify_ins_merkle_proof(const UpdateMerkleProof & proof,
+			     std::string ins_target,
+			     const std::string & old_merkle_root,
+			     std::string & new_merkle_root,
+			     BC * bc = NULL) {
+
+    if (DEBUG_PROOF) { std::cerr << "\n\n start verify\n";}
+
+    if (old_merkle_root != proof.old_hash()) {
+	std::cerr << "merkle hash of old state does not verify \n";
+	std::cerr << "hash of old state is " << proof.old_hash() << "\n";
+	return false;
+    }
+
+    bool r = proof.check_ins_change<V, BC>(ins_target, bc);
+    
+    if (!r) {
+	std::cerr << "incorrect update information";
+	return false;
+    }
+
+    new_merkle_root = proof.new_hash();
+    
+    return true;
+}
+
+
+template<class V, class BC>
+bool
+verify_del_merkle_proof(const UpdateMerkleProof & proof,
+			std::string del_target,
+			const std::string & old_merkle_root,
+			std::string & new_merkle_root,
+			BC * bc = NULL) {
+
+    if (DEBUG_PROOF) { std::cerr << "\n\n start verify\n";}
+
+    if (old_merkle_root != proof.old_hash()) {
+	std::cerr << "merkle hash of old state does not verify \n";
+	std::cerr << "hash of old state is " << proof.old_hash() << "\n";
+	return false;
+    }
+
+    bool r = proof.check_del_change<V, BC>(del_target, bc);
+    
+    if (!r) {
+	std::cerr << "incorrect update information";
+	return false;
+    }
+
+    new_merkle_root = proof.new_hash();
+    
+    return true;
+}
 
 
 /////////////////////////////////////////////////////////////////////////////////////

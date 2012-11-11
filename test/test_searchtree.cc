@@ -9,6 +9,8 @@
 #include <util/util.hh>
 #include <ope/btree.hh>
 #include <ope/transform.hh>
+#include <crypto/blowfish.hh>
+
 
 using namespace std;
 
@@ -114,7 +116,7 @@ public:
 	    }
 	    if (i % period_Merkle_insert_check == 0) {
 		string merkle_after;
-		assert_s(verify_ins_merkle_proof(p, elem.m_key, merkle_root_before, merkle_after),
+		assert_s(verify_ins_merkle_proof<uint64_t, blowfish>(p, elem.m_key, merkle_root_before, merkle_after),
 			 "insert merkle proof not verified");
 		assert_s(merkle_after == tracker->get_root()->merkle_hash, "verify insert does not give correct merkle proof");
 	    }

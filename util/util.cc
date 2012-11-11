@@ -533,3 +533,13 @@ check_good_height(uint maxheight, uint no_elems, uint breadth) {
     assert_s(maxheight <= (log(no_elems*1.0)/log(breadth*1.0)) + 1, "tree is too high");
 }
 
+
+std::string
+TypeFromStr(std::string v) {
+    return v;
+}
+
+std::string
+StrFromType(std::string v) {
+    return v;
+}

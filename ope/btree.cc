@@ -525,55 +525,6 @@ verify_merkle_proof(const MerkleProof & proof, const string & merkle_root) {
     return true;
 }
 
-static bool
-verify_update_merkle_proof(bool is_del,
-			   const UpdateMerkleProof & proof,
-			   string key_target,
-			   const string & old_merkle_root,
-			   string & new_merkle_root) {
-    
-    if (DEBUG_PROOF) { cerr << "\n\n start verify\n";}
-
-    if (old_merkle_root != proof.old_hash()) {
-	cerr << "merkle hash of old state does not verify \n";
-	cerr << "hash of old state is " << proof.old_hash() << "\n";
-	return false;
-    }
-
-    bool r;
-
-    if (is_del) {
-	r = proof.check_del_change(key_target);
-    } else {
-	r = proof.check_ins_change(key_target);
-    }
-    
-    if (!r) {
-	cerr << "incorrect update information";
-	return false;
-    }
-
-    new_merkle_root = proof.new_hash();
-    
-    return true;
-}
-
-bool verify_ins_merkle_proof(const UpdateMerkleProof & proof,
-			string ins_target,
-			const string & old_merkle_root,
-			string & new_merkle_root) {
-    return verify_update_merkle_proof(false, proof, ins_target, old_merkle_root, new_merkle_root);
-    
-}
-
-bool
-verify_del_merkle_proof(const UpdateMerkleProof & proof,
-			string del_target,
-			const string & old_merkle_root,
-			string & new_merkle_root) {
-
-    return verify_update_merkle_proof(true, proof, del_target, old_merkle_root, new_merkle_root);
-}
 
 
 // for gdb -- could not figure out how to call template funcs from
