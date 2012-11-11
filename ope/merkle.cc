@@ -28,7 +28,7 @@ unmarshall_binary(istream & o) {
     char h[size];
     
     for (uint i = 0 ; i < size; i++) {
-	int c;
+	int c = 0;
 	o >> c;
 	h[i] = (char)c;
     }
@@ -204,7 +204,7 @@ NodeInfo::operator==(const NodeInfo & node) const {
 
 std::ostream&
 MerkleProof::operator>>(std::ostream &out) {
-    out << path.size();
+    out << path.size() << " ";
 
     for (auto ni : path) {
 	ni >> out;

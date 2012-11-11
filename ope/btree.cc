@@ -467,7 +467,7 @@ MerkleProof
 node_merkle_proof(Node * start_node) {
     MerkleProof p;
     Node * node = start_node;
-    
+
     while (node) {
 	p.path.push_back(node->extract_NodeInfo());
 	node = node->mp_parent;
@@ -482,9 +482,9 @@ BTree::merkle_proof(TreeNode * n) {
 }
 
 
-
-static bool
-Merkle_path_hash(const MerkleProof & proof, string & root_hash){
+// returns the root hash
+static string
+Merkle_path_hash(const MerkleProof & proof){
 
     string hash =  "";
 
@@ -493,31 +493,19 @@ Merkle_path_hash(const MerkleProof & proof, string & root_hash){
 	if (ni->pos_in_parent >= 0) {
 	    auto ni2 = ni;
 	    auto parent = ++ni2;
-	    if (parent->childr[ni->pos_in_parent].hash != hash) {
-		cerr << "child hash does not verify in parent\n";
-		return false;
-	    }
+	    assert_s(parent->childr[ni->pos_in_parent].hash == hash,
+		     "child hash does not verify in parent\n");
 	}
     }
 
-    if (hash != root_hash) {
-	cerr << "root hash does not verify\n";
-	return false;
-    }
-
-    return true;
+    return hash;
 }
 
 bool
 verify_merkle_proof(const MerkleProof & proof, const string & merkle_root) {
 
-  
-    // check that the resulting hash matches the root Merkle hash
-    string computed_hash;
-    bool r = Merkle_path_hash(proof, computed_hash);
-    if (!r) {
-	return false;
-    }
+    string computed_hash = Merkle_path_hash(proof);
+
     if (computed_hash != merkle_root) {
 	return false;
     }

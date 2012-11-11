@@ -88,7 +88,7 @@ public:
     }
     static void
     test_serialize(UpdateMerkleProof & p) {
-	cerr << "\n-------------------\n";
+
 	stringstream ss;
 	ss << "hello" << " ";
 	p >> ss;
@@ -103,8 +103,7 @@ public:
 	check_equals(p.st_before, p2.st_before);
 	check_equals(p.st_after, p2.st_after);
 
-	cerr << "update proof serialization works\n";
-	cerr << "---------------------------\n";
+
     }
 
     static void
@@ -129,8 +128,8 @@ public:
   
 
     static void
-    test_serialize(MerkleProof & p) {
-	cerr << "===============\n";
+    test_serialize(MerkleProof p) {
+
 	stringstream ss;
 	ss << "hello" << " ";
 	p >> ss;
@@ -144,8 +143,6 @@ public:
 
 	check_equals(p.path, p2.path);
 
-	cerr << "node proof serialization works\n";
-	cerr << "==============\n";
     }
     
     static void
@@ -154,7 +151,7 @@ public:
 	cerr << "Testing B tree.. \n";
 
 	// Frequency of testing certain aspects
-	uint no_inserted_checks =  int(sqrt(no_elems)) + 1;
+	uint no_inserted_checks = 1;// int(sqrt(no_elems)) + 1;
 	uint no_not_in_tree = 10; //no_inserted_checks;
 	//uint delete_freq = 2; //one in deletes_freq will be deleted
 	uint period_Merkle_check = no_inserted_checks;
