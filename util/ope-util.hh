@@ -16,15 +16,17 @@
 
 // if ope mode is true then trees can no longer use the order operation
 // among keys because the real keys are encrypted
-#define OPE_MODE 0
+#define OPE_MODE 1
+#define MALICIOUS 1
 
 // Controls debugging output
 #define DEBUG 1
 #define DEBUG_COMM 1
 #define DEBUG_STREE 1
 #define DEBUG_BTREE 1
-#define MALICIOUS 0
 #define DEBUG_PROOF 1
+
+// Controls tree type
 #define STREE 0
 
 #define BULK_LOAD 1

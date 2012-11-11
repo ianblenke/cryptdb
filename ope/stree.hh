@@ -40,11 +40,11 @@ public:
     Connect * dbconnect;
     int num_rebalances;
 
-
+/*
 #if MALICIOUS
     RootTracker tracker;
 #endif
-
+*/
     /************ Main methods *****************/
     
     Stree(OPETable<EncT> * ot, Connect * db);
