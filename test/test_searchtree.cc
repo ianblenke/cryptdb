@@ -76,7 +76,61 @@ public:
 	check_good_height(max_height, no_elems, b_min_keys);
 	
 	treeorder.clear();
-    }   
+    }
+
+    static void
+    check_equals(State & s1, State & s2) {
+	assert_s(s1.size() == s2.size(), "serialization error: states differ in size");
+
+	for (uint i = 0; i < s1.size(); i++) {
+	    assert_s(s1[i].equals(s2[i]), "states are not equal");
+	}
+    }
+    static void
+    test_serialize(UpdateMerkleProof & p) {
+	stringstream ss;
+	ss << "hello" << " ";
+	p >> ss;
+	string res = ss.str();
+	stringstream ss2 (res);
+	UpdateMerkleProof p2;
+	string greeting;
+	ss2 >> greeting;
+	assert_s(greeting == "hello", "incorrect behavior");
+	p2 << ss2;
+
+	check_equals(p.st_before, p2.st_before);
+	check_equals(p.st_after, p2.st_after);
+    }
+
+    static void
+    check_equals(list<NodeInfo> & s1, list<NodeInfo> & s2) {
+	assert_s(s1.size() == s2.size(), "serialization error: states differ in size");
+
+	auto i1 = s1.begin();
+	auto i2 = s2.begin();
+	
+	for (; i1 != s1.end(); i1++, i2++) {
+	    assert_s(*i1==*i2, "states are not equal");
+	}
+    }
+  
+
+    static void
+    test_serialize(MerkleProof & p) {
+	stringstream ss;
+	ss << "hello" << " ";
+	p >> ss;
+	string res = ss.str();
+	stringstream ss2 (res);
+	MerkleProof p2;
+	string greeting;
+	ss2 >> greeting;
+	assert_s(greeting == "hello", "incorrect behavior");
+	p2 << ss2;
+
+	check_equals(p.path, p2.path);
+    }
     
     static void
     test_help(vector<string> & vals, uint no_elems) {
@@ -106,6 +160,7 @@ public:
 	    string merkle_root_before = tracker->get_root()->merkle_hash;
 	    cerr << "merkle root before " << merkle_root_before << "\n";
 	    bool inserted = tracker->get_root()->tree_insert(elem, p);
+	    
 	    assert_s(inserted, "element was not inserted");
 	    
 	    // check Merkle hash tree integrity
@@ -115,6 +170,7 @@ public:
 		//cerr << "passed check\n";
 	    }
 	    if (i % period_Merkle_insert_check == 0) {
+		test_serialize(p);
 		string merkle_after;
 		assert_s(verify_ins_merkle_proof<uint64_t, blowfish>(p, elem.m_key, merkle_root_before, merkle_after),
 			 "insert merkle proof not verified");
@@ -133,6 +189,10 @@ public:
 	    Node * last;
 	    Elem& result = tracker->get_root()->search(desired, last);
 	    assert_s(desired.m_key == result.m_key, "could not find val that should be there");
+
+	    MerkleProof p = node_merkle_proof(last);
+	    test_serialize(p);
+	    assert_s(verify_merkle_proof(p, tracker->get_root()->merkle_hash), "merkle proof for get does not verify");
 	}
 	
 	// Check tree is correct

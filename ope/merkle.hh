@@ -108,6 +108,10 @@ struct UpInfo  {
 
     std::ostream& operator>>(std::ostream &out);
     std::istream& operator<<(std::istream &is);
+
+    //returns true if ui has the same contents (other than contents marked as
+    //added by client above)
+    bool equals(UpInfo ui);
     
     std::string pretty() const;
     

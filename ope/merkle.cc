@@ -176,6 +176,9 @@ NodeInfo::operator==(const NodeInfo & node) const {
 
 /****** Merkle proof ***************/
 
+
+
+
 std::ostream&
 MerkleProof::operator>>(std::ostream &out) {
     out << path.size();
@@ -216,14 +219,21 @@ MerkleProof::pretty() const {
 
 /********** UpInfo *******************/
 
+bool
+UpInfo::equals(UpInfo ui) {
+    return (node == ui.node) &&
+	(has_left_sib == ui.has_left_sib) &&
+	(left_sib == ui.left_sib) &&
+	(has_right_sib == ui.has_right_sib) &&
+	(right_sib == ui.right_sib);
+}
+
 std::ostream&
 UpInfo::operator>>(std::ostream &out) {
     out << has_left_sib << " ";
     left_sib >> out;
     out << " " << has_right_sib << " ";
     right_sib >> out;
-
-    out << " " << this_was_del << " " << right_was_del << "\n";
 
     return out;
 }
@@ -234,8 +244,6 @@ UpInfo::operator<<(std::istream &is) {
     left_sib << is;
     is >> has_right_sib;
     right_sib << is;
-
-    is >> this_was_del >> right_was_del;
 
     return is;
 }
