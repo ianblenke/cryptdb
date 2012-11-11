@@ -42,11 +42,6 @@ bool test_order(int num_vals, int sorted, bool deletes);
 void handle_udf(void* lp);
 
 
-#if MALICIOUS
-std::string cur_merkle_hash;
-#endif
-
-
 template<class V, class BlockCipher>
 class ope_client {
 public:

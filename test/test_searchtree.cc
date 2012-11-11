@@ -84,12 +84,12 @@ public:
 	cerr << "Testing B tree.. \n";
 
 	// Frequency of testing certain aspects
-	uint no_inserted_checks = 10; // int(sqrt(no_elems)) + 1;
+	uint no_inserted_checks =  int(sqrt(no_elems)) + 1;
 	uint no_not_in_tree = 10; //no_inserted_checks;
 	//uint delete_freq = 2; //one in deletes_freq will be deleted
-	uint period_Merkle_check = 1; //no_inserted_checks/5 + 1;
+	uint period_Merkle_check = no_inserted_checks;
 	//uint period_Merkle_del_check = 1;
-	uint period_Merkle_insert_check = 1;
+	uint period_Merkle_insert_check = no_inserted_checks;
 
 	// Create tree
 	Node::m_failure.invalidate();

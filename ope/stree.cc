@@ -60,7 +60,7 @@ Stree<EncT>::Stree(OPETable<EncT> * ot, Connect * db) : ope_table(ot), dbconnect
 
     cerr << "ope table " << this->ope_table << "\n";
 
-    
+    /*
 #if MALICIOUS
     
     Node::m_failure.invalidate();
@@ -70,6 +70,7 @@ Stree<EncT>::Stree(OPETable<EncT> * ot, Connect * db) : ope_table(ot), dbconnect
     tracker.set_root(null_ptr, root_ptr);
 
 #endif
+    */
 
 }
 
@@ -672,6 +673,7 @@ Stree<EncT>::insert(string encval, TreeNode * tnode,
     vector<Stree_node<EncT> * > path = tree_insert(root, v, nbits, index,
 						   eval, nbits, node_inserted);
 
+    /*
 #if MALICIOUS
     
     //Merkle tree insert
@@ -707,7 +709,7 @@ Stree<EncT>::insert(string encval, TreeNode * tnode,
     if(DEBUG_BTREE) cout<<"Insert imp="<<imp<<endl;
     if(DEBUG_BTREE) cout<<"Insert msg="<<s.str()<<endl;
 #endif
-
+    */
 
     double height = (double) path.size();
 
