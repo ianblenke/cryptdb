@@ -57,22 +57,20 @@ public:
     uint64_t encrypt(V det, bool do_insert);
 
 
-
-    // encryption
-    V block_decrypt(V ct) const;
-    V block_encrypt(V pt) const;
+    //cipher
     BlockCipher *bc;
 
     // network
     pthread_t net_thread;
-    //void * comm_thread(void *);
     int sock; //socked on which client listens for connections
     int csock; //socket to server on which client answers to interactions
     int sock_query; // socket to send queries to server
     struct sockaddr_in my_addr;
-    string handle_interaction(istringstream & iss);   
-
+   
+    // merkle
     string merkle_root;
+
+     string handle_interaction(istringstream & iss);   
 };
 
 
@@ -160,8 +158,7 @@ comm_thread(void * p) {
 
 template<class V, class BlockCipher>
 ope_client<V, BlockCipher>::ope_client(BlockCipher * bc) {
-    assert_s(BlockCipher::blocksize == sizeof(V), "problem with block cipher size");
-
+    
     //Socket connection
     sock = create_and_bind(OPE_CLIENT_PORT);
 
@@ -250,7 +247,7 @@ ope_client<V, BlockCipher>::encrypt(V pt, bool imode) {
     } else {
 	optype = MsgType::QUERY;
     }
-    V ct = block_encrypt(pt);
+    V ct = bc->encrypt(pt);
 
     ostringstream msg;
     msg << optype <<  " " << ct;
@@ -261,7 +258,7 @@ ope_client<V, BlockCipher>::encrypt(V pt, bool imode) {
     cerr << "Result for " << pt << " is " << res << endl << endl;
 
     stringstream ss(res);
-    V ope;
+    OPEType ope;
     ss >> ope;
     
     if (MALICIOUS) { // check Merkle proofs
@@ -468,19 +465,3 @@ ope_client<V, BlockCipher>::insert(uint64_t v, uint64_t nbits, uint64_t index, V
 
 }
 */
-template<class V, class BlockCipher>
-V
-ope_client<V, BlockCipher>::block_decrypt(V ct) const {
-    V pt;
-    bc->block_decrypt((const uint8_t *) &ct, (uint8_t *) &pt);
-    return pt;
-}
-
-template<class V, class BlockCipher>
-V
-ope_client<V, BlockCipher>::block_encrypt(V pt) const {
-    V ct;
-    bc->block_encrypt((const uint8_t *) &pt, (uint8_t *) &ct);
-    return ct;
-}
-

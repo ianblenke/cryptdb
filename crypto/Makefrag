@@ -1,15 +1,15 @@
 OBJDIRS     += crypto
 CRYPTOSRC  := paillier.cc urandom.cc arc4.cc hgd.cc pbkdf2.cc \
 	       ecjoin.cc search.cc skip32.cc ffx.cc online_ope.cc mont.cc \
-	       prng.cc ope.cc BasicCrypto.cc 
+	       prng.cc ope.cc BasicCrypto.cc aes_cbc.cc
 
 all:    $(OBJDIR)/libedbcrypto.so
 $(OBJDIR)/libedbcrypto.so: $(patsubst %.cc,$(OBJDIR)/crypto/%.o,$(CRYPTOSRC))
 	$(CXX) -shared -o $@ $^ $(LDFLAGS)
 
-#all:	$(OBJDIR)/crypto/x
-#$(OBJDIR)/crypto/x: $(OBJDIR)/crypto/x.o $(OBJDIR)/libedbcrypto2.so
-#	$(CXX) $< -o $@ $(LDFLAGS) -ledbcrypto2
+all:	$(OBJDIR)/crypto/x
+$(OBJDIR)/crypto/x: $(OBJDIR)/crypto/x.o $(OBJDIR)/libedbcrypto.so $(OBJDIR)/libedbutil.so
+	$(CXX) $< -o $@ $(LDFLAGS) -ledbcrypto -ledbutil
 
 
 

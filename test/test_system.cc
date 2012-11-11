@@ -17,11 +17,13 @@
 #include <crypto/blowfish.hh>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <crypto/aes_cbc.hh>
 
 using namespace std;
 
 
 static blowfish * bc = new blowfish(passwd);
+static aes_cbc * bc_aes = new aes_cbc(passwd, true);
 
 
 static void
@@ -82,21 +84,58 @@ check_correct(Server * s, vector<uint64_t> & vals) {
 
 }
 
-static vector<uint64_t> vals;
+static uint ciph_size = 0;
+static uint num_tests = 0;
+vector<uint64_t> vals;
 
 static void *
 client_thread(void * ) {
 
-    cerr << "creating client...";
-    ope_client<uint64_t, blowfish> * ope_cl = new ope_client<uint64_t, blowfish>(bc);
-    cerr << "client created \n";
-    
-    for (uint i = 0; i < vals.size(); i++) {
-	cerr << "ENCRYPT " <<  i << "-th val: " << vals[i] << "\n";
-	ope_cl->encrypt(vals[i], true);
+ 
+
+    if (ciph_size == 64) {
+	cerr << "creating uint64, blowfish client...";
+	ope_client<uint64_t, blowfish> * ope_cl = new ope_client<uint64_t, blowfish>(bc);
+	cerr << "client created \n";
+	
+	for (uint i = 0; i < vals.size(); i++) {
+	    cerr << "ENCRYPT " <<  i << "-th val: " << vals[i] << "\n";
+	    ope_cl->encrypt(vals[i], true);
+	}
+	cerr << "DONE!\n";
+	return NULL;
+
     }
 
-    cerr << "DONE!\n";
+    if (ciph_size == 32) {
+	cerr << "creating uint32, blowfish client...";
+	ope_client<uint32_t, blowfish> * ope_cl = new ope_client<uint32_t, blowfish>(bc);
+	cerr << "client created \n";	
+	
+	for (uint i = 0; i < vals.size(); i++) {
+	    cerr << "ENCRYPT " <<  i << "-th val: " << vals[i] << "\n";
+	    ope_cl->encrypt(vals[i], true);
+	}
+	cerr << "DONE!\n";
+	return NULL;
+    }
+
+    if (ciph_size >= 128) {
+	cerr << "creating string, aes cbc client...";
+	ope_client<string, aes_cbc> * ope_cl = new ope_client<string, aes_cbc>(bc_aes);
+	cerr << "client created \n";	
+	
+	for (uint i = 0; i < vals.size(); i++) {
+	    cerr << "ENCRYPT " <<  i << "-th val: " << vals[i] << "\n";
+	    stringstream ss;
+	    ss << vals[i];
+	    ope_cl->encrypt(ss.str(), true);
+	}
+	cerr << "DONE!\n";
+	return NULL;
+    }
+
+    assert_s(false, "not recognized ciphertext size; accepting 32, 64, >= 128\n");
     return NULL;
 }
 
@@ -111,9 +150,12 @@ server_thread(void *s) {
 }
 
 static void
-runtest(uint num_tests) {
+runtest(uint _ciph_size, uint _num_tests) {
        
-    vals = get_random(num_tests);
+    ciph_size = _ciph_size;
+    num_tests = _num_tests;
+
+    vector<uint64_t> vals = get_random(num_tests);
     
     pid_t pid = fork();
     if (pid == 0) {
@@ -188,13 +230,13 @@ int main(int argc, char ** argv)
 	return 0;
     }
 
-    if (argc == 3 && string(argv[1]) == "sys") {
-	runtest(atoi(argv[2]));
+    if (argc == 4 && string(argv[1]) == "sys") {
+	runtest(atoi(argv[2]),atoi(argv[3]));
 	return 0;
     }
   
     //Test::test_search_tree();
-    cerr << "invalid options; nothing to run; options are: client n OR server OR sys N \n";
+    cerr << "invalid options; nothing to run; options are: client n OR server OR sys ciph_size N \n";
     //Test::testMerkleProof();
     //Test::test_transform();
 }

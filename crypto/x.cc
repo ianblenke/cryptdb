@@ -181,7 +181,7 @@ test_paillier()
         assert(sk0 == sk1);
     }
 }
-
+/*
 static void
 test_paillier_packing()
 {
@@ -243,7 +243,7 @@ test_paillier_packing()
         assert(decagg == to_ZZ(plainagg));
     }
 }
-
+*/
 static void
 test_montgomery()
 {
@@ -541,7 +541,7 @@ main(int ac, char **av)
     test_ecjoin();
     test_search();
     test_paillier();
-    test_paillier_packing();
+    // test_paillier_packing();
     test_montgomery();
     test_skip32();
     test_online_ope();
