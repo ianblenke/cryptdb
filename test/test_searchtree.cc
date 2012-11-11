@@ -334,6 +334,8 @@ public:
 	    cerr << "usage: ./test_searchtree num_nodes_to_insert \n";
 	    return;
 	}
+
+	assert_s(!OPE_MODE, "this test is for the B tree and must not be in ope mode");
 	
 	uint no_elems = atoi(argv[1]);
 

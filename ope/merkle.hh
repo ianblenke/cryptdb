@@ -189,9 +189,9 @@ bool
 gt(string a, string b, BlockCipher * bc) {
     if (OPE_MODE) {
 	assert_s(bc, "null blockcipher!\n");
-	return bc->decrypt(TypeFromStr<V>(a)) >= bc->decrypt(TypeFromStr<V>(b));
+	return bc->decrypt(TypeFromStr<V>(a)) > bc->decrypt(TypeFromStr<V>(b));
     } else {
-	return (a>=b);
+	return (a>b);
     }
 }
 
@@ -213,9 +213,9 @@ bool
 eq(string a, string b, BlockCipher * bc) {
     if (OPE_MODE) {
 	assert_s(bc, "null blockcipher!\n");
-	return bc->decrypt(TypeFromStr<V>(a)) >= bc->decrypt(TypeFromStr<V>(b));
+	return bc->decrypt(TypeFromStr<V>(a)) == bc->decrypt(TypeFromStr<V>(b));
     } else {
-	return (a>=b);
+	return (a==b);
     }
 }
 
@@ -477,7 +477,7 @@ ins_elinfo(ElInfo ei, vector<ElInfo> & v, BC * bc = NULL) {
 	binary_search<V, BC>(v, ei.key, matched, pos, bc);
     }
     
-    assert_s(!matched, "ins_elinfo received key to insert that already existsin vector");
+    assert_s(!matched, "ins_elinfo received key to insert that already exists in vector");
     v.resize(v.size()+1);
     
     // must insert on pos + 1
