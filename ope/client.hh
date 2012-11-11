@@ -133,7 +133,10 @@ comm_thread(void * p) {
 	
 	cerr << "comm_th: waiting to receive \n";
         //Receive message to process
-        assert_s(recv(oc->csock, buffer, buflen, 0) > 0, "receive gets  <=0 bytes");
+	uint len = 0;
+        assert_s((len = recv(oc->csock, buffer, buflen, 0)) > 0,
+		 "receive gets  <=0 bytes");
+	cerr << "bytes received during interaction is " << len << "\n";
 	
 	cerr << "received " << buffer << "\n";
         istringstream iss(buffer);
@@ -218,13 +221,15 @@ check_proof(stringstream & ss, MsgType optype, V ins,
     if (optype == MsgType::ENC_INS) {
 	UpdateMerkleProof p;
 	p << ss;
-	verify_ins_merkle_proof<V, BC>(p, inserted, old_mroot, new_mroot, bc);
+	cerr << "proof i got " << p.pretty() << "\n";
+	assert_s(verify_ins_merkle_proof<V, BC>(p, inserted, old_mroot, new_mroot, bc),
+		 "client received incorrect insertion proof from server");
 	return;
     }
     if (optype == MsgType::QUERY) {
 	MerkleProof p;
 	p << ss;
-	verify_merkle_proof(p, old_mroot);
+	assert_s(verify_merkle_proof(p, old_mroot), "client received incorrect node merkle proof");
 	new_mroot = old_mroot;
 	return;
     }
@@ -236,7 +241,7 @@ uint64_t
 ope_client<V, BlockCipher>::encrypt(V pt, bool imode) {
 
     if (imode==false) {
-	std::cout<< "IMODE FALSE!" << std::endl;
+	std::cerr << "IMODE FALSE!" << std::endl;
     }
     
     MsgType optype;
@@ -251,7 +256,8 @@ ope_client<V, BlockCipher>::encrypt(V pt, bool imode) {
     msg << optype <<  " " << ct;
 
     cerr << "cl: sending message to server " << msg.str() <<"\n";
-    string res = send_receive(sock_query, msg.str(), 102400);    
+    string res = send_receive(sock_query, msg.str(), 102400);
+    cerr << "response size " << res.size() << "\n";
     cerr << "Result for " << pt << " is " << res << endl << endl;
 
     stringstream ss(res);
@@ -263,6 +269,8 @@ ope_client<V, BlockCipher>::encrypt(V pt, bool imode) {
 	check_proof<V, BlockCipher>(ss, optype, ct, merkle_root, new_mroot, bc);
 	merkle_root = new_mroot;
     }
+
+    cerr << "ope val is " << ope <<"\n";
     
     return ope;
 }

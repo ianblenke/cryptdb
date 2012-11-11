@@ -873,6 +873,7 @@ template<class V, class BC>
 static void
 sim_insert(State & st, ElInfo & ins_ei, BC * bc = NULL) {
 
+    // use find first here?
     int level = st.size() - 1;
     
     if (ins_elinfo<V, BC>(ins_ei, st[level].node.childr, bc)) {

@@ -383,10 +383,13 @@ bool verify_ins_merkle_proof(const UpdateMerkleProof & proof,
 
     if (DEBUG_PROOF) { std::cerr << "\n\n start verify\n";}
 
-    if (old_merkle_root != proof.old_hash()) {
-	std::cerr << "merkle hash of old state does not verify \n";
-	std::cerr << "hash of old state is " << proof.old_hash() << "\n";
-	return false;
+    if (old_merkle_root != "") {//TODO: remove this check; means client needs
+	// to be initialized with merkle root for empty tree
+	if (old_merkle_root != proof.old_hash()) {
+	    std::cerr << "merkle hash of old state does not verify \n";
+	    std::cerr << "hash of old state is " << proof.old_hash() << "\n";
+	    return false;
+	}
     }
 
     bool r = proof.check_ins_change<V, BC>(ins_target, bc);

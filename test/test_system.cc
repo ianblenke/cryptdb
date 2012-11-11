@@ -95,6 +95,7 @@ client_thread(void * ) {
 	ope_cl->encrypt(vals[i], true);
     }
 
+    cerr << "DONE!\n";
     return NULL;
 }
 
@@ -143,22 +144,24 @@ runtest(uint num_tests) {
     check_correct(s, vals);
 
     cerr << "OK!\n";
-
+    delete s;
 }
 
 static void
-run_client() {
+run_client(int num_tests) {
     
   cerr << "creating client...";
   ope_client<uint64_t, blowfish> * ope_cl = new ope_client<uint64_t, blowfish>(bc);
   cerr << " done \n";
   
-  for (int i = 0; i < 100; i++) {
+  for (int i = 0; i < num_tests; i++) {
       ope_cl->encrypt(i, true);
   }
 
+  cerr << "DONE!\n";
+  
   delete ope_cl;
- 
+
 }
 
 static void
@@ -173,8 +176,10 @@ run_server() {
 
 int main(int argc, char ** argv)
 {
-    if (argc == 2 && string(argv[1]) == "client") {
-	run_client();
+    assert_s(OPE_MODE, "code must be in OPE_MODE to run this test");
+    
+    if (argc == 3 && string(argv[1]) == "client") {
+	run_client(atoi(argv[2]));
 	return 0;
     }
     if (argc == 2 && string(argv[1]) == "server") {
@@ -188,7 +193,7 @@ int main(int argc, char ** argv)
     }
   
     //Test::test_search_tree();
-    cerr << "invalid options; nothing to run; options are: client OR server OR sys N \n";
+    cerr << "invalid options; nothing to run; options are: client n OR server OR sys N \n";
     //Test::testMerkleProof();
     //Test::test_transform();
 }
