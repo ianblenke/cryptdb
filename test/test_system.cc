@@ -92,6 +92,7 @@ client_thread(void * ) {
     cerr << "client created \n";
     
     for (uint i = 0; i < vals.size(); i++) {
+	cerr << "ENCRYPT " <<  i << "-th val: " << vals[i] << "\n";
 	ope_cl->encrypt(vals[i], true);
     }
 

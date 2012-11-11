@@ -186,38 +186,76 @@ format_concat(const std::string & key, uint key_size, const std::string & hash, 
 
 /******************* Checking proofs **********/
 
+template<class V, class BC>
+V get_dec(string a, BC * bc) {
+    assert_s(a != "", "cannot decrypt and compare to empty string");
+    assert_s(bc, "null blockcipher!\n");
+    return bc->decrypt(TypeFromStr<V>(a));
+}
 
 // greater than
-template<class V, class BlockCipher>
+template<class V, class BC>
 bool
-gt(string a, string b, BlockCipher * bc) {
+gt(string a, string b, BC * bc) {
     if (OPE_MODE) {
-	assert_s(bc, "null blockcipher!\n");
-	return bc->decrypt(TypeFromStr<V>(a)) > bc->decrypt(TypeFromStr<V>(b));
+	if (a == "" && b == "") {
+	    return false;
+	}  
+	if (a == "") {
+	    return false;
+	} 
+	if (b == "") {
+	    return true;
+	}
+	
+	V aa = get_dec<V,BC>(a, bc);
+	V bb = get_dec<V,BC>(b, bc);
+
+	return aa > bb;
     } else {
 	return (a>b);
     }
 }
 
+
 // greater or equal than
-template<class V, class BlockCipher>
+template<class V, class BC>
 bool
-ge(string a, string b, BlockCipher * bc) {
+ge(string a, string b, BC * bc) {
     if (OPE_MODE) {
-	assert_s(bc, "null blockcipher!\n");
-	return bc->decrypt(TypeFromStr<V>(a)) >= bc->decrypt(TypeFromStr<V>(b));
+
+	if (b == "") {
+	    return true;
+	} 
+	if (a == "") {
+	    return false;
+	}
+	
+	V aa = get_dec<V,BC>(a, bc);
+	V bb = get_dec<V,BC>(b, bc);
+
+	return aa>=bb;
     } else {
 	return (a>=b);
     }
 }
 
 // equals
-template<class V, class BlockCipher>
+template<class V, class BC>
 bool
-eq(string a, string b, BlockCipher * bc) {
+eq(string a, string b, BC * bc) {
     if (OPE_MODE) {
-	assert_s(bc, "null blockcipher!\n");
-	return bc->decrypt(TypeFromStr<V>(a)) == bc->decrypt(TypeFromStr<V>(b));
+	if (a == "" && b == "") {
+	    return true;
+	}
+	if (a == "" || b == "") {
+	    return false;
+	}
+	
+	V aa = get_dec<V,BC>(a, bc);
+	V bb = get_dec<V,BC>(b, bc);
+
+	return aa==bb;
     } else {
 	return (a==b);
     }
