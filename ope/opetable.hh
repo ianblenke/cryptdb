@@ -6,7 +6,9 @@
 #include <iostream>
 #include <map>
 
+
 #include <util/util.hh>
+#include <ope/tree.hh>
 
 // OPE encoding v||index|| 
 struct table_entry {
@@ -14,6 +16,8 @@ struct table_entry {
   
     uint64_t refcount;
     //int version;
+
+    TreeNode * n;
 };
 
 
@@ -33,8 +37,8 @@ public:
 
     // returns true if new table entry was not in the table and was inserted
     // returns false if encval existed (in which case refcount is incremented)
-    bool insert(EncT encval, uint64_t ope);
+    bool insert(EncT encval, uint64_t ope, TreeNode * n);
 
     // returns true if encval was in the table and was thus updated
-    bool update(EncT encval, uint64_t newope);
+    bool update(EncT encval, uint64_t newope, TreeNode * n);
 };

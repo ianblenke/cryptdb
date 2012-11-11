@@ -50,13 +50,9 @@ inline void Node::set_debug() {
 // a simple C++ array.
 
     for (int i=0; i<m_count && i<8; i++) {
-
         debug[i] = m_vector[i];
-
         if (m_vector[i].mp_subtree)
-
             m_vector[i].mp_subtree->set_debug();
-
     }
 
     for ( ; i<8; i++)
@@ -479,6 +475,12 @@ node_merkle_proof(Node * start_node) {
 
     return p;
 }
+
+MerkleProof
+BTree::merkle_proof(TreeNode * n) {
+    return node_merkle_proof((Node *)n);
+}
+
 
 
 static bool
@@ -1411,16 +1413,16 @@ BTree::get_root(){
 
 
 static void
-update_ot_help(OPETable<string> * ope_table, const Node * n, OPEType path, uint nbits) {
+update_ot_help(OPETable<string> * ope_table, Node * n, OPEType path, uint nbits) {
     cerr << "update node " << n << "\n";
     for (uint i = 0; i < n->m_count; i++) {
 	Elem e = n->m_vector[i];
 	if (i) {
 	    OPEType new_ope = compute_ope(path, nbits, i-1);
 	    //cerr << "update ot " << e.m_key << " -->  path, nbits, index " << path << "," << nbits << "," << i-1 << "=" << new_ope << "\n";
-	    bool r = ope_table->update(e.m_key, new_ope);
+	    bool r = ope_table->update(e.m_key, new_ope, n);
 	    if (!r) {
-		assert_s(ope_table->insert(e.m_key, new_ope), "could not insert in ope table");
+		assert_s(ope_table->insert(e.m_key, new_ope, n), "could not insert in ope table");
 	    }
 	}
 	if (e.mp_subtree) {
@@ -1466,10 +1468,11 @@ BTree::update_db(ChangeInfo & c) {
 
 
 void
-BTree::insert(string ciph, TreeNode * tnode, OPEType ope_path, uint64_t nbits, uint64_t index) {
+BTree::insert(string ciph, TreeNode * tnode,
+	      OPEType ope_path, uint64_t nbits, uint64_t index,
+	      UpdateMerkleProof & p) {
     Node * node = (Node *) tnode;
 
-    UpdateMerkleProof p;
     ChangeInfo ci;
     Elem ciph_elem = Elem(ciph);
     //cerr << "to insert "<< ciph_elem.pretty() <<"\n";

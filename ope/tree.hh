@@ -7,10 +7,9 @@
  **************/
 
 #include <util/ope-util.hh>
-#include <ope/opetable.hh>
 #include <edb/Connect.hh>
 #include <vector>
-
+#include <ope/merkle.hh>
 
 class TreeNode {
 public:    
@@ -38,8 +37,11 @@ public:
      */ 
     virtual void insert(std::string ciph,
 			TreeNode * node,
-			OPEType ope_path, uint64_t nbits, uint64_t index) = 0;
-
+			OPEType ope_path, uint64_t nbits, uint64_t index,
+	                UpdateMerkleProof & p) = 0;
+ 
+    /* Computes Merkle proof of node n */
+    virtual MerkleProof merkle_proof(TreeNode * n) = 0;
 };
 
 

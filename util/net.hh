@@ -30,7 +30,7 @@ int
 create_and_connect(std::string host_name, int host_port, bool fail = true);
 
 std::string
-send_receive(int sock, const std::string & msg);
+send_receive(int sock, const std::string & msg, uint size = 1024);
 
 #define MsgType(m)    \
     m(ENC_INS)		   \

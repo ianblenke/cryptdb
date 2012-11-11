@@ -661,7 +661,9 @@ static EncT TFromString(string s) {
 // index is position in node where insertion should happen
 template<class EncT>
 void
-Stree<EncT>::insert(string encval, TreeNode * tnode, uint64_t v, uint64_t nbits, uint64_t index){
+Stree<EncT>::insert(string encval, TreeNode * tnode,
+		    uint64_t v, uint64_t nbits, uint64_t index,
+		    UpdateMerkleProof & p){
     bool node_inserted;
 
     EncT eval = TFromString<EncT>(encval);
@@ -746,7 +748,7 @@ Stree<EncT>::update_shifted_paths(uint index, uint64_t v, int pathlen,
 	OPEType newope = compute_ope(v, pathlen, i);
 	OPEType oldope = this->ope_table->get(ckey).ope;
 	
-	this->ope_table->update(ckey, newope);
+	this->ope_table->update(ckey, newope, node);
 	update_db(oldope, newope);
     }
     
@@ -808,7 +810,7 @@ Stree<EncT>::tree_insert(Stree_node<EncT>* node,
 	node->keys.insert(it+index, encval);
 
 	// update ope table and db
-	assert_s(this->ope_table->insert(encval, compute_ope(v, pathlen, index)),
+	assert_s(this->ope_table->insert(encval, compute_ope(v, pathlen, index), node),
 		 "did not insert new entry in ope_table");
 	update_shifted_paths(index+1, v, pathlen, node);
 	clear_db_version();
@@ -1013,6 +1015,13 @@ Stree_node<EncT>::new_subtree(uint index) {
     Stree_node * subtree = new Stree_node();
     right[key] = subtree;
     return subtree;
+}
+
+template<class EncT>
+MerkleProof
+Stree<EncT>::merkle_proof(TreeNode * n) {
+    assert_s(false, "Stree node_merkle_proof UNIMPLEMENTED");
+    return MerkleProof();
 }
 
 template class Stree_node<uint64_t>;

@@ -57,8 +57,11 @@ public:
      * the position where it should be inserted
      * Requires that encval is not in tree.
      */
-    void insert(std::string encval, TreeNode * tnode, OPEType v, uint64_t nbits, uint64_t index);
+    void insert(std::string encval, TreeNode * tnode,
+		OPEType v, uint64_t nbits, uint64_t index,
+		UpdateMerkleProof & p);
 
+    MerkleProof merkle_proof(TreeNode * n);
 
     /*********** Helper methods **************/
     
@@ -126,7 +129,7 @@ struct Stree_node : public TreeNode
 
     //returns set of keys at this node
     std::vector<std::string> get_keys();
-    
+
     // Returns the subtree to the right of key if there is such a subtree, else
     // returns null 
     Stree_node<EncT> * has_subtree(EncT key);

@@ -187,6 +187,23 @@ typedef struct TempMKM {
 } TMKM;
 
 //=============  Useful functions =========================//
+template<class V>
+V
+TypeFromStr(std::string s){
+    V ret;
+    std::istringstream ss(s);
+    ss >> ret;
+    return ret;
+}
+
+template<class V>
+std::string
+StrFromType(V v) {
+    std::stringstream ss;
+    ss << v;
+    return ss.str();
+}
+
 
 bool
 IsMySQLTypeNumeric(enum_field_types t);

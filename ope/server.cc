@@ -72,6 +72,7 @@ Server::interaction(string ciph,
     
 }
 
+
 void 
 Server::handle_enc(int csock, istringstream & iss, bool do_ins) {
    
@@ -79,16 +80,24 @@ Server::handle_enc(int csock, istringstream & iss, bool do_ins) {
     iss >> ciph;
     if(DEBUG_COMM) cout<< "ciph: "<< ciph << endl;
 
-    string ope;
+
+    stringstream response;
+    response.clear();
     
     auto ts = ope_table->find(ciph);
+    
     if (ts) { // found in OPE Table
     	if (DEBUG) {cerr << "found in ope table"; }
-    	// if this is an insert, increase ref count
+
+  	// if this is an insert, increase ref count
     	if (do_ins) {
     	    ts->refcount++;
     	}
-	ope = opeToStr(ts->ope);
+	response << ts->ope << " ";
+
+	if (MALICIOUS) {
+	    ope_tree->merkle_proof(ts->n) >> response;
+	}
    	
     } else { // not found in OPE Table
     	if (DEBUG) {cerr << "not in ope table \n"; }
@@ -105,23 +114,35 @@ Server::handle_enc(int csock, istringstream & iss, bool do_ins) {
     	if (DEBUG) {cerr << "new ope_enc has "<< " path " << ope_path
     			 << " index " << index << "\n";}
     	if (do_ins) {
+
+	    UpdateMerkleProof proof;
     	    // insert in OPE Tree
             // ope_insert also updates ope_table
-    	    ope_tree->insert(ciph, tnode, ope_path, nbits, index);
+    	    ope_tree->insert(ciph, tnode, ope_path, nbits, index, proof);
 
             table_entry te = ope_table->get(ciph); // ciph must be in ope_table
-            ope = opeToStr(te.ope);            
+            response << opeToStr(te.ope);
+	    if (MALICIOUS) {
+		response <<  " ";
+		proof >> response;
+	    }
         } else{
 
             uint64_t ope_enc = compute_ope(ope_path, nbits, index);
 
-            //Subtract 1 b/c if ope points to existing value in tree, want this ope value
-            //to be less than 
-            ope = opeToStr(ope_enc-1);            
+            //Fr: Subtract 1 b/c if ope points to existing value in tree, want this ope value
+            //to be less than // Ra: ??
+            response << opeToStr(ope_enc-1);
+	    if (MALICIOUS) {
+		response << " ";
+		ope_tree->merkle_proof(tnode) >> response;
+	    }
         }
     }
     cerr << "replying to udf \n";
-    assert_s(send(csock, ope.c_str(), ope.size(), 0) == (int)ope.size(),
+    string res = response.str();
+    uint reslen = res.size();
+    assert_s(send(csock, res.c_str(), reslen, 0) == (int)reslen,
 	     "problem with send");
     
 }

@@ -10,6 +10,7 @@
 #include <ope/merkle.hh>
 #include <ope/tree.hh>
 #include <util/ope-util.hh>
+#include <ope/opetable.hh>
 
 // uint Merklecost = 0;
 
@@ -97,7 +98,6 @@ typedef std::list<LevelChangeInfo > ChangeInfo;
 class BTree : public Tree {
 public:
 
-
     BTree(OPETable<std::string> * ot, Connect * db);
     
     TreeNode * get_root();
@@ -105,8 +105,12 @@ public:
 //    Node* build_tree(std::vector< std::string> & key_list, RootTracker & root_tracker, int start, int end);
 //    Node* build_tree_wrapper(std::vector<std::string> & key_list, RootTracker & root_tracker, int start, int end);
 
-    void insert(std::string ciph, TreeNode * tnode, OPEType ope_path, uint64_t nbits, uint64_t index);
+    void insert(std::string ciph, TreeNode * tnode,
+		OPEType ope_path, uint64_t nbits, uint64_t index,
+		UpdateMerkleProof & p);
 
+     MerkleProof merkle_proof(TreeNode * n);
+    
     void update_db(ChangeInfo & c);
 
     

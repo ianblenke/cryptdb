@@ -58,13 +58,12 @@ create_and_connect(string host_name, int host_port, bool fail) {
 }
 
 std::string
-send_receive(int sock, const string & msg) {
+send_receive(int sock, const string & msg, uint buflen) {
 
     cerr << "send/receive; ------ \n to send  " << msg << "\n";
     assert_s(send(sock, msg.c_str(), msg.size(), 0) == (int)msg.size(),
 	     "error with send");
     
-    uint buflen = 1024;
     char buffer[buflen];
 	
     memset(buffer, '\0', buflen);

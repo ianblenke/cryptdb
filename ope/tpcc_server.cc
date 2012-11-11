@@ -58,7 +58,7 @@ update_entries(OPETable<std::string> & ope_table, Node* curr_node, uint64_t v, u
         ss << curr_node->m_vector[i].m_key;
         ss >> orig_val; */
         //std::cout<<"Inserting ("<<orig_val<<", "<<ope_enc<<") into ope_table"<<std::endl;
-        assert_s(ope_table.insert( curr_node->m_vector[i].m_key, ope_enc), "inserted table value already existing!");            
+        assert_s(ope_table.insert( curr_node->m_vector[i].m_key, ope_enc, curr_node), "inserted table value already existing!");            
 
     }
 

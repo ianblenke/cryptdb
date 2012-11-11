@@ -18,6 +18,8 @@
 #include <crypto/blowfish.hh>
 #include <util/static_assert.hh>
 #include <util/ope-util.hh>
+#include <ope/merkle.hh>
+#include <ope/btree.hh>
 
 
 #include <pthread.h>
@@ -57,32 +59,9 @@ public:
      * at the node found by the path
      */
  
-    uint64_t encrypt(V det, bool do_insert) const;
+    uint64_t encrypt(V det, bool do_insert);
 
 
-
-    /* OLD Determines the index of pt's predecesor given a node's key vector
-     * Returns -1 if pt is in the vector, 0 is if is smaller than all
-     * elements in the vector, or 1+index where index is the pred's index
-     * in the vector (1 is added due to my protocol, where 0 represents null)
-     */
-    //static int predIndex(std::vector<V> vec, V pt);
-    
-    /*Server protocol code:
-     * lookup(encrypted_plaintext) = 1
-     * lookup(v, nbits) = 2
-     * insert(v, nbits, index, encrypted_plaintext) = 3
-     * delete(v, nbits, index) = 4
-     */
-    
-    
-/*   V decrypt(uint64_t ct) const;
-     
-     void delete_value(V pt);
-     
-     //Function to tell tree server to insert plaintext pt w/ v, nbits
-     void insert(uint64_t v, uint64_t nbits, uint64_t index, V pt, V det) const;
-*/
 
     // encryption
     V block_decrypt(V ct) const;
@@ -98,6 +77,7 @@ public:
     struct sockaddr_in my_addr;
     string handle_interaction(istringstream & iss);   
 
+    string merkle_root;
 };
 
 
@@ -208,11 +188,6 @@ ope_client<V, BlockCipher>::ope_client(BlockCipher * bc) {
     
     this->bc = bc;
     
-
-#if MALICIOUS        
-    cur_merkle_hash="";
-#endif
-
     int rc = pthread_create(&net_thread, NULL, comm_thread<V, BlockCipher>, (void *)this);
     if (rc) {
 	cerr << "error: cannot create thread: " << rc << "\n";
@@ -240,35 +215,61 @@ ope_client<V, BlockCipher>::~ope_client(){
  */
 
 template<class V>
-V VFromString(string s){
-    V ret;
-    istringstream ss(s);
-    ss >> ret;
-    return ret;
+static void
+check_proof(stringstream & ss, MsgType optype, V ins,
+	    const string & old_mroot, string & new_mroot) {
+
+    string inserted = StrFromType<V>(ins);
+    if (optype == MsgType::ENC_INS) {
+	UpdateMerkleProof p;
+	p << ss;
+	verify_ins_merkle_proof(p, inserted, old_mroot, new_mroot);
+	return;
+    }
+    if (optype == MsgType::QUERY) {
+	MerkleProof p;
+	p << ss;
+	verify_merkle_proof(p, old_mroot);
+	new_mroot = old_mroot;
+	return;
+    }
+    assert_s(false, "invalid msg type when checking proof");
 }
 
 template<class V, class BlockCipher>
 uint64_t
-ope_client<V, BlockCipher>::encrypt(V pt, bool imode) const{
+ope_client<V, BlockCipher>::encrypt(V pt, bool imode) {
 
     if (imode==false) {
 	std::cout<< "IMODE FALSE!" << std::endl;
     }
     
-    ostringstream msg;
+    MsgType optype;
     if (imode) {
-	msg << MsgType::ENC_INS << " ";
+	optype = MsgType::ENC_INS;
     } else {
-	msg << MsgType::QUERY << " ";
+	optype = MsgType::QUERY;
     }
+    V ct = block_encrypt(pt);
 
-    msg << block_encrypt(pt);
+    ostringstream msg;
+    msg << optype <<  " " << ct;
 
     cerr << "cl: sending message to server " << msg.str() <<"\n";
-    string res = send_receive(sock_query, msg.str());
+    string res = send_receive(sock_query, msg.str(), 102400);    
     cerr << "Result for " << pt << " is " << res << endl << endl;
 
-    return VFromString<V>(res);
+    stringstream ss(res);
+    V ope;
+    ss >> ope;
+    
+    if (MALICIOUS) { // check Merkle proofs
+	string new_mroot;
+	check_proof<V>(ss, optype, ct, merkle_root, new_mroot);
+	merkle_root = new_mroot;
+    }
+    
+    return ope;
 }
 
 

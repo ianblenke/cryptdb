@@ -38,13 +38,14 @@ OPETable<EncT>::get(EncT encval) {
 
 template <class EncT>
 bool
-OPETable<EncT>::insert(EncT encval, uint64_t ope) {
+OPETable<EncT>::insert(EncT encval, uint64_t ope, TreeNode * n) {
     auto it = table.find(encval);
 
     if (it == table.end()) {
 	table_entry te;
 	te.ope = ope;
 	te.refcount = 1;
+	te.n = n;
 	table[encval] = te;
 
 	return true;
@@ -56,12 +57,13 @@ OPETable<EncT>::insert(EncT encval, uint64_t ope) {
 
 template <class EncT>
 bool
-OPETable<EncT>::update(EncT encval, uint64_t newope) {
+OPETable<EncT>::update(EncT encval, uint64_t newope, TreeNode * n) {
     auto it = table.find(encval);
 
     if (it == table.end()) {
 	return false;
     } else {
+	it->second.n = n;
 	it->second.ope = newope;
 	return true;
     }
