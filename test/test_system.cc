@@ -156,7 +156,7 @@ public:
         s = strFromVal(index);
         string r;
         for (uint i = 0; i < plain_size/8 - s.size(); i++) {
-        r = r + " ";
+	    r = r + " ";
         }
         s = r + s;
         assert_s(s.size() == plain_size/8, "logic error");
@@ -250,8 +250,8 @@ runtest() {
 	vector<string> vs = get_uniq_wload<string>(num_tests, plain_size, RANDOM);
 	vals = (void *) &vs;
     } else {
-	   vector<string> vs = get_uniq_wload<string>(num_tests, plain_size, RANDOM);
-	   vals = (void *) &vs;
+	vector<string> vs = get_uniq_wload<string>(num_tests, plain_size, RANDOM);
+	vals = (void *) &vs;
     }
            
     pid_t pid = fork();
@@ -416,9 +416,11 @@ measure_bclo_instance(uint n, bclo_conf c) {
     for (uint i = 0; i < n; i++) {
         NTL::ZZ pv;
         A plaintext = WorkloadGen<A>::get_query(i, c.plain_size, c.w);
-        if (c.plain_size == 32 || c.plain_size == 64) {
-            pv = NTL::to_ZZ(plaintext);
-        } else {
+        if (c.plain_size == 32) { 
+            pv = plaintext;
+        } else if (c.plain_size == 64) {
+	    pv = plaintext;
+	}  else {
             pv = plaintext;
         }
         chain = ope->encrypt(pv);
