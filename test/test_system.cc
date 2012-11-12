@@ -211,37 +211,123 @@ run_server() {
 
     delete serv;
 }
+enum workload {INCREASING, RANDOM};
+
+struct our_conf {
+    vector<uint> num_elems;
+    workload w;
+    uint ciph_size;
+    bool is_malicious;
+};
+
+struct bclo_conf {
+    vector<uint> num_elems;
+    workload w;
+    uint ciph_size;
+    bool use_cache;
+};
+
+static
+void measure_ours(our_conf c) {
+    
+}
+
+static
+void measure_bclo(bclo_conf c) {
+    cerr << "unimplemented\n";
+}
+
+
+vector<our_conf> our_confs =
+{// num_elems              workload       ciph_size    is_malicious
+    {{10,100,1000},       INCREASING,      64,           false},
+    {{10, 100, 1000},       RANDOM,        64,           false},
+    {{10,100,1000},       INCREASING,      64,           true},
+    {{10,100,1000},       RANDOM,          64,           true},
+    {{10,100,1000},       INCREASING,      128,          false},
+    {{10, 100, 1000},       RANDOM,        128,          false},
+    {{10,100,1000},       INCREASING,      128,          true},
+    {{10,100,1000},       RANDOM,          128,          true},
+};
+
+
+vector<bclo_conf> BCLO_confs =
+{// num_elems               type          ciph_size       cache
+    {{10,100,1000, 10000},
+                            INCREASING,      32,           false},
+    {{10,100,1000, 10000},
+                            INCREASING,      64,          false},
+    {{10,100,1000, 10000},
+                            INCREASING,      128,          false},
+    {{10,100,1000, 10000},
+                            INCREASING,      256,          false},
+};
+
+static void
+test_bench() {
+    cerr << "Our scheme:\n";
+    for (auto c : our_confs) {
+	measure_ours(c);
+    }
+    
+    cerr << "BCLO'09 scheme: \n";
+    for (auto c: BCLO_confs) {
+	measure_bclo(c);
+    }
+    cerr << "DONE\n";
+}
 
 
 int main(int argc, char ** argv)
 {
     assert_s(OPE_MODE, "code must be in OPE_MODE to run this test");
 
-    if (argc != 5) {
-	cerr << "usage ./test testname (client, server, sys) ciph_size(64,>=128) num_tests is_malicious(0/1)\n";
+    if (argc > 5 || argc < 2) {
+	cerr << "usage ./test client ciph_size(64,>=128) num_tests is_malicious(0/1)\n \
+                 OR ./test server is_malicious \
+                 OR ./test sys ciph_size num_tests is_malicious \
+                 OR ./test bench \n";
 	return 0;
     }
-
-    ciph_size = atoi(argv[2]);
-    num_tests = atoi(argv[3]);
-    is_malicious = atoi(argv[4]);
-    vals = get_random(num_tests);
     
-    if (string(argv[1]) == "client") {
+    if (argc == 5 && string(argv[1]) == "client") {
+	
+	ciph_size = atoi(argv[2]);
+	num_tests = atoi(argv[3]);
+	is_malicious = atoi(argv[4]);
+	vals = get_random(num_tests);
+
 	client_thread();
 	return 0;
     }
-    if (string(argv[1]) == "server") {
+    if (argc == 3 && string(argv[1]) == "server") {
+	is_malicious = atoi(argv[2]);
 	run_server();
 	return 0;
     }
 
-    if (string(argv[1]) == "sys") {
+    if (argc==5 && string(argv[1]) == "sys") {
+	
+	ciph_size = atoi(argv[2]);
+	num_tests = atoi(argv[3]);
+	is_malicious = atoi(argv[4]);
+	vals = get_random(num_tests);
+
 	runtest();
 	return 0;
     }
+
+    if (argc == 2 && string(argv[1]) == "bench") {
+	test_bench();
+	return 0;
+    }
     
-    cerr << "invalid test name: client, server, or sys\n";
+    cerr << "invalid test\n";
+    cerr << "usage ./test client ciph_size(64,>=128) num_tests is_malicious(0/1)\n \
+                 OR ./test server is_malicious \
+                 OR ./test sys ciph_size num_tests is_malicious \
+                 OR ./test bench \n";
+    
 
     return 0;
 }
