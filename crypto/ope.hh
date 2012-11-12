@@ -18,8 +18,8 @@ class ope_domain_range {
 
 class OPE {
  public:
-    OPE(const std::string &keyarg, size_t plainbits, size_t cipherbits)
-    : key(keyarg), pbits(plainbits), cbits(cipherbits), aesk(aeskey(key)) {}
+    OPE(const std::string &keyarg, size_t plainbits, size_t cipherbits, bool use_caching = true)
+    : key(keyarg), pbits(plainbits), cbits(cipherbits), caching(use_caching), aesk(aeskey(key)) {}
 
     NTL::ZZ encrypt(const NTL::ZZ &ptext);
     NTL::ZZ decrypt(const NTL::ZZ &ctext);
@@ -33,6 +33,7 @@ class OPE {
 
     std::string key;
     size_t pbits, cbits;
+    bool caching;
 
     AES aesk;
     std::map<NTL::ZZ, NTL::ZZ> dgap_cache;
