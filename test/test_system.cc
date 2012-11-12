@@ -397,23 +397,21 @@ template <class A>
 static void
 measure_bclo_instance(uint n, bclo_conf c) {
     OPE* ope = new OPE(passwd, c.plain_size, c.plain_size * 2, c.use_cache);
-    NTL::ZZ chain;
+    NTL::ZZ ope_enc, pt;
 
     Timer t;
     for (uint i = 0; i < n; i++) {
-        NTL::ZZ pv;
         A plaintext = WorkloadGen<A>::get_query(i, c.plain_size, c.w);
-        if (c.plain_size == 32) { 
-            pv = plaintext;
-        } else if (c.plain_size == 64) {
-	    pv = plaintext;
-	}  else {
-            pv = plaintext;
-        }
-        chain = ope->encrypt(pv);
-        if (chain == NTL::to_ZZ(0) ) {
-            cerr << "chain is 0 in bclo";
-            assert_s(ope->decrypt(chain) == pv, "encryption for int not right");
+        pt = plaintext;
+        ope_enc = ope->encrypt(pt);
+
+        //Do not want this assert during actual timing. Comment out.
+        //assert_s(ope->decrypt(ope_enc) == pt, "encryption for int not right");
+
+        //Chaining to ensure compile doesn't optimize out some loops
+        if (ope_enc == NTL::to_ZZ(0) ) {
+            cerr << "ope_enc is 0 in bclo";
+            assert_s(ope->decrypt(ope_enc) == pt, "encryption for int not right");
         }
     }
     uint64_t time_interval = t.lap();

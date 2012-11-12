@@ -148,7 +148,18 @@ uint64FromZZ(ZZ val)
     return res;
 }
 
-
+uint32_t
+uint32FromZZ(ZZ val)
+{
+    uint32_t res = 0;
+    uint32_t mul = 1;
+    while (val > 0) {
+        res = res + mul*(to_int(val % 10));
+        mul = mul * 10;
+        val = val / 10;
+    }
+    return res;
+}
 
 
 string
@@ -253,6 +264,24 @@ void ZZFromBytesFast(ZZ& x, const unsigned char *p, long n) {
 
 ZZ
 ZZFromUint64 (uint64_t value)
+{
+    unsigned int unit = 256;
+    ZZ power;
+    power = 1;
+    ZZ res;
+    res = 0;
+
+    while (value > 0) {
+        res = res + ((long int)value % unit) * power;
+        power = power * unit;
+        value = value / unit;
+    }
+    return res;
+
+};
+
+ZZ
+ZZFromUint32 (uint32_t value)
 {
     unsigned int unit = 256;
     ZZ power;
