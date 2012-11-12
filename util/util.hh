@@ -187,28 +187,36 @@ typedef struct TempMKM {
 } TMKM;
 
 //=============  Useful functions =========================//
-template<class V>
-V
-TypeFromStr(std::string s){
-    V ret;
-    std::istringstream ss(s);
-    ss >> ret;
-    return ret;
-}
+
 
 template<class V>
-std::string
-StrFromType(V v) {
-    std::stringstream ss;
-    ss << v;
-    return ss.str();
-}
+class Cnv {
+public:
+    static std::string StrFromType(V v){
+	 std::stringstream ss;
+	 ss << v;
+	 return ss.str();
+    }
 
-std::string
-TypeFromStr(std::string v);
+    static V TypeFromStr(std::string s) {
+	  V ret;
+	  std::istringstream ss(s);
+	  ss >> ret;
+	  return ret;
+    }
+};
 
-std::string
-StrFromType(std::string v);
+template<>
+class Cnv<std::string>{
+public:
+    static std::string StrFromType(std::string v) {
+	return v;
+    }
+    static std::string TypeFromStr(std::string v) {
+	return v;
+    }
+};
+
 
 
 bool

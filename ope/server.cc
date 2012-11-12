@@ -32,14 +32,16 @@ Server::interaction(string ciph,
     	stringstream msg;
     	msg.clear();
     	msg << MsgType::INTERACT_FOR_LOOKUP << " ";
-    	msg << ciph << " ";
+    	marshall_binary(msg, ciph);
+	msg << " ";
 
 	vector<string> keys = curr->get_keys();
     	uint len = keys.size();
     	msg << len << " ";
 
     	for (uint i = 0; i < len; i++) {
-    	    msg << keys[i] << " ";
+    	    marshall_binary(msg, keys[i]);
+	    msg << " ";
     	}
 
 	cerr << "sending " << msg.str() << "\n";
@@ -76,8 +78,8 @@ Server::interaction(string ciph,
 void 
 Server::handle_enc(int csock, istringstream & iss, bool do_ins) {
    
-    string ciph;
-    iss >> ciph;
+    string ciph = unmarshall_binary(iss);
+    
     if(DEBUG_COMM) cout<< "ciph: "<< ciph << endl;
 
 
@@ -139,9 +141,11 @@ Server::handle_enc(int csock, istringstream & iss, bool do_ins) {
 	    }
         }
     }
-    cerr << "replying to udf \n";
+    cerr << "replying to request \n";
     string res = response.str();
     uint reslen = res.size();
+    // cerr << "sending\n" <<res << "\n";
+    cerr << "sent " << reslen << " bytes \n";
     assert_s(send(csock, res.c_str(), reslen, 0) == (int)reslen,
 	     "problem with send");
     

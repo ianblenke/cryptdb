@@ -106,19 +106,6 @@ client64() {
 }
 
 static void
-client32() {
-    cerr << "creating uint32, blowfish client...";
-    ope_client<uint32_t, blowfish> * ope_cl = new ope_client<uint32_t, blowfish>(bc);
-    cerr << "client created \n";	
-    
-    for (uint i = 0; i < vals.size(); i++) {
-	    cerr << "ENCRYPT " <<  i << "-th val: " << vals[i] << "\n";
-	    ope_cl->encrypt(vals[i], true);
-    }
-    cerr << "DONE!\n";
-}
-
-static void
 client128() {
     cerr << "creating string, aes cbc client...";
     ope_client<string, aes_cbc> * ope_cl = new ope_client<string, aes_cbc>(bc_aes);
@@ -141,17 +128,12 @@ client_thread() {
 	return;
     }
 
-    if (ciph_size == 32) {
-	client32();
-	return;
-    }
-
     if (ciph_size >= 128) {
 	client128();
 	return;
     }
 
-    assert_s(false, "not recognized ciphertext size; accepting 32, 64, >= 128\n");
+    assert_s(false, "not recognized ciphertext size; accepting 64, >= 128\n");
     return;
 }
 
@@ -235,7 +217,7 @@ int main(int argc, char ** argv)
     assert_s(OPE_MODE, "code must be in OPE_MODE to run this test");
 
     if (argc != 4) {
-	cerr << "usage ./test testname (client, server, sys) ciph_size(32,64,>=128) num_tests\n";
+	cerr << "usage ./test testname (client, server, sys) ciph_size(64,>=128) num_tests\n";
 	return 0;
     }
 

@@ -8,6 +8,7 @@
 #include "btree.hh"
 #include <util/ope-util.hh>
 #include <crypto/blowfish.hh>
+#include <crypto/aes_cbc.hh>
 
 
 using namespace std;
@@ -1416,10 +1417,10 @@ BTree::insert(string ciph, TreeNode * tnode,
     ChangeInfo ci;
     Elem ciph_elem = Elem(ciph);
 
-    //   cerr << "remove code here:\n";
-//    string old_merkle = tracker->get_root()->merkle_hash;
-//    cerr << "old_merkle is " << old_merkle << "\n";
-    
+    cerr << "remove code here:\n";
+    string old_merkle = tracker->get_root()->merkle_hash;
+    cerr << "old_merkle is " << old_merkle << "\n";
+   
     //cerr << "to insert "<< ciph_elem.pretty() <<"\n";
     assert_s(node->m_vector[index].mp_subtree == NULL, "node is not terminal node!");
     node->do_insert(ciph_elem, p, ci, index+1);
@@ -1428,17 +1429,17 @@ BTree::insert(string ciph, TreeNode * tnode,
     //update ope table and DB
     update_ot(opetable, ci.back().node);
 
-//    cerr << "remove proof check code below\n";
-//    string new_merkle;
-//    assert_s(verify_ins_merkle_proof<uint64_t, blowfish>(p, ciph,
-//							 old_merkle, new_merkle,
-//							 new blowfish(passwd)),
-//	     "proof verification fails");
-//    assert_s(new_merkle == tracker->get_root()->merkle_hash, "new merkle root is incorrect");
-//    cerr << "verification holds server-side\n";
-
-//   cerr <<"proof is " << p.pretty() << "\n";
+    cerr << "remove proof check code below\n";
+    string new_merkle;
+    assert_s(verify_ins_merkle_proof<string, aes_cbc>(p, ciph,
+						      old_merkle, new_merkle,
+						      new aes_cbc(passwd, true)),
+	     "proof verification fails");
+    assert_s(new_merkle == tracker->get_root()->merkle_hash, "new merkle root is incorrect");
+    cerr << "verification holds server-side\n";
     
+    cerr <<"proof is " << p.pretty() << "\n";
+   
  
     if (WITH_DB) {
 	update_db(ci);

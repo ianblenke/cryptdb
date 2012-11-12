@@ -25,6 +25,11 @@ using std::cerr;
 using std::max;
 
 
+std::ostream &
+marshall_binary(std::ostream & o, const string & hash);
+
+std::string
+unmarshall_binary(std::istream & o);
 
 // Represents one element: its key and the hash of its subtree
 struct ElInfo {
@@ -190,7 +195,7 @@ template<class V, class BC>
 V get_dec(string a, BC * bc) {
     assert_s(a != "", "cannot decrypt and compare to empty string");
     assert_s(bc, "null blockcipher!\n");
-    return bc->decrypt(TypeFromStr<V>(a));
+    return bc->decrypt(Cnv<V>::TypeFromStr(a));
 }
 
 // greater than

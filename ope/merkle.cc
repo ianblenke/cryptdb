@@ -7,15 +7,46 @@
 using namespace std;
 
 
-static ostream &
-marshall_binary(ostream & o, string & hash) {
+
+ostream &
+marshall_binary(ostream & o, const string & hash) {
     uint len = hash.size();
     
     o << len << " ";
 
-    o.write(hash.c_str(), len);
+    for (uint i = 0; i < len; i++) {
+	o << (int)hash[i] << " ";
+    }
+
+    return o;
+}
+
+string
+unmarshall_binary(istream & o) {
+    uint size;
+    o >> size;
+
+    char h[size];
+    
+    for (uint i = 0 ; i < size; i++) {
+	int c = 0;
+	o >> c;
+	h[i] = (char)c;
+    }
+    return string(h, size);    
+}
+/*
+static ostream &
+marshall_binary(ostream & o, string & hash) {
+    uint len = hash.size();
+
+    cerr << "binary len " << len <<"\n";
+    o << len << " ";
+
+      o.write(hash.c_str(), len);
     o << " ";
-  
+    
+    
     return o;
 }
 
@@ -24,15 +55,21 @@ unmarshall_binary(istream & o) {
     uint size;
     o >> size;
 
-    char b[1];
+    assert_s(size < 1024, "size too large");
+    cerr << "read binary len " << size << "\n";
+
+   char b[1];
     o.read(b, 1);
+    assert_s(b[0] == ' ', "space expected");
     
     char h[size];
     o.read(h, size);
-  
-    return string(h, size);    
-}
 
+
+    return string(h, size);    
+  
+}
+*/
 /**** ElInfo ******/
 
 ostream &

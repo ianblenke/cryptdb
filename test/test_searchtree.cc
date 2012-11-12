@@ -151,7 +151,7 @@ public:
 	cerr << "Testing B tree.. \n";
 
 	// Frequency of testing certain aspects
-	uint no_inserted_checks =  int(sqrt(no_elems)) + 1;
+	uint no_inserted_checks = 1; // int(sqrt(no_elems)) + 1;
 	uint no_not_in_tree = 10; //no_inserted_checks;
 	//uint delete_freq = 2; //one in deletes_freq will be deleted
 	uint period_Merkle_check = no_inserted_checks;

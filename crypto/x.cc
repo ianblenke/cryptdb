@@ -184,6 +184,7 @@ test_paillier()
         assert(sk0 == sk1);
     }
 }
+
 /*
 static void
 test_paillier_packing()
@@ -523,7 +524,8 @@ main(int ac, char **av)
 {
     test_marshall();
     test_aes_cbc();
-     
+
+    
     urandom u;
     cout << u.rand<uint64_t>() << endl;
     cout << u.rand<int64_t>() << endl;
@@ -547,6 +549,7 @@ main(int ac, char **av)
     blowfish bf(u.rand_string(128));
     test_block_cipher(&bf, &u, "blowfish");
 
+    
     skip32 s32(u.rand_vec<uint8_t>(10));
     test_block_cipher(&s32, &u, "skip32");
 

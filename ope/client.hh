@@ -70,7 +70,7 @@ public:
     // merkle
     string merkle_root;
 
-     string handle_interaction(istringstream & iss);   
+    string handle_interaction(istringstream & iss);   
 };
 
 
@@ -89,13 +89,15 @@ ope_client<V, BC>::handle_interaction(istringstream & iss){
         V det, pt, tmp_pt;
         int size, index;
 
-        iss >> det >> size;
+        det = Cnv<V>::TypeFromStr(unmarshall_binary(iss));
+
+	iss >> size;
 
         pt = bc->decrypt(det);
 
         for(index=0; index<size; index++){
 	    V tmp_key;
-	    iss >> tmp_key;
+	    tmp_key = Cnv<V>::TypeFromStr(unmarshall_binary(iss));
             tmp_pt = bc->decrypt(tmp_key);
 
             if (tmp_pt >= pt){
@@ -214,7 +216,7 @@ static void
 check_proof(stringstream & ss, MsgType optype, V ins,
 	    const string & old_mroot, string & new_mroot, BC * bc) {
 
-    string inserted = StrFromType<V>(ins);
+    string inserted = Cnv<V>::StrFromType(ins);
     if (optype == MsgType::ENC_INS) {
 	UpdateMerkleProof p;
 	p << ss;
@@ -234,7 +236,7 @@ check_proof(stringstream & ss, MsgType optype, V ins,
 }
 
 template<class V, class BlockCipher>
-uint64_t
+OPEType
 ope_client<V, BlockCipher>::encrypt(V pt, bool imode) {
 
     if (imode==false) {
@@ -250,12 +252,14 @@ ope_client<V, BlockCipher>::encrypt(V pt, bool imode) {
     V ct = bc->encrypt(pt);
 
     ostringstream msg;
-    msg << optype <<  " " << ct;
+    msg << optype <<  " ";
+    marshall_binary(msg, Cnv<V>::StrFromType(ct));
+    msg << " ";
 
     cerr << "cl: sending message to server " << msg.str() <<"\n";
     string res = send_receive(sock_query, msg.str(), 102400);
     cerr << "response size " << res.size() << "\n";
-    cerr << "Result for " << pt << " is " << res << endl << endl;
+    cerr << "Result for " << pt << " is\n" << res << endl << endl;
 
     stringstream ss(res);
     OPEType ope;
