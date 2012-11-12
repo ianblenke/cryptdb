@@ -135,6 +135,7 @@ public:
 
 template<>
 class WorkloadGen<uint32_t> {
+public:
     static uint32_t get_query(uint index, uint plain_size, workload w) {
 	assert_s(plain_size == 32,"logic error");
 	if (w == INCREASING) {
@@ -144,6 +145,34 @@ class WorkloadGen<uint32_t> {
 	}
     }
 };
+
+ 
+template<>
+class WorkloadGen<NTL::ZZ> {
+public:
+    static NTL::ZZ get_query(uint index, uint plain_size, workload w) {
+    string s;
+    if (w == INCREASING) {
+        s = strFromVal(index);
+        string r;
+        for (uint i = 0; i < plain_size/8 - s.size(); i++) {
+        r = r + " ";
+        }
+        s = r + s;
+        assert_s(s.size() == plain_size/8, "logic error");
+    } else {
+        s = randomBytes(plain_size);
+    }
+    NTL::ZZ return_zz;
+    for(uint i = 0; i < (uint) s.size(); i++){
+            return_zz = return_zz * 256 + (int) s[i];
+    }  
+
+    return return_zz;
+    }
+};
+
+
 
 template<class A>
 static vector<A>
@@ -304,84 +333,6 @@ struct bclo_conf {
     workload w;
     uint plain_size;
     bool use_cache;
-};
-
-template<class A>
-class WorkloadGen {
-public:
-    static A get_query(uint index, uint plain_size, workload w) {
-	return (A) NULL;
-    }
-};
-
-template<>
-class WorkloadGen<string> {
-public:
-    static string get_query(uint index, uint plain_size, workload w) {
-	if (w == INCREASING) {
-	    string s = strFromVal(index);
-	    string r;
-	    for (uint i = 0; i < plain_size/8 - s.size(); i++) {
-		r = r + " ";
-	    }
-	    s = r + s;
-	    assert_s(s.size() == plain_size/8, "logic error");
-	    return s;
-	}
-	// random
-	return randomBytes(plain_size);
-    }
-};
-
-template<>
-class WorkloadGen<NTL::ZZ> {
-public:
-    static NTL::ZZ get_query(uint index, uint plain_size, workload w) {
-    string s;
-    if (w == INCREASING) {
-        s = strFromVal(index);
-        string r;
-        for (uint i = 0; i < plain_size/8 - s.size(); i++) {
-        r = r + " ";
-        }
-        s = r + s;
-        assert_s(s.size() == plain_size/8, "logic error");
-    } else {
-        s = randomBytes(plain_size);
-    }
-    NTL::ZZ return_zz;
-    for(uint i = 0; i < (uint) s.size(); i++){
-            return_zz = return_zz * 256 + (int) s[i];
-    }  
-
-    return return_zz;
-    }
-};
-
-template<>
-class WorkloadGen<uint64_t> {
-public:
-    static uint64_t get_query(uint index, uint plain_size, workload w) {
-	assert_s(plain_size == 64,"logic error");
-	if (w == INCREASING) {
-	    return (uint64_t)index;
-	} else {
-	    return (uint64_t) rand();
-	}
-    }
-};
-
-template<>
-class WorkloadGen<uint32_t> {
-public:
-    static uint32_t get_query(uint index, uint plain_size, workload w) {
-	assert_s(plain_size == 32,"logic error");
-	if (w == INCREASING) {
-	    return (uint32_t)index;
-	} else {
-	    return (uint32_t) rand();
-	}
-    }
 };
 
     
