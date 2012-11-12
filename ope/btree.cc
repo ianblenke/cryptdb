@@ -140,7 +140,9 @@ Node::Node(RootTracker * root_track)  : m_root(root_track) {
     
     insert_zeroth_subtree (0);
 
-    merkle_hash = hash_node();
+    if (MALICIOUS) {
+	merkle_hash = hash_node();
+    }
 }
 
  
@@ -376,8 +378,10 @@ bool Node::split_insert (Elem& element, ChangeInfo & ci, int index) {
     new_node->mp_parent = mp_parent;
 
     // --- Merkle ----------------
-    new_node->update_merkle();
-    update_merkle_upward();
+    if (MALICIOUS) {
+	new_node->update_merkle();
+	update_merkle_upward();
+    }
     //-----------------------------
     
     uint upward_index = index_has_subtree() + 1;
@@ -409,7 +413,9 @@ bool Node::split_insert (Elem& element, ChangeInfo & ci, int index) {
 	ci.push_back(LevelChangeInfo(new_root, NULL, -1));
 
 	//----Merkle----------
-	update_merkle_upward();
+	if (MALICIOUS) {
+	    update_merkle_upward();
+	}
 	//--------------------
 
     }
@@ -618,7 +624,9 @@ void Node::update_merkle_upward() {
 bool Node::do_insert(Elem element, UpdateMerkleProof & p, ChangeInfo & c, int index) {
     // ---- Merkle -----
     // last_visited_ptr is the start point for the proof
-    record_state(this, p.st_before);
+    if (MALICIOUS) {
+	record_state(this, p.st_before);
+    }
     // -----------------
 
     // ---- bench ----
@@ -634,8 +642,10 @@ bool Node::do_insert(Elem element, UpdateMerkleProof & p, ChangeInfo & c, int in
         // -----Merkle ----
 	// done making the changes for insert so update merkle hash and record
 	// new state
-	update_merkle_upward();
-	record_state(this, p.st_after);
+	if (MALICIOUS) {
+	    update_merkle_upward();
+	    record_state(this, p.st_after);
+	}
 	// ----------------
 	
         return true;
@@ -647,8 +657,10 @@ bool Node::do_insert(Elem element, UpdateMerkleProof & p, ChangeInfo & c, int in
     // -----Merkle ----
     // done making the changes for insert so update merkle hash and record
     // new state
-    update_merkle_upward();
-    record_state(this, p.st_after);
+    if (MALICIOUS) {
+	update_merkle_upward();
+	record_state(this, p.st_after);
+    }
     // ----------------
 
     return r;  
@@ -733,8 +745,10 @@ Node::tree_delete(Elem & target, UpdateMerkleProof & proof) {
 
 	// ---- Merkle ------
 	// record old state
-	start_node = node2;
-	record_state(start_node, proof.st_before);
+	if (MALICIOUS) {
+	    start_node = node2;
+	    record_state(start_node, proof.st_before);
+	}
 	// -----------------
 
         found.m_key = smallest_in_subtree.m_key;
@@ -744,8 +758,10 @@ Node::tree_delete(Elem & target, UpdateMerkleProof & proof) {
     } else {
 	// ---- Merkle ----------------
 	// This node is starting point for change
-	start_node = node;
-	record_state(node, proof.st_before);
+	if (MALICIOUS) {
+	    start_node = node;
+	    record_state(node, proof.st_before);
+	}
 	// ------------------------------
 
 	r = tree_delete_help(target, proof, start_node, node);
@@ -753,9 +769,11 @@ Node::tree_delete(Elem & target, UpdateMerkleProof & proof) {
     }
 
     // --- Merkle -------
-    start_node->update_merkle_upward();
+    if (MALICIOUS) {
+	start_node->update_merkle_upward();
 
-    record_state(start_node, proof.st_after);
+	record_state(start_node, proof.st_after);
+    }
     // --------------
     
     return r;
