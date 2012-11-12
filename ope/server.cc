@@ -217,7 +217,7 @@ void Server::work() {
 
     int csock = accept(sock_req, (struct sockaddr*) &sadr, &addr_size);
     assert_s(csock >= 0, "Server accept failed!");
-    cerr << "Server received connection \n";
+    if (DEBUG_COMM) cerr << "Server received connection \n";
     
        
     uint buflen = 10240;
@@ -230,7 +230,7 @@ void Server::work() {
 	
 	uint len = recv(csock, buffer, buflen, 0);
 	if (len  == 0) {
-	    cerr << "client closed connection\n";
+	    if (DEBUG_COMM) cerr << "client closed connection\n";
 	    close(csock);
 	    break;
 	}
@@ -242,7 +242,7 @@ void Server::work() {
 	dispatch(csock, iss);
     }
 
-    cerr << "Server exits!\n";
+    if (DEBUG_COMM) cerr << "Server exits!\n";
 
 }
 

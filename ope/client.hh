@@ -172,17 +172,17 @@ ope_client<V, BlockCipher>::ope_client(BlockCipher * bc, bool malicious) {
     if (listen_rtn < 0) {
 	cerr << "Error listening to socket" << endl;
     }
-    cerr << "Listening \n";
+    if (DEBUG_BARE) cerr << "Listening \n";
 
     socklen_t addr_size = sizeof(sockaddr_in);
     struct sockaddr_in sadr;
 
     csock = accept(sock, (struct sockaddr*) &sadr, &addr_size);    
     assert_s(csock >= 0, "Client failed to accept connection");
-    cerr << "accepted connection (from server hopefully)\n";
+    if (DEBUG_BARE) cerr << "accepted connection (from server hopefully)\n";
 
     while ((sock_query = create_and_connect(OPE_SERVER_HOST, OPE_SERVER_PORT, false)) < 0) {
-	cerr << "server still not up\n";
+	if (DEBUG_BARE) cerr << "server still not up\n";
 	sleep(1);
     }
     
@@ -202,7 +202,7 @@ ope_client<V, BlockCipher>::~ope_client(){
     close(sock_query);
     close(csock);    
     close(sock);
-    cerr<<"Done with client, closing now\n";
+    if (DEBUG_BARE) cerr<<"Done with client, closing now\n";
     delete bc;
 }
 
@@ -226,7 +226,7 @@ check_proof(stringstream & ss, MsgType optype, V ins,
 	if (DEBUG_COMM) {cerr << "proof i got " << p.pretty() << "\n";}
 	assert_s(verify_ins_merkle_proof<V, BC>(p, inserted, old_mroot, new_mroot, bc),
 		 "client received incorrect insertion proof from server");
-	cerr << "proof verified\n";
+	if (DEBUG_COMM) cerr << "proof verified\n";
 	return;
     }
     if (optype == MsgType::QUERY) {

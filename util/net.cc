@@ -53,7 +53,7 @@ create_and_connect(string host_name, int host_port, bool fail) {
 	    return -1;
 	}
     }
-    cerr << "connected \n";
+    if (DEBUG_BARE) cerr << "connected \n";
 
     return hsock;
 }

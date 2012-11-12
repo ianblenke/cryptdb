@@ -27,9 +27,10 @@ static aes_cbc * bc_aes = new aes_cbc(passwd, true);
 
 static uint plain_size = 0;
 static uint num_tests = 0;
-vector<uint64_t> vals;
+void * vals;
 bool is_malicious;
 
+enum workload {INCREASING, RANDOM};
 
 
 template<class V, class BC>
@@ -52,17 +53,16 @@ check_order(OPETable<string> * ot, list<string> & vals, BC * bc) {
 
 template<class V, class BC>
 static void
-check_order_and_values(OPETable<string> * ot, vector<uint64_t> & input_vals,
+check_order_and_values(OPETable<string> * ot, vector<V> & input_vals,
 		       list<string> & tree_vals, BC * bc) {
 
-    cerr << "-- check values\n";
+    if (DEBUG_EXP) cerr << "-- check values\n";
     for (string tree_val : tree_vals) {
 	V val = bc->decrypt(Cnv<V>::TypeFromStr(tree_val));
-	uint64_t val2 = Cnv<uint64_t>::TypeFromStr(Cnv<V>::StrFromType(val)); //ugly..
-	assert_s(mcontains(input_vals, val2), "val  not found in tree");
+	assert_s(mcontains(input_vals, val), "val  not found in tree");
     }
 
-    cerr << "-- check order in tree and ope table\n";
+    if (DEBUG_EXP) cerr << "-- check order in tree and ope table\n";
     // check tree vals are in order
     check_order<V, BC>(ot, tree_vals, bc);
 }
@@ -70,64 +70,130 @@ check_order_and_values(OPETable<string> * ot, vector<uint64_t> & input_vals,
 
 template<class V, class BC>
 static void
-check_correct(Server * s, vector<uint64_t> & vals, BC * bc) {
+check_correct(Server * s, void * vals, BC * bc) {
 
-    cerr << "checking sever state is correct: \n";
+    vector<V> vs = *((vector<V> *) vals);
+    
+    if (DEBUG_EXP) cerr << "checking sever state is correct: \n";
     //s->tracker->get_root()->check_merkle_tree();
 
     BTree * bt = (BTree *) s->ope_tree;
 
     list<string> treeorder;
     bt->tracker->get_root()->in_order_traverse(treeorder); 
-    check_order_and_values<V, BC>(bt->opetable, vals, treeorder, bc);
+    check_order_and_values<V, BC>(bt->opetable, vs, treeorder, bc);
 
-    cerr <<"-- check height\n";
+     if (DEBUG_EXP) cerr <<"-- check height\n";
     uint max_height = bt->tracker->get_root()->max_height();
     cout << " -- max height of tree is " << max_height << " fanout " << b_max_keys << "\n";
     check_good_height(max_height, treeorder.size(), b_min_keys);
 
 }
 
-static void
-client64() {
-    cerr << "creating uint64, blowfish client...";
-    ope_client<uint64_t, blowfish> * ope_cl = new ope_client<uint64_t, blowfish>(bc, is_malicious);
-    cerr << "client created \n";
-    
-    cerr << "num tests " << num_tests << "\n";
-    
-    for (uint i = 0; i < vals.size(); i++) {
-	cerr << "ENCRYPT " <<  i << "-th val: " << vals[i] << "\n";
-	ope_cl->encrypt(vals[i], true);
+
+template<class A>
+class WorkloadGen {
+public:
+    static A get_query(uint index, uint plain_size, workload w) {
+	return (A) NULL;
     }
-    cerr << "DONE!\n";
+};
+
+template<>
+class WorkloadGen<string> {
+public:
+    static string get_query(uint index, uint plain_size, workload w) {
+	if (w == INCREASING) {
+	    string s = strFromVal(index);
+	    string r;
+	    for (uint i = 0; i < plain_size/8 - s.size(); i++) {
+		r = r + " ";
+	    }
+	    s = r + s;
+	    assert_s(s.size() == plain_size/8, "logic error");
+	    return s;
+	}
+	// random
+	return randomBytes(plain_size);
+    }
+};
+
+template<>
+class WorkloadGen<uint64_t> {
+public:
+    static uint64_t get_query(uint index, uint plain_size, workload w) {
+	assert_s(plain_size == 64,"logic error");
+	if (w == INCREASING) {
+	    return (uint64_t)index;
+	} else {
+	    return (uint64_t) rand();
+	}
+    }
+};
+
+template<>
+class WorkloadGen<uint32_t> {
+    static uint32_t get_query(uint index, uint plain_size, workload w) {
+	assert_s(plain_size == 32,"logic error");
+	if (w == INCREASING) {
+	    return (uint32_t)index;
+	} else {
+	    return (uint32_t) rand();
+	}
+    }
+};
+
+template<class A>
+static vector<A>
+get_uniq_wload(uint num, uint plain_size, workload w) {
+    uint fails = 0;
+    vector<A> res;
+    for (uint i = 0; i < num; i++) {	    
+	A q = WorkloadGen<A>::get_query(i, plain_size, w);
+	while (!mcontains(res, q)) {
+	    fails++;
+	    if (fails > num/2) {
+		    assert_s(false, "hard to get a workload of unique values, abandoning");
+	    }
+	    q = WorkloadGen<A>::get_query(i, plain_size, w);
+	}
+	res.push_back(q);
+    }
+    return res;
 }
 
+
+template<class A, class BC>
 static void
-client128() {
-    cerr << "creating string, aes cbc client...";
-    ope_client<string, aes_cbc> * ope_cl = new ope_client<string, aes_cbc>(bc_aes, is_malicious);
-    cerr << "client created \n";	
-    
-    for (uint i = 0; i < vals.size(); i++) {
-	cerr << "ENCRYPT " <<  i << "-th val: " << vals[i] << "\n";
-	stringstream ss;
-	ss << vals[i];
-	cerr << "ope is " << ope_cl->encrypt(ss.str(), true) <<"\n";
+clientgeneric(BC * bc) {
+
+    ope_client<A, BC> * ope_cl = new ope_client<A, BC>(bc, is_malicious);
+    cerr << "client created \n";
+
+    vector<A> vs = *((vector<A> * )vals);
+
+    for (uint i = 0; i < vs.size(); i++) {
+	cerr << "ope is " << ope_cl->encrypt(vs[i], true) <<"\n";
     }
     cerr << "DONE!\n";	
 }
 
 static void
 client_thread() {
-
+    
     if (plain_size == 64) {
-	client64();
+	cerr << "creating uint64, blowfish client\n";
+	vector<uint64_t> vs = get_uniq_wload<uint64_t>(num_tests, plain_size, RANDOM);
+	vals = (void *) &vs;
+	clientgeneric<uint64_t, blowfish>(bc);
 	return;
     }
 
     if (plain_size >= 128) {
-	client128();
+	cerr << "creating string, aes cbc client\n";
+	vector<string> vs = get_uniq_wload<string>(num_tests, plain_size, RANDOM);
+	vals = (void *) &vs;
+	clientgeneric<string, aes_cbc>(bc_aes);
 	return;
     }
 
@@ -147,6 +213,15 @@ server_thread(void *s) {
 
 static void
 runtest() {
+
+    // generate workload
+    if (plain_size == 64) {
+	vector<string> vs = get_uniq_wload<string>(num_tests, plain_size, RANDOM);
+	vals = (void *) &vs;
+    } else {
+	   vector<string> vs = get_uniq_wload<string>(num_tests, plain_size, RANDOM);
+	   vals = (void *) &vs;
+    }
            
     pid_t pid = fork();
     if (pid == 0) {
@@ -213,7 +288,7 @@ run_server() {
 
     delete serv;
 }
-enum workload {INCREASING, RANDOM};
+
 
 struct our_conf {
     vector<uint> num_elems;
@@ -229,65 +304,13 @@ struct bclo_conf {
     bool use_cache;
 };
 
-template<class A>
-class WorkloadGen {
-public:
-    static A get_query(uint index, uint plain_size, workload w) {
-	return (A) NULL;
-    }
-};
-
-template<>
-class WorkloadGen<string> {
-public:
-    static string get_query(uint index, uint plain_size, workload w) {
-	if (w == INCREASING) {
-	    string s = strFromVal(index);
-	    string r;
-	    for (uint i = 0; i < plain_size/8 - s.size(); i++) {
-		r = r + " ";
-	    }
-	    s = r + s;
-	    assert_s(s.size() == plain_size/8, "logic error");
-	    return s;
-	}
-	// random
-	return randomBytes(plain_size);
-    }
-};
-
-template<>
-class WorkloadGen<uint64_t> {
-public:
-    static uint64_t get_query(uint index, uint plain_size, workload w) {
-	assert_s(plain_size == 64,"logic error");
-	if (w == INCREASING) {
-	    return (uint64_t)index;
-	} else {
-	    return (uint64_t) rand();
-	}
-    }
-};
-
-template<>
-class WorkloadGen<uint32_t> {
-    static uint32_t get_query(uint index, uint plain_size, workload w) {
-	assert_s(plain_size == 32,"logic error");
-	if (w == INCREASING) {
-	    return (uint32_t)index;
-	} else {
-	    return (uint32_t) rand();
-	}
-    }
-};
-
     
 template<class A, class BC>
 static void
 client_work(uint n, our_conf c, BC * bc) {
-    cerr << "creating client...";
+    if (DEBUG_EXP) cerr << "creating client...";
     ope_client<A, BC> * ope_cl = new ope_client<A, BC>(bc, c.is_malicious);
-    cerr << "client created \n";
+    if (DEBUG_EXP) cerr << "client created \n";
 
     Timer t;
     for (uint i = 0; i < n; i++) {
@@ -296,14 +319,19 @@ client_work(uint n, our_conf c, BC * bc) {
     uint64_t time_interval = t.lap();
     cerr << "time per enc: " << (time_interval*1.0/(n *1000.0)) << " ms \n";
 
-    cerr << "DONE!\n";
+     if (DEBUG_EXP) cerr << "DONE!\n";
 }
 
 template<class A, class BC>
 static void
 measure_ours_instance(uint n, our_conf c, BC * bc) {
 
-    cerr << "num=" << n << " ciphsize=" << c.plain_size << " malicious=" << c.is_malicious << "\n";
+    cerr << "num=" << n << " ciphsize=" << c.plain_size << " malicious=" << c.is_malicious << " ";
+    if (c.w == INCREASING) {
+	cerr << " increasing\n";
+    } else {
+	cerr << " random \n";
+    }
     // start client
     pid_t pid_client = fork();
     if (pid_client == 0) {
@@ -316,9 +344,9 @@ measure_ours_instance(uint n, our_conf c, BC * bc) {
     sleep(2);
 
     pthread_t server_thd;
-    cerr << "creating server ... ";
+    if (DEBUG_EXP) cerr << "creating server ... ";
     Server * s = new Server(is_malicious);
-    cerr << "server created \n";
+     if (DEBUG_EXP) cerr << "server created \n";
     
     int r = pthread_create(&server_thd, NULL, server_thread, (void *)s);
     if (r) {
@@ -333,11 +361,11 @@ measure_ours_instance(uint n, our_conf c, BC * bc) {
 
     cerr << "rewrites per enc " << (s->num_rewrites() * 1.0)/(n*1.0) << "\n";
 
-    delete s;
-    //  cerr << "checking server state..";
-    //check_correct<A, BC>(s, vals, bc);
-    //cerr << "OK.\n";
+    cerr << "checking server state..";
+    check_correct<A, BC>(s, vals, bc);
+    cerr << "OK.\n";
 
+    delete s;
 }
 template <class A, class BC>
 static
@@ -355,14 +383,16 @@ void measure_bclo(bclo_conf c) {
 
 vector<our_conf> our_confs =
 {// num_elems              workload       plain_size    is_malicious
-    {{10,100},       INCREASING,      64,           false},
-    //  {{10, 100, 1000},       RANDOM,        64,           false},
-    //{{10,100,1000},       INCREASING,      64,           true},
-    //{{10,100,1000},       RANDOM,          64,           true},
-    //{{10,100,1000},       INCREASING,      128,          false},
-    //{{10, 100, 1000},       RANDOM,        128,          false},
-    //{{10,100,1000},       INCREASING,      128,          true},
-    //{{10,100,1000},       RANDOM,          128,          true},
+    {{10,100, 1000},       INCREASING,      64,           false},
+     {{10, 100, 1000},       RANDOM,        64,           false},
+     {{10,100,1000},       INCREASING,      64,           true},
+     {{10,100,1000},       RANDOM,          64,           true},
+     {{10,100,1000},       INCREASING,      128,          false},
+     {{10, 100, 1000},       RANDOM,        128,          false},
+     {{10,100,1000},       INCREASING,      128,          true},
+     {{10,100,1000},       RANDOM,          128,          true},
+     {{10,100,1000},       INCREASING,      256,          true},
+     {{10,100,1000},       RANDOM,          256,          true},
 };
 
 
@@ -414,7 +444,6 @@ int main(int argc, char ** argv)
 	plain_size = atoi(argv[2]);
 	num_tests = atoi(argv[3]);
 	is_malicious = atoi(argv[4]);
-	vals = get_random(num_tests);
 
 	client_thread();
 	return 0;
@@ -430,7 +459,6 @@ int main(int argc, char ** argv)
 	plain_size = atoi(argv[2]);
 	num_tests = atoi(argv[3]);
 	is_malicious = atoi(argv[4]);
-	vals = get_random(num_tests);
 
 	runtest();
 	return 0;
