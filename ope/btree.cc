@@ -1318,7 +1318,7 @@ Elem::repr() {
 }
 
 Elem::Elem(string key) {
-    assert_s(key.size() <= b_key_size, "given key to element is larger than key_size");
+    assert_s(key.size() <= b_key_size, "given key to element "+ strFromVal(key.size())+ "is larger than key_size");
     this->m_key = key;
     mp_subtree = NULL;
 }

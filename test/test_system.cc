@@ -116,7 +116,7 @@ public:
 	    return s;
 	}
 	// random
-	return randomBytes(plain_size);
+	return randomBytes(plain_size/8);
     }
 };
 
@@ -268,6 +268,7 @@ runtest() {
     assert_s(WIFEXITED(status),"client terminated abnormally");
     assert_s(pid == pid2, "incorrect pid");
 
+    cerr << "checking if server state is correct\n";
     if (plain_size == 64) {
 	check_correct<uint64_t, blowfish>(s, vals, bc);
     } else {
@@ -363,7 +364,7 @@ measure_ours_instance(uint n, our_conf c, BC * bc) {
 
     pthread_t server_thd;
     if (DEBUG_EXP) cerr << "creating server ... ";
-    Server * s = new Server(is_malicious);
+    Server * s = new Server(c.is_malicious);
      if (DEBUG_EXP) cerr << "server created \n";
     
     int r = pthread_create(&server_thd, NULL, server_thread, (void *)s);
@@ -379,9 +380,9 @@ measure_ours_instance(uint n, our_conf c, BC * bc) {
 
     cerr << "rewrites per enc " << (s->num_rewrites() * 1.0)/(n*1.0) << "\n";
 
-    cerr << "checking server state..";
-    check_correct<A, BC>(s, vals, bc);
-    cerr << "OK.\n";
+//    cerr << "checking server state..";
+//    check_correct<A, BC>(s, vals, bc);
+//    cerr << "OK.\n";
 
     delete s;
 }
@@ -432,16 +433,24 @@ void measure_bclo(bclo_conf c) {
 
 vector<our_conf> our_confs =
 {// num_elems              workload       plain_size    is_malicious
-    {{10,100, 1000},       INCREASING,      64,           false},
-     {{10, 100, 1000},       RANDOM,        64,           false},
-     {{10,100,1000},       INCREASING,      64,           true},
-     {{10,100,1000},       RANDOM,          64,           true},
-     {{10,100,1000},       INCREASING,      128,          false},
-     {{10, 100, 1000},       RANDOM,        128,          false},
-     {{10,100,1000},       INCREASING,      128,          true},
-     {{10,100,1000},       RANDOM,          128,          true},
-     {{10,100,1000},       INCREASING,      256,          true},
-     {{10,100,1000},       RANDOM,          256,          true},
+ //   {{10,100, 1000},       INCREASING,      64,           false},
+ //    {{10, 100, 1000},       RANDOM,        64,           false},
+     {{100000},
+                           INCREASING,      64,           true},
+     {{10,100,1000},
+                           RANDOM,          64,           true},
+     {{10,100,1000},
+                           INCREASING,      128,          false},
+     {{10, 100, 1000},
+                           RANDOM,        128,          false},
+     {{10,100,1000},
+                           INCREASING,      128,          true},
+     {{10,100,1000},
+                           RANDOM,          128,          true},
+     {{10,100,1000},
+                           INCREASING,      256,          true},
+     {{10,100,1000},
+                           RANDOM,          256,          true},
 };
 
 
@@ -451,7 +460,7 @@ vector<bclo_conf> BCLO_confs =
                             INCREASING,      32,           false},
     {{10,100,1000, 10000},
                             INCREASING,      64,          false},
-    {{10,100,1000, 3000},
+    {{10,100,1000},
                             INCREASING,      128,          false},
     {{10,100,1000},
                             INCREASING,      256,          false},
@@ -484,11 +493,13 @@ test_bench() {
 static void
 set_workload(uint num_tests, uint plain_size, workload w) {
     // generate workload
+    cerr << "preparing workload: \n";
     if (plain_size == 64) {
 	vals = (void *) get_uniq_wload<string>(num_tests, plain_size, w);
     } else {
 	vals = (void *) get_uniq_wload<string>(num_tests, plain_size, w);
     }
+    cerr << "set workload\n";
 }
 
 int main(int argc, char ** argv)

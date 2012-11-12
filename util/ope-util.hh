@@ -20,13 +20,13 @@
 
 
 // Controls debugging output
-#define DEBUG_BARE 1
-#define DEBUG 1
-#define DEBUG_COMM 1
+#define DEBUG_BARE 0
+#define DEBUG 0
+#define DEBUG_COMM 0
 #define DEBUG_STREE 0
-#define DEBUG_BTREE 1
-#define DEBUG_PROOF 1
-#define DEBUG_EXP 1
+#define DEBUG_BTREE 0
+#define DEBUG_PROOF 0
+#define DEBUG_EXP 0
 
 // Controls tree type
 #define STREE 0
@@ -45,7 +45,7 @@ const double alpha = 0.75;
 /**** B tree parameters ****/
 
 // size of key in B tree
-const uint b_key_size = 20; //bytes of max size of key_size
+const uint b_key_size = 50; //bytes of max size of key_size
 
 const int invalid_index = -1;
 
