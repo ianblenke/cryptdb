@@ -424,6 +424,7 @@ static
 void measure_bclo(bclo_conf c) {
     cerr << "BCLO pt size: " << c. plain_size << " ct size: " << c.plain_size * 2 << endl;
     for(uint i = 0; i < c.num_elems.size(); i++){
+	cerr << "num="<<c.num_elems[i] << " cached " << c.use_cache << ":\n";
         measure_bclo_instance<A>(c.num_elems[i], c);
     }
 }
@@ -433,7 +434,7 @@ vector<our_conf> our_confs =
 {// num_elems              workload       plain_size    is_malicious
  //   {{10,100, 1000},       INCREASING,      64,           false},
  //    {{10, 100, 1000},       RANDOM,        64,           false},
-     {{100000},
+    {{10, 100, 1000},
                            INCREASING,      64,           true},
      {{10,100,1000},
                            RANDOM,          64,           true},
@@ -462,6 +463,8 @@ vector<bclo_conf> BCLO_confs =
                             INCREASING,      128,          false},
     {{10,100,1000},
                             INCREASING,      256,          false},
+      {{10,100,1000},
+                            INCREASING,      256,          true},
 };
 
 static void
