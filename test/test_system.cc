@@ -229,6 +229,7 @@ struct bclo_conf {
 
 template<class A>
 class WorkloadGen {
+public:
     static A get_query(uint index, uint ciph_size, workload w) {
 	return (A) NULL;
     }
@@ -236,11 +237,12 @@ class WorkloadGen {
 
 template<>
 class WorkloadGen<string> {
+public:
     static string get_query(uint index, uint ciph_size, workload w) {
 	if (w == INCREASING) {
-	    string s = valFromStr(index);
+	    string s = strFromVal(index);
 	    string r;
-	    for (uint i = 0; i < ciph_size/8 - s.size()) {
+	    for (uint i = 0; i < ciph_size/8 - s.size(); i++) {
 		r = r + " ";
 	    }
 	    s = r + s;
@@ -254,6 +256,7 @@ class WorkloadGen<string> {
 
 template<>
 class WorkloadGen<uint64_t> {
+public:
     static uint64_t get_query(uint index, uint ciph_size, workload w) {
 	assert_s(ciph_size == 64,"logic error");
 	if (w == INCREASING) {
@@ -284,9 +287,9 @@ client_work(uint n, our_conf c, BC * bc) {
     ope_client<A, BC> * ope_cl = new ope_client<A, BC>(bc, c.is_malicious);
     cerr << "client created \n";
 
-    timer t;
+    Timer t;
     for (uint i = 0; i < n; i++) {
-	OPEType ope = ope_cl->encrypt(get_query<A>(i, c.ciph_size, c.w));
+	ope_cl->encrypt(WorkloadGen<A>::get_query(i, c.ciph_size, c.w), true);
     }
     uint64_t time_interval = t.lap();
     cerr << "time per enc: " << (time_interval*1.0/(n *1.0)) << " ms \n";
@@ -300,11 +303,12 @@ measure_ours_instance(uint n, our_conf c, BC * bc) {
 
     // start client
     pid_t pid_client = fork();
-    if (pid == 0) {
+    if (pid_client == 0) {
 	//client
-	client_work<A, BC>(c, bc);
+	client_work<A, BC>(n, c, bc);
 	exit(EXIT_SUCCESS);
     }
+    assert_s(pid_client > 0, "issue starting client");
 
     sleep(2);
 
@@ -322,7 +326,7 @@ measure_ours_instance(uint n, our_conf c, BC * bc) {
     pid_t pid2 = wait(&status);
 
     assert_s(WIFEXITED(status),"client terminated abnormally");
-    assert_s(pid == pid2, "incorrect pid");
+    assert_s(pid_client == pid2, "incorrect pid");
 
     cerr << "rewrites per enc " << (s->num_rewrites() * 1.0)/(n*1.0) << "\n";
 

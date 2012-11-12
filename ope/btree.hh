@@ -121,7 +121,7 @@ public:
     
     //returns the size of the subtree root at this Node
     // in terms of keys (does not count the empty key)
-    uint size(Node * n);
+    static uint size(Node * n);
 
     uint nrewrites;
     RootTracker * tracker;

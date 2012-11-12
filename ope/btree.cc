@@ -1427,7 +1427,7 @@ BTree::update_db(ChangeInfo & c) {
     //not need update_db fn.
 }
 
-static uint
+uint
 BTree::size(Node * n) {
     if (n == NULL) {
 	return 0;
@@ -1439,15 +1439,15 @@ BTree::size(Node * n) {
     return sum;
 }
 
-uint
-BTree:compute_rewrites(ChangeInfo c) {
+static uint
+compute_rewrites(ChangeInfo c) {
     c.reverse(); //the first is the topmost element now
     
     uint sum = 0;
 
     for (auto lci : c) {
-	for (uint i = index; i<node->m_count; i++) {
-	    sum = sum + 1 + size(node->m_vector[i].mp_subtree);
+	for (uint i = lci.index; i< lci.node->m_count; i++) {
+	    sum = sum + 1 + BTree::size(lci.node->m_vector[i].mp_subtree);
 	}
     }
 
@@ -1471,7 +1471,6 @@ BTree::insert(string ciph, TreeNode * tnode,
     
     //cerr << "to insert "<< ciph_elem.pretty() <<"\n";
     assert_s(node->m_vector[index].mp_subtree == NULL, "node is not terminal node!");
-    uint nrewrites_insert;
     node->do_insert(ciph_elem, p, ci, index+1);
     //cerr << "tree after insert is "; node->get_root()->dump(true); cerr << "\n";
     //cerr << "highest node in change log is " << ci.back().node->pretty() << "\n";

@@ -25,8 +25,7 @@ public:
 
     Tree * ope_tree;
     bool MALICIOUS;
-    uint num_rewrites;
-
+   
     OPETable<std::string> * ope_table;
     Connect * db; 
    
@@ -55,6 +54,9 @@ public:
     /* Dispatched messages the server received to their handlers. */
     void dispatch(int csock, std::istringstream & iss);
 
+    // statistics : number of rewrites done so far
+    uint num_rewrites();
+    
 };
 
    
