@@ -20,6 +20,7 @@
 #define MALICIOUS 1
 
 // Controls debugging output
+#define DEBUG_BARE 1
 #define DEBUG 1
 #define DEBUG_COMM 0
 #define DEBUG_STREE 1

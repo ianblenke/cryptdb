@@ -255,9 +255,9 @@ ope_client<V, BlockCipher>::encrypt(V pt, bool imode) {
     marshall_binary(msg, Cnv<V>::StrFromType(ct));
     msg << " ";
 
-    cerr << "cl: sending message to server " << msg.str() <<"\n";
+    if (DEBUG_COMM) cerr << "cl: sending message to server " << msg.str() <<"\n";
     string res = send_receive(sock_query, msg.str(), 102400);
-    cerr << "response size " << res.size() << "\n";
+    if (DEBUG_COMM) cerr << "response size " << res.size() << "\n";
     //cerr << "Result for " << pt << " is\n" << res << endl << endl;
 
     stringstream ss(res);
@@ -270,7 +270,7 @@ ope_client<V, BlockCipher>::encrypt(V pt, bool imode) {
 	merkle_root = new_mroot;
     }
 
-    cerr << "ope val is " << ope <<"\n";
+    if (DEBUG_BARE) cerr << "ope val is " << ope <<"\n";
     
     return ope;
 }

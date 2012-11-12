@@ -18,7 +18,7 @@ Server::interaction(string ciph,
 		    uint64_t & ope_path,
 		    bool & equals) {
 
-    cerr << "\n\n Start Interaction\n";
+    if (DEBUG_COMM) cerr << "\n\n Start Interaction\n";
     TreeNode * root = ope_tree->get_root();
     assert_s(root != NULL, "root is null");
     TreeNode * curr = root;
@@ -27,7 +27,7 @@ Server::interaction(string ciph,
     nbits = 0;
 
     while (true) {
-	cerr << "** Interaction STEP \n";
+	if (DEBUG_COMM) cerr << "** Interaction STEP \n";
     	// create message and send it to client
     	stringstream msg;
     	msg.clear();
@@ -44,7 +44,7 @@ Server::interaction(string ciph,
 	    msg << " ";
     	}
 
-	cerr << "sending " << msg.str() << "\n";
+	if (DEBUG_COMM) cerr << "sending " << msg.str() << "\n";
 
     	string _reply = send_receive(sock_cl, msg.str());
     	istringstream reply(_reply);
@@ -62,7 +62,7 @@ Server::interaction(string ciph,
 
 	TreeNode * subtree = curr->get_subtree(index);
 	if (!subtree) {
-	    cerr << "no subtree at index " << index << "\n";
+	    if (DEBUG_COMM) cerr << "no subtree at index " << index << "\n";
 	    rindex = index;
 	    return curr;
 	}
@@ -141,11 +141,11 @@ Server::handle_enc(int csock, istringstream & iss, bool do_ins) {
 	    }
         }
     }
-    cerr << "replying to request \n";
+    if (DEBUG_COMM) cerr << "replying to request \n";
     string res = response.str();
     uint reslen = res.size();
     // cerr << "sending\n" <<res << "\n";
-    cerr << "sent " << reslen << " bytes \n";
+    if (DEBUG_COMM) cerr << "sent " << reslen << " bytes \n";
     assert_s(send(csock, res.c_str(), reslen, 0) == (int)reslen,
 	     "problem with send");
     
@@ -211,14 +211,14 @@ void Server::work() {
 
     int csock = accept(sock_req, (struct sockaddr*) &sadr, &addr_size);
     assert_s(csock >= 0, "Server accept failed!");
-    cerr << "Server received request \n";
+    cerr << "Server received connection \n";
     
        
     uint buflen = 10240;
     char buffer[buflen];
 
     while (true) {
-    	cerr<<"Waiting for connection..."<<endl;
+    	if (DEBUG_COMM) cerr<<"Waiting for request..."<<endl;
 
         memset(buffer, 0, buflen);
 	
