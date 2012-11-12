@@ -212,7 +212,7 @@ void Server::work() {
     if (listen_rtn < 0) {
 	cerr<<"Error listening to socket"<<endl;
     }
-    cerr<<"Listening \n";
+    if (DEBUG_BARE) cerr<<"Listening \n";
   
 
     int csock = accept(sock_req, (struct sockaddr*) &sadr, &addr_size);

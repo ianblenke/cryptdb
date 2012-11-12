@@ -638,7 +638,7 @@ bool Node::do_insert(Elem element, UpdateMerkleProof & p, ChangeInfo & c, int in
     if (vector_insert(element, index)) {
 	c.push_back(LevelChangeInfo(this, NULL, index, -1));
 	
-	cerr << "basic insert\n";
+	if (DEBUG_BTREE) cerr << "basic insert\n";
         // -----Merkle ----
 	// done making the changes for insert so update merkle hash and record
 	// new state
@@ -653,7 +653,7 @@ bool Node::do_insert(Elem element, UpdateMerkleProof & p, ChangeInfo & c, int in
 
     //last_visited_ptr node is full so we will need to split
     bool r = split_insert(element, c, index);
-    cerr << "split_insert\n";
+    if (DEBUG_BTREE) cerr << "split_insert\n";
     // -----Merkle ----
     // done making the changes for insert so update merkle hash and record
     // new state
@@ -1380,7 +1380,7 @@ update_ot_help(OPETable<string> * ope_table, Node * n, OPEType path, uint nbits)
 	Elem e = n->m_vector[i];
 	if (i) {
 	    OPEType new_ope = compute_ope(path, nbits, i-1);
-	    //if (DEBUG) cerr << "update ot " << e.m_key << " -->  path, nbits, index " << path << "," << nbits << "," << i-1 << "=" << new_ope << "\n";
+	    if (DEBUG) cerr << "update ot " << e.m_key << " -->  path, nbits, index " << path << "," << nbits << "," << i-1 << "=" << new_ope << "\n";
 	    bool r = ope_table->update(e.m_key, new_ope, n);
 	    if (!r) {
 		assert_s(ope_table->insert(e.m_key, new_ope, n), "could not insert in ope table");

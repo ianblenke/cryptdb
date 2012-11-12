@@ -25,7 +25,7 @@ using namespace std;
 static blowfish * bc = new blowfish(passwd);
 static aes_cbc * bc_aes = new aes_cbc(passwd, true);
 
-static uint ciph_size = 0;
+static uint plain_size = 0;
 static uint num_tests = 0;
 vector<uint64_t> vals;
 bool is_malicious;
@@ -121,12 +121,12 @@ client128() {
 static void
 client_thread() {
 
-    if (ciph_size == 64) {
+    if (plain_size == 64) {
 	client64();
 	return;
     }
 
-    if (ciph_size >= 128) {
+    if (plain_size >= 128) {
 	client128();
 	return;
     }
@@ -175,12 +175,14 @@ runtest() {
     assert_s(WIFEXITED(status),"client terminated abnormally");
     assert_s(pid == pid2, "incorrect pid");
 
-    if (ciph_size == 64) {
+    if (plain_size == 64) {
 	check_correct<uint64_t, blowfish>(s, vals, bc);
     } else {
-	assert_s(ciph_size >= 128, "invalid ciph size");
+	assert_s(plain_size >= 128, "invalid ciph size");
 	check_correct<string, aes_cbc>(s, vals, bc_aes);
     }
+
+    cerr << "number of rewrites is " << s->num_rewrites() << "\n";
 
     cerr << "OK!\n";
     delete s;
@@ -216,21 +218,21 @@ enum workload {INCREASING, RANDOM};
 struct our_conf {
     vector<uint> num_elems;
     workload w;
-    uint ciph_size;
+    uint plain_size;
     bool is_malicious;
 };
 
 struct bclo_conf {
     vector<uint> num_elems;
     workload w;
-    uint ciph_size;
+    uint plain_size;
     bool use_cache;
 };
 
 template<class A>
 class WorkloadGen {
 public:
-    static A get_query(uint index, uint ciph_size, workload w) {
+    static A get_query(uint index, uint plain_size, workload w) {
 	return (A) NULL;
     }
 };
@@ -238,27 +240,27 @@ public:
 template<>
 class WorkloadGen<string> {
 public:
-    static string get_query(uint index, uint ciph_size, workload w) {
+    static string get_query(uint index, uint plain_size, workload w) {
 	if (w == INCREASING) {
 	    string s = strFromVal(index);
 	    string r;
-	    for (uint i = 0; i < ciph_size/8 - s.size(); i++) {
+	    for (uint i = 0; i < plain_size/8 - s.size(); i++) {
 		r = r + " ";
 	    }
 	    s = r + s;
-	    assert_s(s.size() == ciph_size/8, "logic error");
+	    assert_s(s.size() == plain_size/8, "logic error");
 	    return s;
 	}
 	// random
-	return randomBytes(ciph_size);
+	return randomBytes(plain_size);
     }
 };
 
 template<>
 class WorkloadGen<uint64_t> {
 public:
-    static uint64_t get_query(uint index, uint ciph_size, workload w) {
-	assert_s(ciph_size == 64,"logic error");
+    static uint64_t get_query(uint index, uint plain_size, workload w) {
+	assert_s(plain_size == 64,"logic error");
 	if (w == INCREASING) {
 	    return (uint64_t)index;
 	} else {
@@ -269,8 +271,8 @@ public:
 
 template<>
 class WorkloadGen<uint32_t> {
-    static uint32_t get_query(uint index, uint ciph_size, workload w) {
-	assert_s(ciph_size == 32,"logic error");
+    static uint32_t get_query(uint index, uint plain_size, workload w) {
+	assert_s(plain_size == 32,"logic error");
 	if (w == INCREASING) {
 	    return (uint32_t)index;
 	} else {
@@ -289,10 +291,10 @@ client_work(uint n, our_conf c, BC * bc) {
 
     Timer t;
     for (uint i = 0; i < n; i++) {
-	ope_cl->encrypt(WorkloadGen<A>::get_query(i, c.ciph_size, c.w), true);
+	ope_cl->encrypt(WorkloadGen<A>::get_query(i, c.plain_size, c.w), true);
     }
     uint64_t time_interval = t.lap();
-    cerr << "time per enc: " << (time_interval*1.0/(n *1.0)) << " ms \n";
+    cerr << "time per enc: " << (time_interval*1.0/(n *1000.0)) << " ms \n";
 
     cerr << "DONE!\n";
 }
@@ -301,6 +303,7 @@ template<class A, class BC>
 static void
 measure_ours_instance(uint n, our_conf c, BC * bc) {
 
+    cerr << "num=" << n << " ciphsize=" << c.plain_size << " malicious=" << c.is_malicious << "\n";
     // start client
     pid_t pid_client = fork();
     if (pid_client == 0) {
@@ -330,9 +333,10 @@ measure_ours_instance(uint n, our_conf c, BC * bc) {
 
     cerr << "rewrites per enc " << (s->num_rewrites() * 1.0)/(n*1.0) << "\n";
 
-    cerr << "checking server state..";
-    check_correct<A, BC>(s, vals, bc);
-    cerr << "OK.\n";
+    delete s;
+    //  cerr << "checking server state..";
+    //check_correct<A, BC>(s, vals, bc);
+    //cerr << "OK.\n";
 
 }
 template <class A, class BC>
@@ -350,20 +354,20 @@ void measure_bclo(bclo_conf c) {
 
 
 vector<our_conf> our_confs =
-{// num_elems              workload       ciph_size    is_malicious
-    {{10,100,1000},       INCREASING,      64,           false},
-    {{10, 100, 1000},       RANDOM,        64,           false},
-    {{10,100,1000},       INCREASING,      64,           true},
-    {{10,100,1000},       RANDOM,          64,           true},
-    {{10,100,1000},       INCREASING,      128,          false},
-    {{10, 100, 1000},       RANDOM,        128,          false},
-    {{10,100,1000},       INCREASING,      128,          true},
-    {{10,100,1000},       RANDOM,          128,          true},
+{// num_elems              workload       plain_size    is_malicious
+    {{10,100},       INCREASING,      64,           false},
+    //  {{10, 100, 1000},       RANDOM,        64,           false},
+    //{{10,100,1000},       INCREASING,      64,           true},
+    //{{10,100,1000},       RANDOM,          64,           true},
+    //{{10,100,1000},       INCREASING,      128,          false},
+    //{{10, 100, 1000},       RANDOM,        128,          false},
+    //{{10,100,1000},       INCREASING,      128,          true},
+    //{{10,100,1000},       RANDOM,          128,          true},
 };
 
 
 vector<bclo_conf> BCLO_confs =
-{// num_elems               type          ciph_size       cache
+{// num_elems               type          plain_size       cache
     {{10,100,1000, 10000},
                             INCREASING,      32,           false},
     {{10,100,1000, 10000},
@@ -378,7 +382,7 @@ static void
 test_bench() {
     cerr << "Our scheme:\n";
     for (auto c : our_confs) {
-	if (c.ciph_size == 64) {
+	if (c.plain_size == 64) {
 	    measure_ours<uint64_t, blowfish>(c, bc);
 	} else {
 	    measure_ours<string, aes_cbc>(c, bc_aes);
@@ -398,16 +402,16 @@ int main(int argc, char ** argv)
     assert_s(OPE_MODE, "code must be in OPE_MODE to run this test");
 
     if (argc > 5 || argc < 2) {
-	cerr << "usage ./test client ciph_size(64,>=128) num_tests is_malicious(0/1)\n \
-                 OR ./test server is_malicious \
-                 OR ./test sys ciph_size num_tests is_malicious \
+	cerr << "usage ./test client plain_size(64,>=128) num_to_enc is_malicious(0/1)\n \
+                 OR ./test server is_malicious\n \
+                 OR ./test sys plain_size num_tests is_malicious\n \
                  OR ./test bench \n";
 	return 0;
     }
     
     if (argc == 5 && string(argv[1]) == "client") {
 	
-	ciph_size = atoi(argv[2]);
+	plain_size = atoi(argv[2]);
 	num_tests = atoi(argv[3]);
 	is_malicious = atoi(argv[4]);
 	vals = get_random(num_tests);
@@ -423,7 +427,7 @@ int main(int argc, char ** argv)
 
     if (argc==5 && string(argv[1]) == "sys") {
 	
-	ciph_size = atoi(argv[2]);
+	plain_size = atoi(argv[2]);
 	num_tests = atoi(argv[3]);
 	is_malicious = atoi(argv[4]);
 	vals = get_random(num_tests);
@@ -438,9 +442,9 @@ int main(int argc, char ** argv)
     }
     
     cerr << "invalid test\n";
-    cerr << "usage ./test client ciph_size(64,>=128) num_tests is_malicious(0/1)\n \
-                 OR ./test server is_malicious \
-                 OR ./test sys ciph_size num_tests is_malicious \
+    cerr << "usage ./test client plain_size(64,>=128) num_to_enc is_malicious(0/1)\n \
+                 OR ./test server is_malicious\n \
+                 OR ./test sys plain_size num_tests is_malicious\n \
                  OR ./test bench \n";
     
 

@@ -9,7 +9,7 @@ using namespace std;
 int
 create_and_bind(int host_port) {
 
-    cerr << "Create and bind on port " << host_port << "\n";
+    if (DEBUG_BARE) cerr << "Create and bind on port " << host_port << "\n";
 
     int hsock = socket(AF_INET, SOCK_STREAM, 0);
     assert_s(hsock >= 0, "Error initializing socket");
@@ -35,7 +35,7 @@ create_and_bind(int host_port) {
 
 int
 create_and_connect(string host_name, int host_port, bool fail) {
-    cerr << "Create and connect \n";
+    if (DEBUG_BARE) cerr << "Create and connect \n";
     int hsock = socket(AF_INET, SOCK_STREAM, 0);
     assert_s(hsock>=0, "Error initializing socket!");
     
@@ -45,7 +45,7 @@ create_and_connect(string host_name, int host_port, bool fail) {
     memset(&(my_addr.sin_zero),0, 8);
     my_addr.sin_addr.s_addr = inet_addr(host_name.c_str());
 
-    cerr << "trying to connect to " << host_name << " " << host_port << "\n";
+    if (DEBUG_BARE) cerr << "trying to connect to " << host_name << " " << host_port << "\n";
     if (connect(hsock, (struct sockaddr*) &my_addr, sizeof(my_addr))<0){
 	if (fail) {
 	    assert_s(false, "cannot connect");
