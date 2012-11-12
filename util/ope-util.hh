@@ -17,7 +17,7 @@
 // if ope mode is true then trees can no longer use the order operation
 // among keys because the real keys are encrypted
 #define OPE_MODE 1
-#define MALICIOUS 0
+
 
 // Controls debugging output
 #define DEBUG_BARE 1

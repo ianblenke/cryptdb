@@ -46,7 +46,7 @@ template<class V, class BlockCipher>
 class ope_client {
 public:
   	
-    ope_client(BlockCipher *bc);
+    ope_client(BlockCipher *bc, bool malicious);
     ~ope_client();
  
     /* Encryption is the path bits (aka v) bitwise left shifted by num_bits
@@ -68,7 +68,9 @@ public:
     struct sockaddr_in my_addr;
    
     // merkle
+    bool MALICIOUS;
     string merkle_root;
+
 
     string handle_interaction(istringstream & iss);   
 };
@@ -158,7 +160,9 @@ comm_thread(void * p) {
 // must define here these few functions if we want to call them from other files..
 
 template<class V, class BlockCipher>
-ope_client<V, BlockCipher>::ope_client(BlockCipher * bc) {
+ope_client<V, BlockCipher>::ope_client(BlockCipher * bc, bool malicious) {
+
+    MALICIOUS = malicious;
     
     //Socket connection
     sock = create_and_bind(OPE_CLIENT_PORT);
@@ -222,6 +226,7 @@ check_proof(stringstream & ss, MsgType optype, V ins,
 	if (DEBUG_COMM) {cerr << "proof i got " << p.pretty() << "\n";}
 	assert_s(verify_ins_merkle_proof<V, BC>(p, inserted, old_mroot, new_mroot, bc),
 		 "client received incorrect insertion proof from server");
+	cerr << "proof verified\n";
 	return;
     }
     if (optype == MsgType::QUERY) {

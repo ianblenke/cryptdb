@@ -24,11 +24,12 @@ public:
     int sock_req; //socket on which server receives requests from udfs or clients
 
     Tree * ope_tree;
+    bool MALICIOUS;
 
     OPETable<std::string> * ope_table;
     Connect * db; 
    
-    Server();
+    Server(bool malicious);
     ~Server();
 
     void work();

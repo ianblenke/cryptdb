@@ -39,7 +39,7 @@ public:
     OPETable<EncT> * ope_table;
     Connect * dbconnect;
     int num_rebalances;
-
+ 
 /*
 #if MALICIOUS
     RootTracker tracker;

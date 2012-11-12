@@ -140,7 +140,7 @@ Node::Node(RootTracker * root_track)  : m_root(root_track) {
     
     insert_zeroth_subtree (0);
 
-    if (MALICIOUS) {
+    if (m_root->MALICIOUS) {
 	merkle_hash = hash_node();
     }
 }
@@ -378,7 +378,7 @@ bool Node::split_insert (Elem& element, ChangeInfo & ci, int index) {
     new_node->mp_parent = mp_parent;
 
     // --- Merkle ----------------
-    if (MALICIOUS) {
+    if (m_root->MALICIOUS) {
 	new_node->update_merkle();
 	update_merkle_upward();
     }
@@ -413,7 +413,7 @@ bool Node::split_insert (Elem& element, ChangeInfo & ci, int index) {
 	ci.push_back(LevelChangeInfo(new_root, NULL, -1));
 
 	//----Merkle----------
-	if (MALICIOUS) {
+	if (m_root->MALICIOUS) {
 	    update_merkle_upward();
 	}
 	//--------------------
@@ -624,7 +624,7 @@ void Node::update_merkle_upward() {
 bool Node::do_insert(Elem element, UpdateMerkleProof & p, ChangeInfo & c, int index) {
     // ---- Merkle -----
     // last_visited_ptr is the start point for the proof
-    if (MALICIOUS) {
+    if (m_root->MALICIOUS) {
 	record_state(this, p.st_before);
     }
     // -----------------
@@ -642,7 +642,7 @@ bool Node::do_insert(Elem element, UpdateMerkleProof & p, ChangeInfo & c, int in
         // -----Merkle ----
 	// done making the changes for insert so update merkle hash and record
 	// new state
-	if (MALICIOUS) {
+	if (m_root->MALICIOUS) {
 	    update_merkle_upward();
 	    record_state(this, p.st_after);
 	}
@@ -657,7 +657,7 @@ bool Node::do_insert(Elem element, UpdateMerkleProof & p, ChangeInfo & c, int in
     // -----Merkle ----
     // done making the changes for insert so update merkle hash and record
     // new state
-    if (MALICIOUS) {
+    if (m_root->MALICIOUS) {
 	update_merkle_upward();
 	record_state(this, p.st_after);
     }
@@ -745,7 +745,7 @@ Node::tree_delete(Elem & target, UpdateMerkleProof & proof) {
 
 	// ---- Merkle ------
 	// record old state
-	if (MALICIOUS) {
+	if (m_root->MALICIOUS) {
 	    start_node = node2;
 	    record_state(start_node, proof.st_before);
 	}
@@ -758,7 +758,7 @@ Node::tree_delete(Elem & target, UpdateMerkleProof & proof) {
     } else {
 	// ---- Merkle ----------------
 	// This node is starting point for change
-	if (MALICIOUS) {
+	if (m_root->MALICIOUS) {
 	    start_node = node;
 	    record_state(node, proof.st_before);
 	}
@@ -769,7 +769,7 @@ Node::tree_delete(Elem & target, UpdateMerkleProof & proof) {
     }
 
     // --- Merkle -------
-    if (MALICIOUS) {
+    if (m_root->MALICIOUS) {
 	start_node->update_merkle_upward();
 
 	record_state(start_node, proof.st_after);
@@ -1357,10 +1357,11 @@ Elem::pretty() const {
 
 /******** BTree ************/
 
-BTree::BTree(OPETable<string> * ot, Connect * _db) : opetable(ot), db(db) {
+BTree::BTree(OPETable<string> * ot, Connect * _db, bool malicious) : opetable(ot), db(db) {
+ 
     Node::m_failure.invalidate();
     Node::m_failure.m_key = "";
-    tracker = new RootTracker ();  // maintains a pointer to the current root of the b-tree
+    tracker = new RootTracker (malicious);  // maintains a pointer to the current root of the b-tree
     Node * root_ptr = new Node (tracker);
     tracker->set_root(null_ptr, root_ptr);
 }
@@ -1373,12 +1374,12 @@ BTree::get_root(){
 
 static void
 update_ot_help(OPETable<string> * ope_table, Node * n, OPEType path, uint nbits) {
-    cerr << "update node " << n << "\n";
+    
     for (uint i = 0; i < n->m_count; i++) {
 	Elem e = n->m_vector[i];
 	if (i) {
 	    OPEType new_ope = compute_ope(path, nbits, i-1);
-	    //cerr << "update ot " << e.m_key << " -->  path, nbits, index " << path << "," << nbits << "," << i-1 << "=" << new_ope << "\n";
+	    //if (DEBUG) cerr << "update ot " << e.m_key << " -->  path, nbits, index " << path << "," << nbits << "," << i-1 << "=" << new_ope << "\n";
 	    bool r = ope_table->update(e.m_key, new_ope, n);
 	    if (!r) {
 		assert_s(ope_table->insert(e.m_key, new_ope, n), "could not insert in ope table");

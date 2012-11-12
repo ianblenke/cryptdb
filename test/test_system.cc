@@ -28,6 +28,7 @@ static aes_cbc * bc_aes = new aes_cbc(passwd, true);
 static uint ciph_size = 0;
 static uint num_tests = 0;
 vector<uint64_t> vals;
+bool is_malicious;
 
 
 
@@ -90,7 +91,7 @@ check_correct(Server * s, vector<uint64_t> & vals, BC * bc) {
 static void
 client64() {
     cerr << "creating uint64, blowfish client...";
-    ope_client<uint64_t, blowfish> * ope_cl = new ope_client<uint64_t, blowfish>(bc);
+    ope_client<uint64_t, blowfish> * ope_cl = new ope_client<uint64_t, blowfish>(bc, is_malicious);
     cerr << "client created \n";
     
     cerr << "num tests " << num_tests << "\n";
@@ -105,7 +106,7 @@ client64() {
 static void
 client128() {
     cerr << "creating string, aes cbc client...";
-    ope_client<string, aes_cbc> * ope_cl = new ope_client<string, aes_cbc>(bc_aes);
+    ope_client<string, aes_cbc> * ope_cl = new ope_client<string, aes_cbc>(bc_aes, is_malicious);
     cerr << "client created \n";	
     
     for (uint i = 0; i < vals.size(); i++) {
@@ -159,7 +160,7 @@ runtest() {
     
     pthread_t server_thd;
     cerr << "creating server ... ";
-    Server * s = new Server();
+    Server * s = new Server(is_malicious);
     cerr << "server created \n";
     
     int r = pthread_create(&server_thd, NULL, server_thread, (void *)s);
@@ -204,7 +205,7 @@ run_client(int num_tests) {
 */
 static void
 run_server() {
-    Server * serv = new Server();
+    Server * serv = new Server(is_malicious);
     
     serv->work();
 
@@ -216,13 +217,14 @@ int main(int argc, char ** argv)
 {
     assert_s(OPE_MODE, "code must be in OPE_MODE to run this test");
 
-    if (argc != 4) {
-	cerr << "usage ./test testname (client, server, sys) ciph_size(64,>=128) num_tests\n";
+    if (argc != 5) {
+	cerr << "usage ./test testname (client, server, sys) ciph_size(64,>=128) num_tests is_malicious(0/1)\n";
 	return 0;
     }
 
     ciph_size = atoi(argv[2]);
     num_tests = atoi(argv[3]);
+    is_malicious = atoi(argv[4]);
     vals = get_random(num_tests);
     
     if (string(argv[1]) == "client") {

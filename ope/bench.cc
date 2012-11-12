@@ -20,7 +20,7 @@ bench_passive_enc(uint num_vals) {
 
     
     blowfish* bc = new blowfish(passwd);
-    ope_client<uint64_t, blowfish> * my_client =  new ope_client<uint64_t, blowfish>(bc);    
+    ope_client<uint64_t, blowfish> * my_client =  new ope_client<uint64_t, blowfish>(bc, false);    
     
     uint64_t ope_encodings[num_vals];
 

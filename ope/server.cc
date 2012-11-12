@@ -173,13 +173,14 @@ Server::dispatch(int csock, istringstream & iss) {
     
 }
 
-Server::Server() {
+Server::Server(bool malicious) {
+    MALICIOUS = malicious;
     if (WITH_DB) {  
 	db = new Connect( "localhost", "root", "letmein","cryptdb", 3306);
     }
     
     ope_table = new OPETable<string>();
-    ope_tree = (Tree *) new BTree(ope_table, db);
+    ope_tree = (Tree *) new BTree(ope_table, db, malicious);
 
     sock_cl = create_and_connect(OPE_CLIENT_HOST, OPE_CLIENT_PORT);
     sock_req = create_and_bind(OPE_SERVER_PORT);

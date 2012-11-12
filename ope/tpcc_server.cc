@@ -213,7 +213,7 @@ int main()
       std::cout << unique_data[i] << std::endl;
     }*/
 
-    RootTracker* root_tracker = new RootTracker();
+    RootTracker* root_tracker = new RootTracker(true);
 
     //std::cout<<"Unique: "<<std::endl;
 /*    for(int i=0; i< (int) unique_data.size(); i++){

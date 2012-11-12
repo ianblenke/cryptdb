@@ -101,7 +101,7 @@ typedef std::list<LevelChangeInfo > ChangeInfo;
 class BTree : public Tree {
 public:
 
-    BTree(OPETable<std::string> * ot, Connect * db);
+    BTree(OPETable<std::string> * ot, Connect * db, bool malicious);
     
     TreeNode * get_root();
 
@@ -337,10 +337,10 @@ class RootTracker {
 protected:
 
     Node* mp_root;
-
+    
 public:
 
-    RootTracker() { mp_root = null_ptr; }
+    RootTracker(bool malicious) { mp_root = null_ptr; MALICIOUS = malicious; }
 
     void set_root (Node* old_root, Node* new_root) {
 
@@ -368,6 +368,8 @@ public:
         }
 
     }
+
+    bool MALICIOUS;
 
 };
 
