@@ -257,9 +257,9 @@ vector<bclo_conf> BCLO_confs =
                             INCREASING,      32,           false},
     {{10,100,1000, 10000},
                             INCREASING,      64,          false},
-    {{10,100,1000, 10000},
+    {{10,100,1000, 3000},
                             INCREASING,      128,          false},
-    {{10,100,1000, 10000},
+    {{10,100,1000},
                             INCREASING,      256,          false},
 };
 
