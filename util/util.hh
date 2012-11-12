@@ -286,8 +286,10 @@ std::string StringFromVal(uint64_t value, unsigned int padLen = 0);
 
 
 uint64_t uint64FromZZ(NTL::ZZ val);
+uint32_t uint32FromZZ(NTL::ZZ val);
 //to_ZZ func may not work for 64 bits
 NTL::ZZ ZZFromUint64(uint64_t val);
+NTL::ZZ ZZFromUint32(uint32_t val);
 
 
 std::string StringFromZZ(const NTL::ZZ &x);
