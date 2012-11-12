@@ -103,7 +103,7 @@ public:
 	check_equals(p.st_before, p2.st_before);
 	check_equals(p.st_after, p2.st_after);
 
-
+	//cerr << "update proof serialize ok\n";
     }
 
     static void
@@ -142,7 +142,7 @@ public:
 	p2 << ss2;
 
 	check_equals(p.path, p2.path);
-
+	//cerr << "node proof serialize ok\n";
     }
     
     static void

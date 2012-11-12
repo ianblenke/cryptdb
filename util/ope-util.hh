@@ -16,7 +16,7 @@
 
 // if ope mode is true then trees can no longer use the order operation
 // among keys because the real keys are encrypted
-#define OPE_MODE 1
+#define OPE_MODE 0
 #define MALICIOUS 1
 
 // Controls debugging output
@@ -32,7 +32,7 @@
 #define BULK_LOAD 1
 
 // hardcoding passwords for our eval
-const std::string passwd = "opeope";
+const std::string passwd = "opeopeopeopeopeo";
 
 /**** Scapegoat paramters ****/
 const int N = 4;

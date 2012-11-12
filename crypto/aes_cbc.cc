@@ -8,7 +8,7 @@ aes_cbc::aes_cbc(std::string passwd, bool det) {
     enc_key = get_AES_enc_key(passwd);
     dec_key = get_AES_dec_key(passwd);
     is_det = det;
-    det_salt = randomBytes(AES_BLOCK_BYTES);
+    det_salt = "1234567890123456";
 }
 
 string

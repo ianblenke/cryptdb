@@ -23,6 +23,10 @@
 #include <util/timer.hh>
 #include <NTL/ZZ.h>
 #include <NTL/RR.h>
+#include <crypto/aes_cbc.hh>
+#include <util/util.hh>
+#include <sstream>
+#include <iostream>
 
 using namespace std;
 using namespace NTL;
@@ -283,6 +287,41 @@ test_montgomery()
 }
 
 static void
+test_aes_cbc() {
+    uint max_len = 32;
+    uint no_tests = 1000;
+
+    cerr << "test aes cbc .. ";
+	
+    aes_cbc * e_det = new aes_cbc("opeopeopeopeopeo", true);
+    aes_cbc * e_rnd = new aes_cbc("opeopeopeopeopeo", false);
+    
+    for (uint l = 1; l < max_len; l++) {
+	for (uint i = 0; i < no_tests; i++) {
+	    string ct, pt;
+	    
+	    string v = randomBytes(l);
+
+	    ct = e_det->encrypt(v);
+	    pt = e_det->decrypt(ct);
+
+	    assert_s(pt == v, "aes_cbc det does not enc/dec properly");
+
+	    assert_s(ct == e_det->encrypt(v), "aes_cbc det is not det");
+
+	    ct = e_rnd->encrypt(v);
+	    pt = e_rnd->decrypt(ct);
+
+	    assert_s(pt == v, "aes_cbc rnd does not enc/dec properly");
+
+	    assert_s(pt != e_rnd->encrypt(v), "aes_cbc rnd is deterministic");
+	}
+    }
+
+    cerr << "OK\n";
+}
+
+static void
 test_bn()
 {
     bignum a(123);
@@ -453,9 +492,38 @@ test_padding()
     cout << "test padding ok\n";
 }
 
+static
+void test_marshall() {
+    ostringstream os;
+    string s = string("a\n\0\tb",5);
+    os << s.size() << " ";
+    os.write(s.c_str(), s.size());
+
+    cerr << "output stream is " << os.str() << "\n";
+
+    string r;
+    istringstream is(os.str());
+
+    uint len;
+    is >> len;
+    cerr << "len read is " << len << "\n";
+    char c[1];
+    char b[len];
+    is.read(c, 1);
+    is.read(b, len);
+
+    assert_s(s == string(b, len), "strings are not equal\n");
+    
+
+    
+}
+
 int
 main(int ac, char **av)
 {
+    test_marshall();
+    test_aes_cbc();
+     
     urandom u;
     cout << u.rand<uint64_t>() << endl;
     cout << u.rand<int64_t>() << endl;
