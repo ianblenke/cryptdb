@@ -18,6 +18,8 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <crypto/aes_cbc.hh>
+#include <crypto/ope.hh>
+#include <NTL/ZZ.h>
 
 using namespace std;
 
@@ -257,6 +259,31 @@ public:
 };
 
 template<>
+class WorkloadGen<NTL::ZZ> {
+public:
+    static NTL::ZZ get_query(uint index, uint plain_size, workload w) {
+    string s;
+    if (w == INCREASING) {
+        s = strFromVal(index);
+        string r;
+        for (uint i = 0; i < plain_size/8 - s.size(); i++) {
+        r = r + " ";
+        }
+        s = r + s;
+        assert_s(s.size() == plain_size/8, "logic error");
+    } else {
+        s = randomBytes(plain_size);
+    }
+    NTL::ZZ return_zz;
+    for(uint i = 0; i < (uint) s.size(); i++){
+            return_zz = return_zz * 256 + (int) s[i];
+    }  
+
+    return return_zz;
+    }
+};
+
+template<>
 class WorkloadGen<uint64_t> {
 public:
     static uint64_t get_query(uint index, uint plain_size, workload w) {
@@ -271,6 +298,7 @@ public:
 
 template<>
 class WorkloadGen<uint32_t> {
+public:
     static uint32_t get_query(uint index, uint plain_size, workload w) {
 	assert_s(plain_size == 32,"logic error");
 	if (w == INCREASING) {
@@ -347,9 +375,38 @@ void measure_ours(our_conf c, BC * bc) {
     }
 }
 
+template <class A>
+static void
+measure_bclo_instance(uint n, bclo_conf c) {
+    OPE* ope = new OPE(passwd, c.plain_size, c.plain_size * 2, c.use_cache);
+    NTL::ZZ chain;
+
+    Timer t;
+    for (uint i = 0; i < n; i++) {
+        NTL::ZZ pv;
+        A plaintext = WorkloadGen<A>::get_query(i, c.plain_size, c.w);
+        if (c.plain_size == 32 || c.plain_size == 64) {
+            pv = NTL::to_ZZ(plaintext);
+        } else {
+            pv = plaintext;
+        }
+        chain = ope->encrypt(pv);
+        if (chain == NTL::to_ZZ(0) ) {
+            cerr << "chain is 0 in bclo";
+            assert_s(ope->decrypt(chain) == pv, "encryption for int not right");
+        }
+    }
+    uint64_t time_interval = t.lap();
+    cerr << "time per enc: " << (time_interval*1.0/(n *1000.0)) << " ms \n";
+}
+
+template <class A>
 static
 void measure_bclo(bclo_conf c) {
-    cerr << "unimplemented\n";
+    cerr << "BCLO pt size: " << c. plain_size << " ct size: " << c.plain_size * 2 << endl;
+    for(uint i = 0; i < c.num_elems.size(); i++){
+        measure_bclo_instance<A>(c.num_elems[i], c);
+    }
 }
 
 
@@ -382,16 +439,22 @@ static void
 test_bench() {
     cerr << "Our scheme:\n";
     for (auto c : our_confs) {
-	if (c.plain_size == 64) {
-	    measure_ours<uint64_t, blowfish>(c, bc);
-	} else {
-	    measure_ours<string, aes_cbc>(c, bc_aes);
-	}
+    	if (c.plain_size == 64) {
+    	    measure_ours<uint64_t, blowfish>(c, bc);
+    	} else {
+    	    measure_ours<string, aes_cbc>(c, bc_aes);
+    	}
     }
     
     cerr << "BCLO'09 scheme: \n";
     for (auto c: BCLO_confs) {
-	measure_bclo(c);
+        if (c.plain_size == 32) {
+            measure_bclo<uint32_t>(c);
+        } else if (c.plain_size == 64) {
+            measure_bclo<uint64_t>(c);
+        } else {
+            measure_bclo<NTL::ZZ>(c);
+        }	   
     }
     cerr << "DONE\n";
 }

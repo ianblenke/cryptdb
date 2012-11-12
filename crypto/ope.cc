@@ -47,7 +47,7 @@ OPE::lazy_sample(const ZZ &d_lo, const ZZ &d_hi,
     ZZ dgap;
 
     auto ci = dgap_cache.find(r_lo + rgap);
-    if (ci == dgap_cache.end()) {
+    if (ci == dgap_cache.end() || !caching) {
         dgap = domain_gap(ndomain, nrange, nrange / 2, prng);
         dgap_cache[r_lo + rgap] = dgap;
     } else {
