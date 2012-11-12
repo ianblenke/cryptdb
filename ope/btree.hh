@@ -78,18 +78,17 @@ verify_ins_merkle_proof(const UpdateMerkleProof & p,
 struct LevelChangeInfo {
     Node * node;
     Node * right;
-    int split_point;
     int index;
-
+    int split_point;
 
     LevelChangeInfo() {
 	node = right = NULL;
 	index = -1;
     }
 
-    LevelChangeInfo(Node * _node, Node * _right, int _index): node(_node),
-							      right(_right),
-							      index(_index) {}
+    LevelChangeInfo(Node * _node, Node * _right,
+		    int _index, int _split_point): node(_node), right(_right),
+						   index(_index), split_point(_split_point) {}
 };
 
 
@@ -119,6 +118,10 @@ public:
     void update_db(ChangeInfo & c);
 
     uint num_rewrites() {return nrewrites;}
+    
+    //returns the size of the subtree root at this Node
+    // in terms of keys (does not count the empty key)
+    uint size(Node * n);
 
     uint nrewrites;
     RootTracker * tracker;
@@ -152,10 +155,7 @@ public:
     std::vector<std::string> get_keys();
     TreeNode * get_subtree(uint index);
 
-    //returns the size of the subtree root at this Node
-    // in terms of keys (does not count the empty key)
-    uint size();
-
+  
     std::string pretty() const;
     
     std::vector<Elem > m_vector;

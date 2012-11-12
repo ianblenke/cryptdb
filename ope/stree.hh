@@ -63,7 +63,7 @@ public:
 
     MerkleProof merkle_proof(TreeNode * n);
 
-    uint num_rewrites() {asser_s(false,"unimplemented"); return 0;}
+    uint num_rewrites() {assert_s(false,"unimplemented"); return 0;}
 
     /*********** Helper methods **************/
     
