@@ -229,7 +229,13 @@ struct bclo_conf {
 
 static
 void measure_ours(our_conf c) {
-    
+    // start client
+
+    // fork and start server
+
+    // prepare values to enc
+
+    // encrypt and measure
 }
 
 static
