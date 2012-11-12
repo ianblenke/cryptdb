@@ -227,15 +227,116 @@ struct bclo_conf {
     bool use_cache;
 };
 
-static
-void measure_ours(our_conf c) {
+template<class A>
+class WorkloadGen {
+    static A get_query(uint index, uint ciph_size, workload w) {
+	return (A) NULL;
+    }
+};
+
+template<>
+class WorkloadGen<string> {
+    static string get_query(uint index, uint ciph_size, workload w) {
+	if (w == INCREASING) {
+	    string s = valFromStr(index);
+	    string r;
+	    for (uint i = 0; i < ciph_size/8 - s.size()) {
+		r = r + " ";
+	    }
+	    s = r + s;
+	    assert_s(s.size() == ciph_size/8, "logic error");
+	    return s;
+	}
+	// random
+	return randomBytes(ciph_size);
+    }
+};
+
+template<>
+class WorkloadGen<uint64_t> {
+    static uint64_t get_query(uint index, uint ciph_size, workload w) {
+	assert_s(ciph_size == 64,"logic error");
+	if (w == INCREASING) {
+	    return (uint64_t)index;
+	} else {
+	    return (uint64_t) rand();
+	}
+    }
+};
+
+template<>
+class WorkloadGen<uint32_t> {
+    static uint32_t get_query(uint index, uint ciph_size, workload w) {
+	assert_s(ciph_size == 32,"logic error");
+	if (w == INCREASING) {
+	    return (uint32_t)index;
+	} else {
+	    return (uint32_t) rand();
+	}
+    }
+};
+
+    
+template<class A, class BC>
+static void
+client_work(uint n, our_conf c, BC * bc) {
+    cerr << "creating client...";
+    ope_client<A, BC> * ope_cl = new ope_client<A, BC>(bc, c.is_malicious);
+    cerr << "client created \n";
+
+    timer t;
+    for (uint i = 0; i < n; i++) {
+	OPEType ope = ope_cl->encrypt(get_query<A>(i, c.ciph_size, c.w));
+    }
+    uint64_t time_interval = t.lap();
+    cerr << "time per enc: " << (time_interval*1.0/(n *1.0)) << " ms \n";
+
+    cerr << "DONE!\n";
+}
+
+template<class A, class BC>
+static void
+measure_ours_instance(uint n, our_conf c, BC * bc) {
+
     // start client
+    pid_t pid_client = fork();
+    if (pid == 0) {
+	//client
+	client_work<A, BC>(c, bc);
+	exit(EXIT_SUCCESS);
+    }
 
-    // fork and start server
+    sleep(2);
 
-    // prepare values to enc
+    pthread_t server_thd;
+    cerr << "creating server ... ";
+    Server * s = new Server(is_malicious);
+    cerr << "server created \n";
+    
+    int r = pthread_create(&server_thd, NULL, server_thread, (void *)s);
+    if (r) {
+	cerr << "problem with thread create for server\n";
+    }
 
-    // encrypt and measure
+    int status;
+    pid_t pid2 = wait(&status);
+
+    assert_s(WIFEXITED(status),"client terminated abnormally");
+    assert_s(pid == pid2, "incorrect pid");
+
+    cerr << "rewrites per enc " << (s->num_rewrites() * 1.0)/(n*1.0) << "\n";
+
+    cerr << "checking server state..";
+    check_correct<A, BC>(s, vals, bc);
+    cerr << "OK.\n";
+
+}
+template <class A, class BC>
+static
+void measure_ours(our_conf c, BC * bc) {
+    for (uint i = 0; i < c.num_elems.size(); i++) {
+	measure_ours_instance<A, BC>(c.num_elems[i], c, bc);
+    }
 }
 
 static
@@ -273,7 +374,11 @@ static void
 test_bench() {
     cerr << "Our scheme:\n";
     for (auto c : our_confs) {
-	measure_ours(c);
+	if (c.ciph_size == 64) {
+	    measure_ours<uint64_t, blowfish>(c, bc);
+	} else {
+	    measure_ours<string, aes_cbc>(c, bc_aes);
+	}
     }
     
     cerr << "BCLO'09 scheme: \n";

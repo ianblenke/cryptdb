@@ -42,6 +42,8 @@ public:
  
     /* Computes Merkle proof of node n */
     virtual MerkleProof merkle_proof(TreeNode * n) = 0;
+
+    virtual uint num_rewrites() = 0;
 };
 
 

@@ -63,6 +63,8 @@ public:
 
     MerkleProof merkle_proof(TreeNode * n);
 
+    uint num_rewrites() {asser_s(false,"unimplemented"); return 0;}
+
     /*********** Helper methods **************/
     
     std::vector<Stree_node<EncT>* > tree_insert(Stree_node<EncT>* node,

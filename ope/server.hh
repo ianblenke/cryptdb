@@ -25,6 +25,7 @@ public:
 
     Tree * ope_tree;
     bool MALICIOUS;
+    uint num_rewrites;
 
     OPETable<std::string> * ope_table;
     Connect * db; 

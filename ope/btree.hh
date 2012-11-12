@@ -70,13 +70,15 @@ verify_ins_merkle_proof(const UpdateMerkleProof & p,
 
 /* Contains information about
  * a split at a level in a tree.
- * The node was split at index into itself and right.
- * index is negative if there was no split
+ * The node was split at split_point into itself and right.
+ * split_point is negative if there was no split
+ * index is index where element was inserted
  */
 
 struct LevelChangeInfo {
     Node * node;
     Node * right;
+    int split_point;
     int index;
 
 
@@ -116,7 +118,9 @@ public:
     
     void update_db(ChangeInfo & c);
 
-    
+    uint num_rewrites() {return nrewrites;}
+
+    uint nrewrites;
     RootTracker * tracker;
     OPETable<std::string> * opetable;
     Connect * db;
@@ -148,7 +152,9 @@ public:
     std::vector<std::string> get_keys();
     TreeNode * get_subtree(uint index);
 
-    
+    //returns the size of the subtree root at this Node
+    // in terms of keys (does not count the empty key)
+    uint size();
 
     std::string pretty() const;
     
@@ -295,7 +301,7 @@ public:
     Elem (std::string key);
     void dump();
     std::string pretty() const;
-    
+
     std::string m_key;
     Node* mp_subtree;
     bool has_subtree() const {return valid() && (mp_subtree != null_ptr) && mp_subtree; }

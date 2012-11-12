@@ -198,6 +198,11 @@ Server::~Server() {
     }
 }
 
+uint 
+Server::num_rewrites(){
+    return ope_tree->num_rewrites();
+}
+
 void Server::work() {
     socklen_t addr_size = sizeof(sockaddr_in);
     struct sockaddr_in sadr;

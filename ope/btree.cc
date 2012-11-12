@@ -358,7 +358,7 @@ bool Node::split_insert (Elem& element, ChangeInfo & ci, int index) {
     // new node receives the rightmost half of elements in *this node
     Node* new_node = new Node(m_root);
 
-    ci.push_back(LevelChangeInfo(this, new_node, split_point));
+    ci.push_back(LevelChangeInfo(this, new_node, index, split_point));
     
     Elem upward_element = m_vector[split_point];
 
@@ -388,7 +388,7 @@ bool Node::split_insert (Elem& element, ChangeInfo & ci, int index) {
     
     // now insert the upward_element into the parent, splitting it if necessary
     if (mp_parent && mp_parent->vector_insert(upward_element, upward_index)) {
-	ci.push_back(LevelChangeInfo(mp_parent, NULL, -1));
+	ci.push_back(LevelChangeInfo(mp_parent, NULL, upward_index, -1));
 	return true;
     }
 
@@ -410,7 +410,7 @@ bool Node::split_insert (Elem& element, ChangeInfo & ci, int index) {
 
         new_root->mp_parent = 0;
 
-	ci.push_back(LevelChangeInfo(new_root, NULL, -1));
+	ci.push_back(LevelChangeInfo(new_root, NULL, 1, -1));
 
 	//----Merkle----------
 	if (m_root->MALICIOUS) {
@@ -636,7 +636,7 @@ bool Node::do_insert(Elem element, UpdateMerkleProof & p, ChangeInfo & c, int in
     
     // insert the element in last_visited_ptr if this node is not fulls
     if (vector_insert(element, index)) {
-	c.push_back(LevelChangeInfo(this, NULL, -1));
+	c.push_back(LevelChangeInfo(this, NULL, index, -1));
 	
 	cerr << "basic insert\n";
         // -----Merkle ----
@@ -1358,7 +1358,8 @@ Elem::pretty() const {
 /******** BTree ************/
 
 BTree::BTree(OPETable<string> * ot, Connect * _db, bool malicious) : opetable(ot), db(db) {
- 
+
+    nrewrites = 0;
     Node::m_failure.invalidate();
     Node::m_failure.m_key = "";
     tracker = new RootTracker (malicious);  // maintains a pointer to the current root of the b-tree
@@ -1426,6 +1427,33 @@ BTree::update_db(ChangeInfo & c) {
     //not need update_db fn.
 }
 
+static uint
+BTree::size(Node * n) {
+    if (n == NULL) {
+	return 0;
+    }
+    uint sum = 0;
+    for (uint i = 1; i < n->m_count; i++) {
+	sum = sum + 1 + size(n->m_vector[i].mp_subtree);
+    }
+    return sum;
+}
+
+uint
+BTree:compute_rewrites(ChangeInfo c) {
+    c.reverse(); //the first is the topmost element now
+    
+    uint sum = 0;
+
+    for (auto lci : c) {
+	for (uint i = index; i<node->m_count; i++) {
+	    sum = sum + 1 + size(node->m_vector[i].mp_subtree);
+	}
+    }
+
+    return sum;
+    
+}
 
 void
 BTree::insert(string ciph, TreeNode * tnode,
@@ -1443,12 +1471,13 @@ BTree::insert(string ciph, TreeNode * tnode,
     
     //cerr << "to insert "<< ciph_elem.pretty() <<"\n";
     assert_s(node->m_vector[index].mp_subtree == NULL, "node is not terminal node!");
+    uint nrewrites_insert;
     node->do_insert(ciph_elem, p, ci, index+1);
     //cerr << "tree after insert is "; node->get_root()->dump(true); cerr << "\n";
     //cerr << "highest node in change log is " << ci.back().node->pretty() << "\n";
     //update ope table and DB
     update_ot(opetable, ci.back().node);
-
+    nrewrites += compute_rewrites(ci);
     /*   cerr << "remove proof check code below\n";
     string new_merkle;
     assert_s(verify_ins_merkle_proof<string, aes_cbc>(p, ciph,
