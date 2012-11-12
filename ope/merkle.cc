@@ -15,10 +15,7 @@ marshall_binary(ostream & o, string & hash) {
 
     o.write(hash.c_str(), len);
     o << " ";
-    /*for (uint i = 0; i < len; i++) {
-	o << (int)hash[i] << " ";
-    }
-    */
+  
     return o;
 }
 
@@ -32,12 +29,7 @@ unmarshall_binary(istream & o) {
     
     char h[size];
     o.read(h, size);
-    /*
-    for (uint i = 0 ; i < size; i++) {
-	int c = 0;
-	o >> c;
-	h[i] = (char)c;
-	}*/
+  
     return string(h, size);    
 }
 
@@ -46,12 +38,6 @@ unmarshall_binary(istream & o) {
 ostream &
 ElInfo::operator>>(std::ostream &out) {
     marshall_binary(out, key);
-    /*
-	if (key == "") {
-	out << "NULL ";
-    } else {
-	out << key << " ";
-	}*/
     marshall_binary(out, hash);
     return out;
 }
@@ -59,10 +45,6 @@ ElInfo::operator>>(std::ostream &out) {
 istream &
 ElInfo::operator<<(std::istream & is) {
     key = unmarshall_binary(is);
-    /*is >> key;
-    if (key == "NULL") {
-	key = "";
-	}*/
     hash = unmarshall_binary(is);
     return is;
 }
@@ -111,12 +93,6 @@ std::ostream&
 NodeInfo::operator>>(std::ostream &out) {
 
     marshall_binary(out, key);
-    /*
-    if (key == "") {
-	out << "NULL" << " ";
-    } else {
-	out << key << " ";
-	}*/
     out << pos_in_parent << " ";
 
     out << childr.size() << " ";
@@ -135,11 +111,7 @@ NodeInfo::operator<<(std::istream & is) {
 
     key = unmarshall_binary(is);
     is >> pos_in_parent;
-/*
-    if (key == "NULL") {
-	key = "";
-    }
-*/
+
     int size;
     is >> size;
 

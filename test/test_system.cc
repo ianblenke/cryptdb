@@ -25,6 +25,12 @@ using namespace std;
 static blowfish * bc = new blowfish(passwd);
 static aes_cbc * bc_aes = new aes_cbc(passwd, true);
 
+static uint ciph_size = 0;
+static uint num_tests = 0;
+vector<uint64_t> vals;
+
+
+
 
 static void
 check_order(OPETable<string> * ot, list<string> & vals) {
@@ -84,59 +90,69 @@ check_correct(Server * s, vector<uint64_t> & vals) {
 
 }
 
-static uint ciph_size = 0;
-static uint num_tests = 0;
-vector<uint64_t> vals;
+static void
+client64() {
+    cerr << "creating uint64, blowfish client...";
+    ope_client<uint64_t, blowfish> * ope_cl = new ope_client<uint64_t, blowfish>(bc);
+    cerr << "client created \n";
+    
+    cerr << "num tests " << num_tests << "\n";
+    
+    for (uint i = 0; i < vals.size(); i++) {
+	cerr << "ENCRYPT " <<  i << "-th val: " << vals[i] << "\n";
+	ope_cl->encrypt(vals[i], true);
+    }
+    cerr << "DONE!\n";
+}
 
-static void *
-client_thread(void * ) {
-
- 
-
-    if (ciph_size == 64) {
-	cerr << "creating uint64, blowfish client...";
-	ope_client<uint64_t, blowfish> * ope_cl = new ope_client<uint64_t, blowfish>(bc);
-	cerr << "client created \n";
-	
-	for (uint i = 0; i < vals.size(); i++) {
+static void
+client32() {
+    cerr << "creating uint32, blowfish client...";
+    ope_client<uint32_t, blowfish> * ope_cl = new ope_client<uint32_t, blowfish>(bc);
+    cerr << "client created \n";	
+    
+    for (uint i = 0; i < vals.size(); i++) {
 	    cerr << "ENCRYPT " <<  i << "-th val: " << vals[i] << "\n";
 	    ope_cl->encrypt(vals[i], true);
-	}
-	cerr << "DONE!\n";
-	return NULL;
+    }
+    cerr << "DONE!\n";
+}
 
+static void
+client128() {
+    cerr << "creating string, aes cbc client...";
+    ope_client<string, aes_cbc> * ope_cl = new ope_client<string, aes_cbc>(bc_aes);
+    cerr << "client created \n";	
+    
+    for (uint i = 0; i < vals.size(); i++) {
+	cerr << "ENCRYPT " <<  i << "-th val: " << vals[i] << "\n";
+	stringstream ss;
+	ss << vals[i];
+	ope_cl->encrypt(ss.str(), true);
+    }
+    cerr << "DONE!\n";	
+}
+
+static void
+client_thread() {
+
+    if (ciph_size == 64) {
+	client64();
+	return;
     }
 
     if (ciph_size == 32) {
-	cerr << "creating uint32, blowfish client...";
-	ope_client<uint32_t, blowfish> * ope_cl = new ope_client<uint32_t, blowfish>(bc);
-	cerr << "client created \n";	
-	
-	for (uint i = 0; i < vals.size(); i++) {
-	    cerr << "ENCRYPT " <<  i << "-th val: " << vals[i] << "\n";
-	    ope_cl->encrypt(vals[i], true);
-	}
-	cerr << "DONE!\n";
-	return NULL;
+	client32();
+	return;
     }
 
     if (ciph_size >= 128) {
-	cerr << "creating string, aes cbc client...";
-	ope_client<string, aes_cbc> * ope_cl = new ope_client<string, aes_cbc>(bc_aes);
-	cerr << "client created \n";	
-	
-	for (uint i = 0; i < vals.size(); i++) {
-	    cerr << "ENCRYPT " <<  i << "-th val: " << vals[i] << "\n";
-	    stringstream ss;
-	    ss << vals[i];
-	    ope_cl->encrypt(ss.str(), true);
-	}
-	cerr << "DONE!\n";
-	return NULL;
+	client128();
+	return;
     }
 
     assert_s(false, "not recognized ciphertext size; accepting 32, 64, >= 128\n");
-    return NULL;
+    return;
 }
 
 static void *
@@ -150,17 +166,14 @@ server_thread(void *s) {
 }
 
 static void
-runtest(uint _ciph_size, uint _num_tests) {
+runtest() {
        
-    ciph_size = _ciph_size;
-    num_tests = _num_tests;
-
     vector<uint64_t> vals = get_random(num_tests);
     
     pid_t pid = fork();
     if (pid == 0) {
 	// child
-	client_thread(NULL);
+	client_thread();
 	exit(EXIT_SUCCESS);
     }
     // parent
@@ -189,7 +202,7 @@ runtest(uint _ciph_size, uint _num_tests) {
     cerr << "OK!\n";
     delete s;
 }
-
+/*
 static void
 run_client(int num_tests) {
     
@@ -206,7 +219,7 @@ run_client(int num_tests) {
   delete ope_cl;
 
 }
-
+*/
 static void
 run_server() {
     Server * serv = new Server();
@@ -220,25 +233,33 @@ run_server() {
 int main(int argc, char ** argv)
 {
     assert_s(OPE_MODE, "code must be in OPE_MODE to run this test");
-    
-    if (argc == 3 && string(argv[1]) == "client") {
-	run_client(atoi(argv[2]));
+
+    if (argc != 4) {
+	cerr << "usage ./test testname (client, server, sys) ciph_size(32,64,>=128) num_tests\n";
 	return 0;
     }
-    if (argc == 2 && string(argv[1]) == "server") {
+
+    ciph_size = atoi(argv[2]);
+    num_tests = atoi(argv[3]);
+    vals = get_random(num_tests);
+    
+    if (string(argv[1]) == "client") {
+	client_thread();
+	return 0;
+    }
+    if (string(argv[1]) == "server") {
 	run_server();
 	return 0;
     }
 
-    if (argc == 4 && string(argv[1]) == "sys") {
-	runtest(atoi(argv[2]),atoi(argv[3]));
+    if (string(argv[1]) == "sys") {
+	runtest();
 	return 0;
     }
-  
-    //Test::test_search_tree();
-    cerr << "invalid options; nothing to run; options are: client n OR server OR sys ciph_size N \n";
-    //Test::testMerkleProof();
-    //Test::test_transform();
+    
+    cerr << "invalid test name: client, server, or sys\n";
+
+    return 0;
 }
 
  
