@@ -1438,7 +1438,7 @@ BTree::insert(string ciph, TreeNode * tnode,
     assert_s(new_merkle == tracker->get_root()->merkle_hash, "new merkle root is incorrect");
     cerr << "verification holds server-side\n";
     
-    cerr <<"proof is " << p.pretty() << "\n";
+	     //cerr <<"proof is " << p.pretty() << "\n";
    
  
     if (WITH_DB) {

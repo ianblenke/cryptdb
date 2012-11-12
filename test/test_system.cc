@@ -31,21 +31,16 @@ vector<uint64_t> vals;
 
 
 
-
+template<class V, class BC>
 static void
-check_order(OPETable<string> * ot, list<string> & vals) {
-
-    /* cerr << "here is ot:\n";
-    for (auto p : ot->table) {
-	cerr << "(" << bc->decrypt(valFromStr(p.first)) << "," << p.second.ope << ") \n";
-	}*/
+check_order(OPETable<string> * ot, list<string> & vals, BC * bc) {
     
     string prev;
     bool first = true;
     for (auto it : vals) {
 	if (!first) {
-	    assert_s(bc->decrypt(valFromStr(it)) >
-		     bc->decrypt(valFromStr(prev)), "values in tree are not ordered properly: prev " + prev + " it " + it);
+	    assert_s(bc->decrypt(Cnv<V>::TypeFromStr(it)) >
+		     bc->decrypt(Cnv<V>::TypeFromStr(prev)), "values in tree are not ordered properly: prev " + prev + " it " + it);
 	    //also check ope table
 	    assert_s(ot->get(it).ope > ot->get(prev).ope, "ope table does not satisfy order");
 	}
@@ -54,25 +49,27 @@ check_order(OPETable<string> * ot, list<string> & vals) {
     }   
 }
 
-
+template<class V, class BC>
 static void
 check_order_and_values(OPETable<string> * ot, vector<uint64_t> & input_vals,
-		       list<string> & tree_vals) {
+		       list<string> & tree_vals, BC * bc) {
 
     cerr << "-- check values\n";
     for (string tree_val : tree_vals) {
-	int val = bc->decrypt(valFromStr(tree_val));
-	assert_s(mcontains(input_vals, val), "val  not found in tree");
+	V val = bc->decrypt(Cnv<V>::TypeFromStr(tree_val));
+	uint64_t val2 = Cnv<uint64_t>::TypeFromStr(Cnv<V>::StrFromType(val)); //ugly..
+	assert_s(mcontains(input_vals, val2), "val  not found in tree");
     }
 
     cerr << "-- check order in tree and ope table\n";
     // check tree vals are in order
-    check_order(ot, tree_vals);
+    check_order<V, BC>(ot, tree_vals, bc);
 }
 
 
+template<class V, class BC>
 static void
-check_correct(Server * s, vector<uint64_t> & vals) {
+check_correct(Server * s, vector<uint64_t> & vals, BC * bc) {
 
     cerr << "checking sever state is correct: \n";
     //s->tracker->get_root()->check_merkle_tree();
@@ -81,7 +78,7 @@ check_correct(Server * s, vector<uint64_t> & vals) {
 
     list<string> treeorder;
     bt->tracker->get_root()->in_order_traverse(treeorder); 
-    check_order_and_values(bt->opetable, vals, treeorder);
+    check_order_and_values<V, BC>(bt->opetable, vals, treeorder, bc);
 
     cerr <<"-- check height\n";
     uint max_height = bt->tracker->get_root()->max_height();
@@ -115,7 +112,7 @@ client128() {
 	cerr << "ENCRYPT " <<  i << "-th val: " << vals[i] << "\n";
 	stringstream ss;
 	ss << vals[i];
-	ope_cl->encrypt(ss.str(), true);
+	cerr << "ope is " << ope_cl->encrypt(ss.str(), true) <<"\n";
     }
     cerr << "DONE!\n";	
 }
@@ -149,9 +146,7 @@ server_thread(void *s) {
 
 static void
 runtest() {
-       
-    vector<uint64_t> vals = get_random(num_tests);
-    
+           
     pid_t pid = fork();
     if (pid == 0) {
 	// child
@@ -178,8 +173,13 @@ runtest() {
 
     assert_s(WIFEXITED(status),"client terminated abnormally");
     assert_s(pid == pid2, "incorrect pid");
-    
-    check_correct(s, vals);
+
+    if (ciph_size == 64) {
+	check_correct<uint64_t, blowfish>(s, vals, bc);
+    } else {
+	assert_s(ciph_size >= 128, "invalid ciph size");
+	check_correct<string, aes_cbc>(s, vals, bc_aes);
+    }
 
     cerr << "OK!\n";
     delete s;

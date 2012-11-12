@@ -453,9 +453,9 @@ get_random(uint no_test_vals);
 void
 check_good_height(uint maxheight, uint no_elems, uint breadth);
 
-template<class T>
+template<class T, class V>
 static bool
-mcontains(const T & vals, uint64_t  test_val) {
+mcontains(const T & vals, V  test_val) {
     for (auto it : vals) {
 	if (it == test_val) {
 	    return true;
@@ -466,14 +466,3 @@ mcontains(const T & vals, uint64_t  test_val) {
 }
 
 
-template<class T>
-static bool
-mcontains(const T & vals, std::string  test_val) {
-    for (auto it : vals) {
-	if (it == test_val) {
-	    return true;
-	}
-    }
-    
-    return false;
-}

@@ -2,6 +2,7 @@
 #include <util/util.hh>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <util/ope-util.hh>
 
 using namespace std;
 
@@ -60,7 +61,7 @@ create_and_connect(string host_name, int host_port, bool fail) {
 std::string
 send_receive(int sock, const string & msg, uint buflen) {
 
-    cerr << "send/receive; ------ \n to send  " << msg << "\n";
+    if (DEBUG_COMM) {cerr << "send/receive; ------ \n to send  " << msg << "\n";}
     assert_s(send(sock, msg.c_str(), msg.size(), 0) == (int)msg.size(),
 	     "error with send");
     
@@ -68,10 +69,10 @@ send_receive(int sock, const string & msg, uint buflen) {
 	
     memset(buffer, '\0', buflen);
 
-    cerr << "waiting for receive\n";
+    if (DEBUG_COMM) { cerr << "waiting for receive\n";}
     assert_s(recv(sock, buffer, buflen, 0) > 0,
 	     "error with receive");
-    cerr << "received " << buffer << "\n -------- \n";
+    if (DEBUG_COMM) {cerr << "received " << buffer << "\n -------- \n";}
     
     return string(buffer);
        

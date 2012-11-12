@@ -78,7 +78,7 @@ public:
 template<class V, class BC>
 string
 ope_client<V, BC>::handle_interaction(istringstream & iss){
-    cerr<<"Called handle_interaction"<<endl;
+    if (DEBUG_COMM) {cerr<<"Called handle_interaction"<<endl;}
 
     MsgType func_d;
     iss>>func_d;
@@ -131,21 +131,20 @@ comm_thread(void * p) {
 
         memset(buffer, 0, buflen);
 	
-	cerr << "comm_th: waiting to receive \n";
+	if (DEBUG_COMM) { cerr << "comm_th: waiting to receive \n";}
         //Receive message to process
 	uint len = 0;
         assert_s((len = recv(oc->csock, buffer, buflen, 0)) > 0,
 		 "receive gets  <=0 bytes");
-	cerr << "bytes received during interaction is " << len << "\n";
+	if (DEBUG_COMM) {cerr << "bytes received during interaction is " << len << "\n";}
 	
-	cerr << "received " << buffer << "\n";
         istringstream iss(buffer);
 	
         interaction_rslt = oc->handle_interaction(iss);
 
         assert_s(interaction_rslt!="", "interaction error");
 
-	cerr << "sending " << interaction_rslt << "\n";
+	if (DEBUG_COMM) {cerr << "sending " << interaction_rslt << "\n";}
         assert_s(send(oc->csock, interaction_rslt.c_str(), interaction_rslt.size(),0)
 		 == (int)interaction_rslt.size(),
 		 "send failed");
@@ -220,7 +219,7 @@ check_proof(stringstream & ss, MsgType optype, V ins,
     if (optype == MsgType::ENC_INS) {
 	UpdateMerkleProof p;
 	p << ss;
-	cerr << "proof i got " << p.pretty() << "\n";
+	if (DEBUG_COMM) {cerr << "proof i got " << p.pretty() << "\n";}
 	assert_s(verify_ins_merkle_proof<V, BC>(p, inserted, old_mroot, new_mroot, bc),
 		 "client received incorrect insertion proof from server");
 	return;
@@ -259,7 +258,7 @@ ope_client<V, BlockCipher>::encrypt(V pt, bool imode) {
     cerr << "cl: sending message to server " << msg.str() <<"\n";
     string res = send_receive(sock_query, msg.str(), 102400);
     cerr << "response size " << res.size() << "\n";
-    cerr << "Result for " << pt << " is\n" << res << endl << endl;
+    //cerr << "Result for " << pt << " is\n" << res << endl << endl;
 
     stringstream ss(res);
     OPEType ope;

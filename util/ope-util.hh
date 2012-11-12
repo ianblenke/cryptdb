@@ -21,7 +21,7 @@
 
 // Controls debugging output
 #define DEBUG 1
-#define DEBUG_COMM 1
+#define DEBUG_COMM 0
 #define DEBUG_STREE 1
 #define DEBUG_BTREE 1
 #define DEBUG_PROOF 1
