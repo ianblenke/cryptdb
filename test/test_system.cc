@@ -175,20 +175,20 @@ public:
 
 
 template<class A>
-static vector<A>
+static vector<A> *
 get_uniq_wload(uint num, uint plain_size, workload w) {
     uint fails = 0;
-    vector<A> res;
+    vector<A> * res = new vector<A>();
     for (uint i = 0; i < num; i++) {	    
 	A q = WorkloadGen<A>::get_query(i, plain_size, w);
-	while (!mcontains(res, q)) {
+	while (mcontains(*res, q)) {
 	    fails++;
 	    if (fails > num/2) {
 		    assert_s(false, "hard to get a workload of unique values, abandoning");
 	    }
 	    q = WorkloadGen<A>::get_query(i, plain_size, w);
 	}
-	res.push_back(q);
+	res->push_back(q);
     }
     return res;
 }
@@ -214,16 +214,12 @@ client_thread() {
     
     if (plain_size == 64) {
 	cerr << "creating uint64, blowfish client\n";
-	vector<uint64_t> vs = get_uniq_wload<uint64_t>(num_tests, plain_size, RANDOM);
-	vals = (void *) &vs;
 	clientgeneric<uint64_t, blowfish>(bc);
 	return;
     }
 
     if (plain_size >= 128) {
 	cerr << "creating string, aes cbc client\n";
-	vector<string> vs = get_uniq_wload<string>(num_tests, plain_size, RANDOM);
-	vals = (void *) &vs;
 	clientgeneric<string, aes_cbc>(bc_aes);
 	return;
     }
@@ -244,15 +240,6 @@ server_thread(void *s) {
 
 static void
 runtest() {
-
-    // generate workload
-    if (plain_size == 64) {
-	vector<string> vs = get_uniq_wload<string>(num_tests, plain_size, RANDOM);
-	vals = (void *) &vs;
-    } else {
-	vector<string> vs = get_uniq_wload<string>(num_tests, plain_size, RANDOM);
-	vals = (void *) &vs;
-    }
            
     pid_t pid = fork();
     if (pid == 0) {
@@ -494,6 +481,15 @@ test_bench() {
     cerr << "DONE\n";
 }
 
+static void
+set_workload(uint num_tests, uint plain_size, workload w) {
+    // generate workload
+    if (plain_size == 64) {
+	vals = (void *) get_uniq_wload<string>(num_tests, plain_size, w);
+    } else {
+	vals = (void *) get_uniq_wload<string>(num_tests, plain_size, w);
+    }
+}
 
 int main(int argc, char ** argv)
 {
@@ -512,8 +508,10 @@ int main(int argc, char ** argv)
 	plain_size = atoi(argv[2]);
 	num_tests = atoi(argv[3]);
 	is_malicious = atoi(argv[4]);
+	set_workload(num_tests, plain_size, RANDOM);
 
 	client_thread();
+
 	return 0;
     }
     if (argc == 3 && string(argv[1]) == "server") {
@@ -527,8 +525,10 @@ int main(int argc, char ** argv)
 	plain_size = atoi(argv[2]);
 	num_tests = atoi(argv[3]);
 	is_malicious = atoi(argv[4]);
-
+	set_workload(num_tests, plain_size, RANDOM);
+	
 	runtest();
+
 	return 0;
     }
 
