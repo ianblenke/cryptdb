@@ -48,7 +48,7 @@ class ope_client {
 public:
   	
     ope_client(BlockCipher *bc, bool malicious, 
-        int cport = OPE_CLIENT_PORT, int sport = OPE_SERVER_PORT);
+        int c_port = OPE_CLIENT_PORT, int s_port = OPE_SERVER_PORT);
     ~ope_client();
  
     /* Encryption is the path bits (aka v) bitwise left shifted by num_bits
@@ -159,12 +159,12 @@ comm_thread(void * p) {
 
 template<class V, class BlockCipher>
 ope_client<V, BlockCipher>::ope_client(BlockCipher * bc, bool malicious, 
-    int cport, int sport) {
+    int c_port, int s_port) {
 
     MALICIOUS = malicious;
     
     //Socket connection
-    sock = create_and_bind(cport);
+    sock = create_and_bind(c_port);
 
     //Start listening
     int listen_rtn = listen(sock, 10);
@@ -180,7 +180,7 @@ ope_client<V, BlockCipher>::ope_client(BlockCipher * bc, bool malicious,
     assert_s(csock >= 0, "Client failed to accept connection");
     if (DEBUG_BARE) cerr << "accepted connection (from server hopefully)\n";
 
-    while ((sock_query = create_and_connect(OPE_SERVER_HOST, sport, false)) < 0) {
+    while ((sock_query = create_and_connect(OPE_SERVER_HOST, s_port, false)) < 0) {
 	if (DEBUG_BARE) cerr << "server still not up\n";
 	sleep(1);
     }

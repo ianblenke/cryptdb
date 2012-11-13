@@ -21,6 +21,8 @@
 #include <crypto/aes_cbc.hh>
 #include <crypto/ope.hh>
 #include <NTL/ZZ.h>
+#include <csignal>
+#include <unistd.h>
 
 using namespace std;
 
@@ -228,6 +230,142 @@ client_thread() {
     assert_s(false, "not recognized ciphertext size; accepting 64, >= 128\n");
     return;
 }
+
+/*** Parallel client/server setup ***/
+
+int rv;
+int completed_enc = 0;
+fstream clientfile;
+
+template<class A, class BC>
+static void
+clientnetgeneric(BC * bc, int c_port, int s_port) {
+
+    ope_client<A, BC> * ope_cl = new ope_client<A, BC>(bc, is_malicious, c_port, s_port);
+    clientfile << "client created \n";
+
+    vector<A> vs = *((vector<A> * )vals);
+
+    for (uint i = 0; i < vs.size(); i++) {
+        ope_cl->encrypt(vs[i], true);
+        completed_enc++;
+    }
+    clientfile << "DONE with workload!\n";  
+}
+
+static void
+clientnet_thread(int c_port, int s_port) {
+    
+    if (plain_size == 64) {
+    //cerr << "creating uint64, blowfish client\n";
+    clientnetgeneric<uint64_t, blowfish>(bc, c_port, s_port);
+    return;
+    }
+
+    if (plain_size >= 128) {
+    //cerr << "creating string, aes cbc client\n";
+    clientnetgeneric<string, aes_cbc>(bc_aes, c_port, s_port);
+    return;
+    }
+
+    assert_s(false, "not recognized ciphertext size; accepting 64, >= 128\n");
+    return;
+}
+
+static void signalHandlerStart(int signum){
+    clientfile <<"signalHandler"<<endl;
+}
+
+static void signalHandlerEnd(int signum){
+    clientfile << "completed: " << completed_enc << endl;
+    clientfile <<"ending"<<endl;
+    clientfile.close();
+    exit(rv);
+}
+
+static void
+client_net(int num_clients){
+    signal(SIGALRM, signalHandlerStart);
+    signal(SIGINT, signalHandlerEnd);
+
+    vector<pid_t> pid_list;
+    for (int i=0; i< num_clients; i++) {
+            pid_t pid = fork();
+            if(pid == 0){
+                    stringstream ss;
+                    ss<<i;
+                    string filename = "client"+ss.str()+".txt";
+                    clientfile.open (filename.c_str());
+                    pause();
+                    clientnet_thread(1110+i, 1110+i);
+                    assert_s(false, "Should have exited with signalEnd");
+                    exit(1);
+            }else{
+                    cout<<"pid: "<<pid<<endl;
+                    pid_list.push_back(pid);
+            }
+    }
+    cout << pid_list.size() << " clients ready, press enter to continue. " << endl;
+    string user_signal;
+    cin >> user_signal;
+
+    for(uint i = 0; i < pid_list.size(); i++){
+            kill(pid_list[i], SIGALRM);
+    }
+    sleep(3);
+    for(uint i = 0; i < pid_list.size(); i++){
+            kill(pid_list[i], SIGINT);
+    }
+
+    int t= pid_list.size();
+    while(t>0){
+            wait(&rv);
+            cout<<"Client closed, " << t << "remaining threads" <<endl;
+            t--;
+    }
+
+}
+
+static void
+servernet_thread(int c_port, int s_port){
+    Server * serv = new Server(is_malicious, c_port, s_port);
+    
+    serv->work();
+}
+
+static void
+server_net(int num_servers){
+
+    vector<pid_t> pid_list;
+    for (int i=0; i< num_servers; i++) {
+            pid_t pid = fork();
+            if(pid == 0){
+                    pause();
+                    servernet_thread(1110+i, 1110+i);
+                    assert_s(false, "Should have exited with signalEnd");
+                    exit(1);
+            }else{
+                    cout<<"pid: "<<pid<<endl;
+                    pid_list.push_back(pid);
+            }
+    }
+    cout << pid_list.size() << " servers started, press enter when done. " << endl;
+    string user_signal;
+    cin >> user_signal;
+
+    for(uint i = 0; i < pid_list.size(); i++){
+            kill(pid_list[i], SIGTERM);
+    }
+
+    int t= pid_list.size();
+    while(t>0){
+            wait(&rv);
+            cout<<"Server closed, " << t << "remaining threads" <<endl;
+            t--;
+    }
+
+}
+
 
 static void *
 server_thread(void *s) {
@@ -571,9 +709,33 @@ int main(int argc, char ** argv)
 	cerr << "usage ./test client plain_size(64,>=128) num_to_enc is_malicious(0/1)\n \
                  OR ./test server is_malicious\n \
                  OR ./test sys plain_size num_tests is_malicious\n \
-                 OR ./test bench \n";
+                 OR ./test bench \n \
+                 OR ./test clientnet plain_size(64,>=128) num_clients \n \
+                 OR ./test servernet num_servers";
 	return 0;
     }
+
+    if (argc == 4 && string(argv[1]) == "clientnet") {
+    
+    plain_size = atoi(argv[2]);
+    int num_clients = atoi(argv[3]);
+    is_malicious = 0;
+    set_workload(1000000, plain_size, RANDOM);
+
+    client_net(num_clients);
+
+    return 0;
+    }
+
+    if (argc == 3 && string(argv[1]) == "servernet") {
+    
+    int num_servers = atoi(argv[2]);
+    is_malicious = 0;
+
+    server_net(num_servers);
+
+    return 0;
+    }    
     
     if (argc == 5 && string(argv[1]) == "client") {
 	
