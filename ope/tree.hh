@@ -24,6 +24,7 @@ public:
 
 class Tree {
 public:
+    virtual ~Tree() {}
 
     virtual TreeNode * get_root() = 0;
 

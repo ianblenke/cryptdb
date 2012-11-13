@@ -2,7 +2,7 @@
 
 #include <vector>
 #include <stdint.h>
-
+#include <string.h>
 
 template<class BlockCipher>
 void

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vector>
+#include <algorithm>
 #include <stdint.h>
 
 template<class BlockCipher>
@@ -22,7 +23,7 @@ class cbcmac {
         const uint8_t *d = static_cast<const uint8_t *> (data);
 
         if (mbytes) {
-            size_t ncopy = min(len, BlockCipher::blocksize - mbytes);
+            size_t ncopy = std::min(len, BlockCipher::blocksize - mbytes);
             memcpy(&m[mbytes], d, ncopy);
             d += ncopy;
             len -= ncopy;
