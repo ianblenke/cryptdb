@@ -7,8 +7,13 @@ xmsg_send(int sock, const std::string &s)
 {
   assert(s.size() <= UINT_MAX);
   uint32_t l = htonl(s.size());
-  write(sock, &l, 4);
-  write(sock, s.data(), s.size());
+
+  struct iovec iov[2];
+  iov[0].iov_base = &l;
+  iov[0].iov_len = 4;
+  iov[1].iov_base = (void*) s.data();
+  iov[1].iov_len = s.size();
+  assert(((ssize_t) (4 + s.size())) == writev(sock, iov, 2));
   return s.size();
 }
 
