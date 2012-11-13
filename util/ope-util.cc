@@ -42,9 +42,9 @@ path_to_vec(OPEType val, int num) {
 // the ope path and the index
 std::vector<uint>
 enc_to_vec(OPEType val) {
-    uint64_t v, nbits, index;
+    uint64_t v = 0, nbits = 0, index = 0;
     
-    parse_ope(val, v, nbits, index);
+    my_parse_ope(val, v, nbits, index);
 
     v = (v << num_bits) + index;
 
@@ -66,7 +66,8 @@ vec_to_path(const std::vector<uint> & vec) {
 
 
 OPEType
-vec_to_enc(const std::vector<uint> & path) {  
+vec_to_enc(const std::vector<uint> & path) {
+    
     return compute_ope(vec_to_path(path), path.size() * num_bits);
 }
 

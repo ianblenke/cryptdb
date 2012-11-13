@@ -617,8 +617,10 @@ public:
     
     static void
     ope_transform_check(OPETransform & t, vector<uint> ope_path, vector<uint> new_path){
-	cerr << "test on " << pretty_path(ope_path) << " vec to enc " << vec_to_enc(ope_path) << " "
-	     << "enc to vec back " << pretty_path(enc_to_vec(vec_to_enc(ope_path))) << "\n";
+	cerr << "test on " << pretty_path(ope_path);
+	cerr << " vec to enc " << vec_to_enc(ope_path) << " "
+	     << "enc to vec back " << pretty_path(ope_path) << "\n";
+
 	vector<uint> compute_path = enc_to_vec(t.transform(vec_to_enc(ope_path)));
 	if (!check_equals(compute_path, new_path)) {
 	    cerr << "expected " << pretty_path(new_path) << " computed " << pretty_path(compute_path) << "\n";
@@ -634,7 +636,7 @@ public:
 	t.push_change(vec_to_path({2}), 1,       2, 3);
 	t.push_change(vec_to_path({}), 0,        3, -1);
 
-	ope_transform_check(t, {0}, {0});
+	ope_transform_check(t, {0, 0}, {0, 0});
 	ope_transform_check(t, {3,5, 6} ,{4, 5, 6} );
 	ope_transform_check(t, {2, 2}, {2, 3});
 	ope_transform_check(t, {0, 5, 6}, {0, 5, 6});
@@ -700,9 +702,9 @@ public:
 int main(int argc, char ** argv)
 {
     //Test::test_search_tree();
-    Test::testBMerkleTree(argc, argv);
+    // Test::testBMerkleTree(argc, argv);
     //Test::testMerkleProof();
-    //Test::test_transform();
+    Test::test_transform();
 }
 
  

@@ -151,6 +151,31 @@ parse_ope(const uint64_t ctxt, uint64_t &v, uint64_t &nbits, uint64_t &index)
     v = tmp_v >> num_bits;
 }
 
+static inline void
+my_parse_ope(uint64_t ctxt, uint64_t &v, uint64_t &nbits, uint64_t &index)
+{
+    uint remainder = 64 % num_bits;
+    ctxt = ctxt >> remainder;
+    
+    uint count = 0;
+    while (ctxt > 0) {
+	uint cindex = ctxt % UNIT_VAL;
+	std::cerr << "cindex " << cindex << " mask " << s_mask << "\n";
+	if (cindex == s_mask) {
+	    ctxt = ctxt >> num_bits;
+	    count++;
+	    index = ctxt % UNIT_VAL;
+	    ctxt = ctxt >> num_bits;
+	    count++;
+	    v = ctxt;
+	    nbits = (64 - num_bits * count);
+	    return;
+	}
+	ctxt = ctxt >> num_bits;
+	count++;
+    }
+    assert_s(false, "given value " + strFromVal(ctxt) + " was not ope encoded ");
+}
 
 
 
