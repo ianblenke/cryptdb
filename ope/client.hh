@@ -412,8 +412,7 @@ ope_client<V, BlockCipher>::delete_value(V pt){
     iss>>dmp;
     char tmp_hash[10240];
     strcpy(tmp_hash, buffer);
-    size_t end = 
-	*space='\0';
+    *space='\0';
     string tmp_hash_str (tmp_hash);
     cur_merkle_hash=tmp_hash_str;  
     //cur_merkle_hash=new_merkle_hash;   
