@@ -97,6 +97,7 @@ Server::handle_enc(int csock, istringstream & iss, bool do_ins) {
     	}
 	response << ts->ope << " ";
 
+	response << PF_QUERY << " ";
 	if (MALICIOUS) {
 	    ope_tree->merkle_proof(ts->n) >> response;
 	}
@@ -125,7 +126,7 @@ Server::handle_enc(int csock, istringstream & iss, bool do_ins) {
             table_entry te = ope_table->get(ciph); // ciph must be in ope_table
             response << opeToStr(te.ope);
 	    if (MALICIOUS) {
-		response <<  " ";
+		response <<  " " << PF_INS << " ";
 		proof >> response;
 	    }
         } else{
@@ -136,7 +137,7 @@ Server::handle_enc(int csock, istringstream & iss, bool do_ins) {
             //to be less than // Ra: ??
             response << opeToStr(ope_enc-1);
 	    if (MALICIOUS) {
-		response << " ";
+		response << " " << PF_QUERY << " ";
 		ope_tree->merkle_proof(tnode) >> response;
 	    }
         }

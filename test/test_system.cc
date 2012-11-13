@@ -252,7 +252,7 @@ runtest() {
 
     cerr << "client pid is " << pid << "\n";
     
-    sleep(20);
+    sleep(2);
     
     pthread_t server_thd;
     cerr << "creating server ... ";

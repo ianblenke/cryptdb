@@ -179,6 +179,8 @@ struct UpdateMerkleProof {
 const std::string hash_empty_node = "";
 const std::string hash_not_extracted = "1";
 
+enum ProofType {PF_INS, PF_QUERY};
+
 
 // formats (key, hash) pair for hashing
 // arranges key in key_size bytes and hash in hash_size bytes

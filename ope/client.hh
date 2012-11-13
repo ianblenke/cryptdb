@@ -221,15 +221,32 @@ check_proof(stringstream & ss, MsgType optype, V ins,
 
     string inserted = Cnv<V>::StrFromType(ins);
     if (optype == MsgType::ENC_INS) {
-	UpdateMerkleProof p;
-	p << ss;
-	if (DEBUG_COMM) {cerr << "proof i got " << p.pretty() << "\n";}
-	assert_s(verify_ins_merkle_proof<V, BC>(p, inserted, old_mroot, new_mroot, bc),
-		 "client received incorrect insertion proof from server");
-	if (DEBUG_COMM) cerr << "proof verified\n";
+	int pft;
+	ss >> pft;
+	if ((ProofType)pft == PF_INS) {
+	    UpdateMerkleProof p;
+	    p << ss;
+	    if (DEBUG_COMM) {cerr << "proof i got " << p.pretty() << "\n";}
+	    assert_s(verify_ins_merkle_proof<V, BC>(p, inserted, old_mroot, new_mroot, bc),
+		     "client received incorrect insertion proof from server");
+	    if (DEBUG_COMM) cerr << "proof verified\n";
+	}
+	else {
+	    MerkleProof p;
+	    p << ss;
+	    if (DEBUG_COMM) {cerr << "proof i got " << p.pretty() << "\n";}
+	    assert_s(verify_merkle_proof(p, old_mroot),
+		     "client received incorrect insert-repeated proof from server");
+	    new_mroot = old_mroot;
+	    if (DEBUG_COMM) cerr << "proof verified\n";
+	    
+	}
 	return;
     }
     if (optype == MsgType::QUERY) {
+	int pft;
+	ss >> pft;
+	assert_s((ProofType)pft == PF_QUERY, "expected query proof");
 	MerkleProof p;
 	p << ss;
 	assert_s(verify_merkle_proof(p, old_mroot), "client received incorrect node merkle proof");
