@@ -4,8 +4,8 @@
 
 struct transf {
     std::vector<uint> ope_path;
-    uint num;
-    uint index_inserted;
+    int num;
+    int index_inserted;
     int split_point;
 };
 
@@ -21,7 +21,7 @@ public:
      * Num is the number of edges in the ope_path.
      * 
      */
-    void push_change(OPEType ope_path, uint num, uint index_inserted, int split_point);
+    void push_change(OPEType ope_path, int num, int index_inserted, int split_point);
 
     // returns the interval of values affected by the transformation
     // min and max can also be affected
