@@ -18,6 +18,7 @@
 #include <crypto/blowfish.hh>
 #include <util/static_assert.hh>
 #include <util/ope-util.hh>
+#include <util/msgsend.hh>
 #include <ope/merkle.hh>
 #include <ope/btree.hh>
 
@@ -125,19 +126,15 @@ comm_thread(void * p) {
 
     ope_client<V, BlockCipher> * oc = (ope_client<V, BlockCipher> *) p;
     
-    int buflen = 1024;
-    char buffer[buflen];
-
     string interaction_rslt="";
 
     while (true) {
 
-        memset(buffer, 0, buflen);
-	
 	if (DEBUG_COMM) { cerr << "comm_th: waiting to receive \n";}
         //Receive message to process
 	uint len = 0;
-        assert_s((len = recv(oc->csock, buffer, buflen, 0)) > 0,
+	std::string buffer;
+        assert_s((len = xmsg_recv(oc->csock, &buffer)) > 0,
 		 "receive gets  <=0 bytes");
 	if (DEBUG_COMM) {cerr << "bytes received during interaction is " << len << "\n";}
 	
@@ -148,7 +145,7 @@ comm_thread(void * p) {
         assert_s(interaction_rslt!="", "interaction error");
 
 	if (DEBUG_COMM) {cerr << "sending " << interaction_rslt << "\n";}
-        assert_s(send(oc->csock, interaction_rslt.c_str(), interaction_rslt.size(),0)
+        assert_s(xmsg_send(oc->csock, interaction_rslt)
 		 == (int)interaction_rslt.size(),
 		 "send failed");
 
@@ -280,7 +277,7 @@ ope_client<V, BlockCipher>::encrypt(V pt, bool imode) {
     msg << " ";
 
     if (DEBUG_COMM) cerr << "cl: sending message to server " << msg.str() <<"\n";
-    string res = send_receive(sock_query, msg.str(), 102400);
+    string res = send_receive(sock_query, msg.str());
     if (DEBUG_COMM) cerr << "response size " << res.size() << "\n";
     //cerr << "Result for " << pt << " is\n" << res << endl << endl;
 
@@ -326,8 +323,6 @@ ope_client<V, BlockCipher>::predIndex(vector<V> vec, V pt){
 template<class V, class BlockCipher>
 V
 ope_client<V, BlockCipher>::decrypt(uint64_t ct) const {
-    char buffer[10240];
-
     uint64_t nbits = 64 - ffsl((uint64_t)ct);
     uint64_t v= ct>>(64-nbits); //Orig v
     uint64_t path = v>>num_bits; //Path part of v
@@ -341,10 +336,11 @@ ope_client<V, BlockCipher>::decrypt(uint64_t ct) const {
     o<<"2 "<<path<<" "<<(nbits-num_bits);
     string msg = o.str();
     if(DEBUG_COMM) cout<<"Sending decrypt msg: "<<msg<<endl;
-    if( send(hsock, msg.c_str(), msg.size(),0) != msg.size()){
+    if( xmsg_send(hsock, msg) != msg.size()){
         assert_s(false, "decrypt send failed");
     }
-    if( recv(hsock, buffer, 10240, 0) <= 0){
+    string buffer;
+    if( xmsg_recv(hsock, &buffer) <= 0){
         assert_s(false, "decrypt recv failed");
     }
 
@@ -386,17 +382,16 @@ ope_client<V, BlockCipher>::delete_value(V pt){
     string msg = o.str();
     if(DEBUG) cout<<"Deleting pt="<<pt<<" with msg "<<msg<<endl;
 
-    char buffer[10240];
-    memset(buffer, '\0', 10240);
-
-    if( send(hsock, msg.c_str(), msg.size(), 0) != msg.size()){
+    if( xmsg_send(hsock, msg) != msg.size()){
         assert_s(false, "delete_value send failed");
     }
-    if( recv(hsock, buffer, 10240, 0) <= 0){
+    string buffer;
+    if( xmsg_recv(hsock, &buffer) <= 0){
         assert_s(false, "delete_value recv failed");
     }
 
 #if MALICIOUS
+    XXX_this_is_likely_broken();
     if(DEBUG_BTREE){
         cout<<"Delete_value buffer recv: "<<buffer<<endl;
     }
@@ -405,9 +400,9 @@ ope_client<V, BlockCipher>::delete_value(V pt){
     UpdateMerkleProof dmp;
     stringstream iss(buffer);
     iss>>new_merkle_hash;
-    string tmp_hash_str (buffer, 10240);
+    string tmp_hash_str (buffer);
     size_t hash_end = tmp_hash_str.find("hash_end");
-    string new_hash_str (buffer, hash_end);
+    string new_hash_str (buffer, 0, hash_end);
     cur_merkle_hash = new_hash_str;
     iss>>dmp;
     char tmp_hash[10240];
@@ -447,15 +442,16 @@ ope_client<V, BlockCipher>::insert(uint64_t v, uint64_t nbits, uint64_t index, V
 
     char buffer[10240];
     memset(buffer, '\0', 10240);
-    if( send(hsock, msg.c_str(), msg.size(),0) != (int)msg.size() ){
+    if( xmsg_send(hsock, msg) != (int)msg.size() ){
         assert_s(false, "insert send failed");
     }
-    if (recv(hsock, buffer, 10240, 0) <= 0 ){
+    if (xmsg_recv(hsock, buffer, 10240) <= 0 ){
         assert_s(false, "insert recv failed");
     }
 
 
 #if MALICIOUS
+    XXX_this_is_likely_broken();
     if(DEBUG_BTREE) cout<<"Insert buffer="<<buffer<<endl;
     const string tmp_merkle_hash = cur_merkle_hash;
     string new_merkle_hash;

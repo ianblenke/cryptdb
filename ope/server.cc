@@ -1,4 +1,5 @@
 #include "server.hh"
+#include <util/msgsend.hh>
 
 using std::cout;
 using std::endl;
@@ -147,7 +148,7 @@ Server::handle_enc(int csock, istringstream & iss, bool do_ins) {
     uint reslen = res.size();
     // cerr << "sending\n" <<res << "\n";
     if (DEBUG_COMM) cerr << "sent " << reslen << " bytes \n";
-    assert_s(send(csock, res.c_str(), reslen, 0) == (int)reslen,
+    assert_s(xmsg_send(csock, res) == (int)reslen,
 	     "problem with send");
     
 }
@@ -221,15 +222,11 @@ void Server::work() {
     if (DEBUG_COMM) cerr << "Server received connection \n";
     
        
-    uint buflen = 10240;
-    char buffer[buflen];
-
     while (true) {
     	if (DEBUG_COMM) cerr<<"Waiting for request..."<<endl;
 
-        memset(buffer, 0, buflen);
-	
-	uint len = recv(csock, buffer, buflen, 0);
+	std::string buffer;
+	uint len = xmsg_recv(csock, &buffer);
 	if (len  == 0) {
 	    if (DEBUG_COMM) cerr << "client closed connection\n";
 	    close(csock);

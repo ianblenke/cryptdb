@@ -1,7 +1,7 @@
 #pragma once
 
 #include "blowfish.hh"
-//#include <util/static_assert.hh>
+#include <util/static_assert.hh>
 #include <iostream>
 #include <utility>
 #include <stdio.h>

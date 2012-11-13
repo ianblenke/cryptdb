@@ -3,6 +3,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <util/ope-util.hh>
+#include <util/msgsend.hh>
 
 using namespace std;
 
@@ -59,23 +60,19 @@ create_and_connect(string host_name, int host_port, bool fail) {
 }
 
 std::string
-send_receive(int sock, const string & msg, uint buflen) {
+send_receive(int sock, const string & msg) {
 
     if (DEBUG_COMM) {cerr << "send/receive; ------ \n to send  " << msg << "\n";}
-    assert_s(send(sock, msg.c_str(), msg.size(), 0) == (int)msg.size(),
+    assert_s(xmsg_send(sock, msg) == (int)msg.size(),
 	     "error with send");
     
-    char buffer[buflen];
-	
-    memset(buffer, '\0', buflen);
-
+    string res;
     if (DEBUG_COMM) { cerr << "waiting for receive\n";}
-    assert_s(recv(sock, buffer, buflen, 0) > 0,
+    assert_s(xmsg_recv(sock, &res) > 0,
 	     "error with receive");
-    if (DEBUG_COMM) {cerr << "received " << buffer << "\n -------- \n";}
-    
-    return string(buffer);
-       
+    if (DEBUG_COMM) {cerr << "received " << res << "\n -------- \n";}
+
+    return res;
 }
 
 
