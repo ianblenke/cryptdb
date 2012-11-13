@@ -237,6 +237,8 @@ int rv;
 int completed_enc = 0;
 fstream clientfile;
 
+struct timeval start_time;
+
 template<class A, class BC>
 static void
 clientnetgeneric(BC * bc, int c_port, int s_port) {
@@ -246,6 +248,8 @@ clientnetgeneric(BC * bc, int c_port, int s_port) {
 
     vector<A> vs = *((vector<A> * )vals);
     pause();
+
+    gettimeofday(&start_time, 0);
     for (uint i = 0; i < vs.size(); i++) {
         ope_cl->encrypt(vs[i], true);
         completed_enc++;
@@ -277,7 +281,13 @@ static void signalHandlerStart(int signum){
 }
 
 static void signalHandlerEnd(int signum){
-    clientfile << "completed: " << completed_enc << endl;
+    struct timeval end_time;
+    gettimeofday(&end_time, 0);    
+
+    long time_passed = end_time.tv_sec+end_time.tv_usec/((long) 1000000.0) - 
+        start_time.tv_sec+start_time.tv_usec/((long) 1000.0);
+    clientfile << "completed: " << completed_enc << " in " << time_passed << endl;
+    clientfile << "throughput: " << completed_enc/time_passed << endl;
     clientfile <<"ending"<<endl;
     clientfile.close();
     exit(rv);
