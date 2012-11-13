@@ -246,7 +246,6 @@ clientnetgeneric(BC * bc, int c_port, int s_port) {
 
     vector<A> vs = *((vector<A> * )vals);
     pause();
-    
     for (uint i = 0; i < vs.size(); i++) {
         ope_cl->encrypt(vs[i], true);
         completed_enc++;
@@ -307,8 +306,7 @@ client_net(int num_clients){
     }
     cout << pid_list.size() << " clients ready, press enter to continue. " << endl;
     string user_signal;
-    cin >> user_signal;
-
+    cin.get();
     for(uint i = 0; i < pid_list.size(); i++){
             kill(pid_list[i], SIGALRM);
     }
@@ -320,9 +318,10 @@ client_net(int num_clients){
     int t= pid_list.size();
     while(t>0){
             wait(&rv);
-            cout<<"Client closed, " << t << "remaining threads" <<endl;
+            cout<<"Client closed, " << t << " remaining threads" <<endl;
             t--;
     }
+    cout << "All clients closed" << endl;
 
 }
 
@@ -353,13 +352,7 @@ server_net(int num_servers){
                     pid_list.push_back(pid);
             }
     }
-    cout << pid_list.size() << " servers started, press enter when done. " << endl;
-    string user_signal;
-    cin >> user_signal;
-
-    for(uint i = 0; i < pid_list.size(); i++){
-            kill(pid_list[i], SIGTERM);
-    }
+    cout << pid_list.size() << " servers started. " << endl;
 
     int t= pid_list.size();
     while(t>0){
@@ -724,7 +717,7 @@ int main(int argc, char ** argv)
     plain_size = atoi(argv[2]);
     int num_clients = atoi(argv[3]);
     is_malicious = 0;
-    set_workload(1000000, plain_size, RANDOM);
+    set_workload(10000, plain_size, INCREASING);
 
     client_net(num_clients);
 
@@ -779,7 +772,9 @@ int main(int argc, char ** argv)
     cerr << "usage ./test client plain_size(64,>=128) num_to_enc is_malicious(0/1)\n \
                  OR ./test server is_malicious\n \
                  OR ./test sys plain_size num_tests is_malicious\n \
-                 OR ./test bench \n";
+                 OR ./test bench \n \
+                 OR ./test clientnet plain_size(64,>=128) num_clients \n \
+                 OR ./test servernet num_servers";
     
 
     return 0;
