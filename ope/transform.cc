@@ -40,7 +40,7 @@ OPEType
 OPETransform::transform(OPEType val) {
   
     if (DEBUG_TRANSF) std::cerr << "val " << val << " \n";
-
+  
     // repr consists of ope path followed by index
     vector<uint> repr = enc_to_vec(val);
 
