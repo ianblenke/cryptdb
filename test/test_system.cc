@@ -520,8 +520,8 @@ test_bench() {
 
     cout << "{ \"hostname\": \"" << uts.nodename << "\",\n"
          << "  \"username\": \"" << getenv("USER") << "\",\n"
-         << "  \"time\": " << curtime << ",\n"
-         << "  \"asctime\": \"" << timebuf << "\",\n"
+         << "  \"start_time\": " << curtime << ",\n"
+         << "  \"start_asctime\": \"" << timebuf << "\",\n"
          << "  \"data\": [";
 
     for (auto c : our_confs) {
@@ -542,7 +542,13 @@ test_bench() {
         }	   
     }
 
-    cout << "]}\n";
+    curtime = time(0);
+    strftime(timebuf, sizeof(timebuf), "%a, %d %b %Y %T %z", localtime(&curtime));
+
+    cout << "],\n"
+         << "  \"end_time\": " << curtime << ",\n"
+         << "  \"end_asctime\": \"" << timebuf << "\"\n"
+         << "}\n";
 }
 
 static void
