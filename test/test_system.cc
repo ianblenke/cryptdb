@@ -437,6 +437,7 @@ measure_bclo_instance(uint n, bclo_conf c) {
     cout << "  \"dv:enctime_ms\": " << (time_interval*1.0/(n *1000.0)) << "\n"
          << "}";
     datadelim = ",\n";
+    cout.flush();
 }
 
 template <class A>
