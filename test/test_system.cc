@@ -368,7 +368,7 @@ measure_ours_instance(uint n, our_conf c, BC * bc) {
     }
     assert_s(pid_client > 0, "issue starting client");
 
-    cerr << "client pid is " << pid_client << "\n";
+    // cerr << "client pid is " << pid_client << "\n";
     sleep(1);
 
     pthread_t server_thd;
