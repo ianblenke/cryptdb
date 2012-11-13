@@ -252,7 +252,7 @@ runtest() {
 
     cerr << "client pid is " << pid << "\n";
     
-    sleep(2);
+    sleep(1);
     
     pthread_t server_thd;
     cerr << "creating server ... ";
@@ -368,8 +368,8 @@ measure_ours_instance(uint n, our_conf c, BC * bc) {
     }
     assert_s(pid_client > 0, "issue starting client");
 
-    cerr << "client pid is " << pid_client << "\n";
-    sleep(10);
+    // cerr << "client pid is " << pid_client << "\n";
+    sleep(1);
 
     pthread_t server_thd;
     if (DEBUG_EXP) cerr << "creating server ... ";
@@ -520,8 +520,8 @@ test_bench() {
 
     cout << "{ \"hostname\": \"" << uts.nodename << "\",\n"
          << "  \"username\": \"" << getenv("USER") << "\",\n"
-         << "  \"time\": " << curtime << ",\n"
-         << "  \"asctime\": \"" << timebuf << "\",\n"
+         << "  \"start_time\": " << curtime << ",\n"
+         << "  \"start_asctime\": \"" << timebuf << "\",\n"
          << "  \"data\": [";
 
     for (auto c : our_confs) {
@@ -542,7 +542,13 @@ test_bench() {
         }	   
     }
 
-    cout << "]}\n";
+    curtime = time(0);
+    strftime(timebuf, sizeof(timebuf), "%a, %d %b %Y %T %z", localtime(&curtime));
+
+    cout << "],\n"
+         << "  \"end_time\": " << curtime << ",\n"
+         << "  \"end_asctime\": \"" << timebuf << "\"\n"
+         << "}\n";
 }
 
 static void
