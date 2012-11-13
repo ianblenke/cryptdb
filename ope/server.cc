@@ -96,10 +96,10 @@ Server::handle_enc(int csock, istringstream & iss, bool do_ins) {
     	if (do_ins) {
     	    ts->refcount++;
     	}
-	response << ts->ope << " ";
+	response << ts->ope;
 
-	response << PF_QUERY << " ";
 	if (MALICIOUS) {
+	    response <<" " << PF_QUERY << " ";
 	    ope_tree->merkle_proof(ts->n) >> response;
 	}
    	
@@ -129,6 +129,7 @@ Server::handle_enc(int csock, istringstream & iss, bool do_ins) {
 	    if (MALICIOUS) {
 		response <<  " " << PF_INS << " ";
 		proof >> response;
+		response << " ";
 	    }
         } else{
 

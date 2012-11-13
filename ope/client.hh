@@ -231,6 +231,7 @@ check_proof(stringstream & ss, MsgType optype, V ins,
 	    if (DEBUG_COMM) cerr << "proof verified\n";
 	}
 	else {
+	    assert_s((ProofType)pft == PF_QUERY, "invalid proof type");
 	    MerkleProof p;
 	    p << ss;
 	    if (DEBUG_COMM) {cerr << "proof i got " << p.pretty() << "\n";}
