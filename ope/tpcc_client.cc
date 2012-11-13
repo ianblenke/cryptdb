@@ -78,7 +78,7 @@ int main(int argc, char* argv[])
   std::vector<std::pair<uint64_t, int> > values_in_db;
   std::vector<std::pair<std::string, int> > strings_in_db;
 
-  void* bc;
+  void* bc = NULL;
 
   if (ope_type == "INT"){
 

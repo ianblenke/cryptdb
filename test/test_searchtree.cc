@@ -594,8 +594,11 @@ public:
     }
 
     static string
-    ope_t_print(OPETransform t, vector<uint> path) {
-	OPEType val = vec_to_enc(path);
+    ope_t_print(OPETransform t, vector<uint> vec) {
+	cerr << "\n\n----------------\n";
+	cerr << "given path " << pretty_path(vec) << "\n";
+	OPEType val = vec_to_enc(vec);
+	cerr << "Val " << val << "\n";
 	vector<uint> str = enc_to_vec(t.transform(val));
 	return pretty_path(str);
     }
@@ -640,9 +643,9 @@ public:
 	ope_transform_check(t, {3,5, 6} ,{4, 5, 6} );
 	ope_transform_check(t, {2, 2}, {2, 3});
 	ope_transform_check(t, {0, 5, 6}, {0, 5, 6});
-	cerr << " 2,1,5,0 " << ope_t_print(t, {2, 1, 5, 0}) << "\n";
-	cerr << "2, 8  " << ope_t_print(t, {2, 8}) << "\n";
-	cerr << "2, 1, 1, 5  " << ope_t_print(t, {2, 1, 1, 5}) << "\n";
+	ope_transform_check(t, {2, 1, 5, 0}, {2, 2, 1, 0});
+	ope_transform_check(t, {2,7}, {3, 4}); 
+	ope_transform_check(t, {2, 1, 1, 5}, {2, 1, 1, 5});
 
 	cerr << "Ok -- not root case and test interval!\n";
 	

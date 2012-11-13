@@ -39,7 +39,7 @@ int main(int argc, char* argv[])
 
   std::cout << rt.rows.size()<< std::endl;
 
-  OPE* ope;
+  OPE* ope = NULL;
   if (ope_type == "INT")
     ope = new OPE(passwd, 32, 64);
   else if (ope_type == "STRING")

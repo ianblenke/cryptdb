@@ -28,10 +28,14 @@
 #define DEBUG_PROOF 0
 #define DEBUG_EXP 0
 
+#define DEBUG_TRANSF 0
+
 // Controls tree type
 #define STREE 0
 
 #define BULK_LOAD 1
+
+
 
 // hardcoding passwords for our eval
 const std::string passwd = "opeopeopeopeopeo";
@@ -92,20 +96,22 @@ const uint MAX_INDEX = (1 << num_bits) -1 ;
 
 // transforms an ope encoding into
 // a vector of uint each being an edge on the path
+// and the last one being the index
 std::vector<uint>
 enc_to_vec(OPEType val);
 
-// the opposite of above
+// the opposite of above, creates valid ope encoding
 OPEType
 vec_to_enc(const std::vector<uint> & path);
 
 
-//takes an ope path and transforms it into
+//takes an ope path value -- a number and transforms it into
 // a vector 
 std::vector<uint>
 path_to_vec(OPEType val, int num);
 
-//takes a vector and transforms it into a ope path value
+//takes a vector consisting of ope path and index
+// and transforms it into a ope path value
 OPEType
 vec_to_path(const std::vector<uint> &path);
 
@@ -151,28 +157,30 @@ parse_ope(const uint64_t ctxt, uint64_t &v, uint64_t &nbits, uint64_t &index)
     v = tmp_v >> num_bits;
 }
 
+// Given OPE encoding returns v = ope path value
+// nbits len in bits of v
+// index -- position in last node on path (the node pointed to by v)
 static inline void
 my_parse_ope(uint64_t ctxt, uint64_t &v, uint64_t &nbits, uint64_t &index)
 {
     uint remainder = 64 % num_bits;
     ctxt = ctxt >> remainder;
     
-    uint count = 0;
+    uint count = remainder;
     while (ctxt > 0) {
 	uint cindex = ctxt % UNIT_VAL;
-	std::cerr << "cindex " << cindex << " mask " << s_mask << "\n";
 	if (cindex == s_mask) {
 	    ctxt = ctxt >> num_bits;
-	    count++;
+	    count = count + num_bits;
 	    index = ctxt % UNIT_VAL;
 	    ctxt = ctxt >> num_bits;
-	    count++;
+	    count = count + num_bits;
 	    v = ctxt;
-	    nbits = (64 - num_bits * count);
+	    nbits = (64 - count);
 	    return;
 	}
 	ctxt = ctxt >> num_bits;
-	count++;
+	count = count + num_bits;
     }
     assert_s(false, "given value " + strFromVal(ctxt) + " was not ope encoded ");
 }

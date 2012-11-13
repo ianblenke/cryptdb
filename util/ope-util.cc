@@ -22,8 +22,7 @@ path_append(uint64_t v, uint index) {
 }
 
 
-//takes a ope path with no padding of
-// num units and transforms it in vec
+
 std::vector<uint>
 path_to_vec(OPEType val, int num) {
     vector<uint> res = std::vector<uint>(num);
@@ -37,9 +36,6 @@ path_to_vec(OPEType val, int num) {
    
 }
 
-// takes a normal ope encoding with mask and
-// transforms it in a path consisting of
-// the ope path and the index
 std::vector<uint>
 enc_to_vec(OPEType val) {
     uint64_t v = 0, nbits = 0, index = 0;
@@ -60,15 +56,14 @@ vec_to_path(const std::vector<uint> & vec) {
     for (uint i = 0; i < vec.size(); i++) {
 	val = (val << num_bits) + vec[i];
     }
-
     return val;
 }
 
 
 OPEType
-vec_to_enc(const std::vector<uint> & path) {
-    
-    return compute_ope(vec_to_path(path), path.size() * num_bits);
+vec_to_enc(const std::vector<uint> & vec) {
+    assert_s(vec.size() >= 1, "vec must have at least one element -- the index");
+    return compute_ope(vec_to_path(vec), vec.size() * num_bits);
 }
 
 
