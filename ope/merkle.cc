@@ -422,7 +422,7 @@ UpdateMerkleProof::old_hash() const {
 
 ostream&
 UpdateMerkleProof::operator>>(std::ostream &out){
-    out << st_before << " " << st_after;
+    out << " " << st_before << " " << st_after << " ";
     return out;
 }
 

@@ -178,17 +178,17 @@ public:
 template<class A>
 static vector<A> *
 get_uniq_wload(uint num, uint plain_size, workload w) {
-    uint fails = 0;
+    //   uint fails = 0;
     vector<A> * res = new vector<A>();
     for (uint i = 0; i < num; i++) {	    
 	A q = WorkloadGen<A>::get_query(i, plain_size, w);
-	while (mcontains(*res, q)) {
+/*	while (mcontains(*res, q)) {
 	    fails++;
 	    if (fails > num/2) {
 		    assert_s(false, "hard to get a workload of unique values, abandoning");
-	    }
+		    }
 	    q = WorkloadGen<A>::get_query(i, plain_size, w);
-	}
+	    }*/
 	res->push_back(q);
     }
     return res;
@@ -249,8 +249,10 @@ runtest() {
 	exit(EXIT_SUCCESS);
     }
     // parent
+
+    cerr << "client pid is " << pid << "\n";
     
-    sleep(2);
+    sleep(20);
     
     pthread_t server_thd;
     cerr << "creating server ... ";
@@ -366,7 +368,8 @@ measure_ours_instance(uint n, our_conf c, BC * bc) {
     }
     assert_s(pid_client > 0, "issue starting client");
 
-    sleep(2);
+    cerr << "client pid is " << pid_client << "\n";
+    sleep(10);
 
     pthread_t server_thd;
     if (DEBUG_EXP) cerr << "creating server ... ";
@@ -452,22 +455,22 @@ vector<our_conf> our_confs =
 {// num_elems              workload       plain_size    is_malicious
  //   {{10,100, 1000},       INCREASING,      64,           false},
  //    {{10, 100, 1000},       RANDOM,        64,           false},
-    {{10, 100, 1000},
-                           INCREASING,      64,           true},
-     {{10,100,1000},
-                           RANDOM,          64,           true},
-     {{10,100,1000},
-                           INCREASING,      128,          false},
-     {{10, 100, 1000},
-                           RANDOM,        128,          false},
-     {{10,100,1000},
+    //  {{10, 100, 1000},
+//                           INCREASING,      64,           true},
+//     {{10,100,1000},
+//                           RANDOM,          64,           true},
+//     {{10,100,1000},
+//                           INCREASING,      128,          false},
+//     {{10, 100, 1000},
+//                           RANDOM,        128,          false},
+    {{10000},
                            INCREASING,      128,          true},
-     {{10,100,1000},
-                           RANDOM,          128,          true},
-     {{10,100,1000},
-                           INCREASING,      256,          true},
-     {{10,100,1000},
-                           RANDOM,          256,          true},
+     //   {{10,100,1000},
+     //                         RANDOM,          128,          true},
+//{{10,100,1000},
+     //                     INCREASING,      256,          true},
+     //{{10,100,1000},
+     //                    RANDOM,          256,          true},
 };
 
 

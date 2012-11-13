@@ -18,7 +18,7 @@ public:
      * split_point+1 is the position of the first node in the new node created
      * during split
      * If split point is negative, the node was not split.
-     * Num is the number of elements in the ope_path.
+     * Num is the number of edges in the ope_path.
      * 
      */
     void push_change(OPEType ope_path, uint num, uint index_inserted, int split_point);
@@ -34,6 +34,7 @@ public:
     //must deal with root
 
 private:
+    // first transformation is the leaf
     std::list<transf> ts;
  
 };

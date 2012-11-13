@@ -17,10 +17,7 @@ OPETransform::push_change(OPEType ope_path, uint num, uint index_inserted, int s
     t.split_point = split_point;
 
     ts.push_back(t);
-
 }
-
-
 
 void
 OPETransform::get_interval(OPEType & omin, OPEType & omax) {
@@ -32,43 +29,41 @@ OPETransform::get_interval(OPEType & omin, OPEType & omax) {
     transf t = ts.back();
     assert_s(t.split_point < 0, "last transformation should have no split point");
     
-    omin = vec_to_enc(t.ope_path);
+    omax = vec_to_enc(t.ope_path);
     OPEType x = (vec_to_path(t.ope_path) << num_bits) + t.index_inserted;
     uint nbits = (t.ope_path.size() + 1) * num_bits;
 
-    omax = x << (64-nbits);
+    omin = x << (64-nbits);
 }
-
-
 
 OPEType
 OPETransform::transform(OPEType val) {
   
     std::cerr << "val " << val << " \n";
-  
-    vector<uint> path = enc_to_vec(val);
 
-    cerr << "its path " << pretty_path(path) << "\n";
+    // repr consists of ope path followed by index
+    vector<uint> repr = enc_to_vec(val);
+
+    cerr << "its path " << pretty_path(repr) << "\n";
     
     bool leaf = true;
     
     // loop thru each transf
     for (auto t :  ts) {
-	if (match(t.ope_path, path)) { // need to transform
+	if (match(t.ope_path, repr)) { // need to transform
 	    cerr << "match with ope path " << pretty_path(t.ope_path) << "\n";
-	    assert_s(path.size() > t.ope_path.size(), "logic error");
-	    uint & index = path[t.ope_path.size()];
+	    uint & index = repr[t.ope_path.size()];
 	    if (leaf && (t.index_inserted <= index)) {
 		index++;
 	    }
 	    if (t.split_point < (int)index) {
 		index = index - t.split_point - 1;
 		assert_s(t.ope_path.size() > 0, "split point at root\n");
-		path[t.ope_path.size()-1]++;
+		repr[t.ope_path.size()-1]++;
 	    }
 	}
 	leaf = false;
     }
 
-    return vec_to_enc(path);
+    return vec_to_enc(repr);
 }

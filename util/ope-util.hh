@@ -109,16 +109,11 @@ path_to_vec(OPEType val, int num);
 OPEType
 vec_to_path(const std::vector<uint> &path);
 
-
-
 bool
 match(const std::vector<uint> & ope_path, const std::vector<uint> & path);
 
-
-
 std::string
 pretty_path(std::vector<uint> v);
-
 
 std::string
 opeToStr(OPEType ope);

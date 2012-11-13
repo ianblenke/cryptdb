@@ -32,12 +32,14 @@ path_to_vec(OPEType val, int num) {
 	val = val >> num_bits;
     }
 
+    assert_s(val == 0, "val should have gotten zero");
     return res;
-
+   
 }
 
 // takes a normal ope encoding with mask and
-// transforms it in a path 
+// transforms it in a path consisting of
+// the ope path and the index
 std::vector<uint>
 enc_to_vec(OPEType val) {
     uint64_t v, nbits, index;
@@ -53,10 +55,10 @@ enc_to_vec(OPEType val) {
 
 
 OPEType
-vec_to_path(const std::vector<uint> & path) {
+vec_to_path(const std::vector<uint> & vec) {
     OPEType val = 0;
-    for (uint i = 0; i < path.size(); i++) {
-	val = (val << num_bits) + path[i];
+    for (uint i = 0; i < vec.size(); i++) {
+	val = (val << num_bits) + vec[i];
     }
 
     return val;
@@ -64,8 +66,7 @@ vec_to_path(const std::vector<uint> & path) {
 
 
 OPEType
-vec_to_enc(const std::vector<uint> & path) {
-  
+vec_to_enc(const std::vector<uint> & path) {  
     return compute_ope(vec_to_path(path), path.size() * num_bits);
 }
 
@@ -83,9 +84,15 @@ pretty_path(vector<uint> v) {
 
 
 bool
-match(const std::vector<uint> & ope_path, const std::vector<uint> & path) {
+match(const std::vector<uint> & ope_path, const std::vector<uint> & repr) {
+
+    // opepath needs to be strictly shorter than repr size
+    if (ope_path.size() >= repr.size()) {
+	return false;
+    }
+    
     for (uint i = 0; i < ope_path.size();i++){
-	if (ope_path[i] != path[i]) {
+	if (ope_path[i] != repr[i]) {
 	    return false;
 	}
     }
