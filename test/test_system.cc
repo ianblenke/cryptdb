@@ -357,7 +357,7 @@ server_net(int num_servers){
     int t= pid_list.size();
     while(t>0){
             wait(&rv);
-            cout<<"Server closed, " << t << "remaining threads" <<endl;
+            cout<<"Server closed, " << t << " remaining threads" <<endl;
             t--;
     }
 
