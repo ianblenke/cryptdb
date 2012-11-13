@@ -29,7 +29,7 @@ public:
     OPETable<std::string> * ope_table;
     Connect * db; 
    
-    Server(bool malicious);
+    Server(bool malicious, int cport = OPE_CLIENT_PORT, int sport = OPE_SERVER_PORT);
     ~Server();
 
     void work();
