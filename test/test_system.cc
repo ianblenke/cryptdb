@@ -440,6 +440,7 @@ measure_bclo_instance(uint n, bclo_conf c) {
     cout << "  \"dv:enctime_ms\": " << (time_interval*1.0/(n *1000.0)) << "\n"
          << "}";
     datadelim = ",\n";
+    cout.flush();
 }
 
 template <class A>
@@ -455,6 +456,7 @@ vector<our_conf> our_confs =
 {// num_elems              workload       plain_size    is_malicious
  //   {{10,100, 1000},       INCREASING,      64,           false},
  //    {{10, 100, 1000},       RANDOM,        64,           false},
+
     //  {{10, 100, 1000},
 //                           INCREASING,      64,           true},
 //     {{10,100,1000},
@@ -476,15 +478,21 @@ vector<our_conf> our_confs =
 
 vector<bclo_conf> BCLO_confs =
 {// num_elems               type          plain_size       cache
-    {{10,100,1000, 10000},
+    {{10,100,1000},
                             INCREASING,      32,           false},
-    {{10,100,1000, 10000},
-                            INCREASING,      64,          false},
+    {{10,100,1000,10000,100000},
+                            INCREASING,      32,           true},
+    {{10,100,1000},
+                            INCREASING,      64,           false},
+    {{10,100,1000,10000,100000},
+                            INCREASING,      64,           true},
     {{10,100,1000},
                             INCREASING,      128,          false},
-    {{10,100,1000},
+    {{10,100,1000,10000},
+                            INCREASING,      128,          true},
+    {{10,100},
                             INCREASING,      256,          false},
-      {{10,100,1000},
+    {{10,100,1000,10000},
                             INCREASING,      256,          true},
 };
 
