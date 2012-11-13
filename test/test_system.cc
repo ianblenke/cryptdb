@@ -17,6 +17,7 @@
 #include <crypto/blowfish.hh>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <sys/utsname.h>
 #include <crypto/aes_cbc.hh>
 #include <crypto/ope.hh>
 #include <NTL/ZZ.h>
@@ -240,7 +241,7 @@ server_thread(void *s) {
 
 static void
 runtest() {
-           
+    cout.flush();
     pid_t pid = fork();
     if (pid == 0) {
 	// child
@@ -336,22 +337,27 @@ client_work(uint n, our_conf c, BC * bc) {
 	ope_cl->encrypt(WorkloadGen<A>::get_query(i, c.plain_size, c.w), true);
     }
     uint64_t time_interval = t.lap();
-    cerr << "time per enc: " << (time_interval*1.0/(n *1000.0)) << " ms \n";
+    cout << "  \"dv:enctime_ms\": " << (time_interval*1.0/(n *1000.0)) << ",\n";
 
      if (DEBUG_EXP) cerr << "DONE!\n";
 }
+
+static const char* datadelim = "\n";
 
 template<class A, class BC>
 static void
 measure_ours_instance(uint n, our_conf c, BC * bc) {
 
-    cerr << "num=" << n << " ciphsize=" << c.plain_size << " malicious=" << c.is_malicious << " ";
-    if (c.w == INCREASING) {
-	cerr << " increasing\n";
-    } else {
-	cerr << " random \n";
-    }
+    cout << datadelim
+         << "{ \"iv:scheme\": " << "\"stOPE\"" << ",\n"
+         << "  \"iv:nelem\": " << n << ",\n"
+         << "  \"iv:ptsize\": " << c.plain_size << ",\n"
+         << "  \"iv:malicious\": " << c.is_malicious << ",\n"
+         << "  \"iv:workload\": " << ((c.w == INCREASING) ? "\"increasing\""
+                                                          : "\"random\"") << ",\n";
+
     // start client
+    cout.flush();
     pid_t pid_client = fork();
     if (pid_client == 0) {
 	//client
@@ -378,7 +384,9 @@ measure_ours_instance(uint n, our_conf c, BC * bc) {
     assert_s(WIFEXITED(status),"client terminated abnormally");
     assert_s(pid_client == pid2, "incorrect pid");
 
-    cerr << "rewrites per enc " << (s->num_rewrites() * 1.0)/(n*1.0) << "\n";
+    cout << "  \"dv:rewrites_per_enc\": " << (s->num_rewrites() * 1.0)/(n*1.0) << "\n"
+         << "}";
+    datadelim = ",\n";
 
 //    cerr << "checking server state..";
 //    check_correct<A, BC>(s, vals, bc);
@@ -397,6 +405,16 @@ void measure_ours(our_conf c, BC * bc) {
 template <class A>
 static void
 measure_bclo_instance(uint n, bclo_conf c) {
+
+    cout << datadelim
+         << "{ \"iv:scheme\": " << "\"bclo\"" << ",\n"
+         << "  \"iv:nelem\": " << n << ",\n"
+         << "  \"iv:ptsize\": " << c.plain_size << ",\n"
+         << "  \"iv:ctsize\": " << c.plain_size*2 << ",\n"
+         << "  \"iv:cached\": " << c.use_cache << ",\n"
+         << "  \"iv:workload\": " << ((c.w == INCREASING) ? "\"increasing\""
+                                                          : "\"random\"") << ",\n";
+
     OPE* ope = new OPE(passwd, c.plain_size, c.plain_size * 2, c.use_cache);
     NTL::ZZ ope_enc, pt;
 
@@ -416,15 +434,15 @@ measure_bclo_instance(uint n, bclo_conf c) {
         }
     }
     uint64_t time_interval = t.lap();
-    cerr << "time per enc: " << (time_interval*1.0/(n *1000.0)) << " ms \n";
+    cout << "  \"dv:enctime_ms\": " << (time_interval*1.0/(n *1000.0)) << "\n"
+         << "}";
+    datadelim = ",\n";
 }
 
 template <class A>
 static
 void measure_bclo(bclo_conf c) {
-    cerr << "BCLO pt size: " << c. plain_size << " ct size: " << c.plain_size * 2 << endl;
     for(uint i = 0; i < c.num_elems.size(); i++){
-	cerr << "num="<<c.num_elems[i] << " cached " << c.use_cache << ":\n";
         measure_bclo_instance<A>(c.num_elems[i], c);
     }
 }
@@ -469,7 +487,19 @@ vector<bclo_conf> BCLO_confs =
 
 static void
 test_bench() {
-    cerr << "Our scheme:\n";
+    time_t curtime = time(0);
+    char timebuf[128];
+    strftime(timebuf, sizeof(timebuf), "%a, %d %b %Y %T %z", localtime(&curtime));
+
+    struct utsname uts;
+    uname(&uts);
+
+    cout << "{ \"hostname\": \"" << uts.nodename << "\",\n"
+         << "  \"username\": \"" << getenv("USER") << "\",\n"
+         << "  \"time\": " << curtime << ",\n"
+         << "  \"asctime\": \"" << timebuf << "\",\n"
+         << "  \"data\": [";
+
     for (auto c : our_confs) {
     	if (c.plain_size == 64) {
     	    measure_ours<uint64_t, blowfish>(c, bc);
@@ -478,7 +508,6 @@ test_bench() {
     	}
     }
     
-    cerr << "BCLO'09 scheme: \n";
     for (auto c: BCLO_confs) {
         if (c.plain_size == 32) {
             measure_bclo<uint32_t>(c);
@@ -488,7 +517,8 @@ test_bench() {
             measure_bclo<NTL::ZZ>(c);
         }	   
     }
-    cerr << "DONE\n";
+
+    cout << "]}\n";
 }
 
 static void
