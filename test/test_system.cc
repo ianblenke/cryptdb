@@ -252,7 +252,7 @@ runtest() {
 
     cerr << "client pid is " << pid << "\n";
     
-    sleep(2);
+    sleep(1);
     
     pthread_t server_thd;
     cerr << "creating server ... ";
@@ -369,7 +369,7 @@ measure_ours_instance(uint n, our_conf c, BC * bc) {
     assert_s(pid_client > 0, "issue starting client");
 
     cerr << "client pid is " << pid_client << "\n";
-    sleep(10);
+    sleep(1);
 
     pthread_t server_thd;
     if (DEBUG_EXP) cerr << "creating server ... ";
