@@ -245,7 +245,8 @@ clientnetgeneric(BC * bc, int c_port, int s_port) {
     clientfile << "client created \n";
 
     vector<A> vs = *((vector<A> * )vals);
-
+    pause();
+    
     for (uint i = 0; i < vs.size(); i++) {
         ope_cl->encrypt(vs[i], true);
         completed_enc++;
@@ -295,11 +296,10 @@ client_net(int num_clients){
                     stringstream ss;
                     ss<<i;
                     string filename = "client"+ss.str()+".txt";
-                    clientfile.open (filename.c_str());
-                    pause();
+                    clientfile.open (filename.c_str(), std::ios::in | std::ios::out | std::ios::trunc);
                     clientnet_thread(1110+i, 1110+i);
                     assert_s(false, "Should have exited with signalEnd");
-                    exit(1);
+                    exit(rv);
             }else{
                     cout<<"pid: "<<pid<<endl;
                     pid_list.push_back(pid);
@@ -312,7 +312,7 @@ client_net(int num_clients){
     for(uint i = 0; i < pid_list.size(); i++){
             kill(pid_list[i], SIGALRM);
     }
-    sleep(3);
+    sleep(5);
     for(uint i = 0; i < pid_list.size(); i++){
             kill(pid_list[i], SIGINT);
     }
@@ -333,17 +333,21 @@ servernet_thread(int c_port, int s_port){
     serv->work();
 }
 
+static void signalHandlerTerminate(int signum){
+    exit(rv);
+}
+
 static void
 server_net(int num_servers){
+    signal(SIGTERM, signalHandlerTerminate);
 
     vector<pid_t> pid_list;
     for (int i=0; i< num_servers; i++) {
             pid_t pid = fork();
             if(pid == 0){
-                    pause();
                     servernet_thread(1110+i, 1110+i);
                     assert_s(false, "Should have exited with signalEnd");
-                    exit(1);
+                    exit(rv);
             }else{
                     cout<<"pid: "<<pid<<endl;
                     pid_list.push_back(pid);
