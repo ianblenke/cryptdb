@@ -41,6 +41,12 @@ extern "C" {
     void  set_transform_deinit(UDF_INIT *initid);
 
 
+    // given an ope encoding, transforms it into the new encoding
+    my_bool transform_init(UDF_INIT * initid, UDF_ARGS * args, char *message);
+    ulonglong transform(UDF_INIT *initid, UDF_ARGS *args, char *is_null,
+				char *error);
+    void  transform_deinit(UDF_INIT *initid);
+
 // UDF that interacts with ops server with respect to some encryption
     my_bool  get_ops_server_init(UDF_INIT *initid, UDF_ARGS *args,
 				 char *message);
@@ -209,8 +215,14 @@ extern "C" {
 	opetransf = new OPETransform();
 	opetransf->from_stream(ss);
 
+	cerr << "transformation is\n";
+	*opetransf >> cerr;
+	cerr << "\n";
+
 	ss.clear();
 	free(buf);
+
+	cerr << "ok after freeing\n";
 
 	return true;
     }
@@ -219,6 +231,21 @@ extern "C" {
 	delete opetransf;
     }
 
+    my_bool transform_init(UDF_INIT * initid, UDF_ARGS * args, char *message) {
+	return 0;
+    }
+    
+    ulonglong transform(UDF_INIT *initid, UDF_ARGS *args, char *is_null,
+			char *error) {
+	assert_s(opetransf != 0, "ope transform is null so cannot transform");
+
+	OPEType old_ope = getui(args, 0);
+
+	return opetransf->transform(old_ope);
+    }
+    
+    void  transform_deinit(UDF_INIT *initid) {
+    }
 
     
     
