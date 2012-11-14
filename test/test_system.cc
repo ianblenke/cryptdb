@@ -335,12 +335,13 @@ static void clean_up(int num_clients){
 
     stringstream ss;
     for (int i = 0; i < num_clients; i++) {
-        ss << (1110+i);
+/*        ss << (1110+i);
         string clean_cmd = "lsof -i:"+ss.str()+" -t | xargs kill -9";
         ss.clear();
-        ss.str("");
+        ss.str("");*/
 
-        system(clean_cmd.c_str());
+        system("killall test");
+        system("ssh -A root@ud1.csail.mit.edu 'killall test'");
     }
 
 }
@@ -371,7 +372,7 @@ client_net(int num_clients){
     stringstream parse_num;
     parse_num << num_clients;
     string cmd = "cd /; ./home/frankli/cryptdb/obj/test/test servernet "+parse_num.str();
-    string ssh = "ssh root@ud0.csail.mit.edu '" + cmd + "'";
+    string ssh = "ssh -A root@ud1.csail.mit.edu '" + cmd + "'";
     sleep(5);
     pid_t pid = fork();
     if(pid == 0) {
@@ -762,11 +763,19 @@ int main(int argc, char ** argv)
                  OR ./test bench \n					\
                  OR ./test net plain_size [num_client1] ... \n		\
                  OR ./test clientnet plain_size(64,>=128) num_clients \n \
-                 OR ./test servernet num_servers\n";
+                 OR ./test servernet num_servers \n \
+                 OR ./test cleanup num_ports";
     
     if (argc < 2) {
 	cerr << usage;
 	return 0;
+    }
+
+    if (argc == 3 && string(argv[1]) == "cleanup") {
+        int num_ports = atoi(argv[2]);
+        clean_up(num_ports);
+        return 0;
+
     }
 
     if (argc > 3 && string(argv[1]) == "net") {
@@ -851,7 +860,15 @@ int main(int argc, char ** argv)
     }
     cerr << endl;
 
-    cerr << usage;    
+    cerr << "usage ./test client plain_size(64,>=128) num_to_enc is_malicious(0/1)\n \
+                 OR ./test server is_malicious\n \
+                 OR ./test sys plain_size num_tests is_malicious\n \
+                 OR ./test bench \n \
+                 OR ./test net plain_size [num_client1] ... \n \
+                 OR ./test clientnet plain_size(64,>=128) num_clients \n \
+                 OR ./test servernet num_servers \n \
+                 OR ./test cleanup num_ports";
+
 
     return 0;
 }
