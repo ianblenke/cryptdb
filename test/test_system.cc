@@ -759,7 +759,7 @@ int main(int argc, char ** argv)
 {
     assert_s(OPE_MODE, "code must be in OPE_MODE to run this test");
 
-    if (argc > 5 || argc < 2) {
+    if (string(argv[1]) != "net" && (argc > 5 || argc < 2) ) {
 	cerr << "usage ./test client plain_size(64,>=128) num_to_enc is_malicious(0/1)\n \
                  OR ./test server is_malicious\n \
                  OR ./test sys plain_size num_tests is_malicious\n \
