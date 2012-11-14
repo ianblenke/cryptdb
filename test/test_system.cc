@@ -776,7 +776,7 @@ int main(int argc, char ** argv)
         is_malicious = 0;
         set_workload(100000, plain_size, INCREASING);
 
-        for (int i=0; i < sizeof(client_load)/sizeof(int); i++) {
+        for (uint i=0; i < sizeof(client_load)/sizeof(int); i++) {
             client_net(client_load[i]);
         }
     }
