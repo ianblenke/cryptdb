@@ -12,7 +12,7 @@
 #include <util/util.hh>
 
 //whether we run with a database or not
-#define WITH_DB 1
+#define WITH_DB 0
 
 #define WITH_NET 0
 
@@ -31,6 +31,7 @@
 #define DEBUG_EXP 1
 
 #define DEBUG_TRANSF 0
+#define DEBUG_UDF 0
 
 // Controls tree type
 #define STREE 0

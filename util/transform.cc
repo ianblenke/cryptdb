@@ -156,7 +156,6 @@ OPETransform::transform(OPEType val) {
 	}
     }
 
-    cerr << "before assert \n";
     // ope encodings have the last index one less than the one in the btree
     assert_s(repr.size() > 0 && repr[repr.size() -1 ] > 0, "index must be > 0");
     repr[repr.size()-1]--;

@@ -1562,7 +1562,7 @@ BTree::update_db(OPEType new_ope, ChangeInfo c) {
 	stringstream swhere;
 	swhere.clear();
 	swhere << " WHERE " << field_name << " >= " << omin << " AND " << field_name << " <= " << omax << " ; ";
-
+/*
 	cerr << "remove below\n";
 	DBResult * dbres;
 	assert_s( db->execute("SELECT count(*) FROM opetable " + swhere.str(), dbres),
@@ -1570,8 +1570,7 @@ BTree::update_db(OPEType new_ope, ChangeInfo c) {
 	string oneval = dbres->oneval();
 	cerr << "touched " << oneval << "\n";
 	cerr << "compute rewrites says " << compute_rewrites(c) << "\n";
-//	assert_s(valFromStr(oneval) <= compute_rewrites(c), "db gets more updated");
-
+*/
 	stringstream ss2; ss2.clear();
 	ss2 << "UPDATE " << table_name << " SET " << field_name
 	    << " = udftransform(" + field_name + ") " << swhere.str();	   

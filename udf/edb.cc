@@ -93,8 +93,6 @@ extern "C" {
 	
 	uint64_t det_val = getui(args, 0);
 
-	cerr << "inside UDF \n";
-
 	char mode;
 	mode = *((char*) args->args[1]);
 
@@ -212,22 +210,13 @@ extern "C" {
 	// delete old transf
 	if (opetransf) delete opetransf;
 
-	cerr << "entering set_udf trans\n";
 	uint64_t len;
 	char * buf = getba(args, 0, len);
-	cerr << "len of buf is " << len << "\n";
-	cerr << "buf is " << string(buf, len) << "\n";
 	string s = string(buf, len);
 	stringstream ss(s);
 	opetransf = new OPETransform();
-	cerr << "before reading from stream\n";
 	opetransf->from_stream(ss);
 
-	/*
-	cerr << "transformation is\n";
-	*opetransf >> cerr;
-	cerr << "\n";
-	*/
 	ss.clear();
 
 	return true;
@@ -248,13 +237,7 @@ extern "C" {
 	OPEType old_ope = getui(args, 0);
 	OPEType new_ope = opetransf->transform(old_ope);
 
-	if (new_ope == old_ope) {
-	    cerr << "NO TRANS: " << old_ope << "\n";
-	} else {
-	    cerr << "transformed:  " << old_ope << "\n";
-	}
-
-	cerr << "counter" << counter << "\n";
+	if (DEBUG_UDF) cerr << "counter" << counter << "\n";
 	return new_ope;
     }
     
