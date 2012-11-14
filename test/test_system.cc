@@ -2,7 +2,7 @@
  * Tests search trees.
  */
 
-
+#include <stdlib.h>
 #include <sstream>
 #include <vector>
 #include <algorithm>
@@ -343,13 +343,21 @@ client_net(int num_clients){
                     assert_s(false, "Should have exited with signalEnd");
                     exit(rv);
             }else{
-                    cout<<"pid: "<<pid<<endl;
+//                    cout<<"pid: "<<pid<<endl;
                     pid_list.push_back(pid);
             }
     }
-    cout << pid_list.size() << " clients ready, press enter to continue. " << endl;
-    string user_signal;
-    cin.get();
+    cout << pid_list.size() << " clients ready, starting servers " << endl;
+    stringstream parse_num;
+    parse_num << num_clients;
+    string cmd = "./home/frankli/cryptdb/obj/test/test servernet "+parse_num.str();
+    string ssh = "ssh root@ud1.csail.mit.edu '" + cmd + "'";
+    sleep(2);
+    pid_t pid = fork();
+    if(pid == 0) {
+        exit( system(ssh.c_str()) );    
+    }
+    sleep(2);
     for(uint i = 0; i < pid_list.size(); i++){
             kill(pid_list[i], SIGALRM);
     }
@@ -366,7 +374,7 @@ client_net(int num_clients){
     }
     cout << "All clients closed" << endl;
 
-    cout << "Throughput = " << parse_client_files(num_clients);
+    cout << "Throughput = " << parse_client_files(num_clients) << endl;
 
 }
 
@@ -393,7 +401,7 @@ server_net(int num_servers){
                     assert_s(false, "Should have exited with signalEnd");
                     exit(rv);
             }else{
-                    cout<<"pid: "<<pid<<endl;
+                    //cout<<"pid: "<<pid<<endl;
                     pid_list.push_back(pid);
             }
     }
@@ -752,13 +760,17 @@ int main(int argc, char ** argv)
                  OR ./test server is_malicious\n \
                  OR ./test sys plain_size num_tests is_malicious\n \
                  OR ./test bench \n \
-                 OR ./test net \n \
+                 OR ./test net plain_size\n \
                  OR ./test clientnet plain_size(64,>=128) num_clients \n \
                  OR ./test servernet num_servers";
 	return 0;
     }
 
-    if (argc == 2 && string(argv[1]) == "net") {
+    if (argc == 3 && string(argv[1]) == "net") {
+        plain_size = atoi(argv[2]);
+        is_malicious = 0;
+        set_workload(100000, plain_size, INCREASING);
+
 
     }
 
@@ -767,7 +779,7 @@ int main(int argc, char ** argv)
     plain_size = atoi(argv[2]);
     int num_clients = atoi(argv[3]);
     is_malicious = 0;
-    set_workload(10000, plain_size, INCREASING);
+    set_workload(100000, plain_size, INCREASING);
 
     client_net(num_clients);
 
