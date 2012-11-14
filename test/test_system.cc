@@ -286,16 +286,18 @@ static void signalHandlerEnd(int signum){
 
     float time_passed = end_time.tv_sec+end_time.tv_usec/((long) 1000000.0) - 
         start_time.tv_sec+start_time.tv_usec/((long) 1000.0);
-    clientfile << "completed: " << completed_enc << " in " << time_passed << endl;
+//    clientfile << "completed: " << completed_enc << " in " << time_passed << endl;
     clientfile << "throughput: " << ( completed_enc*1.0 ) / (time_passed * 1.0) << endl;
-    clientfile << "start-end: "<< start_time.tv_sec+start_time.tv_usec/((long) 1000.0) << " " << end_time.tv_sec+end_time.tv_usec/((long) 1000000.0) <<endl;
+    //clientfile << "start-end: "<< start_time.tv_sec+start_time.tv_usec/((long) 1000.0) << " " << end_time.tv_sec+end_time.tv_usec/((long) 1000000.0) <<endl;
     clientfile <<"ending"<<endl;
     clientfile.close();
     exit(rv);
 }
 
-static float parse_client_files(int num_clients){
+static void parse_client_files(int num_clients){
     float total_throughput = 0;
+    fstream throughput_f;
+    throughput_f.open ("throughput.txt", std::ios::out | std::ios::app);
     for (int i=0; i< num_clients; i++) {
             
             stringstream ss;
@@ -323,7 +325,8 @@ static float parse_client_files(int num_clients){
             }
 
     }  
-    return total_throughput;  
+    throughput_f << num_clients << " " << total_throughput;
+    throughput_f.close();
 }
 
 static void
@@ -374,7 +377,7 @@ client_net(int num_clients){
     }
     cout << "All clients closed" << endl;
 
-    cout << "Throughput = " << parse_client_files(num_clients) << endl;
+    parse_client_files(num_clients);
 
 }
 
