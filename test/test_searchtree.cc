@@ -620,18 +620,25 @@ public:
     
     static void
     ope_transform_check(OPETransform & t, OPEType omin, OPEType omax, vector<uint> ope_path, vector<uint> new_path){
-	cerr << "test on " << pretty_path(ope_path);
-	cerr << " vec to enc " << vec_to_enc(ope_path) << " "
-	     << "enc to vec back " << pretty_path(ope_path) << "\n";
-
+	cerr << "test on B tree path " << pretty_path(ope_path);
+	
+	assert_s(ope_path[ope_path.size()-1] > 0, "invalid test: last position needs > 0");
+	ope_path[ope_path.size()-1]--; //because index in ope encoding is 1 less
+				       //than in Btre..
 	OPEType before_ope = vec_to_enc(ope_path);
-	OPEType ope = t.transform(vec_to_enc(ope_path));
-	if (before_ope != ope) {
-	    cerr <<"omin, before_ope, omax"<<"\n"<<omin << "\n" << before_ope << "\n" << omax <<"\n";
+
+
+	cerr << " ope enc " << before_ope << " "
+	     << "ope enc to vec back " << pretty_path(enc_to_vec(before_ope)) << "\n";
+
+	OPEType new_ope = t.transform(before_ope);
+	if (before_ope != new_ope) {
+	    cerr <<"omin, before_ope, omax"<<"\n"<< omin << "\n" << before_ope << "\n" << omax <<"\n";
 	    assert_s(omin <= before_ope && omax >= before_ope, "ope changed yet intervals did not contain it");
 	}
-	cerr << "new ope is " << ope << "\n";
-	vector<uint> compute_path = enc_to_vec(ope);
+	cerr << "new ope is " << new_ope << " path is " << pretty_path(enc_to_vec(new_ope)) << "\n";
+	vector<uint> compute_path = enc_to_vec(new_ope);
+	compute_path[compute_path.size()-1]++;
 	if (!check_equals(compute_path, new_path)) {
 	    cerr << "expected " << pretty_path(new_path) << " computed " << pretty_path(compute_path) << "\n";
 	    assert_s(false, "");
@@ -651,14 +658,15 @@ public:
 	cerr << " omin " << omin << "\n omax " << omax << "\n";
 
 	// each check if given an initial ope encoding and a final ope encoding
-	// the initial one consists of 
-	ope_transform_check(t, omin, omax,  {2}, {0, 0});
-	ope_transform_check(t, omin, omax,  {0, 0}, {0, 0});
+	// the initial one consists of the B tree paths
+	ope_transform_check(t, omin, omax,  {2, 1, 3}, {2, 2});
+	ope_transform_check(t, omin, omax,  {2, 1, 2}, {2, 1, 2});
+	ope_transform_check(t, omin, omax,  {0, 1}, {0, 1});
 	ope_transform_check(t, omin, omax,  {3,5, 6} ,{4, 5, 6} );
-	ope_transform_check(t, omin, omax,  {2, 2}, {2, 3});
+	ope_transform_check(t, omin, omax,  {2, 2}, {3});
 	ope_transform_check(t, omin, omax,  {0, 5, 6}, {0, 5, 6});
-	ope_transform_check(t, omin, omax,  {2, 1, 5, 0}, {2, 2, 1, 0});
-	ope_transform_check(t, omin, omax,  {2,7}, {3, 4}); 
+	ope_transform_check(t, omin, omax,  {2, 1, 5, 1}, {2, 2, 3, 1});
+	ope_transform_check(t, omin, omax,  {2,7}, {3, 5}); 
 	ope_transform_check(t, omin, omax,  {2, 1, 1, 5}, {2, 1, 1, 5});
 
 	cerr << "Ok -- not root case and test interval!\n";

@@ -25,9 +25,11 @@ public:
 
     // returns the interval of values affected by the transformation
     // min and max can also be affected
+    // these are two ope encodings 
     void get_interval(OPEType & omin, OPEType & omax);
-
+    
     // transforms the given OPE value
+    // the value should be a correct OPE encoding 
     OPEType transform(OPEType val);
 
 

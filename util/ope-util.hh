@@ -28,7 +28,7 @@
 #define DEBUG_PROOF 0
 #define DEBUG_EXP 0
 
-#define DEBUG_TRANSF 0
+#define DEBUG_TRANSF 1
 
 // Controls tree type
 #define STREE 0

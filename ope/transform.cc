@@ -54,12 +54,13 @@ OPETransform::get_interval(OPEType & omin, OPEType & omax) {
 	// remains the case: t.index-1 > t.split_point
 	v = (v << num_bits) + t.split_point;
 	nbits = nbits + num_bits;
+	break;
     }
 
     // ope representations have index one less than B tree index
     assert_s(v > 0, "logic error with omin");
-    v--;
-    omin = (v << (64 - nbits));
+   
+    omin = compute_ope(v-1, nbits);
 	
 }
 
@@ -73,6 +74,8 @@ OPETransform::transform(OPEType val) {
     // ope encodings have the last index one less than the one in the btree
     repr[repr.size()-1]++;
 
+    // now repr is the path in B tree
+    
      if (DEBUG_TRANSF) cerr << "its path " << pretty_path(repr) << "\n";
     
     bool met_transformation = false;
@@ -80,19 +83,34 @@ OPETransform::transform(OPEType val) {
     // loop thru each transf
     for (auto t :  ts) {
 	if (match(t.ope_path, repr)) { // need to transform
-	     if (DEBUG_TRANSF) cerr << "match with ope path " << pretty_path(t.ope_path) << "\n";
-	    uint & index = repr[t.ope_path.size()];
-	    if (!met_transformation && ((uint)t.index_inserted <= index)) {
-		index++;
+	    if (DEBUG_TRANSF) cerr << "match with ope path " << pretty_path(t.ope_path) << "\n";
+	    uint & cur_index = repr[t.ope_path.size()];
+	    if (!met_transformation && ((uint)t.index_inserted <= cur_index)) {
+		cur_index++;
+		if (DEBUG_TRANSF) {cerr << "first transf met, index is " << cur_index << "\n";}
+				
 	    }
-	    if (t.split_point >=0 && t.split_point < (int)index) {
-		if (DEBUG_TRANSF) cerr << "met split point " << t.split_point << "\n";
-		index = index - t.split_point - 1;
+	    met_transformation = true;
+	    if (t.split_point == (int)cur_index) {
+		if (DEBUG_TRANSF) cerr << "right at split point \n";
+		if (repr.size() == t.ope_path.size()+1) {
+		    //remove the last element
+		    repr.resize(repr.size()-1);
+		} else {
+		    cur_index = 0;
+		}
+		repr[t.ope_path.size()-1]++;
+		if (DEBUG_TRANSF) cerr << "path is now " << pretty_path(repr) << "\n";
+		continue;
+	    }
+	    if (t.split_point >=0 && t.split_point < (int)cur_index) {
+		if (DEBUG_TRANSF) cerr << "split point before " << t.split_point << "\n";
+		cur_index = cur_index - t.split_point;
 		assert_s(t.ope_path.size() > 0, "split point at root\n");
 		repr[t.ope_path.size()-1]++;
 		if (DEBUG_TRANSF) cerr << "becomes " << pretty_path(repr) << "\n";
 	    }
-	    met_transformation = true;
+
 	}
 
     }

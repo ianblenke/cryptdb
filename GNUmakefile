@@ -1,8 +1,8 @@
 OBJDIR	 := obj
 TOP	 := $(shell echo $${PWD-`pwd`})
 CXX	 := g++
-# for debugging -O0 -g
-CXXFLAGS :=  -O2 -fno-strict-aliasing -fno-rtti -fwrapv -fPIC \
+# -O2
+CXXFLAGS :=  -O0 -g -fno-strict-aliasing -fno-rtti -fwrapv -fPIC \
 	    -Wall -Werror -Wpointer-arith -Wendif-labels -Wformat=2  \
 	    -Wextra -Wmissing-noreturn -Wwrite-strings -Wno-unused-parameter \
 	    -Wmissing-declarations -Woverloaded-virtual \
