@@ -335,12 +335,13 @@ static void clean_up(int num_clients){
 
     stringstream ss;
     for (int i = 0; i < num_clients; i++) {
-        ss << (1110+i);
+/*        ss << (1110+i);
         string clean_cmd = "lsof -i:"+ss.str()+" -t | xargs kill -9";
         ss.clear();
-        ss.str("");
+        ss.str("");*/
 
-        system(clean_cmd.c_str());
+        system("killall test");
+        system("ssh -A root@ud1.csail.mit.edu 'killall test'");
     }
 
 }
@@ -371,7 +372,7 @@ client_net(int num_clients){
     stringstream parse_num;
     parse_num << num_clients;
     string cmd = "cd /; ./home/frankli/cryptdb/obj/test/test servernet "+parse_num.str();
-    string ssh = "ssh root@ud0.csail.mit.edu '" + cmd + "'";
+    string ssh = "ssh -A root@ud1.csail.mit.edu '" + cmd + "'";
     sleep(5);
     pid_t pid = fork();
     if(pid == 0) {
