@@ -1,5 +1,5 @@
 OBJDIRS     += ope
-OPESRC  := merkle.cc opetable.cc stree.cc btree.cc transform.cc server.cc client.cc
+OPESRC  := merkle.cc opetable.cc stree.cc btree.cc server.cc client.cc
 
 
 all:    $(OBJDIR)/libope.so $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbcrypto.so
@@ -38,11 +38,11 @@ $(OBJDIR)/ope/boost_client: $(OBJDIR)/ope/boost_client.o $(OBJDIR)/libcryptdb.so
 	$(CXX) $< -o $@ $(LDFLAGS) -ledbcrypto -ledbutil -lope -lcryptdb -lpthread -lboost_system
 
 
-install: # install_opsserver
+install: install_ope
 
-#.PHONY: install_opsserver
-#install_opsserver: $(OBJDIR)/ope/client
-#	install -m 555 -g mysql -o mysql $(OBJDIR)/ope/server $(MYSQL_PLUGIN_DIR); 
+.PHONY: install_ope
+install_ope: $(OBJDIR)/libope.so
+	install -m 644 $(OBJDIR)/libope.so /usr/lib
 
-			
+
 # vim: set noexpandtab:

@@ -8,7 +8,7 @@
 #include <algorithm>
 #include <util/util.hh>
 #include <ope/btree.hh>
-#include <ope/transform.hh>
+#include <util/transform.hh>
 #include <crypto/blowfish.hh>
 #include <ope/server.hh>
 #include <ope/client.hh>
@@ -489,24 +489,7 @@ runtest() {
     cerr << "OK!\n";
     delete s;
 }
-/*
-static void
-run_client(int num_tests) {
-    
-  cerr << "creating client...";
-  ope_client<uint64_t, blowfish> * ope_cl = new ope_client<uint64_t, blowfish>(bc);
-  cerr << " done \n";
-  
-  for (int i = 0; i < num_tests; i++) {
-      ope_cl->encrypt(i, true);
-  }
 
-  cerr << "DONE!\n";
-  
-  delete ope_cl;
-
-}
-*/
 static void
 run_server() {
     Server * serv = new Server(is_malicious);

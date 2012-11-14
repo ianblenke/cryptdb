@@ -214,7 +214,6 @@ void Server::work() {
     socklen_t addr_size = sizeof(sockaddr_in);
     struct sockaddr_in sadr;
  
-    assert_s(!WITH_DB, "for UDF the server should accept a few times");
     int listen_rtn = listen(sock_req, 10);
     if (listen_rtn < 0) {
 	cerr<<"Error listening to socket"<<endl;

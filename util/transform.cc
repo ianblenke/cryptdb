@@ -1,4 +1,4 @@
-#include <ope/transform.hh>
+#include <util/transform.hh>
 
 #include <util/util.hh>
 
@@ -55,7 +55,8 @@ OPETransform::get_interval(OPEType & omin, OPEType & omax) {
 	omax = compute_ope({}, 0);
 	return;
     }
-    
+
+    assert_s(ts.size() > 0, "there is no transformation");
     transf t = ts.back();
     assert_s(t.split_point < 0, "last transformation should have no split point");
 
@@ -88,7 +89,7 @@ OPETransform::get_interval(OPEType & omin, OPEType & omax) {
     }
 
     // ope representations have index one less than B tree index
-    assert_s(v > 0, "logic error with omin");
+    assert_s(nbits > 0, "logic error with omin");
    
     omin = compute_ope(v-1, nbits);
 	

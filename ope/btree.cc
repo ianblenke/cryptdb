@@ -9,7 +9,7 @@
 #include <util/ope-util.hh>
 #include <crypto/blowfish.hh>
 #include <crypto/aes_cbc.hh>
-#include <ope/transform.hh>
+#include <util/transform.hh>
 
 
 using namespace std;
@@ -1373,13 +1373,21 @@ BTree::BTree(OPETable<string> * ot, Connect * _db, bool malicious,
 	this->table_name = table_name;
 	this->field_name = field_name;
 	// setup the UDFs at the server
-	assert_s(db->execute("CREATE FUNCTION set_transform RETURNS INTEGER soname 'edb.so';"),
+	assert_s(db->execute("DROP FUNCTION IF EXISTS set_udftransform;"),
+		     "cannot drop if exists set_udftransform");
+	assert_s(db->execute("DROP FUNCTION IF EXISTS udftransform;"),
+	    "cannot drop if exists udftransform");
+
+	assert_s(db->execute("CREATE FUNCTION set_udftransform RETURNS INTEGER soname 'edb.so';"),
 		     "failed to create udf set_transform");
-	assert_s(db->execute("CREATE FUNCTION transform RETURNS INTEGER soname 'edb.so';"),
+	assert_s(db->execute("CREATE FUNCTION udftransform RETURNS INTEGER soname 'edb.so';"),
 	    "could not create UDF transform");
+
+	assert_s(db->execute("DROP TABLE IF EXISTS " + table_name + ";"),
+		 "cannot drop if exists table");	
 	assert_s(db->execute("CREATE TABLE " + table_name + " ( "+ field_name+ " bigint unsigned );"),
 		 "could not create bench table");
-	assert_s(db->execute("CREATE INDEX ind ON TABLE" + table_name + "(" + field_name + ");"),
+	assert_s(db->execute("CREATE INDEX ind ON  " + table_name + " (" + field_name + ");"),
 		 "could not create index");
     }
 }
@@ -1467,29 +1475,33 @@ compute_transform(ChangeInfo c) {
 
 void
 BTree::update_db(OPEType new_ope, ChangeInfo & c) {
-    // compute transform from c
-    OPETransform t = compute_transform(c);
 
-    //send tranform to server
-    stringstream ss;
-    ss.clear();
-    ss << "SELECT set_transform(";
-    t >> ss;
-    ss << ");";
-    assert_s(db->execute(ss.str()),
-	     " could not send transform to DB");
-
-    //prepare SQL query
-    OPEType omin, omax;
-    t.get_interval(omin, omax);
-    ss.clear();
-    ss << "UPDATE " << table_name << " SET " << field_name
-       <<" = transform(" + field_name + " >=" << omin
-       << " AND " << field_name << "<=" << omax << ";";
-    assert_s(db->execute(ss.str()),"could not execute batch update");
-
+    if (c.size() != 0) {
+	// compute transform from c
+	OPETransform t = compute_transform(c);
+	
+	//send tranform to server
+	stringstream ss;
+	ss.clear();
+	ss << "SELECT set_udftransform('";
+	t >> ss;
+	ss << "');";
+	assert_s(db->execute(ss.str()),
+		 " could not send transform to DB");
+	
+	//prepare SQL query
+	OPEType omin, omax;
+	t.get_interval(omin, omax);
+	stringstream ss2; ss2.clear();
+	ss2 << "UPDATE " << table_name << " SET " << field_name
+	    << " = udftransform(" + field_name + ") "
+	    << " WHERE " << field_name << " >=" << omin
+	    << " AND " << field_name << "x<=" << omax << ";";
+	assert_s(db->execute(ss2.str()),"could not execute batch update");
+    }
+    
     // now insert the new value
-    assert_s(db->execute("INSERT INTO table" + table_name + " VALUES (" + strFromVal(new_ope) +");"),
+    assert_s(db->execute("INSERT INTO " + table_name + " VALUES (" + strFromVal(new_ope) +");"),
 	     "could not insert new value");
     
 }

@@ -5,10 +5,8 @@ all:    $(OBJDIR)/udf/edb.so
 $(OBJDIR)/udf/edb.so: $(OBJDIR)/udf/edb.o \
 		      $(OBJDIR)/libedbcrypto.so \
 		      $(OBJDIR)/libedbutil.so \
-		      $(OBJDIR)/../udf/edb.cc \
-		      $(OBJDIR)/libope.so
-	$(CXX) -shared -o $@ $< $(LDFLAGS) -ledbcrypto -ledbutil -lope
-
+		      $(OBJDIR)/../udf/edb.cc
+	$(CXX) -shared -o $@ $< $(LDFLAGS) -ledbcrypto -ledbutil
 
 install: install_udf
 
@@ -17,3 +15,4 @@ install_udf: $(OBJDIR)/udf/edb.so
 	install -m 644 -g mysql -o mysql $(OBJDIR)/udf/edb.so $(MYSQL_PLUGIN_DIR)
 
 # vim: set noexpandtab:
+
