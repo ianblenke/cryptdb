@@ -11,6 +11,6 @@ $(OBJDIR)/test/test_searchtree: $(OBJDIR)/test/test_searchtree.o $(OBJDIR)/libcr
 
 all:	$(OBJDIR)/test/test
 $(OBJDIR)/test/test: $(OBJDIR)/test/test_system.o $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbutil.so $(OBJDIR)/libope.so $(OBJDIR)/libedbcrypto.so
-	$(CXX) $< -o $@ $(LDFLAGS) -ledbutil -lope -lcryptdb -ledbcrypto
+	$(CXX) $< -o $@ $(LDFLAGS) -ledbutil -lope -lcryptdb -ledbcrypto -lboost_system
 
 # vim: set noexpandtab:

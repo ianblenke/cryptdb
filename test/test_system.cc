@@ -2,8 +2,12 @@
  * Tests search trees.
  */
 
+#include <boost/asio.hpp>
+#include <boost/array.hpp>
+
 #include <stdlib.h>
 #include <sstream>
+#include <iostream>
 #include <vector>
 #include <algorithm>
 #include <util/util.hh>
@@ -22,10 +26,12 @@
 #include <crypto/ope.hh>
 #include <NTL/ZZ.h>
 #include <csignal>
+#include <utility>
+#include <time.h>
 #include <unistd.h>
 
 using namespace std;
-
+using boost::asio::ip::tcp;
 
 static blowfish * bc = new blowfish(passwd);
 static aes_cbc * bc_aes = new aes_cbc(passwd, true);
@@ -297,7 +303,7 @@ static void signalHandlerEnd(int signum){
 static void parse_client_files(int num_clients){
     float total_throughput = 0;
     fstream throughput_f;
-    throughput_f.open ("throughput.txt", std::ios::out | std::ios::app);
+    throughput_f.open ("throughput.txt", ios::out | ios::app);
     for (int i=0; i< num_clients; i++) {
             
             stringstream ss;
@@ -359,7 +365,7 @@ client_net(int num_clients){
                     stringstream ss;
                     ss<<i;
                     string filename = "client"+ss.str()+".txt";
-                    clientfile.open (filename.c_str(), std::ios::in | std::ios::out | std::ios::trunc);
+                    clientfile.open (filename.c_str(), ios::in | ios::out | ios::trunc);
                     clientnet_thread(1110+i, 1110+i);
                     assert_s(false, "Client should have exited with signalEnd");
                     exit(rv);
@@ -535,6 +541,333 @@ client_work(uint n, our_conf c, BC * bc) {
 
 static const char* datadelim = "\n";
 
+
+static void
+update_entries(OPETable<string> & ope_table, Node* curr_node, uint64_t v, uint64_t nbits){
+
+    assert_s(nbits < (uint64_t) 64 - num_bits, "ciphertext too long!");
+
+    uint64_t ope_enc;
+    for (unsigned int i=1; i<curr_node->m_count; i++) {
+        ope_enc = compute_ope(v, nbits, i-1);
+        assert_s(ope_table.insert( curr_node->m_vector[i].m_key, ope_enc, curr_node), "inserted table value already existing!");
+
+    }
+
+    if(curr_node->is_leaf()){
+      return;
+    }
+
+    for (unsigned int i=0; i<curr_node->m_count; i++) {
+        if (curr_node->m_vector[i].has_subtree()) {  
+            update_entries(ope_table, curr_node->m_vector[i].mp_subtree, 
+              (v << num_bits) | i, 
+              nbits+num_bits);
+        }
+    }
+
+}
+
+
+static void
+update_table(OPETable<string> & ope_table, Node* btree){
+
+  update_entries(ope_table, btree, 0, 0);
+
+}
+
+static void 
+parse_int_message(stringstream & ss, vector<string> & unique_data, vector<string> & bulk_data){
+
+    string first;
+    string last = "";
+
+    while(true){
+      ss >> first;
+      if(first=="EOF") break;
+
+      stringstream stoi;      
+
+      bulk_data.push_back( first );
+      if (first == last) {
+        continue;
+      } else{
+        last = first;
+        unique_data.push_back(first);
+      }
+    }    
+}
+
+static void 
+parse_string_message(stringstream & ss, vector<string> & unique_data, vector<string> & bulk_data){
+
+    string len_str;
+    string last = "";
+
+    int counter = 0;
+    while(true){
+      counter++;
+      ss >> len_str;
+      if(len_str=="EOF") break;
+
+      stringstream stoi;
+      int len;
+      stoi << len_str;
+      stoi >> len;
+
+      ss.get();
+
+      char data[len];
+      for(int i=0 ; i < len; i++){
+              ss.get(data[i]);
+      }
+
+      string str_data (data, len);
+
+      bulk_data.push_back( str_data );
+      if ( str_data == last) {
+        continue;
+      } else{
+        last = str_data;
+        unique_data.push_back(str_data);
+       }
+
+    }
+
+}
+
+template <class A>
+static void
+server_bulk_work(our_conf c)
+{
+  try
+  {
+    boost::asio::io_service io_service;
+
+    tcp::acceptor acceptor(io_service, tcp::endpoint(tcp::v4(), 13));
+
+    tcp::socket socket(io_service);
+    acceptor.accept(socket);
+    
+    string output = "";
+    stringstream ss (output, stringstream::in | stringstream::out);
+    for(;;)
+    {
+
+      boost::array<char, 128> buf;
+      boost::system::error_code error;
+
+      size_t len = socket.read_some(boost::asio::buffer(buf), error);
+
+      if (error == boost::asio::error::eof){
+        //cout<<"EOF signalled"<<endl;
+        break; // Connection closed cleanly by peer.
+      }else if (error)
+        throw boost::system::system_error(error); // Some other error.
+
+      ss.write(buf.data(), len);
+
+    }
+    ss << " EOF EOF";
+
+    vector<string> unique_data;
+    vector<string> bulk_data;
+
+    if (c.plain_size == 32 || c.plain_size == 64)
+        parse_int_message(ss, unique_data, bulk_data);
+    else
+        parse_string_message(ss, unique_data, bulk_data);
+
+    RootTracker* root_tracker = new RootTracker(true);
+
+    Node* b_tree = build_tree_wrapper(unique_data, root_tracker, 0, unique_data.size());
+
+    vector<uint64_t> db_data;
+
+    OPETable<string >* ope_lookup_table = new OPETable<string>();
+    update_table(*ope_lookup_table, b_tree);    
+    for(int j = 0; j < (int) bulk_data.size(); j++){
+        string key = bulk_data[j];
+        db_data.push_back(ope_lookup_table->get(key).ope);
+    }
+
+
+    struct timeval bulk_end_time;
+    gettimeofday(&bulk_end_time, 0);
+
+    stringstream timess;
+    string seconds;
+    timess <<  bulk_end_time.tv_usec/1000000.0;
+    timess >> seconds; 
+    cout<< "  \"bulk_end_time:\" " << (uint64_t) bulk_end_time.tv_sec << seconds.substr(1, seconds.size()-1) << "," << endl;
+
+    delete ope_lookup_table;
+    delete b_tree;
+    delete root_tracker;
+
+  }
+  catch (exception& e)
+  {
+    cerr << e.what() << endl;
+  }
+}
+
+
+template<class A>
+static void
+client_bulk_work(uint n, our_conf c) {
+    struct timeval bulk_start_time;
+
+    stringstream timess;
+    string seconds;
+    gettimeofday(&bulk_start_time, 0);
+    timess <<  bulk_start_time.tv_usec/1000000.0;
+    timess >> seconds;
+    cout<< "  \"bulk_start_time:\" " << bulk_start_time.tv_sec << seconds.substr(1, seconds.size()-1) << "," << endl;
+    
+    vector<uint32_t > values_in_db32;
+    vector<uint64_t > values_in_db64;
+    vector<string > strings_in_db;
+
+    void* det_bc = NULL;
+
+    if (c.plain_size == 32){
+        det_bc = (blowfish *) new blowfish(passwd);
+        values_in_db32.resize(n);
+    } else if (c.plain_size == 64 ) {
+        det_bc = (blowfish *) new blowfish(passwd);
+        values_in_db64.resize(n);
+    }else {
+        strings_in_db.resize(n);
+    }
+
+    AES_KEY * aes_key = get_AES_enc_key(passwd);
+
+    for ( uint rc=0; rc < n; rc++){
+        std::stringstream ss;
+        ss << WorkloadGen<A>::get_query(rc, c.plain_size, c.w);
+
+        if(c.plain_size == 32 ){
+            uint32_t cur_val = 0;
+            ss >> cur_val;
+            values_in_db32[rc] =cur_val;    
+        }else if (c.plain_size == 64) {
+            uint64_t cur_val = 0;
+            ss >> cur_val;
+            values_in_db64[rc] =cur_val;            
+        } else {
+            std::string cur_val = ss.str();
+            std::transform( cur_val.begin(), cur_val.end(), cur_val.begin(), ::tolower);
+            strings_in_db[rc] = cur_val;
+        }
+
+    }
+
+    if(c.plain_size == 32 ){
+        std::stable_sort(values_in_db32.begin(), values_in_db32.end() );  
+    }else if (c.plain_size == 64) {
+        std::stable_sort(values_in_db64.begin(), values_in_db64.end() );         
+    } else {
+        std::stable_sort(strings_in_db.begin(), strings_in_db.end() );
+    }
+
+    std::string message = "";
+
+    for (uint rc = 0; rc < n; rc++) {
+        std::stringstream ss;
+
+        if(c.plain_size == 32 ){
+            cout <<"32";
+            uint32_t det;
+            ( (blowfish *) det_bc)->block_encrypt( &values_in_db32[rc] , &det);
+            ss << det;   
+        }else if (c.plain_size == 64) {
+            uint64_t det;
+            ( (blowfish *) det_bc)->block_encrypt( &values_in_db64[rc] , &det);
+            ss << det;      
+        } else {
+            std::string det = encrypt_AES_CBC(strings_in_db[rc], aes_key, "0");
+            ss << det.size() << " " << det;
+        }
+        message += ss.str() + " ";
+    }
+
+    try
+    {
+
+        boost::asio::io_service io_service;
+
+        tcp::resolver resolver(io_service);
+        tcp::resolver::query query("localhost", "daytime");
+        tcp::resolver::iterator endpoint_iterator = resolver.resolve(query);
+        tcp::resolver::iterator end;
+
+        tcp::socket socket(io_service);
+        boost::system::error_code error = boost::asio::error::host_not_found;
+        while (error && endpoint_iterator != end)
+        {
+          socket.close();
+          socket.connect(*endpoint_iterator++, error);
+        }
+        if (error)
+          throw boost::system::system_error(error);
+
+        //cout <<"Sending message "<<message<<endl;
+        boost::system::error_code ignored_error;
+        boost::asio::write(socket, boost::asio::buffer(message),
+            boost::asio::transfer_all(), ignored_error);
+
+    }
+    catch (exception& e)
+    {
+        cerr << e.what() << endl;
+    }
+
+}
+
+
+template<class A>
+static void
+measure_bulk_instance(uint n, our_conf c) {
+
+    cout << datadelim
+         << "{ \"iv:scheme\": " << "\"bulk\"" << ",\n"
+         << "  \"iv:nelem\": " << n << ",\n"
+         << "  \"iv:ptsize\": " << c.plain_size << ",\n"
+         << "  \"iv:malicious\": " << c.is_malicious << ",\n"
+         << "  \"iv:workload\": " << ((c.w == INCREASING) ? "\"increasing\""
+                                                          : "\"random\"") << ",\n";  
+    int killsig;
+
+    // start client
+    cout.flush();
+    pid_t pid_server = fork();
+    if (pid_server == 0) {
+    //client
+        server_bulk_work<A>(c);
+        exit(killsig);
+    }
+    assert_s(pid_server > 0, "issue starting bulk server");
+
+    // cerr << "client pid is " << pid_client << "\n";
+    sleep(1);
+
+    pid_t pid_client = fork();
+    if (pid_client == 0) {
+        client_bulk_work<A>(n, c);
+        exit(killsig);
+    }
+    int t= 2;
+    while(t>0){
+            wait(&killsig);
+            t--;
+    }
+    cout << "}";
+    datadelim = ",\n";
+    cout.flush();
+
+}
+
 template<class A, class BC>
 static void
 measure_ours_instance(uint n, our_conf c, BC * bc) {
@@ -586,11 +919,21 @@ measure_ours_instance(uint n, our_conf c, BC * bc) {
 
     delete s;
 }
+
 template <class A, class BC>
 static
 void measure_ours(our_conf c, BC * bc) {
     for (uint i = 0; i < c.num_elems.size(); i++) {
 	measure_ours_instance<A, BC>(c.num_elems[i], c, bc);
+    }
+
+}
+
+template <class A>
+static
+void measure_ours_bulk(our_conf c) {
+    for (uint i = 0; i < c.num_elems.size(); i++) {
+        measure_bulk_instance<A>(c.num_elems[i], c);
     }
 }
 
@@ -677,6 +1020,16 @@ vector<our_conf> our_confs =
                             RANDOM,         256,        true},
 };
 
+vector<our_conf> bulk_confs =
+{//    num_elems         workload  plain_size    is_malicious
+    {{100, 1000, 10000}, INCREASING,    32,         false},
+    {{100, 1000, 10000}, INCREASING,    64,         false},
+    {{100, 1000, 10000}, INCREASING,    128,        false},
+    {{100, 1000, 10000}, RANDOM,        32,         false},
+    {{100, 1000, 10000}, RANDOM,        64,         false},
+    {{100, 1000, 10000}, RANDOM,        128,        false}
+
+};
 
 vector<bclo_conf> BCLO_confs =
 {// num_elems               type          plain_size       cache
@@ -719,6 +1072,16 @@ test_bench() {
     	} else {
     	    measure_ours<string, aes_cbc>(c, bc_aes);
     	}
+    }
+
+    for (auto c: bulk_confs) {
+        if (c.plain_size == 32) {
+            measure_ours_bulk<uint32_t>(c);
+        } else if (c.plain_size == 64) {
+            measure_ours_bulk<uint64_t>(c);
+        }else {
+            measure_ours_bulk<string>(c);
+        }        
     }
     
     for (auto c: BCLO_confs) {
