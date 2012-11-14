@@ -7,11 +7,13 @@ struct transf {
     int num;
     int index_inserted;
     int split_point;
+    bool finalized;
 };
 
 class OPETransform {
 
 public:
+    OPETransform();
     /*
      * Pushes a new transformation. Transformations must be pushed in leaf to
      * root order.
@@ -22,6 +24,9 @@ public:
      * 
      */
     void push_change(OPEType ope_path, int num, int index_inserted, int split_point);
+
+    /* Call this if root was split */
+    void add_root();
 
     // returns the interval of values affected by the transformation
     // min and max can also be affected
@@ -38,5 +43,6 @@ public:
 private:
     // first transformation is the leaf
     std::list<transf> ts;
- 
-};
+
+    bool add_root;
+ };

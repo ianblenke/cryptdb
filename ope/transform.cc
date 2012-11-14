@@ -4,11 +4,16 @@
 
 using namespace std;
 
+OPETransform::OPETransform() {
+    add_root = false;
+}
+
 void
 OPETransform::push_change(OPEType ope_path, int num, int index_inserted, int split_point) {
+
     transf t;
     t.ope_path = path_to_vec(ope_path, num);
-    cerr << "given ope path " << ope_path << " path is " << pretty_path(t.ope_path) << "\n";
+    if (DEBUG_TRANSF) cerr << "given ope path " << ope_path << " path is " << pretty_path(t.ope_path) << "\n";
     t.num = num;
     t.index_inserted = index_inserted;
     if (ts.size()) {
@@ -20,12 +25,24 @@ OPETransform::push_change(OPEType ope_path, int num, int index_inserted, int spl
 }
 
 void
+OPETransform::add_root() {
+    assert_s(ts.back().split_point >= 0, "cannot add root if old root was not split");
+    add_root = true;
+}
+
+void
 OPETransform::get_interval(OPEType & omin, OPEType & omax) {
     /*
      * Interval depends on the highest node affected in which there was just an
      * insert and no split.
      */
 
+    if (add_root) {
+	omin = 0;
+	omax = compute_ope({}, 0);
+	return;
+    }
+    
     transf t = ts.back();
     assert_s(t.split_point < 0, "last transformation should have no split point");
 
@@ -66,7 +83,7 @@ OPETransform::get_interval(OPEType & omin, OPEType & omax) {
 
 OPEType
 OPETransform::transform(OPEType val) {
-  
+
     if (DEBUG_TRANSF) std::cerr << "val " << val << " \n";
   
     // repr consists of ope path followed by index
