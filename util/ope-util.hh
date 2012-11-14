@@ -12,7 +12,7 @@
 #include <util/util.hh>
 
 //whether we run with a database or not
-#define WITH_DB 0
+#define WITH_DB 1
 
 // if ope mode is true then trees can no longer use the order operation
 // among keys because the real keys are encrypted
@@ -20,13 +20,13 @@
 
 
 // Controls debugging output
-#define DEBUG_BARE 0
-#define DEBUG 0
-#define DEBUG_COMM 0
+#define DEBUG_BARE 1
+#define DEBUG 1
+#define DEBUG_COMM 1
 #define DEBUG_STREE 0
-#define DEBUG_BTREE 0
-#define DEBUG_PROOF 0
-#define DEBUG_EXP 0
+#define DEBUG_BTREE 1
+#define DEBUG_PROOF 1
+#define DEBUG_EXP 1
 
 #define DEBUG_TRANSF 1
 

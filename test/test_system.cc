@@ -755,14 +755,16 @@ int main(int argc, char ** argv)
 {
     assert_s(OPE_MODE, "code must be in OPE_MODE to run this test");
 
-    if (string(argv[1]) != "net" && (argc > 5 || argc < 2) ) {
-	cerr << "usage ./test client plain_size(64,>=128) num_to_enc is_malicious(0/1)\n \
-                 OR ./test server is_malicious\n \
-                 OR ./test sys plain_size num_tests is_malicious\n \
-                 OR ./test bench \n \
-                 OR ./test net plain_size [num_client1] ... \n \
+    string usage = "usage ./test client plain_size(64,>=128) num_to_enc is_malicious(0/1)\n \
+                 OR ./test server is_malicious\n			\
+                 OR ./test sys plain_size num_tests is_malicious\n	\
+                 OR ./test bench \n					\
+                 OR ./test net plain_size [num_client1] ... \n		\
                  OR ./test clientnet plain_size(64,>=128) num_clients \n \
-                 OR ./test servernet num_servers";
+                 OR ./test servernet num_servers\n";
+    
+    if (argc < 2) {
+	cerr << usage;
 	return 0;
     }
 
@@ -848,14 +850,7 @@ int main(int argc, char ** argv)
     }
     cerr << endl;
 
-    cerr << "usage ./test client plain_size(64,>=128) num_to_enc is_malicious(0/1)\n \
-                 OR ./test server is_malicious\n \
-                 OR ./test sys plain_size num_tests is_malicious\n \
-                 OR ./test bench \n \
-                 OR ./test net plain_size [num_client1] ... \n \
-                 OR ./test clientnet plain_size(64,>=128) num_clients \n \
-                 OR ./test servernet num_servers";
-    
+    cerr << usage;    
 
     return 0;
 }

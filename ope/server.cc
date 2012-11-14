@@ -184,8 +184,11 @@ Server::Server(bool malicious, int cport, int sport) {
     }
     
     ope_table = new OPETable<string>();
-    ope_tree = (Tree *) new BTree(ope_table, db, malicious);
-
+    if (WITH_DB) {
+	ope_tree = (Tree*) new BTree(ope_table, db, malicious, "opetable", "opefield");
+    } else {
+	ope_tree = (Tree *) new BTree(ope_table, db, malicious);
+    }
     sock_cl = create_and_connect(OPE_CLIENT_HOST, cport);
     sock_req = create_and_bind(sport);
     
