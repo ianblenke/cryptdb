@@ -1359,7 +1359,7 @@ Elem::pretty() const {
 /******** BTree ************/
 
 BTree::BTree(OPETable<string> * ot, Connect * _db, bool malicious,
-	     string table_name, string field_name) : opetable(ot), db(db) {
+	     string table_name, string field_name) : opetable(ot), db(_db) {
 
     nrewrites = 0;
     Node::m_failure.invalidate();
@@ -1369,6 +1369,7 @@ BTree::BTree(OPETable<string> * ot, Connect * _db, bool malicious,
     tracker->set_root(null_ptr, root_ptr);
 
     if (WITH_DB) {
+	if (DEBUG) {cerr << "table name " << table_name << " field name " << field_name << "\n";}
 	this->table_name = table_name;
 	this->field_name = field_name;
 	// setup the UDFs at the server

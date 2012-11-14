@@ -38,11 +38,11 @@ $(OBJDIR)/ope/boost_client: $(OBJDIR)/ope/boost_client.o $(OBJDIR)/libcryptdb.so
 	$(CXX) $< -o $@ $(LDFLAGS) -ledbcrypto -ledbutil -lope -lcryptdb -lpthread -lboost_system
 
 
-install: install_opsserver
+install: # install_opsserver
 
-.PHONY: install_opsserver
-install_opsserver: $(OBJDIR)/ope/client
-	install -m 555 -g mysql -o mysql $(OBJDIR)/ope/server $(MYSQL_PLUGIN_DIR); 
+#.PHONY: install_opsserver
+#install_opsserver: $(OBJDIR)/ope/client
+#	install -m 555 -g mysql -o mysql $(OBJDIR)/ope/server $(MYSQL_PLUGIN_DIR); 
 
 			
 # vim: set noexpandtab:
