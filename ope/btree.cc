@@ -9,6 +9,7 @@
 #include <util/ope-util.hh>
 #include <crypto/blowfish.hh>
 #include <crypto/aes_cbc.hh>
+#include <ope/transform.hh>
 
 
 using namespace std;
@@ -410,7 +411,7 @@ bool Node::split_insert (Elem& element, ChangeInfo & ci, int index) {
 
         new_root->mp_parent = 0;
 
-	ci.push_back(LevelChangeInfo(new_root, NULL, 1, -1));
+	ci.push_back(LevelChangeInfo(new_root, NULL, 1, -1, true));
 
 	//----Merkle----------
 	if (m_root->MALICIOUS) {
@@ -1357,7 +1358,8 @@ Elem::pretty() const {
 
 /******** BTree ************/
 
-BTree::BTree(OPETable<string> * ot, Connect * _db, bool malicious) : opetable(ot), db(db) {
+BTree::BTree(OPETable<string> * ot, Connect * _db, bool malicious,
+	     string table_name, string field_name) : opetable(ot), db(db) {
 
     nrewrites = 0;
     Node::m_failure.invalidate();
@@ -1365,6 +1367,30 @@ BTree::BTree(OPETable<string> * ot, Connect * _db, bool malicious) : opetable(ot
     tracker = new RootTracker (malicious);  // maintains a pointer to the current root of the b-tree
     Node * root_ptr = new Node (tracker);
     tracker->set_root(null_ptr, root_ptr);
+
+    if (WITH_DB) {
+	this->table_name = table_name;
+	this->field_name = field_name;
+	// setup the UDFs at the server
+	assert_s(db->execute("CREATE FUNCTION set_transform RETURNS INTEGER soname 'edb.so';"),
+		     "failed to create udf set_transform");
+	assert_s(db->execute("CREATE FUNCTION transform RETURNS INTEGER soname 'edb.so';"),
+	    "could not create UDF transform");
+	assert_s(db->execute("CREATE TABLE " + table_name + " ( "+ field_name+ " bigint unsigned );"),
+		 "could not create bench table");
+	assert_s(db->execute("CREATE INDEX ind ON TABLE" + table_name + "(" + field_name + ");"),
+		 "could not create index");
+    }
+}
+
+
+BTree::~BTree() {
+    delete tracker;
+    if (WITH_DB) {
+	assert_s(db->execute("DROP FUNCTION IF EXISTS set_transform;"), "could not drop func");
+	assert_s(db->execute("DROP FUNCTION IF EXISTS transform; "), "could not drop func");
+	assert_s(db->execute("DROP TABLE IF EXISTS " + table_name + ";"), "could not drop table");
+    }
 }
 
 TreeNode *
@@ -1419,13 +1445,54 @@ update_ot(OPETable<string> * ope_table, Node * n) {
     update_ot_help(ope_table, n, opepath, nbits);
 }
 
+static OPETransform
+compute_transform(ChangeInfo c) {
+    OPETransform t;
+
+    for (auto lc: c) {
+	if (!lc.is_new_root) {
+	    OPEType opepath;
+	    uint nbits;
+	    get_ope_path(lc.node, opepath, nbits);
+	    t.push_change(opepath, nbits/num_bits, lc.index, lc.split_point);
+	} else {
+	    assert_s(lc.node == c.back().node, "only the last change info must be new root");
+	    t.add_root();
+	}
+    }
+
+    return t;
+}
 
 void
-BTree::update_db(ChangeInfo & c) {
-    //TODO
-    //Stupid way would be to just send DB query when we update table, so would
-    //not need update_db fn.
+BTree::update_db(OPEType new_ope, ChangeInfo & c) {
+    // compute transform from c
+    OPETransform t = compute_transform(c);
+
+    //send tranform to server
+    stringstream ss;
+    ss.clear();
+    ss << "SELECT set_transform(";
+    t >> ss;
+    ss << ");";
+    assert_s(db->execute(ss.str()),
+	     " could not send transform to DB");
+
+    //prepare SQL query
+    OPEType omin, omax;
+    t.get_interval(omin, omax);
+    ss.clear();
+    ss << "UPDATE " << table_name << " SET " << field_name
+       <<" = transform(" + field_name + " >=" << omin
+       << " AND " << field_name << "<=" << omax << ";";
+    assert_s(db->execute(ss.str()),"could not execute batch update");
+
+    // now insert the new value
+    assert_s(db->execute("INSERT INTO table" + table_name + " VALUES (" + strFromVal(new_ope) +");"),
+	     "could not insert new value");
+    
 }
+   
 
 uint
 BTree::size(Node * n) {
@@ -1490,7 +1557,7 @@ BTree::insert(string ciph, TreeNode * tnode,
 	     */
  
     if (WITH_DB) {
-	update_db(ci);
+	update_db(opetable->get(ciph).ope, ci);
     }
 }
 

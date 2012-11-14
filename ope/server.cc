@@ -131,7 +131,7 @@ Server::handle_enc(int csock, istringstream & iss, bool do_ins) {
 		proof >> response;
 		response << " ";
 	    }
-        } else{
+        } else {
 
             uint64_t ope_enc = compute_ope(ope_path, nbits, index);
 
