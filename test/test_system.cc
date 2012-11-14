@@ -339,6 +339,8 @@ static void clean_up(int num_clients){
         string clean_cmd = "lsof -i:"+ss.str()+" -t | xargs kill -9";
         ss.clear();
         ss.str("");
+
+        system(clean_cmd.c_str());
     }
 
 }
