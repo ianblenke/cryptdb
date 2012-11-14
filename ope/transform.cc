@@ -5,7 +5,7 @@
 using namespace std;
 
 OPETransform::OPETransform() {
-    add_root = false;
+    new_root = false;
 }
 
 void
@@ -14,10 +14,10 @@ OPETransform::push_change(OPEType ope_path, int num, int index_inserted, int spl
     transf t;
     t.ope_path = path_to_vec(ope_path, num);
     if (DEBUG_TRANSF) cerr << "given ope path " << ope_path << " path is " << pretty_path(t.ope_path) << "\n";
-    t.num = num;
     t.index_inserted = index_inserted;
     if (ts.size()) {
-	assert_s(index_inserted == (int)(1 + ts.back().ope_path[ts.back().num - 1]), " inconsistent insert");
+	transf last_t = ts.back();
+	assert_s(index_inserted == (int)(1 + last_t.ope_path[last_t.ope_path.size() - 1]), " inconsistent insert");
     }
     t.split_point = split_point;
 
@@ -27,7 +27,16 @@ OPETransform::push_change(OPEType ope_path, int num, int index_inserted, int spl
 void
 OPETransform::add_root() {
     assert_s(ts.back().split_point >= 0, "cannot add root if old root was not split");
-    add_root = true;
+    new_root = true;
+
+    // all transformations get an index of zero, as if the new root already
+    // existed
+    for (auto t = ts.begin(); t != ts.end(); t++) {
+	t->ope_path.insert(t->ope_path.begin(), 0);
+    }
+
+    // add a new transformation for the new root
+    push_change(0, 0, 1, -1);
 }
 
 void
@@ -37,7 +46,8 @@ OPETransform::get_interval(OPEType & omin, OPEType & omax) {
      * insert and no split.
      */
 
-    if (add_root) {
+    if (new_root) {
+	//everything
 	omin = 0;
 	omax = compute_ope({}, 0);
 	return;
@@ -90,6 +100,12 @@ OPETransform::transform(OPEType val) {
     vector<uint> repr = enc_to_vec(val);
     // ope encodings have the last index one less than the one in the btree
     repr[repr.size()-1]++;
+
+    if (new_root) {
+	// we can think of nodes in the old tree as having index 0 in the new
+	// root
+	repr.insert(repr.begin(), 0);
+    }
 
     // now repr is the path in B tree
     

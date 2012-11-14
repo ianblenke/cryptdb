@@ -4,10 +4,8 @@
 
 struct transf {
     std::vector<uint> ope_path;
-    int num;
     int index_inserted;
     int split_point;
-    bool finalized;
 };
 
 class OPETransform {
@@ -21,7 +19,8 @@ public:
      * during split
      * If split point is negative, the node was not split.
      * Num is the number of edges in the ope_path.
-     * 
+     * Push_change should only be called for changes that happended to old
+     * nodes; for a new root, call add_root()
      */
     void push_change(OPEType ope_path, int num, int index_inserted, int split_point);
 
@@ -44,5 +43,5 @@ private:
     // first transformation is the leaf
     std::list<transf> ts;
 
-    bool add_root;
+    bool new_root;
  };

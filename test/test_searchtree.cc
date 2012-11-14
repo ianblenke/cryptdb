@@ -669,7 +669,54 @@ public:
 	ope_transform_check(t, omin, omax,  {2,7}, {3, 5}); 
 	ope_transform_check(t, omin, omax,  {2, 1, 1, 5}, {2, 1, 1, 5});
 
-	cerr << "Ok -- not root case and test interval!\n";
+	cerr << "\n\n test root add simple \n";
+	//test root add
+	OPETransform t2;
+	t2.push_change(vec_to_path({2, 1, 5}), 3, 1, 1);
+	t2.push_change(vec_to_path({2, 1}), 2,    6, 3);
+	t2.push_change(vec_to_path({2}), 1,       2, 3);
+	t2.push_change(vec_to_path({}), 0,        3, 4);
+	t2.add_root();
+
+	omin = 0;
+	omax = 0;
+	t2.get_interval(omin, omax);
+	cerr << " omin " << omin << "\n omax " << omax << "\n";
+
+	ope_transform_check(t2, omin, omax,  {2, 1, 3}, {0, 2, 2});
+	ope_transform_check(t2, omin, omax,  {2, 1, 2}, {0, 2, 1, 2});
+	ope_transform_check(t2, omin, omax,  {0, 1}, {0, 0, 1});
+	ope_transform_check(t2, omin, omax,  {3, 5, 6}, {1, 0, 5, 6} );
+	ope_transform_check(t2, omin, omax,  {2, 2}, {0, 3});
+	ope_transform_check(t2, omin, omax,  {0, 5, 6}, {0, 0, 5, 6});
+	ope_transform_check(t2, omin, omax,  {2, 1, 5, 1}, {0, 2, 2, 3, 1});
+	ope_transform_check(t2, omin, omax,  {2,7}, {0, 3, 5}); 
+	ope_transform_check(t2, omin, omax,  {2, 1, 1, 5}, {0, 2, 1, 1, 5});
+
+	cerr << "\n\ntest root add complicated \n";
+	OPETransform t3;
+	t3.push_change(vec_to_path({2, 1, 5}), 3, 1, 1);
+	t3.push_change(vec_to_path({2, 1}), 2,    6, 3);
+	t3.push_change(vec_to_path({2}), 1,       2, 3);
+	t3.push_change(vec_to_path({}), 0,        3, 1);
+	t3.add_root();
+
+	omin = 0;
+	omax = 0;
+	t3.get_interval(omin, omax);
+	cerr << " omin " << omin << "\n omax " << omax << "\n";
+
+	ope_transform_check(t3, omin, omax,  {2, 1, 3}, {1, 1, 2});
+	ope_transform_check(t3, omin, omax,  {2, 1, 2}, {1, 1, 1, 2});
+	ope_transform_check(t3, omin, omax,  {0, 1}, {0, 0, 1});
+	ope_transform_check(t3, omin, omax,  {3,5, 6} ,{1, 3, 5, 6} );
+	ope_transform_check(t3, omin, omax,  {2, 2}, {1, 2});
+	ope_transform_check(t3, omin, omax,  {0, 5, 6}, {0, 0, 5, 6});
+	ope_transform_check(t3, omin, omax,  {2, 1, 5, 1}, {1, 1, 2, 3, 1});
+	ope_transform_check(t3, omin, omax,  {2,7}, {1, 2, 5}); 
+	ope_transform_check(t3, omin, omax,  {2, 1, 1, 5}, {1, 1, 1, 1, 5});
+
+	cerr << "OK!\n";
 	
     }
     
