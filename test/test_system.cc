@@ -325,7 +325,7 @@ static void parse_client_files(int num_clients){
             }
 
     }  
-    throughput_f << num_clients << " " << total_throughput;
+    throughput_f << num_clients << " " << total_throughput << endl;
     throughput_f.close();
 }
 
@@ -364,7 +364,7 @@ client_net(int num_clients){
     for(uint i = 0; i < pid_list.size(); i++){
             kill(pid_list[i], SIGALRM);
     }
-    sleep(5);
+    sleep(10);
     for(uint i = 0; i < pid_list.size(); i++){
             kill(pid_list[i], SIGINT);
     }
@@ -754,6 +754,8 @@ set_workload(uint num_tests, uint plain_size, workload w) {
     cerr << "set workload\n";
 }
 
+int client_load []= {1, 10, 20};
+
 int main(int argc, char ** argv)
 {
     assert_s(OPE_MODE, "code must be in OPE_MODE to run this test");
@@ -774,7 +776,9 @@ int main(int argc, char ** argv)
         is_malicious = 0;
         set_workload(100000, plain_size, INCREASING);
 
-
+        for (int i=0; i < sizeof(client_load)/sizeof(int); i++) {
+            client_net(client_load[i]);
+        }
     }
 
     if (argc == 4 && string(argv[1]) == "clientnet") {
