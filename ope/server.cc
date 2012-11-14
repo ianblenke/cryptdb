@@ -172,6 +172,7 @@ Server::dispatch(int csock, istringstream & iss) {
     default: {}
     }
 
+    cerr << msgtype << endl;
     assert_s(false, "invalid message type in dispatch");
     
 }

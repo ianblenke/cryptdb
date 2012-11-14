@@ -325,7 +325,7 @@ static void parse_client_files(int num_clients){
             }
 
     }  
-    throughput_f << num_clients << " " << total_throughput;
+    throughput_f << num_clients << " " << total_throughput << endl;
     throughput_f.close();
 }
 
@@ -364,7 +364,7 @@ client_net(int num_clients){
     for(uint i = 0; i < pid_list.size(); i++){
             kill(pid_list[i], SIGALRM);
     }
-    sleep(5);
+    sleep(10);
     for(uint i = 0; i < pid_list.size(); i++){
             kill(pid_list[i], SIGINT);
     }
@@ -754,27 +754,39 @@ set_workload(uint num_tests, uint plain_size, workload w) {
     cerr << "set workload\n";
 }
 
+
 int main(int argc, char ** argv)
 {
     assert_s(OPE_MODE, "code must be in OPE_MODE to run this test");
 
-    if (argc > 5 || argc < 2) {
+    if (string(argv[1]) != "net" && (argc > 5 || argc < 2) ) {
 	cerr << "usage ./test client plain_size(64,>=128) num_to_enc is_malicious(0/1)\n \
                  OR ./test server is_malicious\n \
                  OR ./test sys plain_size num_tests is_malicious\n \
                  OR ./test bench \n \
-                 OR ./test net plain_size\n \
+                 OR ./test net plain_size [num_client1] ... \n \
                  OR ./test clientnet plain_size(64,>=128) num_clients \n \
                  OR ./test servernet num_servers";
 	return 0;
     }
 
-    if (argc == 3 && string(argv[1]) == "net") {
+    if (argc > 3 && string(argv[1]) == "net") {
         plain_size = atoi(argv[2]);
         is_malicious = 0;
         set_workload(100000, plain_size, INCREASING);
 
+        stringstream ss;
 
+        for(int i = 0; i < argc - 3; i++) {
+            int num_clients;
+            ss << string(argv[3+i]);
+            ss >> num_clients;
+            client_net(num_clients);
+            ss.clear();
+            ss.str("");
+            cout << "Done with " << num_clients << " clients." << endl;
+        }
+        return 0;
     }
 
     if (argc == 4 && string(argv[1]) == "clientnet") {
@@ -833,12 +845,18 @@ int main(int argc, char ** argv)
 	return 0;
     }
     
-    cerr << "invalid test\n";
+    cerr << "invalid test \n";
+
+    for(int i = 0; i < argc; i++ ){
+        cerr << string(argv[i]) << " ";
+    }
+    cerr << endl;
+
     cerr << "usage ./test client plain_size(64,>=128) num_to_enc is_malicious(0/1)\n \
                  OR ./test server is_malicious\n \
                  OR ./test sys plain_size num_tests is_malicious\n \
                  OR ./test bench \n \
-                 OR ./test net \n \
+                 OR ./test net plain_size [num_client1] ... \n \
                  OR ./test clientnet plain_size(64,>=128) num_clients \n \
                  OR ./test servernet num_servers";
     
