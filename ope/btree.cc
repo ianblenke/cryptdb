@@ -1398,7 +1398,7 @@ BTree::~BTree() {
     if (WITH_DB) {
 	assert_s(db->execute("DROP FUNCTION IF EXISTS set_transform;"), "could not drop func");
 	assert_s(db->execute("DROP FUNCTION IF EXISTS transform; "), "could not drop func");
-	assert_s(db->execute("DROP TABLE IF EXISTS " + table_name + ";"), "could not drop table");
+	//assert_s(db->execute("DROP TABLE IF EXISTS " + table_name + ";"), "could not drop table");
     }
 }
 
@@ -1473,10 +1473,27 @@ compute_transform(ChangeInfo c) {
     return t;
 }
 
-void
-BTree::update_db(OPEType new_ope, ChangeInfo & c) {
+static bool
+must_rewrite(ChangeInfo c) {
+    if (c.size() == 0) {
+	return false;
+    }
 
-    if (c.size() != 0) {
+    if (c.size() == 1) {
+	// only leaf, let's see if any nodes were pushed
+	LevelChangeInfo lci = c.front();
+	assert_s(lci.split_point == -1, "there should be no split in one change info");
+	if (lci.node->m_count == (int)(lci.index+1)) {
+	    return false;
+	}
+    }
+
+    return true;
+}
+void
+BTree::update_db(OPEType new_ope, ChangeInfo c) {
+
+    if (must_rewrite(c)) {
 	// compute transform from c
 	OPETransform t = compute_transform(c);
 	
@@ -1486,18 +1503,25 @@ BTree::update_db(OPEType new_ope, ChangeInfo & c) {
 	ss << "SELECT set_udftransform('";
 	t >> ss;
 	ss << "');";
+	if (DEBUG_COMM) {cerr << ss.str() <<"\n";}
 	assert_s(db->execute(ss.str()),
 		 " could not send transform to DB");
-	
+
 	//prepare SQL query
 	OPEType omin, omax;
 	t.get_interval(omin, omax);
+
+	stringstream swhere;
+	swhere.clear();
+	swhere << " WHERE " << field_name << " >= " << omin << " AND " << field_name << " <= " << omax << " ; ";
+
 	stringstream ss2; ss2.clear();
 	ss2 << "UPDATE " << table_name << " SET " << field_name
-	    << " = udftransform(" + field_name + ") "
-	    << " WHERE " << field_name << " >=" << omin
-	    << " AND " << field_name << "x<=" << omax << ";";
+	    << " = udftransform(" + field_name + ") " << swhere.str();	   
+	if  (DEBUG_COMM) {cerr << ss2.str() << "\n";}
 	assert_s(db->execute(ss2.str()),"could not execute batch update");
+    } else {
+	if (DEBUG_COMM) cerr << "no need to rewrite anything in DB\n";
     }
     
     // now insert the new value
@@ -1526,12 +1550,19 @@ compute_rewrites(ChangeInfo c) {
     uint sum = 0;
 
     for (auto lci : c) {
+	if (lci.index-1 >= (int)lci.node->m_count) {
+	    // done
+	    assert_s(sum > 0, " logic error with sum");
+	    return sum-1;
+	}
 	for (uint i = lci.index; i< lci.node->m_count; i++) {
 	    sum = sum + 1 + BTree::size(lci.node->m_vector[i].mp_subtree);
 	}
     }
 
-    return sum;
+    assert_s(sum > 0, "logic error with end sum");
+    // the recently inserted node should not be counted
+    return sum-1;
     
 }
 

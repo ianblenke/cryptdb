@@ -210,7 +210,7 @@ extern "C" {
 			  char *error) {
 	cerr << "entering set_udf trans\n";
 	uint64_t len;
-	char * buf = getba(args, 1, len);
+	char * buf = getba(args, 0, len);
 	cerr << "len of buf is " << len << "\n";
 	cerr << "buf is " << string(buf, len) << "\n";
 	string s = string(buf, len);
@@ -224,7 +224,6 @@ extern "C" {
 	cerr << "\n";
 
 	ss.clear();
-	free(buf);
 
 	cerr << "ok after freeing\n";
 
@@ -244,7 +243,7 @@ extern "C" {
 	assert_s(opetransf != 0, "ope transform is null so cannot transform");
 
 	OPEType old_ope = getui(args, 0);
-
+	cerr << "transform " << old_ope << "\n";
 	return opetransf->transform(old_ope);
     }
     

@@ -121,7 +121,7 @@ public:
 
      MerkleProof merkle_proof(TreeNode * n);
     
-    void update_db(OPEType ciph, ChangeInfo & c);
+    void update_db(OPEType ciph, ChangeInfo  c);
 
     uint num_rewrites() {return nrewrites;}
     
