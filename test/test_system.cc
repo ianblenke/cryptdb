@@ -754,7 +754,6 @@ set_workload(uint num_tests, uint plain_size, workload w) {
     cerr << "set workload\n";
 }
 
-int client_load []= {1, 10, 20};
 
 int main(int argc, char ** argv)
 {
@@ -765,19 +764,27 @@ int main(int argc, char ** argv)
                  OR ./test server is_malicious\n \
                  OR ./test sys plain_size num_tests is_malicious\n \
                  OR ./test bench \n \
-                 OR ./test net plain_size\n \
+                 OR ./test net plain_size [num_client1] ... \n \
                  OR ./test clientnet plain_size(64,>=128) num_clients \n \
                  OR ./test servernet num_servers";
 	return 0;
     }
 
-    if (argc == 3 && string(argv[1]) == "net") {
+    if (argc > 3 && string(argv[1]) == "net") {
         plain_size = atoi(argv[2]);
         is_malicious = 0;
         set_workload(100000, plain_size, INCREASING);
 
-        for (uint i=0; i < sizeof(client_load)/sizeof(int); i++) {
-            client_net(client_load[i]);
+        stringstream ss;
+
+        for(int i = 0; i < argc - 3; i++) {
+            int num_clients;
+            ss << string(argv[3+i]);
+            ss >> num_clients;
+            client_net(num_clients);
+            ss.clear();
+            ss.str("");
+            cout << "Done with " << num_clients << " clients." << endl;
         }
         return 0;
     }
@@ -849,7 +856,7 @@ int main(int argc, char ** argv)
                  OR ./test server is_malicious\n \
                  OR ./test sys plain_size num_tests is_malicious\n \
                  OR ./test bench \n \
-                 OR ./test net plain_size \n \
+                 OR ./test net plain_size [num_client1] ... \n \
                  OR ./test clientnet plain_size(64,>=128) num_clients \n \
                  OR ./test servernet num_servers";
     
