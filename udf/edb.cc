@@ -26,7 +26,7 @@ extern "C" {
 #include <ctype.h>
 
     OPETransform * opetransf;
-    uint counter;
+    uint counter = 0;
 
 
 //UDF that creates the ops server
@@ -212,8 +212,6 @@ extern "C" {
 	// delete old transf
 	if (opetransf) delete opetransf;
 
-	counter = 0;
-	
 	cerr << "entering set_udf trans\n";
 	uint64_t len;
 	char * buf = getba(args, 0, len);
