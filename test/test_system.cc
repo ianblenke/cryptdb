@@ -779,6 +779,7 @@ int main(int argc, char ** argv)
         for (uint i=0; i < sizeof(client_load)/sizeof(int); i++) {
             client_net(client_load[i]);
         }
+        return 0;
     }
 
     if (argc == 4 && string(argv[1]) == "clientnet") {
