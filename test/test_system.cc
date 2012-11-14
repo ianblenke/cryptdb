@@ -294,6 +294,10 @@ static void signalHandlerEnd(int signum){
     exit(rv);
 }
 
+static void signalHandlerTerminate(int signum){
+    exit(rv);
+}
+
 static void parse_client_files(int num_clients){
     float total_throughput = 0;
     fstream throughput_f;
@@ -343,7 +347,7 @@ client_net(int num_clients){
                     string filename = "client"+ss.str()+".txt";
                     clientfile.open (filename.c_str(), std::ios::in | std::ios::out | std::ios::trunc);
                     clientnet_thread(1110+i, 1110+i);
-                    assert_s(false, "Should have exited with signalEnd");
+                    assert_s(false, "Client should have exited with signalEnd");
                     exit(rv);
             }else{
 //                    cout<<"pid: "<<pid<<endl;
@@ -353,11 +357,12 @@ client_net(int num_clients){
     cout << pid_list.size() << " clients ready, starting servers " << endl;
     stringstream parse_num;
     parse_num << num_clients;
-    string cmd = "cd /; ./home/frankli/cryptdb/obj/test/test servernet "+parse_num.str();
+    string cmd = "cd /; ./home/frankli/cryptdb/obj/test/test servernet "+parse_num.str() + " > junk";
     string ssh = "ssh root@ud0.csail.mit.edu '" + cmd + "'";
     sleep(2);
     pid_t pid = fork();
     if(pid == 0) {
+        signal(SIGTERM, signalHandlerTerminate);
         exit( system(ssh.c_str()) );    
     }
     sleep(2);
@@ -368,6 +373,7 @@ client_net(int num_clients){
     for(uint i = 0; i < pid_list.size(); i++){
             kill(pid_list[i], SIGINT);
     }
+    kill(pid, SIGTERM);
 
     int t= pid_list.size();
     while(t>0){
@@ -386,22 +392,18 @@ servernet_thread(int c_port, int s_port){
     Server * serv = new Server(is_malicious, c_port, s_port);
     
     serv->work();
-}
-
-static void signalHandlerTerminate(int signum){
     exit(rv);
 }
 
 static void
 server_net(int num_servers){
-    signal(SIGTERM, signalHandlerTerminate);
 
     vector<pid_t> pid_list;
     for (int i=0; i< num_servers; i++) {
             pid_t pid = fork();
             if(pid == 0){
                     servernet_thread(1110+i, 1110+i);
-                    assert_s(false, "Should have exited with signalEnd");
+                    assert_s(false, "Server should have exited with in servernet_thread");
                     exit(rv);
             }else{
                     //cout<<"pid: "<<pid<<endl;
