@@ -317,7 +317,9 @@ static void parse_client_files(int num_clients){
                         float indiv_throughput = 0;
                         ss >> indiv_throughput;
                         total_throughput += indiv_throughput;
-                        break;
+                    }
+                    if (first == "DONE") {
+                        cout <<"DONE???" << endl;
                     }
 
                 }
@@ -328,6 +330,19 @@ static void parse_client_files(int num_clients){
     throughput_f << num_clients << " " << total_throughput << endl;
     throughput_f.close();
 }
+
+static void clean_up(int num_clients){
+
+    stringstream ss;
+    for (int i = 0; i < num_clients; i++) {
+        ss << (1110+i);
+        string clean_cmd = "lsof -i tcp:" + ss.str() + " | awk 'NR!=1 {print $2}' | xargs kill -9";
+        ss.clear();
+        ss.str("");
+    }
+
+}
+
 
 static void
 client_net(int num_clients){
@@ -355,16 +370,16 @@ client_net(int num_clients){
     parse_num << num_clients;
     string cmd = "cd /; ./home/frankli/cryptdb/obj/test/test servernet "+parse_num.str();
     string ssh = "ssh root@ud0.csail.mit.edu '" + cmd + "'";
-    sleep(2);
+    sleep(5);
     pid_t pid = fork();
     if(pid == 0) {
         exit( system(ssh.c_str()) );    
     }
-    sleep(2);
+    sleep(5);
     for(uint i = 0; i < pid_list.size(); i++){
             kill(pid_list[i], SIGALRM);
     }
-    sleep(10);
+    sleep(60);
     for(uint i = 0; i < pid_list.size(); i++){
             kill(pid_list[i], SIGINT);
     }
@@ -378,6 +393,7 @@ client_net(int num_clients){
     cout << "All clients closed" << endl;
 
     parse_client_files(num_clients);
+    clean_up(num_clients);
 
 }
 
@@ -412,7 +428,7 @@ server_net(int num_servers){
             t--;
             cout<<"Server closed, " << t << " remaining threads" <<endl;            
     }
-
+    clean_up(num_servers);
 }
 
 
@@ -769,7 +785,7 @@ int main(int argc, char ** argv)
     if (argc > 3 && string(argv[1]) == "net") {
         plain_size = atoi(argv[2]);
         is_malicious = 0;
-        set_workload(100000, plain_size, INCREASING);
+        set_workload(1000000, plain_size, INCREASING);
 
         stringstream ss;
 
@@ -790,7 +806,7 @@ int main(int argc, char ** argv)
     plain_size = atoi(argv[2]);
     int num_clients = atoi(argv[3]);
     is_malicious = 0;
-    set_workload(100000, plain_size, INCREASING);
+    set_workload(1000000, plain_size, INCREASING);
 
     client_net(num_clients);
 
