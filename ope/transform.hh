@@ -12,6 +12,7 @@ class OPETransform {
 
 public:
     OPETransform();
+    ~OPETransform();
     /*
      * Pushes a new transformation. Transformations must be pushed in leaf to
      * root order.

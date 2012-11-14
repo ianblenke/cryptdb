@@ -31,6 +31,11 @@ extern "C" {
 				char *error);
     void  create_ops_server_deinit(UDF_INIT *initid);
 
+    my_bool set_transform_init(UDF_INIT * initid, UDF_ARGS * args, char *message);
+    my_bool set_transform(UDF_INIT *initid, UDF_ARGS *args, char *is_null,
+				char *error);
+    void  set_transform_deinit(UDF_INIT *initid);
+
 
 // UDF that interacts with ops server with respect to some encryption
     my_bool  get_ops_server_init(UDF_INIT *initid, UDF_ARGS *args,
@@ -180,5 +185,6 @@ extern "C" {
 	return (char*) initid->ptr;
     }
 
+    
     
 } /* extern "C" */

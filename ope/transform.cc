@@ -8,6 +8,9 @@ OPETransform::OPETransform() {
     new_root = false;
 }
 
+OPETransform::~OPETransform() {
+    ts.clear();
+}
 void
 OPETransform::push_change(OPEType ope_path, int num, int index_inserted, int split_point) {
 
