@@ -652,7 +652,7 @@ public:
 	t >> ss;
 	stringstream ss2(ss.str());
 	OPETransform t2;
-	t2 << ss2;
+	t2.from_stream(ss);
 
 	assert_s(t2.equals(t), "serialization does not work");
     }

@@ -201,6 +201,12 @@ OPETransform::operator>>(ostream &out) {
 
 istream &
 OPETransform::operator<<(istream & is) {
+    from_stream(is);
+    return is;
+}
+
+void
+OPETransform::from_stream(istream & is){
     uint size;
     is >> size;
 
@@ -212,7 +218,6 @@ OPETransform::operator<<(istream & is) {
 
     is >> new_root;
 
-    return is;
 }
 
 static bool
