@@ -45,15 +45,15 @@ compute_rewrites(ChangeInfo c) {
 
     auto toplci = c.front();
     if (toplci.is_new_root) {
-	return BTree::size(toplci.node) - 1; 
+	return BTree::size(toplci.node); 
     }
     
     for (auto lci : c) {
-/*	if (lci.index-1 >= (int)lci.node->m_count) {
+	if (lci.index-1 >= (int)lci.node->m_count) {
 	    // done
 	    assert_s(sum > 0, " logic error with sum");
-	    return sum-1;
-	    }*/
+	    return sum;
+	}
 	for (uint i = lci.index; i< lci.node->m_count; i++) {
 	    sum = sum + 1 + BTree::size(lci.node->m_vector[i].mp_subtree);
 	}
@@ -61,7 +61,7 @@ compute_rewrites(ChangeInfo c) {
 
     assert_s(sum > 0, "logic error with end sum");
     // the recently inserted node should not be counted
-    return sum-1;
+    return sum;
     
 }
 
@@ -1570,7 +1570,7 @@ BTree::update_db(OPEType new_ope, ChangeInfo c) {
 	string oneval = dbres->oneval();
 	cerr << "touched " << oneval << "\n";
 	cerr << "compute rewrites says " << compute_rewrites(c) << "\n";
-	//assert_s(valFromStr(oneval) <= compute_rewrites(c), "db gets more updated");
+	assert_s(valFromStr(oneval) <= compute_rewrites(c), "db gets more updated");
 
 	stringstream ss2; ss2.clear();
 	ss2 << "UPDATE " << table_name << " SET " << field_name

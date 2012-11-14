@@ -248,10 +248,13 @@ extern "C" {
 
 	counter++;
 	OPEType old_ope = getui(args, 0);
-	cerr << "transform " << old_ope << "\n";
 	OPEType new_ope = opetransf->transform(old_ope);
 
-	if (new_ope == old_ope) {cerr << "NO TRANS!\n";}
+	if (new_ope == old_ope) {
+	    cerr << "NO TRANS: " << old_ope << "\n";
+	} else {
+	    cerr << "transformed:  " << old_ope << "\n";
+	}
 
 	cerr << "counter" << counter << "\n";
 	return new_ope;

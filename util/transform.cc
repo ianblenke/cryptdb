@@ -63,18 +63,20 @@ OPETransform::get_interval(OPEType & omin, OPEType & omax) {
     transf t = ts.back();
     assert_s(t.split_point < 0, "last transformation should have no split point");
 
-    omax = compute_ope(vec_to_path(t.ope_path), t.ope_path.size() * num_bits);
+    OPEType common_path = vec_to_path(t.ope_path);
+    OPEType common_bits = t.ope_path.size() * num_bits;
+    
+    omax = compute_ope(common_path, common_bits);
 
     /* Computing omin is less straightforward: */
     
     auto ts2 = ts;
     ts2.reverse();
-    OPEType v = 0;
-    uint nbits = 0;
-    uint count = 0;
+    OPEType v = common_path;
+    uint nbits = common_bits;
+
     // loop starting from highest node
     for (auto t : ts2) {
-	count++;
 	if (t.split_point == -1) {
 	    v  = (v << num_bits) + t.index_inserted - 1;
 	    nbits = nbits + num_bits;
