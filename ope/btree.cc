@@ -9,6 +9,7 @@
 #include <util/ope-util.hh>
 #include <crypto/blowfish.hh>
 #include <crypto/aes_cbc.hh>
+#include <ope/transform.hh>
 
 
 using namespace std;
@@ -410,7 +411,7 @@ bool Node::split_insert (Elem& element, ChangeInfo & ci, int index) {
 
         new_root->mp_parent = 0;
 
-	ci.push_back(LevelChangeInfo(new_root, NULL, 1, -1));
+	ci.push_back(LevelChangeInfo(new_root, NULL, 1, -1, true));
 
 	//----Merkle----------
 	if (m_root->MALICIOUS) {
@@ -1357,7 +1358,8 @@ Elem::pretty() const {
 
 /******** BTree ************/
 
-BTree::BTree(OPETable<string> * ot, Connect * _db, bool malicious) : opetable(ot), db(db) {
+BTree::BTree(OPETable<string> * ot, Connect * _db, bool malicious,
+	     string table_name, string field_name) : opetable(ot), db(db) {
 
     nrewrites = 0;
     Node::m_failure.invalidate();
@@ -1367,12 +1369,13 @@ BTree::BTree(OPETable<string> * ot, Connect * _db, bool malicious) : opetable(ot
     tracker->set_root(null_ptr, root_ptr);
 
     if (WITH_DB) {
+	this->table_name = table_name;
+	this->field_name = field_name;
 	// setup the UDFs at the server
 	assert_s(db->execute("CREATE FUNCTION set_transform RETURNS INTEGER soname 'edb.so';"),
 		     "failed to create udf set_transform");
 	assert_s(db->execute("CREATE FUNCTION transform RETURNS INTEGER soname 'edb.so';"),
-	    "could not create UDF transform");
-	
+	    "could not create UDF transform");	
     }
 }
 
@@ -1428,12 +1431,48 @@ update_ot(OPETable<string> * ope_table, Node * n) {
     update_ot_help(ope_table, n, opepath, nbits);
 }
 
+static OPETransform
+compute_transform(ChangeInfo c) {
+    OPETransform t;
+
+    for (auto lc: c) {
+	if (!lc.is_new_root) {
+	    OPEType opepath;
+	    uint nbits;
+	    get_ope_path(lc.node, opepath, nbits);
+	    t.push_change(opepath, nbits/num_bits, lc.index, lc.split_point);
+	} else {
+	    assert_s(lc.node == c.back().node, "only the last change info must be new root");
+	    t.add_root();
+	}
+    }
+
+    return t;
+}
 
 void
 BTree::update_db(ChangeInfo & c) {
-    //TODO
-    //Stupid way would be to just send DB query when we update table, so would
-    //not need update_db fn.
+    // compute transform from c
+    OPETransform t = compute_transform(c);
+
+    //send tranform to server
+    stringstream ss;
+    ss.clear();
+    ss << "SELECT set_transform(";
+    t >> ss;
+    ss << ");";
+    assert_s(db->execute(ss.str()),
+	     " could not send transform to DB");
+
+    //prepare SQL query
+    OPEType omin, omax;
+    t.get_interval(omin, omax);
+    ss.clear();
+    ss << "UPDATE " << table_name << " SET " << field_name
+       <<" = transform(" + field_name + ") WHERE field_name >= " << omin
+       << " AND " << field_name << " <= " << omax << ";";
+    assert_s(db->execute(ss.str()),"could not execute batch update");
+    
 }
 
 uint

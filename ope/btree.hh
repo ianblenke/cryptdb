@@ -80,15 +80,19 @@ struct LevelChangeInfo {
     Node * right;
     int index;
     int split_point;
-
+    bool is_new_root;
+      
     LevelChangeInfo() {
 	node = right = NULL;
 	index = -1;
+	is_new_root = false;
     }
 
     LevelChangeInfo(Node * _node, Node * _right,
-		    int _index, int _split_point): node(_node), right(_right),
-						   index(_index), split_point(_split_point) {}
+		    int _index, int _split_point, bool new_root = false):
+	node(_node), right(_right),
+	index(_index), split_point(_split_point),
+	is_new_root(new_root){}
 };
 
 
@@ -102,7 +106,8 @@ typedef std::list<LevelChangeInfo > ChangeInfo;
 class BTree : public Tree {
 public:
 
-    BTree(OPETable<std::string> * ot, Connect * db, bool malicious);
+    BTree(OPETable<std::string> * ot, Connect * db, bool malicious,
+	  string table_name = "", string field_name = "");
     
     TreeNode * get_root();
 
@@ -127,6 +132,7 @@ public:
     RootTracker * tracker;
     OPETable<std::string> * opetable;
     Connect * db;
+    string table_name, field_name;
 };
 
 
