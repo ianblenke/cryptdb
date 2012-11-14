@@ -837,12 +837,18 @@ int main(int argc, char ** argv)
 	return 0;
     }
     
-    cerr << "invalid test\n";
+    cerr << "invalid test \n";
+
+    for(uint i = 0; i < argc; i++ ){
+        cerr << string(argv[i]) << " "
+    }
+    cerr << endl;
+
     cerr << "usage ./test client plain_size(64,>=128) num_to_enc is_malicious(0/1)\n \
                  OR ./test server is_malicious\n \
                  OR ./test sys plain_size num_tests is_malicious\n \
                  OR ./test bench \n \
-                 OR ./test net \n \
+                 OR ./test net plain_size \n \
                  OR ./test clientnet plain_size(64,>=128) num_clients \n \
                  OR ./test servernet num_servers";
     
