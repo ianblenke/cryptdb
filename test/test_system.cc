@@ -294,11 +294,6 @@ static void signalHandlerEnd(int signum){
     exit(rv);
 }
 
-static void signalHandlerTerminate(int signum){
-    cout << "Killing ssh to server child" << endl;
-    exit(rv);
-}
-
 static void parse_client_files(int num_clients){
     float total_throughput = 0;
     fstream throughput_f;
@@ -358,12 +353,11 @@ client_net(int num_clients){
     cout << pid_list.size() << " clients ready, starting servers " << endl;
     stringstream parse_num;
     parse_num << num_clients;
-    string cmd = "cd /; ./home/frankli/cryptdb/obj/test/test servernet "+parse_num.str() + " > junk";
+    string cmd = "cd /; ./home/frankli/cryptdb/obj/test/test servernet "+parse_num.str();
     string ssh = "ssh root@ud0.csail.mit.edu '" + cmd + "'";
     sleep(2);
     pid_t pid = fork();
     if(pid == 0) {
-        signal(SIGTERM, signalHandlerTerminate);
         exit( system(ssh.c_str()) );    
     }
     sleep(2);
@@ -374,7 +368,6 @@ client_net(int num_clients){
     for(uint i = 0; i < pid_list.size(); i++){
             kill(pid_list[i], SIGINT);
     }
-    kill(pid, SIGTERM);
 
     int t= pid_list.size();
     while(t>0){
