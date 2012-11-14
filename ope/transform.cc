@@ -8,6 +8,9 @@ OPETransform::OPETransform() {
     new_root = false;
 }
 
+OPETransform::~OPETransform() {
+    ts.clear();
+}
 void
 OPETransform::push_change(OPEType ope_path, int num, int index_inserted, int split_point) {
 
@@ -168,7 +171,7 @@ operator>>(transf t, ostream & out) {
 }
 
 static istream&
-operator<<(transf t, istream & is) {
+operator<<(transf & t, istream & is) {
     uint size;
     is >> size;
     t.ope_path.resize(size);
@@ -178,7 +181,7 @@ operator<<(transf t, istream & is) {
     }
 
     is >> t.index_inserted >> t.split_point;
-
+  
     return is;
 }
 
@@ -198,6 +201,12 @@ OPETransform::operator>>(ostream &out) {
 
 istream &
 OPETransform::operator<<(istream & is) {
+    from_stream(is);
+    return is;
+}
+
+void
+OPETransform::from_stream(istream & is){
     uint size;
     is >> size;
 
@@ -209,7 +218,6 @@ OPETransform::operator<<(istream & is) {
 
     is >> new_root;
 
-    return is;
 }
 
 static bool

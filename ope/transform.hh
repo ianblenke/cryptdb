@@ -12,6 +12,7 @@ class OPETransform {
 
 public:
     OPETransform();
+    ~OPETransform();
     /*
      * Pushes a new transformation. Transformations must be pushed in leaf to
      * root order.
@@ -38,7 +39,8 @@ public:
 
     // for network messaging
     std::ostream& operator>>(std::ostream &out);
-    std::istream& operator<<(std::istream &out);
+    std::istream& operator<<(std::istream &is);
+    void from_stream(std::istream &is);
     bool equals(OPETransform ts);
   
 

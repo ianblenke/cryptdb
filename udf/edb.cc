@@ -11,6 +11,7 @@
 #include <unistd.h>
 #include <sstream>
 #include <util/net.hh>
+#include <ope/transform.hh>
 
 using namespace std;
 using namespace NTL;
@@ -24,6 +25,8 @@ extern "C" {
 #include <mysql.h>
 #include <ctype.h>
 
+    OPETransform * opetransf;
+
 
 //UDF that creates the ops server
     my_bool  create_ops_server_init(UDF_INIT *initid, UDF_ARGS *args, char *message);
@@ -31,6 +34,18 @@ extern "C" {
 				char *error);
     void  create_ops_server_deinit(UDF_INIT *initid);
 
+    // sets a OPE transformation
+    my_bool set_transform_init(UDF_INIT * initid, UDF_ARGS * args, char *message);
+    my_bool set_transform(UDF_INIT *initid, UDF_ARGS *args, char *is_null,
+				char *error);
+    void  set_transform_deinit(UDF_INIT *initid);
+
+
+    // given an ope encoding, transforms it into the new encoding
+    my_bool transform_init(UDF_INIT * initid, UDF_ARGS * args, char *message);
+    ulonglong transform(UDF_INIT *initid, UDF_ARGS *args, char *is_null,
+				char *error);
+    void  transform_deinit(UDF_INIT *initid);
 
 // UDF that interacts with ops server with respect to some encryption
     my_bool  get_ops_server_init(UDF_INIT *initid, UDF_ARGS *args,
@@ -52,7 +67,14 @@ getui(UDF_ARGS * args, int i)
 {
     return (uint64_t) (*((ulonglong *) args->args[i]));
 }
-    
+
+static char *
+getba(UDF_ARGS * args, int i, uint64_t &len)
+{
+    len = args->lengths[i];
+    return args->args[i];
+}
+      
 extern "C" {
 
     my_bool  ope_enc_init(UDF_INIT *initid, UDF_ARGS *args, char *message){
@@ -180,5 +202,51 @@ extern "C" {
 	return (char*) initid->ptr;
     }
 
+    my_bool set_transform_init(UDF_INIT * initid, UDF_ARGS * args, char *message) {
+	return 0;
+    }
+
+    my_bool set_transform(UDF_INIT *initid, UDF_ARGS *args, char *is_null,
+			  char *error) {
+	uint64_t len;
+	char * buf = getba(args, 1, len);
+	string s = string(buf, len);
+	stringstream ss(s);
+	opetransf = new OPETransform();
+	opetransf->from_stream(ss);
+
+	cerr << "transformation is\n";
+	*opetransf >> cerr;
+	cerr << "\n";
+
+	ss.clear();
+	free(buf);
+
+	cerr << "ok after freeing\n";
+
+	return true;
+    }
+    
+    void  set_transform_deinit(UDF_INIT *initid) {
+	delete opetransf;
+    }
+
+    my_bool transform_init(UDF_INIT * initid, UDF_ARGS * args, char *message) {
+	return 0;
+    }
+    
+    ulonglong transform(UDF_INIT *initid, UDF_ARGS *args, char *is_null,
+			char *error) {
+	assert_s(opetransf != 0, "ope transform is null so cannot transform");
+
+	OPEType old_ope = getui(args, 0);
+
+	return opetransf->transform(old_ope);
+    }
+    
+    void  transform_deinit(UDF_INIT *initid) {
+    }
+
+    
     
 } /* extern "C" */
