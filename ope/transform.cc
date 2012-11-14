@@ -168,7 +168,7 @@ operator>>(transf t, ostream & out) {
 }
 
 static istream&
-operator<<(transf t, istream & is) {
+operator<<(transf & t, istream & is) {
     uint size;
     is >> size;
     t.ope_path.resize(size);
@@ -178,7 +178,7 @@ operator<<(transf t, istream & is) {
     }
 
     is >> t.index_inserted >> t.split_point;
-
+  
     return is;
 }
 
