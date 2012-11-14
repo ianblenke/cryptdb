@@ -779,11 +779,19 @@ int main(int argc, char ** argv)
                  OR ./test bench \n					\
                  OR ./test net plain_size [num_client1] ... \n		\
                  OR ./test clientnet plain_size(64,>=128) num_clients \n \
-                 OR ./test servernet num_servers\n";
+                 OR ./test servernet num_servers \n \
+                 OR ./test cleanup num_ports";
     
     if (argc < 2) {
 	cerr << usage;
 	return 0;
+    }
+
+    if (argc == 3 && string(argv[1]) == "cleanup") {
+        int num_ports = atoi(argv[2]);
+        clean_up(num_ports);
+        return 0;
+
     }
 
     if (argc > 3 && string(argv[1]) == "net") {
@@ -868,7 +876,15 @@ int main(int argc, char ** argv)
     }
     cerr << endl;
 
-    cerr << usage;    
+    cerr << "usage ./test client plain_size(64,>=128) num_to_enc is_malicious(0/1)\n \
+                 OR ./test server is_malicious\n \
+                 OR ./test sys plain_size num_tests is_malicious\n \
+                 OR ./test bench \n \
+                 OR ./test net plain_size [num_client1] ... \n \
+                 OR ./test clientnet plain_size(64,>=128) num_clients \n \
+                 OR ./test servernet num_servers \n \
+                 OR ./test cleanup num_ports";
+
 
     return 0;
 }
