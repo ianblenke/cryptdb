@@ -336,7 +336,7 @@ static void clean_up(int num_clients){
     stringstream ss;
     for (int i = 0; i < num_clients; i++) {
         ss << (1110+i);
-        string clean_cmd = "lsof -i tcp:" + ss.str() + " | awk 'NR!=1 {print $2}' | xargs kill -9";
+        string clean_cmd = "lsof -i:"+ss.str()+" -t | xargs kill -9";
         ss.clear();
         ss.str("");
     }
