@@ -16,6 +16,8 @@ public:
     /*
      * Pushes a new transformation. Transformations must be pushed in leaf to
      * root order.
+     * each transformation indicates what happened to a node at a level
+     * ope_path and num were the path of the node in the old tree
      * split_point+1 is the position of the first node in the new node created
      * during split
      * If split point is negative, the node was not split.

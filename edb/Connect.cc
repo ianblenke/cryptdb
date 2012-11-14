@@ -232,3 +232,22 @@ DBResult::unpack()
 
     return res;
 }
+
+// returns the data in the last server response
+// TODO: to optimize return pointer to avoid overcopying large result sets?
+string
+DBResult::oneval()
+{
+    assert(n != NULL);
+
+    size_t rows = (size_t)mysql_num_rows(n);
+    assert(rows == 1);
+    assert(mysql_num_fields(n) ==1);
+
+    MYSQL_FIELD * field = mysql_fetch_field(n);
+    assert(field != 0);
+    MYSQL_ROW row = mysql_fetch_row(n);
+    unsigned long *lengths = mysql_fetch_lengths(n);
+    return string(row[0], lengths[0]);
+
+}

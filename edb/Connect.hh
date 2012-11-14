@@ -24,6 +24,8 @@ class DBResult {
     //returns data from this db result
     ResType unpack();
 
+    std::string oneval(); 
+
     static DBResult *wrap(DBResult_native *);
 };
 

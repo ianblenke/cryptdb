@@ -193,6 +193,7 @@ get_uniq_wload(uint num, uint plain_size, workload w) {
 	    }*/
 	res->push_back(q);
     }
+    cerr << "given num " << num << " result is " << res->size() << "\n";
     return res;
 }
 
@@ -204,10 +205,11 @@ clientgeneric(BC * bc) {
     ope_client<A, BC> * ope_cl = new ope_client<A, BC>(bc, is_malicious);
     cerr << "client created \n";
 
-    vector<A> vs = *((vector<A> * )vals);
+    vector<A> * vs = (vector<A> * )vals;
+    cerr << "SIZE of workload is " << vs->size() << "\n";
 
-    for (uint i = 0; i < vs.size(); i++) {
-	cerr << "ope is " << ope_cl->encrypt(vs[i], true) <<"\n";
+    for (uint i = 0; i < vs->size(); i++) {
+	cerr << "ope is " << ope_cl->encrypt(vs->at(i), true) <<"\n";
     }
     cerr << "DONE!\n";	
 }
@@ -745,7 +747,8 @@ set_workload(uint num_tests, uint plain_size, workload w) {
     // generate workload
     cerr << "preparing workload: \n";
     if (plain_size == 64) {
-	vals = (void *) get_uniq_wload<string>(num_tests, plain_size, w);
+	vals = (void *) get_uniq_wload<uint64_t>(num_tests, plain_size, w);
+	
     } else {
 	vals = (void *) get_uniq_wload<string>(num_tests, plain_size, w);
     }
@@ -823,9 +826,10 @@ int main(int argc, char ** argv)
 	
 	plain_size = atoi(argv[2]);
 	num_tests = atoi(argv[3]);
+	cerr << "num_tests is " << num_tests << "\n";
 	is_malicious = atoi(argv[4]);
-	set_workload(num_tests, plain_size, RANDOM);
-
+	set_workload(num_tests, plain_size, INCREASING);
+	
 	client_thread();
 
 	return 0;

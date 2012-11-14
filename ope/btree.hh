@@ -81,6 +81,8 @@ struct LevelChangeInfo {
     int index;
     int split_point;
     bool is_new_root;
+    OPEType opepath;
+    uint nbits;
       
     LevelChangeInfo() {
 	node = right = NULL;
@@ -134,6 +136,8 @@ public:
     OPETable<std::string> * opetable;
     Connect * db;
     string table_name, field_name;
+
+    uint glb_counter;
 };
 
 

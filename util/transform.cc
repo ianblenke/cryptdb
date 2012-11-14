@@ -16,7 +16,10 @@ OPETransform::push_change(OPEType ope_path, int num, int index_inserted, int spl
 
     transf t;
     t.ope_path = path_to_vec(ope_path, num);
-    if (DEBUG_TRANSF) cerr << "given ope path " << ope_path << " path is " << pretty_path(t.ope_path) << "\n";
+    if (DEBUG_TRANSF) {
+	cerr << "push change: ope_path " << ope_path << ": " << pretty_path(t.ope_path) << "  "
+	     << " num " << num << " index_inserted " << index_inserted << " split_point " << split_point << "\n";
+    }
     t.index_inserted = index_inserted;
     if (ts.size()) {
 	transf last_t = ts.back();
@@ -116,7 +119,7 @@ OPETransform::transform(OPEType val) {
      if (DEBUG_TRANSF) cerr << "its path " << pretty_path(repr) << "\n";
     
     bool met_transformation = false;
-    
+
     // loop thru each transf
     for (auto t :  ts) {
 	if (match(t.ope_path, repr)) { // need to transform
@@ -149,11 +152,11 @@ OPETransform::transform(OPEType val) {
 	    }
 
 	}
-
     }
 
+    cerr << "before assert \n";
     // ope encodings have the last index one less than the one in the btree
-    assert_s(repr.size() > 0 && repr[repr.size() -1 ] > 0, "index must be >0");
+    assert_s(repr.size() > 0 && repr[repr.size() -1 ] > 0, "index must be > 0");
     repr[repr.size()-1]--;
     return vec_to_enc(repr);
 }

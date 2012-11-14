@@ -26,6 +26,7 @@ extern "C" {
 #include <ctype.h>
 
     OPETransform * opetransf;
+    uint counter;
 
 
 //UDF that creates the ops server
@@ -208,6 +209,11 @@ extern "C" {
 
     my_bool set_udftransform(UDF_INIT *initid, UDF_ARGS *args, char *is_null,
 			  char *error) {
+	// delete old transf
+	if (opetransf) delete opetransf;
+
+	counter = 0;
+	
 	cerr << "entering set_udf trans\n";
 	uint64_t len;
 	char * buf = getba(args, 0, len);
@@ -219,19 +225,17 @@ extern "C" {
 	cerr << "before reading from stream\n";
 	opetransf->from_stream(ss);
 
+	/*
 	cerr << "transformation is\n";
 	*opetransf >> cerr;
 	cerr << "\n";
-
+	*/
 	ss.clear();
-
-	cerr << "ok after freeing\n";
 
 	return true;
     }
     
     void  set_udftransform_deinit(UDF_INIT *initid) {
-	delete opetransf;
     }
 
     my_bool udftransform_init(UDF_INIT * initid, UDF_ARGS * args, char *message) {
@@ -242,9 +246,15 @@ extern "C" {
 			char *error) {
 	assert_s(opetransf != 0, "ope transform is null so cannot transform");
 
+	counter++;
 	OPEType old_ope = getui(args, 0);
 	cerr << "transform " << old_ope << "\n";
-	return opetransf->transform(old_ope);
+	OPEType new_ope = opetransf->transform(old_ope);
+
+	if (new_ope == old_ope) {cerr << "NO TRANS!\n";}
+
+	cerr << "counter" << counter << "\n";
+	return new_ope;
     }
     
     void  udftransform_deinit(UDF_INIT *initid) {

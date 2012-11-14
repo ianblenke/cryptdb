@@ -24,6 +24,49 @@ void Elem::dump () {
 
 }
 
+static void
+get_ope_path(Node * n, OPEType & opepath, uint & nbits) {
+    if (n->mp_parent) {
+	get_ope_path(n->mp_parent, opepath, nbits);
+	nbits = nbits+ num_bits;
+	opepath = (opepath << num_bits) + n->index_has_subtree();
+    } else {
+	nbits = 0;
+	opepath = 0;
+    }
+}
+
+
+static uint
+compute_rewrites(ChangeInfo c) {
+    c.reverse(); //the first is the topmost element now
+    
+    uint sum = 0;
+
+    auto toplci = c.front();
+    if (toplci.is_new_root) {
+	return BTree::size(toplci.node) - 1; 
+    }
+    
+    for (auto lci : c) {
+/*	if (lci.index-1 >= (int)lci.node->m_count) {
+	    // done
+	    assert_s(sum > 0, " logic error with sum");
+	    return sum-1;
+	    }*/
+	for (uint i = lci.index; i< lci.node->m_count; i++) {
+	    sum = sum + 1 + BTree::size(lci.node->m_vector[i].mp_subtree);
+	}
+    }
+
+    assert_s(sum > 0, "logic error with end sum");
+    // the recently inserted node should not be counted
+    return sum-1;
+    
+}
+
+
+
 uint
 Node::Merkle_cost() {
 
@@ -340,6 +383,18 @@ bool Node::vector_insert_for_split (Elem& element, int index) {
 }
 
 
+static void
+add_change(ChangeInfo & ci, Node * n, Node * r, int index, int split_point, bool is_new_root = false) {
+    LevelChangeInfo lci = LevelChangeInfo(n, r, index, split_point, is_new_root);
+    OPEType opepath;
+    uint nbits;
+    if (!is_new_root) {
+	get_ope_path(n, opepath, nbits);
+	lci.opepath = opepath;
+	lci.nbits = nbits;
+    }
+    ci.push_back(lci);
+}
 
 /* split_insert should only be called if node is full */
 bool Node::split_insert (Elem& element, ChangeInfo & ci, int index) {
@@ -359,8 +414,8 @@ bool Node::split_insert (Elem& element, ChangeInfo & ci, int index) {
     // new node receives the rightmost half of elements in *this node
     Node* new_node = new Node(m_root);
 
-    ci.push_back(LevelChangeInfo(this, new_node, index, split_point));
-    
+    add_change(ci, this, new_node, index, split_point);
+       
     Elem upward_element = m_vector[split_point];
 
     new_node->insert_zeroth_subtree (upward_element.mp_subtree);
@@ -389,7 +444,7 @@ bool Node::split_insert (Elem& element, ChangeInfo & ci, int index) {
     
     // now insert the upward_element into the parent, splitting it if necessary
     if (mp_parent && mp_parent->vector_insert(upward_element, upward_index)) {
-	ci.push_back(LevelChangeInfo(mp_parent, NULL, upward_index, -1));
+	add_change(ci, mp_parent, NULL, upward_index, -1);
 	return true;
     }
 
@@ -411,7 +466,7 @@ bool Node::split_insert (Elem& element, ChangeInfo & ci, int index) {
 
         new_root->mp_parent = 0;
 
-	ci.push_back(LevelChangeInfo(new_root, NULL, 1, -1, true));
+	add_change(ci, new_root, NULL, 1, -1, true);
 
 	//----Merkle----------
 	if (m_root->MALICIOUS) {
@@ -1361,6 +1416,7 @@ Elem::pretty() const {
 BTree::BTree(OPETable<string> * ot, Connect * _db, bool malicious,
 	     string table_name, string field_name) : opetable(ot), db(_db) {
 
+    glb_counter = 0;
     nrewrites = 0;
     Node::m_failure.invalidate();
     Node::m_failure.m_key = "";
@@ -1385,7 +1441,7 @@ BTree::BTree(OPETable<string> * ot, Connect * _db, bool malicious,
 
 	assert_s(db->execute("DROP TABLE IF EXISTS " + table_name + ";"),
 		 "cannot drop if exists table");	
-	assert_s(db->execute("CREATE TABLE " + table_name + " ( "+ field_name+ " bigint unsigned );"),
+	assert_s(db->execute("CREATE TABLE " + table_name + " ( "+ "counter bigint, " + field_name+ " bigint unsigned );"),
 		 "could not create bench table");
 	assert_s(db->execute("CREATE INDEX ind ON  " + table_name + " (" + field_name + ");"),
 		 "could not create index");
@@ -1409,7 +1465,9 @@ BTree::get_root(){
 
 
 static void
-update_ot_help(OPETable<string> * ope_table, Node * n, OPEType path, uint nbits) {
+update_ot_help(OPETable<string> * ope_table, Node * n, OPEType path, uint nbits, uint & counter) {
+
+    counter = 0;
     
     for (uint i = 0; i < n->m_count; i++) {
 	Elem e = n->m_vector[i];
@@ -1417,28 +1475,19 @@ update_ot_help(OPETable<string> * ope_table, Node * n, OPEType path, uint nbits)
 	    OPEType new_ope = compute_ope(path, nbits, i-1);
 	    if (DEBUG) cerr << "update ot " << e.m_key << " -->  path, nbits, index " << path << "," << nbits << "," << i-1 << "=" << new_ope << "\n";
 	    bool r = ope_table->update(e.m_key, new_ope, n);
+	    counter++;
 	    if (!r) {
 		assert_s(ope_table->insert(e.m_key, new_ope, n), "could not insert in ope table");
 	    }
 	}
 	if (e.mp_subtree) {
-	    update_ot_help(ope_table, e.mp_subtree, (path << num_bits) + i, nbits+num_bits);
+	    uint count_child = 0;
+	    update_ot_help(ope_table, e.mp_subtree, (path << num_bits) + i, nbits+num_bits, count_child);
+	    counter += count_child;
 	}
     }
 }
 
-
-static void
-get_ope_path(Node * n, OPEType & opepath, uint & nbits) {
-    if (n->mp_parent) {
-	get_ope_path(n->mp_parent, opepath, nbits);
-	nbits = nbits+ num_bits;
-	opepath = (opepath << num_bits) + n->index_has_subtree();
-    } else {
-	nbits = 0;
-	opepath = 0;
-    }
-}
 
 /*
  * Updates ope table after a change. 
@@ -1451,7 +1500,9 @@ update_ot(OPETable<string> * ope_table, Node * n) {
     OPEType opepath = 0;
     get_ope_path(n, opepath, nbits);
 
-    update_ot_help(ope_table, n, opepath, nbits);
+    uint counter = 0;
+    update_ot_help(ope_table, n, opepath, nbits, counter);
+    cerr << "OT UPDATES " << counter << "\n";
 }
 
 static OPETransform
@@ -1460,10 +1511,7 @@ compute_transform(ChangeInfo c) {
 
     for (auto lc: c) {
 	if (!lc.is_new_root) {
-	    OPEType opepath;
-	    uint nbits;
-	    get_ope_path(lc.node, opepath, nbits);
-	    t.push_change(opepath, nbits/num_bits, lc.index, lc.split_point);
+	    t.push_change(lc.opepath, lc.nbits/num_bits, lc.index, lc.split_point);
 	} else {
 	    assert_s(lc.node == c.back().node, "only the last change info must be new root");
 	    t.add_root();
@@ -1515,18 +1563,30 @@ BTree::update_db(OPEType new_ope, ChangeInfo c) {
 	swhere.clear();
 	swhere << " WHERE " << field_name << " >= " << omin << " AND " << field_name << " <= " << omax << " ; ";
 
+	cerr << "remove below\n";
+	DBResult * dbres;
+	assert_s( db->execute("SELECT count(*) FROM opetable " + swhere.str(), dbres),
+		 "could not compute count");
+	string oneval = dbres->oneval();
+	cerr << "touched " << oneval << "\n";
+	cerr << "compute rewrites says " << compute_rewrites(c) << "\n";
+	//assert_s(valFromStr(oneval) <= compute_rewrites(c), "db gets more updated");
+
 	stringstream ss2; ss2.clear();
 	ss2 << "UPDATE " << table_name << " SET " << field_name
 	    << " = udftransform(" + field_name + ") " << swhere.str();	   
 	if  (DEBUG_COMM) {cerr << ss2.str() << "\n";}
 	assert_s(db->execute(ss2.str()),"could not execute batch update");
     } else {
-	if (DEBUG_COMM) cerr << "no need to rewrite anything in DB\n";
+	cerr << "no need to rewrite anything in DB\n";
     }
-    
+
+    cerr << "------- \n\n";
+    cerr << "INSERT " << new_ope << "\n";
     // now insert the new value
-    assert_s(db->execute("INSERT INTO " + table_name + " VALUES (" + strFromVal(new_ope) +");"),
-	     "could not insert new value");
+    stringstream si;
+    si << "INSERT INTO " << table_name << " VALUES (" << glb_counter++  << ", " << strFromVal(new_ope) << ");";
+    assert_s(db->execute(si.str()), "could not insert new value");
     
 }
    
@@ -1543,36 +1603,13 @@ BTree::size(Node * n) {
     return sum;
 }
 
-static uint
-compute_rewrites(ChangeInfo c) {
-    c.reverse(); //the first is the topmost element now
-    
-    uint sum = 0;
-
-    for (auto lci : c) {
-	if (lci.index-1 >= (int)lci.node->m_count) {
-	    // done
-	    assert_s(sum > 0, " logic error with sum");
-	    return sum-1;
-	}
-	for (uint i = lci.index; i< lci.node->m_count; i++) {
-	    sum = sum + 1 + BTree::size(lci.node->m_vector[i].mp_subtree);
-	}
-    }
-
-    assert_s(sum > 0, "logic error with end sum");
-    // the recently inserted node should not be counted
-    return sum-1;
-    
-}
-
 void
 BTree::insert(string ciph, TreeNode * tnode,
 	      OPEType ope_path, uint64_t nbits, uint64_t index,
 	      UpdateMerkleProof & p) {
     Node * node = (Node *) tnode;
 
-    ChangeInfo ci;
+    ChangeInfo ci; ci.clear();
     Elem ciph_elem = Elem(ciph);
 
     /*   cerr << "remove code here:\n";
