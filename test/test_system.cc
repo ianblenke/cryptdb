@@ -839,8 +839,8 @@ int main(int argc, char ** argv)
     
     cerr << "invalid test \n";
 
-    for(uint i = 0; i < argc; i++ ){
-        cerr << string(argv[i]) << " "
+    for(int i = 0; i < argc; i++ ){
+        cerr << string(argv[i]) << " ";
     }
     cerr << endl;
 
