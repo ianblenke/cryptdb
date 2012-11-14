@@ -350,8 +350,8 @@ client_net(int num_clients){
     cout << pid_list.size() << " clients ready, starting servers " << endl;
     stringstream parse_num;
     parse_num << num_clients;
-    string cmd = "./home/frankli/cryptdb/obj/test/test servernet "+parse_num.str();
-    string ssh = "ssh root@ud1.csail.mit.edu '" + cmd + "'";
+    string cmd = "cd /; ./home/frankli/cryptdb/obj/test/test servernet "+parse_num.str();
+    string ssh = "ssh root@ud0.csail.mit.edu '" + cmd + "'";
     sleep(2);
     pid_t pid = fork();
     if(pid == 0) {
