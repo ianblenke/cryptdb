@@ -295,6 +295,7 @@ static void signalHandlerEnd(int signum){
 }
 
 static void signalHandlerTerminate(int signum){
+    cout << "Killing ssh to server child" << endl;
     exit(rv);
 }
 
