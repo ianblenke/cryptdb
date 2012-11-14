@@ -36,8 +36,11 @@ public:
     // the value should be a correct OPE encoding 
     OPEType transform(OPEType val);
 
-
-    //must deal with root
+    // for network messaging
+    std::ostream& operator>>(std::ostream &out);
+    std::istream& operator<<(std::istream &out);
+    bool equals(OPETransform ts);
+  
 
 private:
     // first transformation is the leaf

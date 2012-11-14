@@ -153,3 +153,108 @@ OPETransform::transform(OPEType val) {
     repr[repr.size()-1]--;
     return vec_to_enc(repr);
 }
+
+
+static ostream&
+operator>>(transf t, ostream & out) {
+    out <<  " " << t.ope_path.size() << " ";
+    for (uint i = 0; i < t.ope_path.size(); i++) {
+	out << t.ope_path[i] << " ";
+    }
+
+    out << t.index_inserted << " " << t.split_point << " ";
+
+    return out;
+}
+
+static istream&
+operator<<(transf t, istream & is) {
+    uint size;
+    is >> size;
+    t.ope_path.resize(size);
+
+    for (uint i = 0; i < size; i++) {
+	is >> t.ope_path[i];
+    }
+
+    is >> t.index_inserted >> t.split_point;
+
+    return is;
+}
+
+ostream &
+OPETransform::operator>>(ostream &out) {
+    out << " " << ts.size();
+
+    for (auto t: ts) {
+	t >> out;
+	out << " ";
+    }
+
+    out << new_root << " ";
+
+    return out;
+}
+
+istream &
+OPETransform::operator<<(istream & is) {
+    uint size;
+    is >> size;
+    ts.resize(size);
+
+    for (uint i = 0; i < size; i++) {
+	transf t;
+	t << is;
+	ts[i] = t;
+    }
+
+    new_root << is;
+
+    return is;
+}
+
+static bool
+equals(transf t1, transf t2) {
+    if (t1.index_inserted != t2.index_inserted) {
+	return false;
+    }
+    
+    if (t1.split_point != t2.split_point) {
+	return false;
+    }
+
+    if (t1.ope_path.size() != t2.ope_path.size()) {
+	return false;
+    }
+
+    for (uint i = 0; i < t1.ope_path.size(); i++) {
+	if (t1.ope_path[i] != t2.ope_path[i]) {
+	    return false;
+	}
+    }
+
+    return true; 
+ }
+
+bool
+OPETransform::equals(OPETransform t) {
+    if (new_root != t.new_root) {
+	return false;
+    }
+
+    if (ts.size() != t.ts.size()) {
+	return false;
+    }
+
+    auto it1 = ts.begin();
+    auto it2 = t.ts.begin();
+
+    for (; it1 != ts.end(); it1++) {
+	if (!equals(*it1, *it2)) {
+	    return false;
+	}
+	it2++;
+    }
+
+    return true;
+}

@@ -646,6 +646,17 @@ public:
     }
 
     static void
+    test_serialize(OPETransform t) {
+	stringstream ss;
+	ss.clear();
+	t >> ss;
+	stringstream ss2(ss.str();
+	OPETransform t2;
+	t2 << ss2;
+
+	assert_s(t2.equals(t), "serialization does not work");
+    }
+    static void
     test_transform() {
 	OPETransform t;
 	t.push_change(vec_to_path({2, 1, 5}), 3, 1, 1);
@@ -716,6 +727,11 @@ public:
 	ope_transform_check(t3, omin, omax,  {2,7}, {1, 2, 5}); 
 	ope_transform_check(t3, omin, omax,  {2, 1, 1, 5}, {1, 1, 1, 1, 5});
 
+	// test serialize
+	test_serialize(t1);
+	test_serialize(t2);
+	test_serialize(t3);
+	
 	cerr << "OK!\n";
 	
     }
