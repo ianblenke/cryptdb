@@ -1365,6 +1365,15 @@ BTree::BTree(OPETable<string> * ot, Connect * _db, bool malicious) : opetable(ot
     tracker = new RootTracker (malicious);  // maintains a pointer to the current root of the b-tree
     Node * root_ptr = new Node (tracker);
     tracker->set_root(null_ptr, root_ptr);
+
+    if (WITH_DB) {
+	// setup the UDFs at the server
+	assert_s(db->execute("CREATE FUNCTION set_transform RETURNS INTEGER soname 'edb.so';"),
+		     "failed to create udf set_transform");
+	assert_s(db->execute("CREATE FUNCTION transform RETURNS INTEGER soname 'edb.so';"),
+	    "could not create UDF transform");
+	
+    }
 }
 
 TreeNode *
