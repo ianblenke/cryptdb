@@ -1375,7 +1375,21 @@ BTree::BTree(OPETable<string> * ot, Connect * _db, bool malicious,
 	assert_s(db->execute("CREATE FUNCTION set_transform RETURNS INTEGER soname 'edb.so';"),
 		     "failed to create udf set_transform");
 	assert_s(db->execute("CREATE FUNCTION transform RETURNS INTEGER soname 'edb.so';"),
-	    "could not create UDF transform");	
+	    "could not create UDF transform");
+	assert_s(db->execute("CREATE TABLE " + table_name + " ( "+ field_name+ " bigint unsigned );"),
+		 "could not create bench table");
+	assert_s(db->execute("CREATE INDEX ind ON TABLE" + table_name + "(" + field_name + ");"),
+		 "could not create index");
+    }
+}
+
+
+BTree::~BTree() {
+    delete tracker;
+    if (WITH_DB) {
+	assert_s(db->execute("DROP FUNCTION IF EXISTS set_transform;"), "could not drop func");
+	assert_s(db->execute("DROP FUNCTION IF EXISTS transform; "), "could not drop func");
+	assert_s(db->execute("DROP TABLE IF EXISTS " + table_name + ";"), "could not drop table");
     }
 }
 
@@ -1451,7 +1465,7 @@ compute_transform(ChangeInfo c) {
 }
 
 void
-BTree::update_db(ChangeInfo & c) {
+BTree::update_db(OPEType new_ope, ChangeInfo & c) {
     // compute transform from c
     OPETransform t = compute_transform(c);
 
@@ -1469,11 +1483,16 @@ BTree::update_db(ChangeInfo & c) {
     t.get_interval(omin, omax);
     ss.clear();
     ss << "UPDATE " << table_name << " SET " << field_name
-       <<" = transform(" + field_name + ") WHERE field_name >= " << omin
-       << " AND " << field_name << " <= " << omax << ";";
+       <<" = transform(" + field_name + " >=" << omin
+       << " AND " << field_name << "<=" << omax << ";";
     assert_s(db->execute(ss.str()),"could not execute batch update");
+
+    // now insert the new value
+    assert_s(db->execute("INSERT INTO table" + table_name + " VALUES (" + strFromVal(new_ope) +");"),
+	     "could not insert new value");
     
 }
+   
 
 uint
 BTree::size(Node * n) {
@@ -1538,7 +1557,7 @@ BTree::insert(string ciph, TreeNode * tnode,
 	     */
  
     if (WITH_DB) {
-	update_db(ci);
+	update_db(opetable->get(ciph).ope, ci);
     }
 }
 

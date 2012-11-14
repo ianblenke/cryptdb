@@ -108,6 +108,7 @@ public:
 
     BTree(OPETable<std::string> * ot, Connect * db, bool malicious,
 	  string table_name = "", string field_name = "");
+    ~BTree();
     
     TreeNode * get_root();
 
@@ -120,7 +121,7 @@ public:
 
      MerkleProof merkle_proof(TreeNode * n);
     
-    void update_db(ChangeInfo & c);
+    void update_db(OPEType ciph, ChangeInfo & c);
 
     uint num_rewrites() {return nrewrites;}
     
