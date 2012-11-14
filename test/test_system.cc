@@ -2,7 +2,7 @@
  * Tests search trees.
  */
 
-
+#include <stdlib.h>
 #include <sstream>
 #include <vector>
 #include <algorithm>
@@ -21,6 +21,8 @@
 #include <crypto/aes_cbc.hh>
 #include <crypto/ope.hh>
 #include <NTL/ZZ.h>
+#include <csignal>
+#include <unistd.h>
 
 using namespace std;
 
@@ -228,6 +230,195 @@ client_thread() {
     assert_s(false, "not recognized ciphertext size; accepting 64, >= 128\n");
     return;
 }
+
+/*** Parallel client/server setup ***/
+
+int rv;
+int completed_enc = 0;
+fstream clientfile;
+
+struct timeval start_time;
+
+template<class A, class BC>
+static void
+clientnetgeneric(BC * bc, int c_port, int s_port) {
+
+    ope_client<A, BC> * ope_cl = new ope_client<A, BC>(bc, is_malicious, c_port, s_port);
+    clientfile << "client created \n";
+
+    vector<A> vs = *((vector<A> * )vals);
+    pause();
+
+    gettimeofday(&start_time, 0);
+    for (uint i = 0; i < vs.size(); i++) {
+        ope_cl->encrypt(vs[i], true);
+        completed_enc++;
+    }
+    clientfile << "DONE with workload!\n";  
+}
+
+static void
+clientnet_thread(int c_port, int s_port) {
+    
+    if (plain_size == 64) {
+    //cerr << "creating uint64, blowfish client\n";
+    clientnetgeneric<uint64_t, blowfish>(bc, c_port, s_port);
+    return;
+    }
+
+    if (plain_size >= 128) {
+    //cerr << "creating string, aes cbc client\n";
+    clientnetgeneric<string, aes_cbc>(bc_aes, c_port, s_port);
+    return;
+    }
+
+    assert_s(false, "not recognized ciphertext size; accepting 64, >= 128\n");
+    return;
+}
+
+static void signalHandlerStart(int signum){
+    clientfile <<"signalHandler"<<endl;
+}
+
+static void signalHandlerEnd(int signum){
+    struct timeval end_time;
+    gettimeofday(&end_time, 0);    
+
+    float time_passed = end_time.tv_sec+end_time.tv_usec/((long) 1000000.0) - 
+        start_time.tv_sec+start_time.tv_usec/((long) 1000.0);
+//    clientfile << "completed: " << completed_enc << " in " << time_passed << endl;
+    clientfile << "throughput: " << ( completed_enc*1.0 ) / (time_passed * 1.0) << endl;
+    //clientfile << "start-end: "<< start_time.tv_sec+start_time.tv_usec/((long) 1000.0) << " " << end_time.tv_sec+end_time.tv_usec/((long) 1000000.0) <<endl;
+    clientfile <<"ending"<<endl;
+    clientfile.close();
+    exit(rv);
+}
+
+static void parse_client_files(int num_clients){
+    float total_throughput = 0;
+    fstream throughput_f;
+    throughput_f.open ("throughput.txt", std::ios::out | std::ios::app);
+    for (int i=0; i< num_clients; i++) {
+            
+            stringstream ss;
+            ss<<i;
+            string filename = "client"+ss.str()+".txt";
+            ifstream readfile (filename);
+            if (readfile.is_open()) {
+                string line;
+                while (readfile.good() ){
+                    getline(readfile, line);
+                    ss.clear();
+                    ss.str("");
+                    ss << line;
+                    string first;
+                    ss >> first;
+                    if (first == "throughput:") {
+                        float indiv_throughput = 0;
+                        ss >> indiv_throughput;
+                        total_throughput += indiv_throughput;
+                        break;
+                    }
+
+                }
+                readfile.close();
+            }
+
+    }  
+    throughput_f << num_clients << " " << total_throughput;
+    throughput_f.close();
+}
+
+static void
+client_net(int num_clients){
+    signal(SIGALRM, signalHandlerStart);
+    signal(SIGINT, signalHandlerEnd);
+
+    vector<pid_t> pid_list;
+    for (int i=0; i< num_clients; i++) {
+            pid_t pid = fork();
+            if(pid == 0){
+                    stringstream ss;
+                    ss<<i;
+                    string filename = "client"+ss.str()+".txt";
+                    clientfile.open (filename.c_str(), std::ios::in | std::ios::out | std::ios::trunc);
+                    clientnet_thread(1110+i, 1110+i);
+                    assert_s(false, "Should have exited with signalEnd");
+                    exit(rv);
+            }else{
+//                    cout<<"pid: "<<pid<<endl;
+                    pid_list.push_back(pid);
+            }
+    }
+    cout << pid_list.size() << " clients ready, starting servers " << endl;
+    stringstream parse_num;
+    parse_num << num_clients;
+    string cmd = "cd /; ./home/frankli/cryptdb/obj/test/test servernet "+parse_num.str();
+    string ssh = "ssh root@ud0.csail.mit.edu '" + cmd + "'";
+    sleep(2);
+    pid_t pid = fork();
+    if(pid == 0) {
+        exit( system(ssh.c_str()) );    
+    }
+    sleep(2);
+    for(uint i = 0; i < pid_list.size(); i++){
+            kill(pid_list[i], SIGALRM);
+    }
+    sleep(5);
+    for(uint i = 0; i < pid_list.size(); i++){
+            kill(pid_list[i], SIGINT);
+    }
+
+    int t= pid_list.size();
+    while(t>0){
+            wait(&rv);
+            t--;
+            cout<<"Client closed, " << t << " remaining threads" <<endl;
+    }
+    cout << "All clients closed" << endl;
+
+    parse_client_files(num_clients);
+
+}
+
+static void
+servernet_thread(int c_port, int s_port){
+    Server * serv = new Server(is_malicious, c_port, s_port);
+    
+    serv->work();
+}
+
+static void signalHandlerTerminate(int signum){
+    exit(rv);
+}
+
+static void
+server_net(int num_servers){
+    signal(SIGTERM, signalHandlerTerminate);
+
+    vector<pid_t> pid_list;
+    for (int i=0; i< num_servers; i++) {
+            pid_t pid = fork();
+            if(pid == 0){
+                    servernet_thread(1110+i, 1110+i);
+                    assert_s(false, "Should have exited with signalEnd");
+                    exit(rv);
+            }else{
+                    //cout<<"pid: "<<pid<<endl;
+                    pid_list.push_back(pid);
+            }
+    }
+    cout << pid_list.size() << " servers started. " << endl;
+
+    int t= pid_list.size();
+    while(t>0){
+            wait(&rv);
+            t--;
+            cout<<"Server closed, " << t << " remaining threads" <<endl;            
+    }
+
+}
+
 
 static void *
 server_thread(void *s) {
@@ -571,9 +762,42 @@ int main(int argc, char ** argv)
 	cerr << "usage ./test client plain_size(64,>=128) num_to_enc is_malicious(0/1)\n \
                  OR ./test server is_malicious\n \
                  OR ./test sys plain_size num_tests is_malicious\n \
-                 OR ./test bench \n";
+                 OR ./test bench \n \
+                 OR ./test net plain_size\n \
+                 OR ./test clientnet plain_size(64,>=128) num_clients \n \
+                 OR ./test servernet num_servers";
 	return 0;
     }
+
+    if (argc == 3 && string(argv[1]) == "net") {
+        plain_size = atoi(argv[2]);
+        is_malicious = 0;
+        set_workload(100000, plain_size, INCREASING);
+
+
+    }
+
+    if (argc == 4 && string(argv[1]) == "clientnet") {
+    
+    plain_size = atoi(argv[2]);
+    int num_clients = atoi(argv[3]);
+    is_malicious = 0;
+    set_workload(100000, plain_size, INCREASING);
+
+    client_net(num_clients);
+
+    return 0;
+    }
+
+    if (argc == 3 && string(argv[1]) == "servernet") {
+    
+    int num_servers = atoi(argv[2]);
+    is_malicious = 0;
+
+    server_net(num_servers);
+
+    return 0;
+    }    
     
     if (argc == 5 && string(argv[1]) == "client") {
 	
@@ -613,7 +837,10 @@ int main(int argc, char ** argv)
     cerr << "usage ./test client plain_size(64,>=128) num_to_enc is_malicious(0/1)\n \
                  OR ./test server is_malicious\n \
                  OR ./test sys plain_size num_tests is_malicious\n \
-                 OR ./test bench \n";
+                 OR ./test bench \n \
+                 OR ./test net \n \
+                 OR ./test clientnet plain_size(64,>=128) num_clients \n \
+                 OR ./test servernet num_servers";
     
 
     return 0;
