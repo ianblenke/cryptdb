@@ -343,7 +343,7 @@ client_net(int num_clients){
                     string filename = "client"+ss.str()+".txt";
                     clientfile.open (filename.c_str(), std::ios::in | std::ios::out | std::ios::trunc);
                     clientnet_thread(1110+i, 1110+i);
-                    assert_s(false, "Should have exited with signalEnd");
+                    assert_s(false, "Client should have exited with signalEnd");
                     exit(rv);
             }else{
 //                    cout<<"pid: "<<pid<<endl;
@@ -386,22 +386,18 @@ servernet_thread(int c_port, int s_port){
     Server * serv = new Server(is_malicious, c_port, s_port);
     
     serv->work();
-}
-
-static void signalHandlerTerminate(int signum){
     exit(rv);
 }
 
 static void
 server_net(int num_servers){
-    signal(SIGTERM, signalHandlerTerminate);
 
     vector<pid_t> pid_list;
     for (int i=0; i< num_servers; i++) {
             pid_t pid = fork();
             if(pid == 0){
                     servernet_thread(1110+i, 1110+i);
-                    assert_s(false, "Should have exited with signalEnd");
+                    assert_s(false, "Server should have exited with in servernet_thread");
                     exit(rv);
             }else{
                     //cout<<"pid: "<<pid<<endl;
