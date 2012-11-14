@@ -200,21 +200,20 @@ istream &
 OPETransform::operator<<(istream & is) {
     uint size;
     is >> size;
-    ts.resize(size);
 
     for (uint i = 0; i < size; i++) {
 	transf t;
 	t << is;
-	ts[i] = t;
+	ts.push_back(t);
     }
 
-    new_root << is;
+    is >> new_root;
 
     return is;
 }
 
 static bool
-equals(transf t1, transf t2) {
+tr_equals(transf t1, transf t2) {
     if (t1.index_inserted != t2.index_inserted) {
 	return false;
     }
@@ -250,7 +249,7 @@ OPETransform::equals(OPETransform t) {
     auto it2 = t.ts.begin();
 
     for (; it1 != ts.end(); it1++) {
-	if (!equals(*it1, *it2)) {
+	if (!tr_equals(*it1, *it2)) {
 	    return false;
 	}
 	it2++;

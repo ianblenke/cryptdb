@@ -650,7 +650,7 @@ public:
 	stringstream ss;
 	ss.clear();
 	t >> ss;
-	stringstream ss2(ss.str();
+	stringstream ss2(ss.str());
 	OPETransform t2;
 	t2 << ss2;
 
@@ -728,7 +728,7 @@ public:
 	ope_transform_check(t3, omin, omax,  {2, 1, 1, 5}, {1, 1, 1, 1, 5});
 
 	// test serialize
-	test_serialize(t1);
+	test_serialize(t);
 	test_serialize(t2);
 	test_serialize(t3);
 	
