@@ -284,13 +284,46 @@ static void signalHandlerEnd(int signum){
     struct timeval end_time;
     gettimeofday(&end_time, 0);    
 
-    long time_passed = end_time.tv_sec+end_time.tv_usec/((long) 1000000.0) - 
+    float time_passed = end_time.tv_sec+end_time.tv_usec/((long) 1000000.0) - 
         start_time.tv_sec+start_time.tv_usec/((long) 1000.0);
     clientfile << "completed: " << completed_enc << " in " << time_passed << endl;
-    clientfile << "throughput: " << completed_enc/time_passed << endl;
+    clientfile << "throughput: " << ( completed_enc*1.0 ) / (time_passed * 1.0) << endl;
+    clientfile << "start-end: "<< start_time.tv_sec+start_time.tv_usec/((long) 1000.0) << " " << end_time.tv_sec+end_time.tv_usec/((long) 1000000.0) <<endl;
     clientfile <<"ending"<<endl;
     clientfile.close();
     exit(rv);
+}
+
+static float parse_client_files(int num_clients){
+    float total_throughput = 0;
+    for (int i=0; i< num_clients; i++) {
+            
+            stringstream ss;
+            ss<<i;
+            string filename = "client"+ss.str()+".txt";
+            ifstream readfile (filename);
+            if (readfile.is_open()) {
+                string line;
+                while (readfile.good() ){
+                    getline(readfile, line);
+                    ss.clear();
+                    ss.str("");
+                    ss << line;
+                    string first;
+                    ss >> first;
+                    if (first == "throughput:") {
+                        float indiv_throughput = 0;
+                        ss >> indiv_throughput;
+                        total_throughput += indiv_throughput;
+                        break;
+                    }
+
+                }
+                readfile.close();
+            }
+
+    }  
+    return total_throughput;  
 }
 
 static void
@@ -328,10 +361,12 @@ client_net(int num_clients){
     int t= pid_list.size();
     while(t>0){
             wait(&rv);
-            cout<<"Client closed, " << t << " remaining threads" <<endl;
             t--;
+            cout<<"Client closed, " << t << " remaining threads" <<endl;
     }
     cout << "All clients closed" << endl;
+
+    cout << "Throughput = " << parse_client_files(num_clients);
 
 }
 
@@ -367,8 +402,8 @@ server_net(int num_servers){
     int t= pid_list.size();
     while(t>0){
             wait(&rv);
-            cout<<"Server closed, " << t << " remaining threads" <<endl;
             t--;
+            cout<<"Server closed, " << t << " remaining threads" <<endl;            
     }
 
 }
@@ -717,9 +752,14 @@ int main(int argc, char ** argv)
                  OR ./test server is_malicious\n \
                  OR ./test sys plain_size num_tests is_malicious\n \
                  OR ./test bench \n \
+                 OR ./test net \n \
                  OR ./test clientnet plain_size(64,>=128) num_clients \n \
                  OR ./test servernet num_servers";
 	return 0;
+    }
+
+    if (argc == 2 && string(argv[1]) == "net") {
+
     }
 
     if (argc == 4 && string(argv[1]) == "clientnet") {
@@ -783,6 +823,7 @@ int main(int argc, char ** argv)
                  OR ./test server is_malicious\n \
                  OR ./test sys plain_size num_tests is_malicious\n \
                  OR ./test bench \n \
+                 OR ./test net \n \
                  OR ./test clientnet plain_size(64,>=128) num_clients \n \
                  OR ./test servernet num_servers";
     
