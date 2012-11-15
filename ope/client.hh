@@ -165,7 +165,6 @@ ope_client<V, BlockCipher>::ope_client(BlockCipher * bc, bool malicious,
     MALICIOUS = malicious;
     
     //Socket connection
-    cout << "client trying to bind " << endl;
     sock = create_and_bind(c_port);
 
     //Start listening
