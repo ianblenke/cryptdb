@@ -99,6 +99,8 @@ ope_client<V, BC>::handle_interaction(istringstream & iss){
 
         pt = bc->decrypt(det);
 
+        assert(size > 0);
+
         for(index=0; index<size; index++){
 	    V tmp_key;
 	    tmp_key = Cnv<V>::TypeFromStr(unmarshall_binary(iss));

@@ -348,8 +348,10 @@ static void clean_up(int num_clients){
         ss.clear();
         ss.str("");*/
 
-        system("killall test");
-        system("ssh -A root@ud1.csail.mit.edu 'killall test'");
+        if (system("killall test") < 0)
+            perror("system killall test");
+        if (system("ssh -A root@ud1.csail.mit.edu 'killall test'") < 0)
+            perror("system ssh killall test");
     }
 
 }
