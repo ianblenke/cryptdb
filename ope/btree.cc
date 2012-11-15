@@ -1502,7 +1502,8 @@ update_ot(OPETable<string> * ope_table, Node * n) {
 
     uint counter = 0;
     update_ot_help(ope_table, n, opepath, nbits, counter);
-    cerr << "OT UPDATES " << counter << "\n";
+    if (DEBUG)
+        cerr << "OT UPDATES " << counter << "\n";
 }
 
 static OPETransform
