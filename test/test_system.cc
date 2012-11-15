@@ -30,6 +30,8 @@
 #include <time.h>
 #include <unistd.h>
 
+#define port_start 45850
+
 using namespace std;
 using boost::asio::ip::tcp;
 
@@ -340,19 +342,8 @@ static void parse_client_files(int num_clients){
 }
 
 static void clean_up(int num_clients){
-
-    stringstream ss;
-    for (int i = 0; i < num_clients; i++) {
-/*        ss << (1110+i);
-        string clean_cmd = "lsof -i:"+ss.str()+" -t | xargs kill -9";
-        ss.clear();
-        ss.str("");*/
-
-        if (system("killall test") < 0)
-            perror("system killall test");
-        if (system("ssh -A root@ud1.csail.mit.edu 'killall test'") < 0)
-            perror("system ssh killall test");
-    }
+    if (system("killall test") < 0)
+        perror("system killall test");
 
 }
 
@@ -370,7 +361,7 @@ client_net(int num_clients){
                     ss<<i;
                     string filename = "client"+ss.str()+".txt";
                     clientfile.open (filename.c_str(), ios::in | ios::out | ios::trunc);
-                    clientnet_thread(1110+i, 1110+i);
+                    clientnet_thread(port_start+i, port_start+i);
                     assert_s(false, "Client should have exited with signalEnd");
                     exit(rv);
             }else{
@@ -382,7 +373,7 @@ client_net(int num_clients){
     stringstream parse_num;
     parse_num << num_clients;
     string cmd = "cd /; ./home/frankli/cryptdb/obj/test/test servernet "+parse_num.str();
-    string ssh = "ssh -A root@ud1.csail.mit.edu '" + cmd + "'";
+    string ssh = "sshpass -p 'nba2k13' ssh -A root@ud1.csail.mit.edu '" + cmd + "'";
     sleep(5);
     pid_t pid = fork();
     if(pid == 0) {
@@ -425,7 +416,7 @@ server_net(int num_servers){
     for (int i=0; i< num_servers; i++) {
             pid_t pid = fork();
             if(pid == 0){
-                    servernet_thread(1110+i, 1110+i);
+                    servernet_thread(port_start+i, port_start+i);
                     assert_s(false, "Server should have exited with in servernet_thread");
                     exit(rv);
             }else{
@@ -896,10 +887,10 @@ client_bulk_work(uint n, our_conf c) {
 
         f.close();
     }
-    double start_time = bulk_start_time.tv_sec + bulk_start_time.tv_usec/1000000.0;
+    double b_start_time = bulk_start_time.tv_sec + bulk_start_time.tv_usec/1000000.0;
 
-    double client_runtime = bulk_end_time.tv_sec + bulk_end_time.tv_usec/1000000.0 - start_time;
-    double server_runtime = server_end - start_time;
+    double client_runtime = bulk_end_time.tv_sec + bulk_end_time.tv_usec/1000000.0 - b_start_time;
+    double server_runtime = server_end - b_start_time;
 /*    if ( client_runtime > server_runtime) cout << "CLIENT" << endl;
     else cout << "SERVER" <<endl;*/
     double enctime_ms = (max(client_runtime, server_runtime)*1.0)/(n*1.0);
