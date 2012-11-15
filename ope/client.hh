@@ -92,6 +92,7 @@ ope_client<V, BC>::handle_interaction(istringstream & iss){
         
         V det, pt, tmp_pt;
         int size, index;
+        bool some_flag = false;
 
         det = Cnv<V>::TypeFromStr(unmarshall_binary(iss));
 
@@ -99,21 +100,19 @@ ope_client<V, BC>::handle_interaction(istringstream & iss){
 
         pt = bc->decrypt(det);
 
-        assert(size > 0);
-
         for(index=0; index<size; index++){
 	    V tmp_key;
 	    tmp_key = Cnv<V>::TypeFromStr(unmarshall_binary(iss));
             tmp_pt = bc->decrypt(tmp_key);
+            some_flag = (tmp_pt==pt);
 
             if (tmp_pt >= pt){
                 break;
             }
-
         }
 
         stringstream o;
-        o << index << " " << (tmp_pt==pt);
+        o << index << " " << some_flag;
         return o.str();
         
     }
