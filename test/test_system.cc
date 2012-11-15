@@ -370,15 +370,15 @@ client_net(int num_clients){
             }
     }
     cout << pid_list.size() << " clients ready, starting servers " << endl;
-/*    stringstream parse_num;
+    stringstream parse_num;
     parse_num << num_clients;
     string cmd = "cd /; ./home/frankli/cryptdb/obj/test/test servernet "+parse_num.str();
-    string ssh = "ssh -A root@ud0.csail.mit.edu '" + cmd + "'";*/
+    string ssh = "ssh -A root@ud1.csail.mit.edu '" + cmd + "'";
     sleep(5);
-/*    pid_t pid = fork();
+    pid_t pid = fork();
     if(pid == 0) {
         exit( system(ssh.c_str()) );    
-    }*/
+    }
     sleep(5);
     for(uint i = 0; i < pid_list.size(); i++){
             kill(pid_list[i], SIGALRM);
