@@ -640,7 +640,7 @@ parse_string_message(stringstream & ss, vector<string> & unique_data, vector<str
 
 template <class A>
 static void
-server_bulk_work(our_conf c)
+server_bulk_work(our_conf c, uint n)
 {
   try
   {
@@ -685,23 +685,40 @@ server_bulk_work(our_conf c)
     Node* b_tree = build_tree_wrapper(unique_data, root_tracker, 0, unique_data.size());
 
     vector<uint64_t> db_data;
+    db_data.resize( bulk_data.size());
 
     OPETable<string >* ope_lookup_table = new OPETable<string>();
     update_table(*ope_lookup_table, b_tree);    
     for(int j = 0; j < (int) bulk_data.size(); j++){
         string key = bulk_data[j];
-        db_data.push_back(ope_lookup_table->get(key).ope);
+        db_data[j] = ope_lookup_table->get(key).ope;
     }
-
-
     struct timeval bulk_end_time;
     gettimeofday(&bulk_end_time, 0);
+    sleep(2);
+    ifstream f;
+    f.open("bulk.txt");
 
-    stringstream timess;
+    double start;
+    if (f.is_open()) {
+        string line;
+        while (f.good() ){
+            getline(f, line);
+            ss.clear();
+            ss.str("");
+            ss << line;
+            ss >> start;
+        }
+        f.close();
+    }
+/*    stringstream timess;
     string seconds;
     timess <<  bulk_end_time.tv_usec/1000000.0;
     timess >> seconds; 
-    cout<< "  \"bulk_end_time:\" " << (uint64_t) bulk_end_time.tv_sec << seconds.substr(1, seconds.size()-1) << "," << endl;
+    cout<< "  \"bulk_end_time:\" " << (uint64_t) bulk_end_time.tv_sec << seconds.substr(1, seconds.size()-1) << "," << endl;*/
+    double total_runtime = bulk_end_time.tv_sec + bulk_end_time.tv_usec/1000000.0 - start;
+    double enctime_ms = (total_runtime*1.0)/(n*1.0);
+    cout<< "  \"dv:enctime_ms:\" " << enctime_ms*1000.0 << "," << endl;
 
     delete ope_lookup_table;
     delete b_tree;
@@ -718,15 +735,7 @@ server_bulk_work(our_conf c)
 template<class A>
 static void
 client_bulk_work(uint n, our_conf c) {
-    struct timeval bulk_start_time;
-
-    stringstream timess;
-    string seconds;
-    gettimeofday(&bulk_start_time, 0);
-    timess <<  bulk_start_time.tv_usec/1000000.0;
-    timess >> seconds;
-    cout<< "  \"bulk_start_time:\" " << bulk_start_time.tv_sec << seconds.substr(1, seconds.size()-1) << "," << endl;
-    
+  
     vector<uint32_t > values_in_db32;
     vector<uint64_t > values_in_db64;
     vector<string > strings_in_db;
@@ -765,6 +774,14 @@ client_bulk_work(uint n, our_conf c) {
 
     }
 
+    struct timeval bulk_start_time;
+    gettimeofday(&bulk_start_time, 0);
+
+/*    stringstream timess1;
+    string seconds1;
+    timess1 <<  bulk_start_time.tv_usec/1000000.0;
+    timess1 >> seconds1;*/
+
     if(c.plain_size == 32 ){
         std::stable_sort(values_in_db32.begin(), values_in_db32.end() );  
     }else if (c.plain_size == 64) {
@@ -779,7 +796,6 @@ client_bulk_work(uint n, our_conf c) {
         std::stringstream ss;
 
         if(c.plain_size == 32 ){
-            cout <<"32";
             uint32_t det;
             ( (blowfish *) det_bc)->block_encrypt( &values_in_db32[rc] , &det);
             ss << det;   
@@ -824,6 +840,15 @@ client_bulk_work(uint n, our_conf c) {
     {
         cerr << e.what() << endl;
     }
+    //cout<< "  \"bulk_start_time:\" " << bulk_start_time.tv_sec << seconds1.substr(1, seconds1.size()-1) << "," << endl;    
+    fstream f;
+    f.open("bulk.txt",ios::in | ios::out | ios::trunc);
+    stringstream timess;
+    string seconds;
+    timess <<  bulk_start_time.tv_usec/1000000.0;
+    timess >> seconds;
+    f << bulk_start_time.tv_sec << seconds.substr(1, seconds.size()-1)  << endl;
+    f.close();
 
 }
 
@@ -846,7 +871,7 @@ measure_bulk_instance(uint n, our_conf c) {
     pid_t pid_server = fork();
     if (pid_server == 0) {
     //client
-        server_bulk_work<A>(c);
+        server_bulk_work<A>(c, n);
         exit(killsig);
     }
     assert_s(pid_server > 0, "issue starting bulk server");
