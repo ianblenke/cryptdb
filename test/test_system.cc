@@ -30,7 +30,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#define port_start 37777
+#define port_start 37778
 
 using namespace std;
 using boost::asio::ip::tcp;
@@ -362,19 +362,26 @@ static void parse_client_files(int num_clients){
 static void clean_up_client(int num_clients){
     if (system("rm client*.txt") < 0)
         perror("system rm client");
-/*    for(int i=0; i< num_clients; i++) {
+    for(int i=0; i< num_clients; i++) {
         stringstream killport;
         killport << "kill -9 $(lsof -i:" << port_start+ i << " -t)";
         cout << killport.str() << endl;
         if (system(killport.str().c_str()) < 0)
             perror("system kill port");        
-    }*/
+    }
 
 }
 
 static void clean_up_server(){
     if (system("killall -9 test") < 0)
-        perror("system killall test");    
+        perror("system killall test"); 
+    for(int i=0; i< num_clients; i++) {
+        stringstream killport;
+        killport << "kill -9 $(lsof -i:" << port_start+ i << " -t)";
+        cout << killport.str() << endl;
+        if (system(killport.str().c_str()) < 0)
+            perror("system kill port");        
+    }           
 }
 
 
@@ -403,7 +410,7 @@ client_net(int num_clients){
     stringstream parse_num;
     parse_num << num_clients;
     string cmd = "cd /; ./home/frankli/cryptdb/obj/test/test servernet "+parse_num.str();
-    string ssh = "ssh -A root@ud1.csail.mit.edu '" + cmd + "' > server_junk";
+    string ssh = "ssh -A root@ud1.csail.mit.edu '" + cmd + "'";
     sleep(3);
     pid_t pid = fork();
     if(pid == 0) {
@@ -1215,8 +1222,9 @@ vector<bclo_conf> BCLO_confs =
 };
 
 vector<net_conf> net_confs = 
-{// trials  plain_size  workload            num_threads             latencies
-    {1,     64,         INCREASING,     {1, 10, 50, 100},     {0, 5, 10, 25}}
+{// trials  plain_size  workload            num_threads                             latencies
+    {5,     64,         INCREASING, {1, 10, 50, 100, 200, 500, 750, 1000, 2000},     {0, 5, 10, 15, 20, 25}},
+    {5,     64,         RANDOM,     {1, 10, 50, 100, 200, 500, 750, 1000, 2000},     {0, 5, 10, 15, 20, 25}}
 };
 
 static 
