@@ -858,12 +858,13 @@ static void
 measure_bulk_instance(uint n, our_conf c) {
 
     cout << datadelim
-         << "{ \"iv:scheme\": " << "\"bulk\"" << ",\n"
+         << "{ \"iv:scheme\": " << "\"stOPE\"" << ",\n"
          << "  \"iv:nelem\": " << n << ",\n"
          << "  \"iv:ptsize\": " << c.plain_size << ",\n"
          << "  \"iv:malicious\": " << c.is_malicious << ",\n"
-         << "  \"iv:workload\": " << ((c.w == INCREASING) ? "\"increasing\""
-                                                          : "\"random\"") << ",\n";  
+         << "  \"iv:workload\": " << ((c.w == INCREASING) ? "\"bulk-increasing\""
+                                                          : "\"bulk-random\"") << ",\n";
+
     int killsig;
 
     // start client
