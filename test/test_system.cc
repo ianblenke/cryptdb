@@ -1106,14 +1106,14 @@ vector<our_conf> our_confs =
 
 vector<our_conf> bulk_confs =
 {//    num_elems             workload  plain_size    is_malicious
-/*    {{10, 100, 1000, 10000}, INCREASING,    32,         false},
+    {{10, 100, 1000, 10000}, INCREASING,    32,         false},
     {{10, 100, 1000, 10000}, INCREASING,    64,         false},
     {{10, 100, 1000, 10000}, INCREASING,    128,        false},
     {{10, 100, 1000, 10000}, INCREASING,    256,        false},
     {{10, 100, 1000, 10000}, RANDOM,        32,         false},
     {{10, 100, 1000, 10000}, RANDOM,        64,         false},
     {{10, 100, 1000, 10000}, RANDOM,        128,        false},
-    {{10, 100, 1000, 10000}, RANDOM,        256,        false},*/
+    {{10, 100, 1000, 10000}, RANDOM,        256,        false},
     {{10, 100, 1000, 10000}, INCREASING,    32,         true},
     {{10, 100, 1000, 10000}, INCREASING,    64,         true},
     {{10, 100, 1000, 10000}, INCREASING,    128,        true},
@@ -1159,13 +1159,13 @@ test_bench() {
          << "  \"start_asctime\": \"" << timebuf << "\",\n"
          << "  \"data\": [";
 
-/*    for (auto c : our_confs) {
+    for (auto c : our_confs) {
     	if (c.plain_size == 64) {
     	    measure_ours<uint64_t, blowfish>(c, bc);
     	} else {
     	    measure_ours<string, aes_cbc>(c, bc_aes);
     	}
-    }*/
+    }
 
     for (auto c: bulk_confs) {
         if (c.plain_size == 32) {
@@ -1177,7 +1177,7 @@ test_bench() {
         }        
     }
     
-/*    for (auto c: BCLO_confs) {
+    for (auto c: BCLO_confs) {
         if (c.plain_size == 32) {
             measure_bclo<uint32_t>(c);
         } else if (c.plain_size == 64) {
@@ -1185,7 +1185,7 @@ test_bench() {
         } else {
             measure_bclo<NTL::ZZ>(c);
         }	   
-    }*/
+    }
 
     curtime = time(0);
     strftime(timebuf, sizeof(timebuf), "%a, %d %b %Y %T %z", localtime(&curtime));
