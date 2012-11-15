@@ -22,13 +22,13 @@
 
 
 // Controls debugging output
-#define DEBUG_BARE 1
+#define DEBUG_BARE 0
 #define DEBUG 0
 #define DEBUG_COMM 0
 #define DEBUG_STREE 0
 #define DEBUG_BTREE 0
-#define DEBUG_PROOF 1
-#define DEBUG_EXP 1
+#define DEBUG_PROOF 0
+#define DEBUG_EXP 0
 
 #define DEBUG_TRANSF 0
 #define DEBUG_UDF 0
