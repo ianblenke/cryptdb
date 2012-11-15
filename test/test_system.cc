@@ -40,6 +40,9 @@ static aes_cbc * bc_aes = new aes_cbc(passwd, true);
 
 static uint plain_size = 0;
 static uint num_tests = 0;
+
+static const char* datadelim = "\n";
+
 void * vals;
 bool is_malicious;
 
@@ -205,6 +208,19 @@ get_uniq_wload(uint num, uint plain_size, workload w) {
     return res;
 }
 
+static void
+set_workload(uint num_tests, uint plain_size, workload w) {
+    // generate workload
+    cerr << "preparing workload: \n";
+    if (plain_size == 64) {
+    vals = (void *) get_uniq_wload<uint64_t>(num_tests, plain_size, w);
+    
+    } else {
+    vals = (void *) get_uniq_wload<string>(num_tests, plain_size, w);
+    }
+    cerr << "set workload\n";
+}
+
 
 template<class A, class BC>
 static void
@@ -255,13 +271,12 @@ clientnetgeneric(BC * bc, int c_port, int s_port) {
 
     ope_client<A, BC> * ope_cl = new ope_client<A, BC>(bc, is_malicious, c_port, s_port);
     clientfile << "client created \n";
-
-    vector<A> vs = *((vector<A> * )vals);
+    vector<A> * vs = (vector<A> * )vals;
     pause();
 
     gettimeofday(&start_time, 0);
-    for (uint i = 0; i < vs.size(); i++) {
-        ope_cl->encrypt(vs[i], true);
+    for (uint i = 0; i < vs->size(); i++) {
+        ope_cl->encrypt(vs->at(i), true);
         completed_enc++;
     }
     clientfile << "DONE with workload!\n";  
@@ -337,13 +352,22 @@ static void parse_client_files(int num_clients){
             }
 
     }  
-    throughput_f << num_clients << " " << total_throughput << endl;
+    throughput_f << "  \"dv:throughput\": " << total_throughput << ",\n";
+    cout << "}";
+    datadelim = ",\n";    
     throughput_f.close();
 }
 
 static void clean_up(int num_clients){
-    if (system("killall test") < 0)
+    if (system("rm client*.txt") < 0)
         perror("system killall test");
+    for(int i=0; i< num_clients; i++) {
+        stringstream killport;
+        killport << "kill -9 $(lsof -i:" << port_start+ i << " -t)";
+        cout << killport.str() << endl;
+        if (system(killport.str().c_str()) < 0)
+            perror("system kill port");        
+    }
 
 }
 
@@ -374,16 +398,18 @@ client_net(int num_clients){
     parse_num << num_clients;
     string cmd = "cd /; ./home/frankli/cryptdb/obj/test/test servernet "+parse_num.str();
     string ssh = "ssh -A root@ud1.csail.mit.edu '" + cmd + "'";
-    sleep(5);
+    sleep(3);
     pid_t pid = fork();
     if(pid == 0) {
-        exit( system(ssh.c_str()) );    
+        if(system(ssh.c_str()) < 0)
+            perror("ssh error on server");
+        exit(1);    
     }
     sleep(5);
     for(uint i = 0; i < pid_list.size(); i++){
             kill(pid_list[i], SIGALRM);
     }
-    sleep(5);
+    sleep(20);
     for(uint i = 0; i < pid_list.size(); i++){
             kill(pid_list[i], SIGINT);
     }
@@ -516,6 +542,14 @@ struct bclo_conf {
     bool use_cache;
 };
 
+struct net_conf {
+    uint trials;
+    uint plain_size;
+    workload w;
+    vector<uint> num_threads;
+    vector<uint> latencies;
+};
+
     
 template<class A, class BC>
 static void
@@ -533,8 +567,6 @@ client_work(uint n, our_conf c, BC * bc) {
 
      if (DEBUG_EXP) cerr << "DONE!\n";
 }
-
-static const char* datadelim = "\n";
 
 
 static void
@@ -635,100 +667,100 @@ template <class A>
 static void
 server_bulk_work(our_conf c, uint n)
 {
-  try
-  {
-    boost::asio::io_service io_service;
+      try
+      {
+        boost::asio::io_service io_service;
 
-    tcp::acceptor acceptor(io_service, tcp::endpoint(tcp::v4(), 9913));
+        tcp::acceptor acceptor(io_service, tcp::endpoint(tcp::v4(), 9913));
 
-    tcp::socket socket(io_service);
-    acceptor.accept(socket);
-    
-    string output = "";
-    stringstream ss (output, stringstream::in | stringstream::out);
-    for(;;)
-    {
+        tcp::socket socket(io_service);
+        acceptor.accept(socket);
+        
+        string output = "";
+        stringstream ss (output, stringstream::in | stringstream::out);
+        for(;;)
+        {
 
-      boost::array<char, 128> buf;
-      boost::system::error_code error;
+          boost::array<char, 128> buf;
+          boost::system::error_code error;
 
-      size_t len = socket.read_some(boost::asio::buffer(buf), error);
+          size_t len = socket.read_some(boost::asio::buffer(buf), error);
 
-      if (error == boost::asio::error::eof){
-        //cout<<"EOF signalled"<<endl;
-        break; // Connection closed cleanly by peer.
-      }else if (error)
-        throw boost::system::system_error(error); // Some other error.
+          if (error == boost::asio::error::eof){
+            //cout<<"EOF signalled"<<endl;
+            break; // Connection closed cleanly by peer.
+          }else if (error)
+            throw boost::system::system_error(error); // Some other error.
 
-      ss.write(buf.data(), len);
+          ss.write(buf.data(), len);
 
-    }
-    ss << " EOF EOF";
-
-    vector<string> unique_data;
-    vector<string> bulk_data;
-
-    if (c.plain_size == 32 || c.plain_size == 64)
-        parse_int_message(ss, unique_data, bulk_data);
-    else
-        parse_string_message(ss, unique_data, bulk_data);
-
-    RootTracker* root_tracker = new RootTracker(true);
-
-    Node* b_tree = build_tree_wrapper(unique_data, root_tracker, 0, unique_data.size());
-
-/*    vector<uint64_t> db_data;
-    db_data.resize( bulk_data.size());*/
-
-    OPETable<string >* ope_lookup_table = new OPETable<string>();
-    update_table(*ope_lookup_table, b_tree);    
-/*    for(int j = 0; j < (int) bulk_data.size(); j++){
-        string key = bulk_data[j];
-        db_data[j] = ope_lookup_table->get(key).ope;
-    }*/
-    struct timeval bulk_end_time;
-    gettimeofday(&bulk_end_time, 0);
-
-    if (!c.is_malicious) {
-        sleep(2);
-        ifstream f;
-        f.open("bulk.txt");        
-        double start;
-        stringstream timess;
-        if (f.is_open()) {
-            string line;
-
-            getline(f, line);
-            timess << line;
-            timess >> start;
-           // cout << line << endl;
-            f.close();
         }
-        double total_runtime = bulk_end_time.tv_sec + bulk_end_time.tv_usec/1000000.0 - start;
-        //cout << total_runtime << " : " << bulk_end_time.tv_sec <<"." << bulk_end_time.tv_usec/1000000.0<<endl;
-        double enctime_ms = (total_runtime*1.0)/(n*1.0);
-        cout<< "  \"dv:enctime_ms\": " << enctime_ms*1000.0 << endl;
-    }else{
-        fstream f;
-        f.open("bulk.txt", ios::out | ios::trunc);
-        stringstream timess;
-        string seconds;
-        timess <<  bulk_end_time.tv_usec/1000000.0;
-        timess >> seconds;
-        f << bulk_end_time.tv_sec << seconds.substr(1, seconds.size()-1)  << endl;
-        f.close();        
+        ss << " EOF EOF";
+
+        vector<string> unique_data;
+        vector<string> bulk_data;
+
+        if (c.plain_size == 32 || c.plain_size == 64)
+            parse_int_message(ss, unique_data, bulk_data);
+        else
+            parse_string_message(ss, unique_data, bulk_data);
+
+        RootTracker* root_tracker = new RootTracker(true);
+
+        Node* b_tree = build_tree_wrapper(unique_data, root_tracker, 0, unique_data.size());
+
+        /*vector<uint64_t> db_data;
+        db_data.resize( bulk_data.size());*/
+
+        OPETable<string >* ope_lookup_table = new OPETable<string>();
+        update_table(*ope_lookup_table, b_tree);    
+       /* for(int j = 0; j < (int) bulk_data.size(); j++){
+            string key = bulk_data[j];
+            db_data[j] = ope_lookup_table->get(key).ope;
+        }*/
+        struct timeval bulk_end_time;
+        gettimeofday(&bulk_end_time, 0);
+
+        if (!c.is_malicious) {
+            sleep(2);
+            ifstream f;
+            f.open("bulk.txt");        
+            double start;
+            stringstream timess;
+            if (f.is_open()) {
+                string line;
+
+                getline(f, line);
+                timess << line;
+                timess >> start;
+               // cout << line << endl;
+                f.close();
+            }
+            double total_runtime = bulk_end_time.tv_sec + bulk_end_time.tv_usec/1000000.0 - start;
+            //cout << total_runtime << " : " << bulk_end_time.tv_sec <<"." << bulk_end_time.tv_usec/1000000.0<<endl;
+            double enctime_ms = (total_runtime*1.0)/(n*1.0);
+            cout<< "  \"dv:enctime_ms\": " << enctime_ms*1000.0 << endl;
+        }else{
+            fstream f;
+            f.open("bulk.txt", ios::out | ios::trunc);
+            stringstream timess;
+            string seconds;
+            timess <<  bulk_end_time.tv_usec/1000000.0;
+            timess >> seconds;
+            f << bulk_end_time.tv_sec << seconds.substr(1, seconds.size()-1)  << endl;
+            f.close();        
+        }
+
+
+        delete ope_lookup_table;
+        delete b_tree;
+        delete root_tracker;
+
     }
-
-
-    delete ope_lookup_table;
-    delete b_tree;
-    delete root_tracker;
-
-  }
-  catch (exception& e)
-  {
-    cerr << e.what() << endl;
-  }
+    catch (exception& e)
+    {
+        cerr << e.what() << endl;
+    }
 }
 
 
@@ -1058,6 +1090,47 @@ void measure_bclo(bclo_conf c) {
     }
 }
 
+static void measure_net_instance(net_conf c) {
+    fstream throughput_f;
+    set_workload(1000000, c.plain_size, c.w);
+    plain_size = c.plain_size;
+    is_malicious = 0;
+    cout << c.latencies.size() << endl;
+    for(uint j = 0; j < c.latencies.size(); j++){
+        stringstream ss;
+        ss << "ssh root@ud1.csail.mit.edu ' tc qdisc add dev eth0 root netem delay " << c.latencies[j] << "ms'";
+
+        if (system(ss.str().c_str()) < 0)
+            perror("tc add failed");
+        sleep(1);
+
+        cout << c.num_threads.size() << endl;
+        for(uint i = 0; i < c.num_threads.size(); i++) {
+            uint num_clients = c.num_threads[i];           
+            for(uint trial = 0; trial < c.trials; trial++) {
+
+                throughput_f.open ("throughput.txt", ios::out | ios::app);
+                throughput_f << datadelim
+                     << "{ \"iv:scheme\": " << "\"network\"" << ",\n"
+                     << "  \"iv:latency\": " << c.latencies[j] << ",\n"
+                     << "  \"iv:ptsize\": " << c.plain_size << ",\n"
+                     << "  \"iv:numthd\": " << num_clients << ",\n"
+                     << "  \"iv:trialnum\": " << trial << ",\n"
+                     << "  \"iv:workload\": " << ((c.w == INCREASING) ? "\"increasing\""
+                                                                      : "\"random\"") << ",\n";
+                throughput_f.close(); 
+
+                client_net(num_clients);                
+            }
+
+
+        }
+        if (system("ssh root@ud1.csail.mit.edu ' tc qdisc del dev eth0 root'") < 0)
+            perror("tc del failed");  
+        sleep(1);      
+
+    }
+}
 
 vector<our_conf> our_confs =
 {// num_elems              workload       plain_size    is_malicious
@@ -1135,6 +1208,46 @@ vector<bclo_conf> BCLO_confs =
                             INCREASING,      256,          true},
 };
 
+vector<net_conf> net_confs = 
+{// trials  plain_size  workload            num_threads             latencies
+    {1,     64,         INCREASING,     {1, 10, 50, 100},     {0, 5, 10, 25}}
+};
+
+static 
+void measure_net () {
+    time_t curtime = time(0);
+    char timebuf[128];
+    strftime(timebuf, sizeof(timebuf), "%a, %d %b %Y %T %z", localtime(&curtime));
+
+    struct utsname uts;
+    uname(&uts);
+
+    fstream throughput_f;
+    throughput_f.open ("throughput.txt", ios::out | ios::app);
+    throughput_f << "{ \"hostname\": \"" << uts.nodename << "\",\n"
+         << "  \"username\": \"" << getenv("USER") << "\",\n"
+         << "  \"start_time\": " << curtime << ",\n"
+         << "  \"start_asctime\": \"" << timebuf << "\",\n"
+         << "  \"data\": [";
+    throughput_f.close(); 
+
+    for (auto c: net_confs) {
+        measure_net_instance(c);
+    }
+
+    curtime = time(0);
+    strftime(timebuf, sizeof(timebuf), "%a, %d %b %Y %T %z", localtime(&curtime));
+    throughput_f.open ("throughput.txt", ios::out | ios::app);
+    throughput_f << "],\n"
+         << "  \"end_time\": " << curtime << ",\n"
+         << "  \"end_asctime\": \"" << timebuf << "\"\n"
+         << "}\n";
+    throughput_f.close();
+
+    return;
+
+}
+
 static void
 test_bench() {
     time_t curtime = time(0);
@@ -1187,20 +1300,6 @@ test_bench() {
          << "}\n";
 }
 
-static void
-set_workload(uint num_tests, uint plain_size, workload w) {
-    // generate workload
-    cerr << "preparing workload: \n";
-    if (plain_size == 64) {
-	vals = (void *) get_uniq_wload<uint64_t>(num_tests, plain_size, w);
-	
-    } else {
-	vals = (void *) get_uniq_wload<string>(num_tests, plain_size, w);
-    }
-    cerr << "set workload\n";
-}
-
-
 int main(int argc, char ** argv)
 {
     assert_s(OPE_MODE, "code must be in OPE_MODE to run this test");
@@ -1208,20 +1307,19 @@ int main(int argc, char ** argv)
     string usage = "usage ./test client plain_size(64,>=128) num_to_enc is_malicious(0/1)\n \
                  OR ./test server is_malicious\n			\
                  OR ./test sys plain_size num_tests is_malicious\n	\
-                 OR ./test bench \n					\
+                 OR ./test bench \n	\
+                 OR ./test net \n \
                  OR ./test net plain_size [num_client1] ... \n		\
                  OR ./test clientnet plain_size(64,>=128) num_clients \n \
-                 OR ./test servernet num_servers \n \
-                 OR ./test cleanup num_ports";
+                 OR ./test servernet num_servers";
     
     if (argc < 2) {
 	cerr << usage;
 	return 0;
     }
 
-    if (argc == 3 && string(argv[1]) == "cleanup") {
-        int num_ports = atoi(argv[2]);
-        clean_up(num_ports);
+    if (argc == 2 && string(argv[1]) == "net") {
+        measure_net();
         return 0;
 
     }
@@ -1313,10 +1411,10 @@ int main(int argc, char ** argv)
                  OR ./test server is_malicious\n \
                  OR ./test sys plain_size num_tests is_malicious\n \
                  OR ./test bench \n \
+                 OR ./test net \n   \
                  OR ./test net plain_size [num_client1] ... \n \
                  OR ./test clientnet plain_size(64,>=128) num_clients \n \
-                 OR ./test servernet num_servers \n \
-                 OR ./test cleanup num_ports";
+                 OR ./test servernet num_servers";
 
 
     return 0;
