@@ -411,9 +411,11 @@ client_net(int num_clients){
     stringstream parse_num;
     parse_num << num_clients;
     string cmd = "cd /; ./home/frankli/cryptdb/obj/test/test servernet "+parse_num.str();
-    string ssh = "ssh -A root@ud1.csail.mit.edu '" + cmd + "' > trash 2>&1";
+    string ssh = "ssh -A root@ud1.csail.mit.edu '" + cmd + "' >> trash_client 2>&1";
     sleep(3);
     pid_t pid = fork();
+    int sleep_rv;
+
     if(pid == 0) {
         if(system(ssh.c_str()) < 0)
             perror("ssh error on server");
@@ -423,7 +425,7 @@ client_net(int num_clients){
     for(uint i = 0; i < pid_list.size(); i++){
             kill(pid_list[i], SIGALRM);
     }
-    sleep(60);
+    sleep(10);
     for(uint i = 0; i < pid_list.size(); i++){
             kill(pid_list[i], SIGINT);
     }
@@ -434,8 +436,9 @@ client_net(int num_clients){
             t--;
             if(DEBUG) cout<<"Client closed, " << t << " remaining threads" <<endl;
     }
+    wait(&sleep_rv);
     if(DEBUG) cout << "All clients closed" << endl;
-
+    sleep(3);
     parse_client_files(num_clients);
     clean_up_client(num_clients);
 
@@ -1134,7 +1137,8 @@ static void measure_net_instance(net_conf c) {
                                                                       : "\"random\"") << ",\n";
                 throughput_f.close(); 
 
-                client_net(num_clients);                
+                client_net(num_clients);  
+                sleep(3);              
             }
 
 
