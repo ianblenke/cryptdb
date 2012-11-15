@@ -1126,7 +1126,7 @@ vector<our_conf> bulk_confs =
 
 vector<bclo_conf> BCLO_confs =
 {// num_elems               type          plain_size       cache
-    {{10,100,1000},
+    {{10,100,1000,10000},
                             INCREASING,      32,           false},
     {{10,100,1000,10000,100000},
                             INCREASING,      32,           true},
