@@ -342,7 +342,7 @@ static void parse_client_files(int num_clients){
                         float indiv_throughput = 0;
                         ss >> indiv_throughput;
                         total_throughput += indiv_throughput;
-                        cout << filename <<": " << indiv_throughput << endl;
+                        if(DEBUG) cout << filename <<": " << indiv_throughput << " : " << total_throughput  << endl;
                     }
                     if (first == "DONE") {
                         assert_s(false, "means workload was finished early");
@@ -362,13 +362,13 @@ static void parse_client_files(int num_clients){
 static void clean_up(int num_clients){
     if (system("rm client*.txt") < 0)
         perror("system killall test");
-    for(int i=0; i< num_clients; i++) {
+/*    for(int i=0; i< num_clients; i++) {
         stringstream killport;
         killport << "kill -9 $(lsof -i:" << port_start+ i << " -t)";
         cout << killport.str() << endl;
         if (system(killport.str().c_str()) < 0)
             perror("system kill port");        
-    }
+    }*/
 
 }
 
@@ -419,9 +419,9 @@ client_net(int num_clients){
     while(t>0){
             wait(&rv);
             t--;
-            cout<<"Client closed, " << t << " remaining threads" <<endl;
+            if(DEBUG) cout<<"Client closed, " << t << " remaining threads" <<endl;
     }
-    cout << "All clients closed" << endl;
+    if(DEBUG) cout << "All clients closed" << endl;
 
     parse_client_files(num_clients);
     clean_up(num_clients);
@@ -457,7 +457,7 @@ server_net(int num_servers){
     while(t>0){
             wait(&rv);
             t--;
-            cout<<"Server closed, " << t << " remaining threads" <<endl;            
+            if(DEBUG) cout<<"Server closed, " << t << " remaining threads" <<endl;            
     }
     clean_up(num_servers);
 }
