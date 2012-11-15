@@ -359,9 +359,9 @@ static void parse_client_files(int num_clients){
     throughput_f.close();
 }
 
-static void clean_up(int num_clients){
+static void clean_up_client(int num_clients){
     if (system("rm client*.txt") < 0)
-        perror("system killall test");
+        perror("system rm client");
 /*    for(int i=0; i< num_clients; i++) {
         stringstream killport;
         killport << "kill -9 $(lsof -i:" << port_start+ i << " -t)";
@@ -370,6 +370,11 @@ static void clean_up(int num_clients){
             perror("system kill port");        
     }*/
 
+}
+
+static void clean_up_server(){
+    if (system("killall -9 test") < 0)
+        perror("system killall test");    
 }
 
 
@@ -398,7 +403,7 @@ client_net(int num_clients){
     stringstream parse_num;
     parse_num << num_clients;
     string cmd = "cd /; ./home/frankli/cryptdb/obj/test/test servernet "+parse_num.str();
-    string ssh = "ssh -A root@ud1.csail.mit.edu '" + cmd + "'";
+    string ssh = "ssh -A root@ud1.csail.mit.edu '" + cmd + "' > server_junk";
     sleep(3);
     pid_t pid = fork();
     if(pid == 0) {
@@ -424,7 +429,7 @@ client_net(int num_clients){
     if(DEBUG) cout << "All clients closed" << endl;
 
     parse_client_files(num_clients);
-    clean_up(num_clients);
+    clean_up_client(num_clients);
 
 }
 
@@ -459,7 +464,7 @@ server_net(int num_servers){
             t--;
             if(DEBUG) cout<<"Server closed, " << t << " remaining threads" <<endl;            
     }
-    clean_up(num_servers);
+    clean_up_server(num_servers);
 }
 
 
