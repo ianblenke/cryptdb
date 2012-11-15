@@ -1048,15 +1048,15 @@ vector<our_conf> our_confs =
 };
 
 vector<our_conf> bulk_confs =
-{//    num_elems         workload  plain_size    is_malicious
-    {{100, 1000, 10000}, INCREASING,    32,         false},
-    {{100, 1000, 10000}, INCREASING,    64,         false},
-    {{100, 1000, 10000}, INCREASING,    128,        false},
-    {{100, 1000, 10000}, INCREASING,    256,        false},
-    {{100, 1000, 10000}, RANDOM,        32,         false},
-    {{100, 1000, 10000}, RANDOM,        64,         false},
-    {{100, 1000, 10000}, RANDOM,        128,        false},
-    {{100, 1000, 10000}, RANDOM,        256,        false},
+{//    num_elems             workload  plain_size    is_malicious
+    {{10, 100, 1000, 10000}, INCREASING,    32,         false},
+    {{10, 100, 1000, 10000}, INCREASING,    64,         false},
+    {{10, 100, 1000, 10000}, INCREASING,    128,        false},
+    {{10, 100, 1000, 10000}, INCREASING,    256,        false},
+    {{10, 100, 1000, 10000}, RANDOM,        32,         false},
+    {{10, 100, 1000, 10000}, RANDOM,        64,         false},
+    {{10, 100, 1000, 10000}, RANDOM,        128,        false},
+    {{10, 100, 1000, 10000}, RANDOM,        256,        false},
 };
 
 vector<bclo_conf> BCLO_confs =
