@@ -16,9 +16,9 @@ const int OPE_CLIENT_PORT = 1112;
 
 #if WITH_NET
 //ud0 is server, ud1 is client
-const std::string OPE_SERVER_HOST = "18.26.4.145"; // we will need to get these in
+const std::string OPE_SERVER_HOST = "18.26.4.148"; // we will need to get these in
 						 // as inputs instead
-const std::string OPE_CLIENT_HOST = "18.242.6.164";
+const std::string OPE_CLIENT_HOST = "18.26.4.145";
 #else
 //ud0 is server, ud1 is client
 const std::string OPE_SERVER_HOST = "127.0.0.1"; // we will need to get these in
