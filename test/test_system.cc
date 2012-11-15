@@ -686,41 +686,48 @@ server_bulk_work(our_conf c, uint n)
 
     Node* b_tree = build_tree_wrapper(unique_data, root_tracker, 0, unique_data.size());
 
-    vector<uint64_t> db_data;
-    db_data.resize( bulk_data.size());
+/*    vector<uint64_t> db_data;
+    db_data.resize( bulk_data.size());*/
 
     OPETable<string >* ope_lookup_table = new OPETable<string>();
     update_table(*ope_lookup_table, b_tree);    
-    for(int j = 0; j < (int) bulk_data.size(); j++){
+/*    for(int j = 0; j < (int) bulk_data.size(); j++){
         string key = bulk_data[j];
         db_data[j] = ope_lookup_table->get(key).ope;
-    }
+    }*/
     struct timeval bulk_end_time;
     gettimeofday(&bulk_end_time, 0);
-    sleep(2);
-    ifstream f;
-    f.open("bulk.txt");
 
-    double start;
-    if (f.is_open()) {
-        string line;
-        while (f.good() ){
+    if (!c.is_malicious) {
+        sleep(2);
+        ifstream f;
+        f.open("bulk.txt");        
+        double start;
+        stringstream timess;
+        if (f.is_open()) {
+            string line;
+
             getline(f, line);
-            ss.clear();
-            ss.str("");
-            ss << line;
-            ss >> start;
+            timess << line;
+            timess >> start;
+           // cout << line << endl;
+            f.close();
         }
-        f.close();
+        double total_runtime = bulk_end_time.tv_sec + bulk_end_time.tv_usec/1000000.0 - start;
+        //cout << total_runtime << " : " << bulk_end_time.tv_sec <<"." << bulk_end_time.tv_usec/1000000.0<<endl;
+        double enctime_ms = (total_runtime*1.0)/(n*1.0);
+        cout<< "  \"dv:enctime_ms\": " << enctime_ms*1000.0 << endl;
+    }else{
+        fstream f;
+        f.open("bulk.txt", ios::out | ios::trunc);
+        stringstream timess;
+        string seconds;
+        timess <<  bulk_end_time.tv_usec/1000000.0;
+        timess >> seconds;
+        f << bulk_end_time.tv_sec << seconds.substr(1, seconds.size()-1)  << endl;
+        f.close();        
     }
-/*    stringstream timess;
-    string seconds;
-    timess <<  bulk_end_time.tv_usec/1000000.0;
-    timess >> seconds; 
-    cout<< "  \"bulk_end_time:\" " << (uint64_t) bulk_end_time.tv_sec << seconds.substr(1, seconds.size()-1) << "," << endl;*/
-    double total_runtime = bulk_end_time.tv_sec + bulk_end_time.tv_usec/1000000.0 - start;
-    double enctime_ms = (total_runtime*1.0)/(n*1.0);
-    cout<< "  \"dv:enctime_ms\": " << enctime_ms*1000.0 << endl;
+
 
     delete ope_lookup_table;
     delete b_tree;
@@ -779,10 +786,7 @@ client_bulk_work(uint n, our_conf c) {
     struct timeval bulk_start_time;
     gettimeofday(&bulk_start_time, 0);
 
-/*    stringstream timess1;
-    string seconds1;
-    timess1 <<  bulk_start_time.tv_usec/1000000.0;
-    timess1 >> seconds1;*/
+    //cout << bulk_start_time.tv_sec <<"."<<bulk_start_time.tv_usec<<endl;
 
     if(c.plain_size == 32 ){
         std::stable_sort(values_in_db32.begin(), values_in_db32.end() );  
@@ -794,6 +798,9 @@ client_bulk_work(uint n, our_conf c) {
 
     std::string message = "";
 
+    vector<string> unique_data;
+    string last = "";
+
     for (uint rc = 0; rc < n; rc++) {
         std::stringstream ss;
 
@@ -801,13 +808,25 @@ client_bulk_work(uint n, our_conf c) {
             uint32_t det;
             ( (blowfish *) det_bc)->block_encrypt( &values_in_db32[rc] , &det);
             ss << det;   
+            if (c.is_malicious && ss.str() != last) {
+                last = ss.str();
+                unique_data.push_back(last);
+            }
         }else if (c.plain_size == 64) {
             uint64_t det;
             ( (blowfish *) det_bc)->block_encrypt( &values_in_db64[rc] , &det);
-            ss << det;      
+            ss << det;    
+            if (c.is_malicious && ss.str() != last) {
+                last = ss.str();
+                unique_data.push_back(last);
+            }              
         } else {
             std::string det = encrypt_AES_CBC(strings_in_db[rc], aes_key, "0");
             ss << det.size() << " " << det;
+            if (c.is_malicious && det != last) {
+                last = det;
+                unique_data.push_back(det);
+            }            
         }
         message += ss.str() + " ";
     }
@@ -842,16 +861,51 @@ client_bulk_work(uint n, our_conf c) {
     {
         cerr << e.what() << endl;
     }
-    //cout<< "  \"bulk_start_time:\" " << bulk_start_time.tv_sec << seconds1.substr(1, seconds1.size()-1) << "," << endl;    
-    fstream f;
-    f.open("bulk.txt",ios::in | ios::out | ios::trunc);
-    stringstream timess;
-    string seconds;
-    timess <<  bulk_start_time.tv_usec/1000000.0;
-    timess >> seconds;
-    f << bulk_start_time.tv_sec << seconds.substr(1, seconds.size()-1)  << endl;
-    f.close();
+    if (!c.is_malicious) {
+        fstream f;
+        f.open("bulk.txt",ios::in | ios::out | ios::trunc);
+        stringstream timess;
+        string seconds;
+        timess <<  bulk_start_time.tv_usec/1000000.0;
+        timess >> seconds;
+        f << bulk_start_time.tv_sec << seconds.substr(1, seconds.size()-1)  << endl;
+        f.close();
+        return;
+    }
 
+    RootTracker* root_tracker = new RootTracker(true);   
+   
+    Node* b_tree = build_tree_wrapper(unique_data, root_tracker, 0, unique_data.size());
+
+    b_tree->compute_merkle_subtree();
+
+    struct timeval bulk_end_time;
+    gettimeofday(&bulk_end_time, 0);    
+
+    sleep(5);
+    ifstream f;
+    f.open("bulk.txt");        
+    double server_end;
+    stringstream timess;
+    if (f.is_open()) {
+        string line;
+
+        getline(f, line);
+        timess << line;
+        timess >> server_end;
+
+        f.close();
+    }
+    double start_time = bulk_start_time.tv_sec + bulk_start_time.tv_usec/1000000.0;
+
+    double client_runtime = bulk_end_time.tv_sec + bulk_end_time.tv_usec/1000000.0 - start_time;
+    double server_runtime = server_end - start_time;
+/*    if ( client_runtime > server_runtime) cout << "CLIENT" << endl;
+    else cout << "SERVER" <<endl;*/
+    double enctime_ms = (max(client_runtime, server_runtime)*1.0)/(n*1.0);
+    cout<< "  \"dv:enctime_ms\": " << enctime_ms*1000.0 << endl;    
+
+    delete b_tree;
 }
 
 
@@ -1052,14 +1106,22 @@ vector<our_conf> our_confs =
 
 vector<our_conf> bulk_confs =
 {//    num_elems             workload  plain_size    is_malicious
-    {{10, 100, 1000, 10000}, INCREASING,    32,         false},
+/*    {{10, 100, 1000, 10000}, INCREASING,    32,         false},
     {{10, 100, 1000, 10000}, INCREASING,    64,         false},
     {{10, 100, 1000, 10000}, INCREASING,    128,        false},
     {{10, 100, 1000, 10000}, INCREASING,    256,        false},
     {{10, 100, 1000, 10000}, RANDOM,        32,         false},
     {{10, 100, 1000, 10000}, RANDOM,        64,         false},
     {{10, 100, 1000, 10000}, RANDOM,        128,        false},
-    {{10, 100, 1000, 10000}, RANDOM,        256,        false},
+    {{10, 100, 1000, 10000}, RANDOM,        256,        false},*/
+    {{10, 100, 1000, 10000}, INCREASING,    32,         true},
+    {{10, 100, 1000, 10000}, INCREASING,    64,         true},
+    {{10, 100, 1000, 10000}, INCREASING,    128,        true},
+    {{10, 100, 1000, 10000}, INCREASING,    256,        true},
+    {{10, 100, 1000, 10000}, RANDOM,        32,         true},
+    {{10, 100, 1000, 10000}, RANDOM,        64,         true},
+    {{10, 100, 1000, 10000}, RANDOM,        128,        true},
+    {{10, 100, 1000, 10000}, RANDOM,        256,        true},    
 };
 
 vector<bclo_conf> BCLO_confs =
@@ -1097,13 +1159,13 @@ test_bench() {
          << "  \"start_asctime\": \"" << timebuf << "\",\n"
          << "  \"data\": [";
 
-    for (auto c : our_confs) {
+/*    for (auto c : our_confs) {
     	if (c.plain_size == 64) {
     	    measure_ours<uint64_t, blowfish>(c, bc);
     	} else {
     	    measure_ours<string, aes_cbc>(c, bc_aes);
     	}
-    }
+    }*/
 
     for (auto c: bulk_confs) {
         if (c.plain_size == 32) {
@@ -1115,7 +1177,7 @@ test_bench() {
         }        
     }
     
-    for (auto c: BCLO_confs) {
+/*    for (auto c: BCLO_confs) {
         if (c.plain_size == 32) {
             measure_bclo<uint32_t>(c);
         } else if (c.plain_size == 64) {
@@ -1123,7 +1185,7 @@ test_bench() {
         } else {
             measure_bclo<NTL::ZZ>(c);
         }	   
-    }
+    }*/
 
     curtime = time(0);
     strftime(timebuf, sizeof(timebuf), "%a, %d %b %Y %T %z", localtime(&curtime));

@@ -1316,6 +1316,15 @@ void Node::check_merkle_tree() {
         
 }
 
+void Node::compute_merkle_subtree(){
+    for (uint i = 0; i < m_count; i++) {
+    if (m_vector[i].has_subtree()) {
+        m_vector[i].mp_subtree->compute_merkle_subtree();
+    }
+    }
+    merkle_hash = hash_node();    
+}
+
 void Node::recompute_merkle_subtree() {
     // recompute for children first
     for (uint i = 0; i < m_count; i++) {

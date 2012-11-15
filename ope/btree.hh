@@ -264,6 +264,7 @@ public:
     // Functions for testing
     void check_merkle_tree(); //checks merkle tree was computed correctly
     void recompute_merkle_subtree();
+    void compute_merkle_subtree();
     uint max_height();   //height in no of edges 
 
 #ifdef _DEBUG
