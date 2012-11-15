@@ -718,7 +718,7 @@ server_bulk_work(our_conf c, uint n)
     cout<< "  \"bulk_end_time:\" " << (uint64_t) bulk_end_time.tv_sec << seconds.substr(1, seconds.size()-1) << "," << endl;*/
     double total_runtime = bulk_end_time.tv_sec + bulk_end_time.tv_usec/1000000.0 - start;
     double enctime_ms = (total_runtime*1.0)/(n*1.0);
-    cout<< "  \"dv:enctime_ms:\" " << enctime_ms*1000.0 << endl;
+    cout<< "  \"dv:enctime_ms\": " << enctime_ms*1000.0 << endl;
 
     delete ope_lookup_table;
     delete b_tree;
