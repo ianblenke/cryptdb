@@ -309,10 +309,11 @@ static void signalHandlerEnd(int signum){
     struct timeval end_time;
     gettimeofday(&end_time, 0);    
 
-    float time_passed = end_time.tv_sec+end_time.tv_usec/((long) 1000000.0) - 
-        start_time.tv_sec+start_time.tv_usec/((long) 1000.0);
+    float time_passed = end_time.tv_sec+end_time.tv_usec/(1000000.0) - 
+        start_time.tv_sec+start_time.tv_usec/( 1000000.0);
 //    clientfile << "completed: " << completed_enc << " in " << time_passed << endl;
     clientfile << "throughput: " << ( completed_enc*1.0 ) / (time_passed * 1.0) << endl;
+    cout << "throughput: " << ( completed_enc*1.0 ) / (time_passed * 1.0) << " = " << completed_enc << " / " << time_passed << endl;
     //clientfile << "start-end: "<< start_time.tv_sec+start_time.tv_usec/((long) 1000.0) << " " << end_time.tv_sec+end_time.tv_usec/((long) 1000000.0) <<endl;
     clientfile <<"ending"<<endl;
     clientfile.close();
@@ -342,7 +343,7 @@ static void parse_client_files(int num_clients){
                         float indiv_throughput = 0;
                         ss >> indiv_throughput;
                         total_throughput += indiv_throughput;
-                        if(DEBUG) cout << filename <<": " << indiv_throughput << " : " << total_throughput  << endl;
+                        cout << filename <<": " << indiv_throughput << " : " << total_throughput  << endl;
                     }
                     if (first == "DONE") {
                         assert_s(false, "means workload was finished early");
@@ -422,7 +423,7 @@ client_net(int num_clients){
     for(uint i = 0; i < pid_list.size(); i++){
             kill(pid_list[i], SIGALRM);
     }
-    sleep(20);
+    sleep(60);
     for(uint i = 0; i < pid_list.size(); i++){
             kill(pid_list[i], SIGINT);
     }
