@@ -646,7 +646,7 @@ server_bulk_work(our_conf c, uint n)
   {
     boost::asio::io_service io_service;
 
-    tcp::acceptor acceptor(io_service, tcp::endpoint(tcp::v4(), 13));
+    tcp::acceptor acceptor(io_service, tcp::endpoint(tcp::v4(), 9913));
 
     tcp::socket socket(io_service);
     acceptor.accept(socket);
@@ -816,7 +816,7 @@ client_bulk_work(uint n, our_conf c) {
         boost::asio::io_service io_service;
 
         tcp::resolver resolver(io_service);
-        tcp::resolver::query query("localhost", "daytime");
+        tcp::resolver::query query("localhost", "9913");
         tcp::resolver::iterator endpoint_iterator = resolver.resolve(query);
         tcp::resolver::iterator end;
 
@@ -1052,10 +1052,11 @@ vector<our_conf> bulk_confs =
     {{100, 1000, 10000}, INCREASING,    32,         false},
     {{100, 1000, 10000}, INCREASING,    64,         false},
     {{100, 1000, 10000}, INCREASING,    128,        false},
+    {{100, 1000, 10000}, INCREASING,    256,        false},
     {{100, 1000, 10000}, RANDOM,        32,         false},
     {{100, 1000, 10000}, RANDOM,        64,         false},
-    {{100, 1000, 10000}, RANDOM,        128,        false}
-
+    {{100, 1000, 10000}, RANDOM,        128,        false},
+    {{100, 1000, 10000}, RANDOM,        256,        false},
 };
 
 vector<bclo_conf> BCLO_confs =
