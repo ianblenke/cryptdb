@@ -372,10 +372,10 @@ static void clean_up_client(int num_clients){
 
 }
 
-static void clean_up_server(){
+static void clean_up_server(int num_servers){
     if (system("killall -9 test") < 0)
         perror("system killall test"); 
-    for(int i=0; i< num_clients; i++) {
+    for(int i=0; i< num_servers; i++) {
         stringstream killport;
         killport << "kill -9 $(lsof -i:" << port_start+ i << " -t)";
         cout << killport.str() << endl;
@@ -471,7 +471,7 @@ server_net(int num_servers){
             t--;
             if(DEBUG) cout<<"Server closed, " << t << " remaining threads" <<endl;            
     }
-    clean_up_server();
+    clean_up_server(num_servers);
 }
 
 
