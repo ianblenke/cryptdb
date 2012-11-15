@@ -1531,7 +1531,7 @@ must_rewrite(ChangeInfo c) {
 	// only leaf, let's see if any nodes were pushed
 	LevelChangeInfo lci = c.front();
 	assert_s(lci.split_point == -1, "there should be no split in one change info");
-	if (lci.node->m_count == (int)(lci.index+1)) {
+	if (lci.node->m_count == (uint)(lci.index+1)) {
 	    return false;
 	}
     }
