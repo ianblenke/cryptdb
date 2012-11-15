@@ -354,7 +354,7 @@ static void parse_client_files(int num_clients){
 
     }  
     throughput_f << "  \"dv:throughput\": " << total_throughput << ",\n";
-    cout << "}";
+    throughput_f << "}";
     datadelim = ",\n";    
     throughput_f.close();
 }

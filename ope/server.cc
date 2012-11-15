@@ -189,6 +189,7 @@ Server::Server(bool malicious, int cport, int sport) {
 	ope_tree = (Tree *) new BTree(ope_table, db, malicious);
     }
     sock_cl = create_and_connect(OPE_CLIENT_HOST, cport);
+    cout <<"server trying to bind" << endl;
     sock_req = create_and_bind(sport);
     
   
