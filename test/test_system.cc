@@ -30,7 +30,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#define port_start 1110
+#define port_start 37777
 
 using namespace std;
 using boost::asio::ip::tcp;
@@ -342,9 +342,10 @@ static void parse_client_files(int num_clients){
                         float indiv_throughput = 0;
                         ss >> indiv_throughput;
                         total_throughput += indiv_throughput;
+                        cout << filename <<": " << indiv_throughput << endl;
                     }
                     if (first == "DONE") {
-                        cout <<"DONE???" << endl;
+                        assert_s(false, "means workload was finished early");
                     }
 
                 }
