@@ -30,7 +30,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#define port_start 37778
+#define port_start 25566
 
 using namespace std;
 using boost::asio::ip::tcp;
@@ -411,7 +411,7 @@ client_net(int num_clients){
     stringstream parse_num;
     parse_num << num_clients;
     string cmd = "cd /; ./home/frankli/cryptdb/obj/test/test servernet "+parse_num.str();
-    string ssh = "ssh -A root@ud1.csail.mit.edu '" + cmd + "'";
+    string ssh = "ssh -A root@ud1.csail.mit.edu '" + cmd + "' > trash 2>&1";
     sleep(3);
     pid_t pid = fork();
     if(pid == 0) {
@@ -1224,8 +1224,8 @@ vector<bclo_conf> BCLO_confs =
 
 vector<net_conf> net_confs = 
 {// trials  plain_size  workload            num_threads                             latencies
-    {5,     64,         INCREASING, {1, 10, 50, 100, 200, 500, 750, 1000, 2000},     {0, 5, 10, 15, 20, 25}},
-    {5,     64,         RANDOM,     {1, 10, 50, 100, 200, 500, 750, 1000, 2000},     {0, 5, 10, 15, 20, 25}}
+    {3,     64,         INCREASING, {1, 10, 50, 100, 200, 500, 750, 1000, 2000},     {0, 5, 10, 15, 20, 25}},
+    {3,     64,         RANDOM,     {1, 10, 50, 100, 200, 500, 750, 1000, 2000},     {0, 5, 10, 15, 20, 25}}
 };
 
 static 
