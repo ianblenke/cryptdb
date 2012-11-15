@@ -14,7 +14,7 @@
 //whether we run with a database or not
 #define WITH_DB 0
 
-#define WITH_NET 1
+#define WITH_NET 0
 
 // if ope mode is true then trees can no longer use the order operation
 // among keys because the real keys are encrypted
