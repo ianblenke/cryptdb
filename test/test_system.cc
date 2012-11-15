@@ -464,7 +464,7 @@ server_net(int num_servers){
             t--;
             if(DEBUG) cout<<"Server closed, " << t << " remaining threads" <<endl;            
     }
-    clean_up_server(num_servers);
+    clean_up_server();
 }
 
 
