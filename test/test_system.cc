@@ -354,7 +354,7 @@ static void parse_client_files(int num_clients){
             }
 
     }  
-    throughput_f << "  \"dv:throughput\": " << total_throughput << ",\n";
+    throughput_f << "  \"dv:enctime_ms\": " << 1.0/total_throughput << ",\n";
     throughput_f << "}";
     datadelim = ",\n";    
     throughput_f.close();
@@ -363,26 +363,26 @@ static void parse_client_files(int num_clients){
 static void clean_up_client(int num_clients){
     if (system("rm client*.txt") < 0)
         perror("system rm client");
-    for(int i=0; i< num_clients; i++) {
+/*    for(int i=0; i< num_clients; i++) {
         stringstream killport;
         killport << "kill -9 $(lsof -i:" << port_start+ i << " -t)";
         cout << killport.str() << endl;
         if (system(killport.str().c_str()) < 0)
             perror("system kill port");        
-    }
+    }*/
 
 }
 
 static void clean_up_server(int num_servers){
     if (system("killall -9 test") < 0)
         perror("system killall test"); 
-    for(int i=0; i< num_servers; i++) {
+/*    for(int i=0; i< num_servers; i++) {
         stringstream killport;
         killport << "kill -9 $(lsof -i:" << port_start+ i << " -t)";
         cout << killport.str() << endl;
         if (system(killport.str().c_str()) < 0)
             perror("system kill port");        
-    }           
+    }*/           
 }
 
 
