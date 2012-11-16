@@ -11,6 +11,7 @@
 #include <ope/tree.hh>
 #include <util/ope-util.hh>
 #include <ope/opetable.hh>
+#include <fstream>
 
 // uint Merklecost = 0;
 
@@ -130,6 +131,8 @@ public:
     //returns the size of the subtree root at this Node
     // in terms of keys (does not count the empty key)
     static uint size(Node * n);
+    void store_tree(std::fstream &f);
+    void store_tree_helper(std::fstream &f, Node* cur_node);
 
     uint nrewrites;
     RootTracker * tracker;
@@ -180,7 +183,7 @@ public:
 
     //Dump to file so we can measure size
 
-    void dump_to_file();
+    void store_tree(std::fstream &f);
 
     // locality of reference, beneficial to effective cache utilization,
     // is provided by a "vector" container rather than a "list"
@@ -322,7 +325,7 @@ public:
     Node* mp_subtree;
     bool has_subtree() const {return valid() && (mp_subtree != null_ptr) && mp_subtree; }
 
-    void dump_to_file();
+    void store_tree(std::fstream &f);
 private:
     friend class Node;
     friend class NodeMerkleInfo;

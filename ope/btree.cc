@@ -24,6 +24,14 @@ void Elem::dump () {
 
 }
 
+void 
+Elem::store_tree(fstream &f) {
+    assert_s(f.is_open(), "filedump stream not open in elem");
+    f << " (" << m_key << " " << mp_subtree << ") ";
+
+}
+
+
 static void
 get_ope_path(Node * n, OPEType & opepath, uint & nbits) {
     if (n->mp_parent) {
@@ -65,6 +73,15 @@ compute_rewrites(ChangeInfo c) {
     
 }
 
+void
+Node::store_tree(fstream &f) {
+    assert_s(f.is_open(), "filedump stream not open in node");
+    f << "[" << merkle_hash << " " << m_root << " " << m_count << " " << mp_parent << " ";
+    for (uint i = 0; i < m_count; i++) {
+        m_vector[i].store_tree(f);
+    }
+    f <<"]";
+}
 
 
 uint
@@ -545,6 +562,21 @@ BTree::merkle_proof(TreeNode * n) {
     return node_merkle_proof((Node *)n);
 }
 
+void 
+BTree::store_tree_helper(fstream &f, Node* cur_node) {
+    cur_node->store_tree(f);
+    for (uint i = 0; i < cur_node->m_count; i++) {
+        if (cur_node->m_vector[i].has_subtree()) {
+            store_tree_helper(f, cur_node->m_vector[i].mp_subtree);
+        }
+    }    
+}
+
+void 
+BTree::store_tree(fstream &f) {
+    Node* root = (Node*) get_root();
+    store_tree_helper(f, root);
+}
 
 // returns the root hash
 static string

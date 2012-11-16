@@ -16,6 +16,9 @@
 #include <ope/tree.hh>
 #include <ope/stree.hh>
 #include <ope/btree.hh>
+#include <fstream>
+#include <sys/stat.h>
+#include <unistd.h>
 
 
 
@@ -54,8 +57,9 @@ public:
     
     /*************** helper functions *****************************/
 
-    void handle_enc(int csock, std::istringstream & iss, bool do_ins, string table_name = auto_table);
+    uint64_t store_tree();
 
+    void handle_enc(int csock, std::istringstream & iss, bool do_ins, string table_name = auto_table);
     /*
      * Given ciph, interacts with client and returns
      * a pair (node, index of subtree of node) where node should be inserted

@@ -484,6 +484,7 @@ struct our_conf {
     workload w;
     uint plain_size;
     bool is_malicious;
+    bool storage;
 };
 
 struct bclo_conf {
@@ -967,6 +968,9 @@ measure_ours_instance(uint n, our_conf c, BC * bc) {
     assert_s(WIFEXITED(status),"client terminated abnormally");
     assert_s(pid_client == pid2, "incorrect pid");
 
+    uint64_t dump_size = s->store_tree();
+
+    cout << "  \"dv:storage_size\": " << dump_size << "\n";
     cout << "  \"dv:rewrites_per_enc\": " << (s->num_rewrites() * 1.0)/(n*1.0) << "\n"
          << "}";
     datadelim = ",\n";
@@ -1080,59 +1084,59 @@ static void measure_net_instance(net_conf c) {
 }
 
 vector<our_conf> our_confs =
-{// num_elems              workload       plain_size    is_malicious
+{// num_elems              workload       plain_size    is_malicious   storage
     {{10,100,1000,10000},
-                            INCREASING,     32,         false},
+                            INCREASING,     32,         false,           false},
     {{10,100,1000,10000},
-                            RANDOM,         32,         false},
+                            RANDOM,         32,         false,           false},
     {{10,100,1000,10000},
-                            INCREASING,     32,         true},
+                            INCREASING,     32,         true,           false},
     {{10,100,1000,10000},
-                            RANDOM,         32,         true},
+                            RANDOM,         32,         true,           false},
     {{10,100,1000,10000},
-                            INCREASING,     64,         false},
+                            INCREASING,     64,         false,           false},
     {{10,100,1000,10000},
-                            RANDOM,         64,         false},
+                            RANDOM,         64,         false ,          false},
     {{10,100,1000,10000},
-                            INCREASING,     64,         true},
+                            INCREASING,     64,         true   ,        false},
     {{10,100,1000,10000},
-                            RANDOM,         64,         true},
+                            RANDOM,         64,         true    ,       false},
     {{10,100,1000,10000},
-                            INCREASING,     128,        false},
+                            INCREASING,     128,        false    ,       false},
     {{10,100,1000,10000},
-                            RANDOM,         128,        false},
+                            RANDOM,         128,        false     ,      false},
     {{10,100,1000,10000},
-                            INCREASING,     128,        true},
+                            INCREASING,     128,        true    ,       false},
     {{10,100,1000,10000},
-                            RANDOM,         128,        true},
+                            RANDOM,         128,        true,           false},
     {{10,100,1000,10000},
-                            INCREASING,     256,        false},
+                            INCREASING,     256,        false,           false},
     {{10,100,1000,10000},
-                            RANDOM,         256,        false},
+                            RANDOM,         256,        false,           false},
     {{10,100,1000,10000},
-                            INCREASING,     256,        true},
+                            INCREASING,     256,        true,           false},
     {{10,100,1000,10000},
-                            RANDOM,         256,        true},
+                            RANDOM,         256,        true,           false},
 };
 
 vector<our_conf> bulk_confs =
 {//    num_elems             workload  plain_size    is_malicious
-    {{10, 100, 1000, 10000}, INCREASING,    32,         false},
-    {{10, 100, 1000, 10000}, INCREASING,    64,         false},
-    {{10, 100, 1000, 10000}, INCREASING,    128,        false},
-    {{10, 100, 1000, 10000}, INCREASING,    256,        false},
-    {{10, 100, 1000, 10000}, RANDOM,        32,         false},
-    {{10, 100, 1000, 10000}, RANDOM,        64,         false},
-    {{10, 100, 1000, 10000}, RANDOM,        128,        false},
-    {{10, 100, 1000, 10000}, RANDOM,        256,        false},
-    {{10, 100, 1000, 10000}, INCREASING,    32,         true},
-    {{10, 100, 1000, 10000}, INCREASING,    64,         true},
-    {{10, 100, 1000, 10000}, INCREASING,    128,        true},
-    {{10, 100, 1000, 10000}, INCREASING,    256,        true},
-    {{10, 100, 1000, 10000}, RANDOM,        32,         true},
-    {{10, 100, 1000, 10000}, RANDOM,        64,         true},
-    {{10, 100, 1000, 10000}, RANDOM,        128,        true},
-    {{10, 100, 1000, 10000}, RANDOM,        256,        true},    
+    {{10, 100, 1000, 10000}, INCREASING,    32,         false,           false},
+    {{10, 100, 1000, 10000}, INCREASING,    64,         false,           false},
+    {{10, 100, 1000, 10000}, INCREASING,    128,        false,           false},
+    {{10, 100, 1000, 10000}, INCREASING,    256,        false,           false},
+    {{10, 100, 1000, 10000}, RANDOM,        32,         false,           false},
+    {{10, 100, 1000, 10000}, RANDOM,        64,         false,           false},
+    {{10, 100, 1000, 10000}, RANDOM,        128,        false,           false},
+    {{10, 100, 1000, 10000}, RANDOM,        256,        false,           false},
+    {{10, 100, 1000, 10000}, INCREASING,    32,         true,           false},
+    {{10, 100, 1000, 10000}, INCREASING,    64,         true,           false},
+    {{10, 100, 1000, 10000}, INCREASING,    128,        true,           false},
+    {{10, 100, 1000, 10000}, INCREASING,    256,        true,           false},
+    {{10, 100, 1000, 10000}, RANDOM,        32,         true,           false},
+    {{10, 100, 1000, 10000}, RANDOM,        64,         true,           false},
+    {{10, 100, 1000, 10000}, RANDOM,        128,        true,           false},
+    {{10, 100, 1000, 10000}, RANDOM,        256,        true,           false},
 };
 
 vector<bclo_conf> BCLO_confs =
