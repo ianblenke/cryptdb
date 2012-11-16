@@ -1097,17 +1097,17 @@ vector<our_conf> our_confs =
     {{10,100,1000,10000},
                             INCREASING,     64,         false,           false},
     {{10,100,1000,10000},
-                            RANDOM,         64,         false ,          false},
+                            RANDOM,         64,         false,          false},
     {{10,100,1000,10000},
-                            INCREASING,     64,         true   ,        false},
+                            INCREASING,     64,         true,        false},
     {{10,100,1000,10000},
-                            RANDOM,         64,         true    ,       false},
+                            RANDOM,         64,         true,       false},
     {{10,100,1000,10000},
-                            INCREASING,     128,        false    ,       false},
+                            INCREASING,     128,        false,       false},
     {{10,100,1000,10000},
-                            RANDOM,         128,        false     ,      false},
+                            RANDOM,         128,        false,      false},
     {{10,100,1000,10000},
-                            INCREASING,     128,        true    ,       false},
+                            INCREASING,     128,        true,       false},
     {{10,100,1000,10000},
                             RANDOM,         128,        true,           false},
     {{10,100,1000,10000},
@@ -1162,8 +1162,7 @@ vector<bclo_conf> BCLO_confs =
 
 vector<net_conf> net_confs = 
 {// trials  plain_size  workload            num_threads                             latencies
-    {3,     64,         INCREASING, {1, 10, 50, 100, 200, 500, 750, 1000, 2000},     {0, 5, 10, 15, 20, 25}},
-    {3,     64,         RANDOM,     {1, 10, 50, 100, 200, 500, 750, 1000, 2000},     {0, 5, 10, 15, 20, 25}}
+    {1,     64,         INCREASING,         {1, 5000},     {0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50}},
 };
 
 static 
