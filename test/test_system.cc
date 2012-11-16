@@ -968,9 +968,10 @@ measure_ours_instance(uint n, our_conf c, BC * bc) {
     assert_s(WIFEXITED(status),"client terminated abnormally");
     assert_s(pid_client == pid2, "incorrect pid");
 
-    uint64_t dump_size = s->store_tree();
-
-    cout << "  \"dv:storage_size\": " << dump_size << "\n";
+    if(c.storage){
+        uint64_t dump_size = s->store_tree();
+        cout << "  \"dv:storage_size\": " << dump_size << ",\n";        
+    }
     cout << "  \"dv:rewrites_per_enc\": " << (s->num_rewrites() * 1.0)/(n*1.0) << "\n"
          << "}";
     datadelim = ",\n";
