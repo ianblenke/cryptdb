@@ -237,27 +237,61 @@ clientgeneric(BC * bc) {
     vector<A> * vs = (vector<A> * )vals;
     cerr << "SIZE of workload is " << vs->size() << "\n";
 
+    cout << datadelim
+         << "{ \"iv:scheme\": " << "\"stOPE\"" << ",\n"
+         << "  \"iv:nelem\": " << vs->size() << ",\n"
+         << "  \"iv:ptsize\": " << plain_size << ",\n"
+         << "  \"iv:malicious\": " << is_malicious << ",\n"
+         << "  \"iv:workload\": " <<  "\"increasing\"" << ",\n";
+    
+    Timer t;
     for (uint i = 0; i < vs->size(); i++) {
-	cerr << "ope is " << ope_cl->encrypt(vs->at(i), true, "testope") <<"\n";
+	OPEType ope =  ope_cl->encrypt(vs->at(i), true, "testope");
+	cerr << "ope is " << ope << " \n";
     }
+    uint64_t time_interval = t.lap();
+    cout << "  \"dv:enctime_ms\": " << (time_interval*1.0/(vs->size() *1000.0)) << "\n" << "}";
+
     cerr << "DONE!\n";	
 }
 
 static void
 client_thread() {
-    
+
+    time_t curtime = time(0);
+    char timebuf[128];
+    strftime(timebuf, sizeof(timebuf), "%a, %d %b %Y %T %z", localtime(&curtime));
+
+    struct utsname uts;
+    uname(&uts);
+
+      cout << "{ \"hostname\": \"" << uts.nodename << "\",\n"
+         << "  \"username\": \"" << getenv("USER") << "\",\n"
+         << "  \"start_time\": " << curtime << ",\n"
+         << "  \"start_asctime\": \"" << timebuf << "\",\n"
+         << "  \"data\": [";
+  
     if (plain_size == 64) {
 	cerr << "creating uint64, blowfish client\n";
 	clientgeneric<uint64_t, blowfish>(bc);
-	return;
+	
     }
 
     if (plain_size >= 128) {
 	cerr << "creating string, aes cbc client\n";
 	clientgeneric<string, aes_cbc>(bc_aes);
-	return;
+	
     }
 
+    curtime = time(0);
+    strftime(timebuf, sizeof(timebuf), "%a, %d %b %Y %T %z", localtime(&curtime));
+    
+    cout << "],\n"
+         << "  \"end_time\": " << curtime << ",\n"
+         << "  \"end_asctime\": \"" << timebuf << "\"\n"
+         << "}\n";
+    
+    
     assert_s(false, "not recognized ciphertext size; accepting 64, >= 128\n");
     return;
 }
@@ -1296,12 +1330,12 @@ tpcc_client(uint numtests) {
     struct utsname uts;
     uname(&uts);
 
-    /*   cout << "{ \"hostname\": \"" << uts.nodename << "\",\n"
+      cout << "{ \"hostname\": \"" << uts.nodename << "\",\n"
          << "  \"username\": \"" << getenv("USER") << "\",\n"
          << "  \"start_time\": " << curtime << ",\n"
          << "  \"start_asctime\": \"" << timebuf << "\",\n"
          << "  \"data\": [";
-    */
+    
 
     ope_client<uint64_t, blowfish> * ope_cl = new ope_client<uint64_t, blowfish>(bc, is_malicious);
     cerr << "tpcc client created \n";
@@ -1332,11 +1366,11 @@ tpcc_client(uint numtests) {
     curtime = time(0);
     strftime(timebuf, sizeof(timebuf), "%a, %d %b %Y %T %z", localtime(&curtime));
     
-    /*  cout << "],\n"
+    cout << "],\n"
          << "  \"end_time\": " << curtime << ",\n"
          << "  \"end_asctime\": \"" << timebuf << "\"\n"
          << "}\n";
-    */
+    
     cerr << "DONE!\n";	
 }
 
