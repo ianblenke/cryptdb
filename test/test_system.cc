@@ -274,6 +274,7 @@ clientnetgeneric(BC * bc, int c_port, int s_port) {
     for (uint i = 0; i < vs->size(); i++) {
         ope_cl->encrypt(vs->at(i), true);
     }
+    delete ope_cl;
 }
 
 static void
@@ -337,6 +338,8 @@ client_net(int num_clients){
     sleep(5);
 
     struct timeval begin_net_time;
+    struct timeval end_net_time;
+
     gettimeofday(&begin_net_time, 0);    
     for(uint i = 0; i < pid_list.size(); i++){
             kill(pid_list[i], SIGALRM);
@@ -347,7 +350,6 @@ client_net(int num_clients){
             wait(&rv);
             t--;
     }
-    struct timeval end_net_time;
     gettimeofday(&end_net_time, 0);
 
     float time_passed = end_net_time.tv_sec - begin_net_time.tv_sec + \
@@ -359,9 +361,9 @@ client_net(int num_clients){
     throughput_f << "}";
     datadelim = ",\n";
     throughput_f.close();
+
     wait(&sleep_rv);
     if(DEBUG) cout << "All clients closed" << endl;
-    sleep(1);
 }
 
 static void
@@ -1155,7 +1157,7 @@ void measure_net () {
     uname(&uts);
 
     fstream throughput_f;
-    throughput_f.open ("throughput.txt", ios::out | ios::app);
+    throughput_f.open ("throughput.txt", ios::out | ios::trunc);
     throughput_f << "{ \"hostname\": \"" << uts.nodename << "\",\n"
          << "  \"username\": \"" << getenv("USER") << "\",\n"
          << "  \"start_time\": " << curtime << ",\n"
@@ -1291,6 +1293,7 @@ int main(int argc, char ** argv)
     
     int num_servers = atoi(argv[2]);
     is_malicious = 0;
+    plain_size = 64;
 
     server_net(num_servers);
 
