@@ -539,8 +539,19 @@ runtest() {
 }
 
 static void
-run_server() {
-    Server * serv = new Server(is_malicious);
+run_server(bool is_tpcc) {
+    assert_s(!is_tpcc || WITH_DB, "for tpcc need to be in Db mode");
+
+    list<string> * tables = new list<string>();
+    if (is_tpcc) {
+	tables->push_back("new_order");
+	tables->push_back("oorder");
+	tables->push_back("order_line");
+	tables->push_back("stock");
+    } else {
+	tables->push_back("testope");
+    }
+    Server * serv = new Server(is_malicious, OPE_CLIENT_PORT, OPE_SERVER_PORT, tables);
     
     serv->work();
 
@@ -1402,9 +1413,10 @@ int main(int argc, char ** argv)
 
 	return 0;
     }
-    if (argc == 3 && string(argv[1]) == "server") {
+    if (argc == 4 && string(argv[1]) == "server") {
 	is_malicious = atoi(argv[2]);
-	run_server();
+	bool is_tpcc = atoi(argv[3]);
+	run_server(is_tpcc);
 	return 0;
     }
 
