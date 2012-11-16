@@ -9,6 +9,8 @@
 #include <arpa/inet.h>
 #include <resolv.h>
 #include <sys/types.h>
+#include <map>
+#include <list>
 
 #include <edb/Connect.hh>
 #include <ope/tree.hh>
@@ -17,26 +19,40 @@
 
 
 
+struct tablemeta {
+    Tree * ope_tree;
+    OPETable<std::string> * ope_table;
+    tablemeta(Tree * otree, OPETable<std::string> * otable) {
+	ope_tree = otree;
+	ope_table = otable;
+    }
+};
+
+const string auto_table = "opetable";
+
 
 class Server {
 public:
     int sock_cl; //socket to client; server sends request to clients thru it
     int sock_req; //socket on which server receives requests from udfs or clients
-
-    Tree * ope_tree;
+    
     bool MALICIOUS;
    
-    OPETable<std::string> * ope_table;
+    std::map<string, tablemeta *> tables;
+      
     Connect * db; 
-   
-    Server(bool malicious, int cport = OPE_CLIENT_PORT, int sport = OPE_SERVER_PORT);
+    
+    Server(bool malicious, int cport = OPE_CLIENT_PORT, int sport = OPE_SERVER_PORT, std::list<string> * tables = NULL);
     ~Server();
+
+    // returns the ope tree of the server and asserts there is just one
+    Tree * ope_tree();
 
     void work();
     
     /*************** helper functions *****************************/
 
-    void handle_enc(int csock, std::istringstream & iss, bool do_ins);
+    void handle_enc(int csock, std::istringstream & iss, bool do_ins, string table_name = auto_table);
 
     /*
      * Given ciph, interacts with client and returns
@@ -47,9 +63,10 @@ public:
      * Returns the tree last tree node on the path. 
      */
     TreeNode * interaction(std::string ciph,
-		     uint & rindex, uint & nbits,
-		     uint64_t & ope_path,
-		     bool & requals);
+			   uint & rindex, uint & nbits,
+			   uint64_t & ope_path,
+			   bool & requals,
+			   Tree * ope_tree);
 
     /* Dispatched messages the server received to their handlers. */
     void dispatch(int csock, std::istringstream & iss);

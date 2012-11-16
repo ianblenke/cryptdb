@@ -10,14 +10,14 @@ using std::stringstream;
 using std::vector;
 using std::cerr;
 using std::map;
-
+using std::list;
 
 
 TreeNode *
 Server::interaction(string ciph,
 		    uint & rindex, uint & nbits,
 		    uint64_t & ope_path,
-		    bool & equals) {
+		    bool & equals, Tree * ope_tree) {
 
     if (DEBUG_COMM) cerr << "\n\n Start Interaction\n";
     TreeNode * root = ope_tree->get_root();
@@ -77,8 +77,13 @@ Server::interaction(string ciph,
 
 
 void 
-Server::handle_enc(int csock, istringstream & iss, bool do_ins) {
-   
+Server::handle_enc(int csock, istringstream & iss, bool do_ins, string table_name) {
+
+    assert_s(tables.find(table_name) != tables.end(), "invalid table name " + table_name);
+    tablemeta * tm = tables[table_name];
+    Tree * ope_tree = tm->ope_tree;
+    OPETable<std::string> * ope_table = tm->ope_table;
+    
     string ciph = unmarshall_binary(iss);
     
     if(DEBUG_COMM) cout<< "ciph: "<< ciph << endl;
@@ -86,6 +91,7 @@ Server::handle_enc(int csock, istringstream & iss, bool do_ins) {
 
     stringstream response;
     response.clear();
+
     
     auto ts = ope_table->find(ciph);
     
@@ -111,7 +117,7 @@ Server::handle_enc(int csock, istringstream & iss, bool do_ins) {
     	bool equals = false;
     	uint nbits = 0;
 
-    	TreeNode * tnode = interaction(ciph, index, nbits, ope_path, equals);
+    	TreeNode * tnode = interaction(ciph, index, nbits, ope_path, equals, ope_tree);
 
         assert_s(!equals, "equals should always be false");
     	
@@ -160,14 +166,21 @@ Server::dispatch(int csock, istringstream & iss) {
     MsgType msgtype;
     iss >> msgtype;
 
+    string table_name;
+    if (WITH_DB) {
+	iss >> table_name;
+    } else {
+	table_name = auto_table;
+    }
+
     if (DEBUG_COMM) {cerr << "message type is " << mtnames[(int) msgtype] << endl;}
 
     switch (msgtype) {
     case MsgType::ENC_INS: {
-	return handle_enc(csock, iss, true);
+	return handle_enc(csock, iss, true, table_name);
     }
     case MsgType::QUERY: {
-	return handle_enc(csock, iss, false);
+	return handle_enc(csock, iss, false, table_name);
     }
     default: {}
     }
@@ -175,30 +188,42 @@ Server::dispatch(int csock, istringstream & iss) {
     assert_s(false, "invalid message type in dispatch");
     
 }
-
-Server::Server(bool malicious, int cport, int sport) {
+Tree *
+Server::ope_tree() {
+    assert_s(tables.size() == 1, "invalid no, of tables for get_ope_Tree");
+    return tables.begin()->second->ope_tree;
+}
+Server::Server(bool malicious, int cport, int sport, list<string> * itables) {
     MALICIOUS = malicious;
+
     if (WITH_DB) {  
 	db = new Connect( "localhost", "root", "letmein","cryptdb", 3306);
+	assert_s(itables, "lacking tables info");
+    } else {
+	db = NULL;
+	itables = new list<string>({auto_table});
     }
     
-    ope_table = new OPETable<string>();
-    if (WITH_DB) {
-	ope_tree = (Tree*) new BTree(ope_table, db, malicious, "opetable", "opefield");
-    } else {
-	ope_tree = (Tree *) new BTree(ope_table, db, malicious);
+    for (auto table : *itables) {
+	OPETable<string> *ope_table = new OPETable<string>();
+	Tree * ope_tree = (Tree*) new BTree(ope_table, db, malicious, table, "opefield");
+	tablemeta * tm = new tablemeta(ope_tree, ope_table);
+	tables[table] = tm;
     }
+    
     sock_cl = create_and_connect(OPE_CLIENT_HOST, cport);
     sock_req = create_and_bind(sport);
     
-  
 }
 
 Server::~Server() {
     close(sock_cl);
     close(sock_req);
-    delete ope_tree;
-    delete ope_table;
+    for (auto tm : tables) {
+	delete tm.second->ope_tree;
+	delete tm.second->ope_table;
+    }
+    tables.clear();
     if (WITH_DB) {
 	delete db;
     }
@@ -206,7 +231,9 @@ Server::~Server() {
 
 uint 
 Server::num_rewrites(){
-    return ope_tree->num_rewrites();
+    assert_s(!WITH_DB && tables.size() == 1, " num_rewrites only for non DB case");
+    
+    return tables.begin()->second->ope_tree->num_rewrites();
 }
 
 void Server::work() {

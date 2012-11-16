@@ -54,9 +54,10 @@ public:
     /* Encryption is the path bits (aka v) bitwise left shifted by num_bits
      * so that the last num_bits can indicate the index of the value pt at
      * at the node found by the path
+     * tname is for DB setting
      */
  
-    uint64_t encrypt(V det, bool do_insert);
+    uint64_t encrypt(V det, bool do_insert, string tname = "");
 
 
     //cipher
@@ -259,7 +260,7 @@ check_proof(stringstream & ss, MsgType optype, V ins,
 
 template<class V, class BlockCipher>
 OPEType
-ope_client<V, BlockCipher>::encrypt(V pt, bool imode) {
+ope_client<V, BlockCipher>::encrypt(V pt, bool imode, string tname) {
 
     if (imode==false) {
 	std::cerr << "IMODE FALSE!" << std::endl;
@@ -275,6 +276,10 @@ ope_client<V, BlockCipher>::encrypt(V pt, bool imode) {
 
     ostringstream msg;
     msg << optype <<  " ";
+    if (WITH_DB) {
+	assert_s(tname.size(), "empty table name");
+	msg << tname << " ";
+    }
     marshall_binary(msg, Cnv<V>::StrFromType(ct));
     msg << " ";
 

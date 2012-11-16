@@ -93,7 +93,8 @@ check_correct(Server * s, void * vals, BC * bc) {
     if (DEBUG_EXP) cerr << "checking sever state is correct: \n";
     //s->tracker->get_root()->check_merkle_tree();
 
-    BTree * bt = (BTree *) s->ope_tree;
+    
+    BTree * bt = (BTree *) s->ope_tree();
 
     list<string> treeorder;
     bt->tracker->get_root()->in_order_traverse(treeorder); 
@@ -206,6 +207,11 @@ get_uniq_wload(uint num, uint plain_size, workload w) {
     }
     cerr << "given num " << num << " result is " << res->size() << "\n";
     return res;
+}
+
+static void
+prepare_tpcc(uint num_tests, uint plain_size) {
+    
 }
 
 static void
@@ -1315,6 +1321,7 @@ test_bench() {
          << "}\n";
 }
 
+
 int main(int argc, char ** argv)
 {
     assert_s(OPE_MODE, "code must be in OPE_MODE to run this test");
@@ -1380,14 +1387,17 @@ int main(int argc, char ** argv)
     return 0;
     }    
     
-    if (argc == 5 && string(argv[1]) == "client") {
-	
+    if (argc == 6 && string(argv[1]) == "client") {
 	plain_size = atoi(argv[2]);
 	num_tests = atoi(argv[3]);
 	cerr << "num_tests is " << num_tests << "\n";
 	is_malicious = atoi(argv[4]);
-	set_workload(num_tests, plain_size, INCREASING);
-	
+	bool is_tpcc = atoi(argv[5]);
+	if (is_tpcc) {
+	    prepare_tpcc(num_tests, plain_size);
+	} else {
+	    set_workload(num_tests, plain_size, INCREASING);
+	}
 	client_thread();
 
 	return 0;
@@ -1414,7 +1424,7 @@ int main(int argc, char ** argv)
 	test_bench();
 	return 0;
     }
-    
+   
     cerr << "invalid test \n";
 
     for(int i = 0; i < argc; i++ ){
@@ -1422,14 +1432,15 @@ int main(int argc, char ** argv)
     }
     cerr << endl;
 
-    cerr << "usage ./test client plain_size(64,>=128) num_to_enc is_malicious(0/1)\n \
+    cerr << "usage ./test client plain_size(64,>=128) num_to_enc malicious(0/1) incr/tpcc(0/1) \n \
                  OR ./test server is_malicious\n \
                  OR ./test sys plain_size num_tests is_malicious\n \
                  OR ./test bench \n \
                  OR ./test net \n   \
                  OR ./test net plain_size [num_client1] ... \n \
                  OR ./test clientnet plain_size(64,>=128) num_clients \n \
-                 OR ./test servernet num_servers";
+                 OR ./test servernet num_servers \
+                 OR ./test db \n";
 
 
     return 0;

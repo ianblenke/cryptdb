@@ -12,7 +12,7 @@
 #include <util/util.hh>
 
 //whether we run with a database or not
-#define WITH_DB 0
+#define WITH_DB 1
 
 #define WITH_NET 0
 
