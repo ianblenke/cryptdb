@@ -124,14 +124,30 @@ class WorkloadGen<string> {
 public:
     static string get_query(uint index, uint plain_size, workload w) {
 	if (w == INCREASING) {
-	    string s = strFromVal(index);
-	    string r;
-	    for (uint i = 0; i < plain_size/8 - s.size(); i++) {
-		r = r + " ";
-	    }
-	    s = r + s;
-	    assert_s(s.size() == plain_size/8, "logic error");
-	    return s;
+        string s = "";
+        if(plain_size > 64) {
+	       s = strFromVal(index);
+    	    string r;
+    	    for (uint i = 0; i < plain_size/8 - s.size(); i++) {
+    		r = r + " ";
+    	    }
+    	    s = r + s;
+    	    assert_s(s.size() == plain_size/8, "logic error");
+    	    return s;
+        } else if (plain_size == 32) {
+            uint num = index;
+            while ( num > 0) {
+                s = s + (char) ((int) num % 256);
+                num = num/256;
+            }
+
+            assert_s(s.size() <= 4, "get_query32 bit oversized");
+            string r;
+            for (uint i = 0; i < plain_size/8 - s.size(); i++) {
+            r = r + " ";
+            }
+            s = r + s;
+        }
 	}
 	// random
 	return randomBytes(plain_size/8);
