@@ -109,7 +109,7 @@ class BTree : public Tree {
 public:
 
     BTree(OPETable<std::string> * ot, Connect * db, bool malicious,
-	  string table_name = "", string field_name = "");
+	  string table_name = "", string field_name = "", bool db_updates = true);
     ~BTree();
     
     TreeNode * get_root();
@@ -136,6 +136,7 @@ public:
     OPETable<std::string> * opetable;
     Connect * db;
     string table_name, field_name;
+    bool db_updates;
 
     uint glb_counter;
 };

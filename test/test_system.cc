@@ -7,6 +7,7 @@
 
 #include <stdlib.h>
 #include <sstream>
+#include <fstream>
 #include <iostream>
 #include <vector>
 #include <algorithm>
@@ -209,10 +210,6 @@ get_uniq_wload(uint num, uint plain_size, workload w) {
     return res;
 }
 
-static void
-prepare_tpcc(uint num_tests, uint plain_size) {
-    
-}
 
 static void
 set_workload(uint num_tests, uint plain_size, workload w) {
@@ -239,7 +236,7 @@ clientgeneric(BC * bc) {
     cerr << "SIZE of workload is " << vs->size() << "\n";
 
     for (uint i = 0; i < vs->size(); i++) {
-	cerr << "ope is " << ope_cl->encrypt(vs->at(i), true) <<"\n";
+	cerr << "ope is " << ope_cl->encrypt(vs->at(i), true, "testope") <<"\n";
     }
     cerr << "DONE!\n";	
 }
@@ -539,7 +536,7 @@ runtest() {
 }
 
 static void
-run_server(bool is_tpcc) {
+run_server(bool is_tpcc, bool db_updates) {
     assert_s(!is_tpcc || WITH_DB, "for tpcc need to be in Db mode");
 
     list<string> * tables = new list<string>();
@@ -551,7 +548,7 @@ run_server(bool is_tpcc) {
     } else {
 	tables->push_back("testope");
     }
-    Server * serv = new Server(is_malicious, OPE_CLIENT_PORT, OPE_SERVER_PORT, tables);
+    Server * serv = new Server(is_malicious, OPE_CLIENT_PORT, OPE_SERVER_PORT, tables, db_updates);
     
     serv->work();
 
@@ -1333,18 +1330,109 @@ test_bench() {
 }
 
 
+static void
+client_file(ope_client<uint64_t, blowfish> * ope_cl, string table,
+	    uint & tests_so_far, uint numtests) {
+
+    if (tests_so_far >= numtests) {
+	return;
+    }
+    
+    string filename = "/home/raluca/" + table + ".txt";
+
+    ifstream f(filename);
+    assert_s(f.is_open(), "file not open");
+
+    while (true) {
+	string s1;
+	f >> s1;
+	if (s1 == "END") {
+	    break;
+	}
+	string s2;
+	uint64_t v;
+	f >> s2 >> v;
+	assert_s(s1 == "enc", "not parsed as expected");
+	if (s2 == "i") {
+	    cerr << "ope is " << ope_cl->encrypt(v, true, table) <<"\n";
+	    tests_so_far++;
+	    if (tests_so_far >= numtests) {
+		break;
+	    }
+	}
+    }
+
+    f.close();
+
+}
+
+static void
+tpcc_client(uint numtests) {
+  
+    time_t curtime = time(0);
+    char timebuf[128];
+    strftime(timebuf, sizeof(timebuf), "%a, %d %b %Y %T %z", localtime(&curtime));
+
+    struct utsname uts;
+    uname(&uts);
+
+    /*   cout << "{ \"hostname\": \"" << uts.nodename << "\",\n"
+         << "  \"username\": \"" << getenv("USER") << "\",\n"
+         << "  \"start_time\": " << curtime << ",\n"
+         << "  \"start_asctime\": \"" << timebuf << "\",\n"
+         << "  \"data\": [";
+    */
+
+    ope_client<uint64_t, blowfish> * ope_cl = new ope_client<uint64_t, blowfish>(bc, is_malicious);
+    cerr << "tpcc client created \n";
+
+    cout << datadelim
+         << "{ \"iv:scheme\": " << "\"stOPE\"" << ",\n"
+         << "  \"iv:nelem\": " << numtests << ",\n"
+         << "  \"iv:ptsize\": " << 32 << ",\n"
+         << "  \"iv:malicious\": " << is_malicious << ",\n"
+         << "  \"iv:workload\": " << "\"tpcc\"" << ",\n";
+  
+    Timer t;
+    uint tests_so_far = 0;
+
+    client_file(ope_cl, "stock", tests_so_far, numtests);
+    client_file(ope_cl, "order_line", tests_so_far, numtests);
+    client_file(ope_cl, "new_order", tests_so_far, numtests);
+    client_file(ope_cl, "oorder", tests_so_far, numtests);
+    
+    uint64_t time_interval = t.lap();
+    
+    if (tests_so_far < numtests) {
+	cerr << "did not have enough tests\n";
+    }
+    
+    cout << "  \"dv:enctime_ms\": " << (time_interval*1.0/(tests_so_far *1000.0)) << ",\n";
+
+    curtime = time(0);
+    strftime(timebuf, sizeof(timebuf), "%a, %d %b %Y %T %z", localtime(&curtime));
+    
+    /*  cout << "],\n"
+         << "  \"end_time\": " << curtime << ",\n"
+         << "  \"end_asctime\": \"" << timebuf << "\"\n"
+         << "}\n";
+    */
+    cerr << "DONE!\n";	
+}
+
+
 int main(int argc, char ** argv)
 {
     assert_s(OPE_MODE, "code must be in OPE_MODE to run this test");
 
-    string usage = "usage ./test client plain_size(64,>=128) num_to_enc is_malicious(0/1)\n \
-                 OR ./test server is_malicious\n			\
+    string usage = "usage ./test client plain_size(64,>=128) num_to_enc is_malicious(0/1) incr/tpcc (0/1)\n \
+                 OR ./test server is_malicious incr/tpcc(0/1) do_db_updates(0/1)\n			\
                  OR ./test sys plain_size num_tests is_malicious\n	\
                  OR ./test bench \n	\
                  OR ./test net \n \
                  OR ./test net plain_size [num_client1] ... \n		\
-                 OR ./test clientnet plain_size(64,>=128) num_clients \n \
-                 OR ./test servernet num_servers";
+                 OR ./test clientnet plain_size(64,>=128) num_clients \
+                 OR ./test servernet num_servers\n";
     
     if (argc < 2) {
 	cerr << usage;
@@ -1405,18 +1493,18 @@ int main(int argc, char ** argv)
 	is_malicious = atoi(argv[4]);
 	bool is_tpcc = atoi(argv[5]);
 	if (is_tpcc) {
-	    prepare_tpcc(num_tests, plain_size);
+	    tpcc_client(num_tests);
 	} else {
 	    set_workload(num_tests, plain_size, INCREASING);
+	    client_thread();
 	}
-	client_thread();
-
 	return 0;
     }
-    if (argc == 4 && string(argv[1]) == "server") {
+    if (argc == 5 && string(argv[1]) == "server") {
 	is_malicious = atoi(argv[2]);
 	bool is_tpcc = atoi(argv[3]);
-	run_server(is_tpcc);
+	bool db_updates = atoi(argv[4]);
+	run_server(is_tpcc, db_updates);
 	return 0;
     }
 
@@ -1444,17 +1532,8 @@ int main(int argc, char ** argv)
     }
     cerr << endl;
 
-    cerr << "usage ./test client plain_size(64,>=128) num_to_enc malicious(0/1) incr/tpcc(0/1) \n \
-                 OR ./test server is_malicious\n \
-                 OR ./test sys plain_size num_tests is_malicious\n \
-                 OR ./test bench \n \
-                 OR ./test net \n   \
-                 OR ./test net plain_size [num_client1] ... \n \
-                 OR ./test clientnet plain_size(64,>=128) num_clients \n \
-                 OR ./test servernet num_servers \
-                 OR ./test db \n";
-
-
+    cerr << usage << "\n";
+ 
     return 0;
 }
 

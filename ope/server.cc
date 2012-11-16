@@ -193,7 +193,7 @@ Server::ope_tree() {
     assert_s(tables.size() == 1, "invalid no, of tables for get_ope_Tree");
     return tables.begin()->second->ope_tree;
 }
-Server::Server(bool malicious, int cport, int sport, list<string> * itables) {
+Server::Server(bool malicious, int cport, int sport, list<string> * itables, bool db_updates) {
     MALICIOUS = malicious;
 
     if (WITH_DB) {  
@@ -206,7 +206,7 @@ Server::Server(bool malicious, int cport, int sport, list<string> * itables) {
     
     for (auto table : *itables) {
 	OPETable<string> *ope_table = new OPETable<string>();
-	Tree * ope_tree = (Tree*) new BTree(ope_table, db, malicious, table, "opefield");
+	Tree * ope_tree = (Tree*) new BTree(ope_table, db, malicious, table, "opefield", db_updates);
 	tablemeta * tm = new tablemeta(ope_tree, ope_table);
 	tables[table] = tm;
     }

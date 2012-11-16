@@ -42,7 +42,9 @@ public:
       
     Connect * db; 
     
-    Server(bool malicious, int cport = OPE_CLIENT_PORT, int sport = OPE_SERVER_PORT, std::list<string> * tables = NULL);
+    Server(bool malicious, int cport = OPE_CLIENT_PORT, int sport = OPE_SERVER_PORT,
+	   std::list<string> * tables = NULL,
+	   bool db_updates = true);
     ~Server();
 
     // returns the ope tree of the server and asserts there is just one

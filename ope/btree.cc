@@ -1423,8 +1423,9 @@ Elem::pretty() const {
 /******** BTree ************/
 
 BTree::BTree(OPETable<string> * ot, Connect * _db, bool malicious,
-	     string table_name, string field_name) : opetable(ot), db(_db) {
+	     string table_name, string field_name, bool _db_updates) : opetable(ot), db(_db) {
 
+    db_updates = _db_updates;
     glb_counter = 0;
     nrewrites = 0;
     Node::m_failure.invalidate();
@@ -1551,7 +1552,8 @@ must_rewrite(ChangeInfo c) {
 void
 BTree::update_db(OPEType new_ope, ChangeInfo c) {
 
-    if (must_rewrite(c)) {
+    
+    if (db_updates && must_rewrite(c)) {
 	// compute transform from c
 	OPETransform t = compute_transform(c);
 	
