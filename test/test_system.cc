@@ -544,7 +544,7 @@ run_server(bool is_tpcc, bool db_updates) {
 	tables->push_back("new_order");
 	tables->push_back("oorder");
 	tables->push_back("order_line");
-	tables->push_back("stock");
+	//tables->push_back("stock");
     } else {
 	tables->push_back("testope");
     }
@@ -1343,6 +1343,7 @@ client_file(ope_client<uint64_t, blowfish> * ope_cl, string table,
     ifstream f(filename);
     assert_s(f.is_open(), "file not open");
 
+    cerr << "file" << filename << "\n";
     while (true) {
 	string s1;
 	f >> s1;
@@ -1354,11 +1355,11 @@ client_file(ope_client<uint64_t, blowfish> * ope_cl, string table,
 	f >> s2 >> v;
 	assert_s(s1 == "enc", "not parsed as expected");
 	if (s2 == "i") {
-	    cerr << "ope is " << ope_cl->encrypt(v, true, table) <<"\n";
-	    tests_so_far++;
-	    if (tests_so_far >= numtests) {
-		break;
-	    }
+	    cerr << "ope for " << v << "is " << ope_cl->encrypt(v, true, table) <<"\n";
+	    tests_so_far++;  
+	}
+	if (tests_so_far >= numtests) {
+	    break;
 	}
     }
 
@@ -1396,7 +1397,7 @@ tpcc_client(uint numtests) {
     Timer t;
     uint tests_so_far = 0;
 
-    client_file(ope_cl, "stock", tests_so_far, numtests);
+    //client_file(ope_cl, "stock", tests_so_far, numtests);
     client_file(ope_cl, "order_line", tests_so_far, numtests);
     client_file(ope_cl, "new_order", tests_so_far, numtests);
     client_file(ope_cl, "oorder", tests_so_far, numtests);

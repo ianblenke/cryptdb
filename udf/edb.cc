@@ -236,8 +236,15 @@ extern "C" {
 	counter++;
 	OPEType old_ope = getui(args, 0);
 	OPEType new_ope = opetransf->transform(old_ope);
-
-	if (DEBUG_UDF) cerr << "counter" << counter << "\n";
+	
+	if (DEBUG_UDF){
+	    cerr << "counter" << counter << "\n";
+	    if (old_ope == new_ope) {
+		cerr << "NOT TRANS\n";
+	    } else {
+		cerr << "transformed\n";
+	    }
+	}
 	return new_ope;
     }
     

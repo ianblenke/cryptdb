@@ -101,6 +101,9 @@ Server::handle_enc(int csock, istringstream & iss, bool do_ins, string table_nam
   	// if this is an insert, increase ref count
     	if (do_ins) {
     	    ts->refcount++;
+	    stringstream ss;
+	    ss << "INSERT INTO " << table_name << " VALUES (0, " << ts->ope << ");";
+	    assert_s(db->execute(ss.str()), "could not insert into table value found in ope table");
     	}
 	response << ts->ope;
 
