@@ -10,9 +10,19 @@
 #include <crypto/blowfish.hh>
 #include <crypto/aes_cbc.hh>
 #include <util/transform.hh>
+#include <util/util.hh>
 
 
 using namespace std;
+
+
+static
+string get_binary(uint64_t num){
+    stringstream ss;
+    const char* ptr = (const char*) &num;
+    ss.write(ptr, 8);
+    return ss.str();
+}
 
 void Elem::dump () {
     std::cout << " (key = " <<  m_key << "\n" << " mhash = ";
@@ -27,7 +37,11 @@ void Elem::dump () {
 void 
 Elem::store_tree(fstream &f) {
     assert_s(f.is_open(), "filedump stream not open in elem");
-    f << " (" << m_key << " " << mp_subtree << ") ";
+
+    string key = get_binary(Cnv<uint64_t>::TypeFromStr(m_key));
+    f.write(key.c_str(), 8);
+    string subtree = get_binary( (uint64_t)mp_subtree);
+    f.write(subtree.c_str(), 8);
 
 }
 
@@ -76,11 +90,15 @@ compute_rewrites(ChangeInfo c) {
 void
 Node::store_tree(fstream &f) {
     assert_s(f.is_open(), "filedump stream not open in node");
-    f << "[" << merkle_hash << " " << m_root << " " << m_count << " " << mp_parent << " ";
+    stringstream ss;
+    ss << m_count;
+
+    f << ss.str();
+    string parent = get_binary( (uint64_t) this);
+    f.write(parent.c_str(), 8);
     for (uint i = 0; i < m_count; i++) {
         m_vector[i].store_tree(f);
     }
-    f <<"]";
 }
 
 

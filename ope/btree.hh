@@ -490,5 +490,3 @@ const char *
 myprint(const Node & v);
 const char *
 myprint(const State & st);
-
-

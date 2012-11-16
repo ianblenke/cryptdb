@@ -237,7 +237,7 @@ Server::~Server() {
 uint64_t
 Server::store_tree(){
     fstream f;
-    f.open("tree.dump", std::ios::out | std::ios::trunc);
+    f.open("tree.dump", std::ios::out | std::ios::binary | std::ios::trunc);
     ( (BTree*) ope_tree())->store_tree(f);
     f.close();
     struct stat filestatus;
