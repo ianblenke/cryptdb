@@ -43,6 +43,7 @@ static uint net_workload = 1000;
 
 static uint plain_size = 0;
 static uint num_tests = 0;
+static bool db_rewrites = 1;
 
 static const char* datadelim = "\n";
 
@@ -125,9 +126,11 @@ public:
     static string get_query(uint index, uint plain_size, workload w) {
 	if (w == INCREASING) {
 	    string s = strFromVal(index);
-	    string r;
-	    for (uint i = 0; i < plain_size/8 - s.size(); i++) {
-		r = r + " ";
+	    string r ="";
+	    if (plain_size/8 > s.size()) {
+		for (uint i = 0; i < plain_size/8 - s.size(); i++) {
+		    r = r + " ";
+		}
 	    }
 	    s = r + s;
 	    assert_s(s.size() == plain_size/8, "logic error");
@@ -229,6 +232,9 @@ template<class A, class BC>
 static void
 clientgeneric(BC * bc) {
 
+
+    cerr << "rewrites is " << db_rewrites << "\n";
+
     ope_client<A, BC> * ope_cl = new ope_client<A, BC>(bc, is_malicious);
     if (DEBUG_EXP) cerr << "client created \n";
 
@@ -240,7 +246,8 @@ clientgeneric(BC * bc) {
          << "  \"iv:nelem\": " << vs->size() << ",\n"
          << "  \"iv:ptsize\": " << plain_size << ",\n"
          << "  \"iv:malicious\": " << is_malicious << ",\n"
-         << "  \"iv:workload\": " <<  "\"increasing\"" << ",\n";
+         << "  \"iv:workload\": " <<  "\"sql_incr\"" << ",\n"
+    	 << "  \"iv:dbrewrites\": " << "\"" << (db_rewrites==0 ? "yes" : "no") << "\"" << ",\n";
     
     Timer t;
     for (uint i = 0; i < vs->size(); i++) {
@@ -272,6 +279,9 @@ client_thread() {
     if (plain_size == 64) {
 	if (DEBUG_EXP) cerr << "creating uint64, blowfish client\n";
 	clientgeneric<uint64_t, blowfish>(bc);
+	curtime = time(0);
+	strftime(timebuf, sizeof(timebuf), "%a, %d %b %Y %T %z", localtime(&curtime));
+   
 	cout << "],\n"
 	     << "  \"end_time\": " << curtime << ",\n"
 	     << "  \"end_asctime\": \"" << timebuf << "\"\n"
@@ -286,8 +296,6 @@ client_thread() {
 	
     }
 
-    curtime = time(0);
-    strftime(timebuf, sizeof(timebuf), "%a, %d %b %Y %T %z", localtime(&curtime));
     
     
     
@@ -1325,7 +1333,7 @@ client_file(ope_client<uint64_t, blowfish> * ope_cl, string table,
 }
 
 static void
-tpcc_client(uint numtests) {
+tpcc_client(uint numtests, bool rewrites) {
   
     time_t curtime = time(0);
     char timebuf[128];
@@ -1349,8 +1357,8 @@ tpcc_client(uint numtests) {
          << "  \"iv:nelem\": " << numtests << ",\n"
          << "  \"iv:ptsize\": " << 32 << ",\n"
          << "  \"iv:malicious\": " << is_malicious << ",\n"
-         << "  \"iv:workload\": " << "\"tpcc\"" << ",\n";
-  
+         << "  \"iv:workload\": " << "\"tpcc\"" << ",\n"
+	 << "  \"iv:dbrewrites\": " << "\"" << (rewrites==0 ? "yes" : "no") << "\"" << ",\n";
     Timer t;
     uint tests_so_far = 0;
 
@@ -1378,13 +1386,39 @@ tpcc_client(uint numtests) {
     if (DEBUG_EXP) cerr << "DONE!\n";	
 }
 
+static bool
+val_rewrites(string rewrites, string usage) {
+    if (rewrites != "noup" && rewrites != "up") {
+	cerr << "invalid rewrites option\n" << usage << "\n";
+	exit(0);
+    }
+    if (rewrites == "up") {
+	return true;
+    } else {
+	return false;
+    }
+}
+
+
+static bool
+val_tpcc(string tpcc, string usage) {
+    if (tpcc != "tpcc" && tpcc != "incr") {
+	cerr << "invalid tpcc option\n" << usage << "\n";
+	exit(0);
+    }
+    if (rewrites == "tpcc") {
+	return true;
+    } else {
+	return false;
+    }
+}
 
 int main(int argc, char ** argv)
 {
     assert_s(OPE_MODE, "code must be in OPE_MODE to run this test");
 
-    string usage = "usage ./test client plain_size(64,>=128) num_to_enc is_malicious(0/1) incr/tpcc (0/1)\n \
-                 OR ./test server is_malicious incr/tpcc(0/1) do_db_updates(0/1)\n			\
+    string usage = "usage ./test client plain_size(64,>=128) num_to_enc is_malicious(0/1) incr/tpcc do_db_updates(up/noup)\n \
+                 OR ./test server is_malicious incr/tpcc do_db_updates(up/noup)\n			\
                  OR ./test sys plain_size num_tests is_malicious\n	\
                  OR ./test bench \n	\
                  OR ./test net \n \
@@ -1445,24 +1479,26 @@ int main(int argc, char ** argv)
     return 0;
     }    
     
-    if (argc == 6 && string(argv[1]) == "client") {
+    if (argc == 7 && string(argv[1]) == "client") {
 	plain_size = atoi(argv[2]);
 	num_tests = atoi(argv[3]);
 	if (DEBUG_EXP) cerr << "num_tests is " << num_tests << "\n";
 	is_malicious = atoi(argv[4]);
-	bool is_tpcc = atoi(argv[5]);
-	if (is_tpcc) {
-	    tpcc_client(num_tests);
+	bool tpcc = val_tpcc(string(argv[5]), usage);
+	db_rewrites = val_rewrites(string(argv[6]), usage);
+	if (tpcc) {
+	    tpcc_client(num_tests, rewrites);
 	} else {
-	    set_workload(num_tests, plain_size, INCREASING);
+	    set_workload(num_tests, plain_size, INCREASING, rewrites);
 	    client_thread();
 	}
+	
 	return 0;
     }
     if (argc == 5 && string(argv[1]) == "server") {
 	is_malicious = atoi(argv[2]);
-	bool is_tpcc = atoi(argv[3]);
-	bool db_updates = atoi(argv[4]);
+	bool is_tpcc = val_tpcc(argv[3], usage);
+	bool db_updates = val_rewrites(argv[4], usage);
 	run_server(is_tpcc, db_updates);
 	return 0;
     }
