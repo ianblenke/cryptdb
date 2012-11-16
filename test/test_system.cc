@@ -208,7 +208,6 @@ get_uniq_wload(uint num, uint plain_size, workload w) {
 	    }*/
 	res->push_back(q);
     }
-    cerr << "given num " << num << " result is " << res->size() << "\n";
     return res;
 }
 
@@ -216,14 +215,13 @@ get_uniq_wload(uint num, uint plain_size, workload w) {
 static void
 set_workload(uint num_tests, uint plain_size, workload w) {
     // generate workload
-    cerr << "preparing workload: \n";
     if (plain_size == 64) {
     vals = (void *) get_uniq_wload<uint64_t>(num_tests, plain_size, w);
     
     } else {
     vals = (void *) get_uniq_wload<string>(num_tests, plain_size, w);
     }
-    cerr << "set workload\n";
+    if (DEBUG_EXP) cerr << "set workload\n";
 }
 
 
@@ -252,7 +250,7 @@ clientgeneric(BC * bc) {
     uint64_t time_interval = t.lap();
     cout << "  \"dv:enctime_ms\": " << (time_interval*1.0/(vs->size() *1000.0)) << "\n" << "}";
 
-    cerr << "DONE!\n";	
+    if (DEBUG_EXP) cerr << "DONE!\n";	
 }
 
 static void
@@ -1367,7 +1365,7 @@ tpcc_client(uint numtests) {
 	cerr << "did not have enough tests\n";
     }
     
-    cout << "  \"dv:enctime_ms\": " << (time_interval*1.0/(tests_so_far *1000.0)) << ",\n";
+    cout << "  \"dv:enctime_ms\": " << (time_interval*1.0/(tests_so_far *1000.0)) << "}\n";
 
     curtime = time(0);
     strftime(timebuf, sizeof(timebuf), "%a, %d %b %Y %T %z", localtime(&curtime));
@@ -1377,7 +1375,7 @@ tpcc_client(uint numtests) {
          << "  \"end_asctime\": \"" << timebuf << "\"\n"
          << "}\n";
     
-    cerr << "DONE!\n";	
+    if (DEBUG_EXP) cerr << "DONE!\n";	
 }
 
 
@@ -1450,7 +1448,7 @@ int main(int argc, char ** argv)
     if (argc == 6 && string(argv[1]) == "client") {
 	plain_size = atoi(argv[2]);
 	num_tests = atoi(argv[3]);
-	cerr << "num_tests is " << num_tests << "\n";
+	if (DEBUG_EXP) cerr << "num_tests is " << num_tests << "\n";
 	is_malicious = atoi(argv[4]);
 	bool is_tpcc = atoi(argv[5]);
 	if (is_tpcc) {
