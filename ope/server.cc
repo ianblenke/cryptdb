@@ -11,6 +11,8 @@ using std::vector;
 using std::cerr;
 using std::map;
 using std::list;
+using std::fstream;
+
 
 
 TreeNode *
@@ -230,6 +232,17 @@ Server::~Server() {
     if (WITH_DB) {
 	delete db;
     }
+}
+
+uint64_t
+Server::store_tree(){
+    fstream f;
+    f.open("tree.dump", std::ios::out | std::ios::trunc);
+    ( (BTree*) ope_tree())->store_tree(f);
+    f.close();
+    struct stat filestatus;
+    stat( "tree.dump", &filestatus );
+    return filestatus.st_size;
 }
 
 uint 
