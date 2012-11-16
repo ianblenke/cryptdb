@@ -31,13 +31,15 @@
 #include <time.h>
 #include <unistd.h>
 
-#define port_start 37778
+#define port_start 25566
 
 using namespace std;
 using boost::asio::ip::tcp;
 
 static blowfish * bc = new blowfish(passwd);
 static aes_cbc * bc_aes = new aes_cbc(passwd, true);
+
+static uint net_workload = 1000;
 
 static uint plain_size = 0;
 static uint num_tests = 0;
@@ -263,26 +265,19 @@ client_thread() {
 /*** Parallel client/server setup ***/
 
 int rv;
-int completed_enc = 0;
-fstream clientfile;
-
-struct timeval start_time;
 
 template<class A, class BC>
 static void
 clientnetgeneric(BC * bc, int c_port, int s_port) {
 
     ope_client<A, BC> * ope_cl = new ope_client<A, BC>(bc, is_malicious, c_port, s_port);
-    clientfile << "client created \n";
     vector<A> * vs = (vector<A> * )vals;
-    pause();
 
-    gettimeofday(&start_time, 0);
+    pause();
     for (uint i = 0; i < vs->size(); i++) {
         ope_cl->encrypt(vs->at(i), true);
-        completed_enc++;
     }
-    clientfile << "DONE with workload!\n";  
+    delete ope_cl;
 }
 
 static void
@@ -304,108 +299,27 @@ clientnet_thread(int c_port, int s_port) {
     return;
 }
 
-static void signalHandlerStart(int signum){
-    clientfile <<"signalHandler"<<endl;
+
+static void
+signalHandlerStart(int signum) {
+    return;
 }
-
-static void signalHandlerEnd(int signum){
-    struct timeval end_time;
-    gettimeofday(&end_time, 0);    
-
-    float time_passed = end_time.tv_sec+end_time.tv_usec/(1000000.0) - 
-        start_time.tv_sec+start_time.tv_usec/( 1000000.0);
-//    clientfile << "completed: " << completed_enc << " in " << time_passed << endl;
-    clientfile << "throughput: " << ( completed_enc*1.0 ) / (time_passed * 1.0) << endl;
-    cout << "throughput: " << ( completed_enc*1.0 ) / (time_passed * 1.0) << " = " << completed_enc << " / " << time_passed << endl;
-    //clientfile << "start-end: "<< start_time.tv_sec+start_time.tv_usec/((long) 1000.0) << " " << end_time.tv_sec+end_time.tv_usec/((long) 1000000.0) <<endl;
-    clientfile <<"ending"<<endl;
-    clientfile.close();
-    exit(rv);
-}
-
-static void parse_client_files(int num_clients){
-    float total_throughput = 0;
-    fstream throughput_f;
-    throughput_f.open ("throughput.txt", ios::out | ios::app);
-    for (int i=0; i< num_clients; i++) {
-            
-            stringstream ss;
-            ss<<i;
-            string filename = "client"+ss.str()+".txt";
-            ifstream readfile (filename);
-            if (readfile.is_open()) {
-                string line;
-                while (readfile.good() ){
-                    getline(readfile, line);
-                    ss.clear();
-                    ss.str("");
-                    ss << line;
-                    string first;
-                    ss >> first;
-                    if (first == "throughput:") {
-                        float indiv_throughput = 0;
-                        ss >> indiv_throughput;
-                        total_throughput += indiv_throughput;
-                        cout << filename <<": " << indiv_throughput << " : " << total_throughput  << endl;
-                    }
-                    if (first == "DONE") {
-                        assert_s(false, "means workload was finished early");
-                    }
-
-                }
-                readfile.close();
-            }
-
-    }  
-    throughput_f << "  \"dv:throughput\": " << total_throughput << ",\n";
-    throughput_f << "}";
-    datadelim = ",\n";    
-    throughput_f.close();
-}
-
-static void clean_up_client(int num_clients){
-    if (system("rm client*.txt") < 0)
-        perror("system rm client");
-    for(int i=0; i< num_clients; i++) {
-        stringstream killport;
-        killport << "kill -9 $(lsof -i:" << port_start+ i << " -t)";
-        cout << killport.str() << endl;
-        if (system(killport.str().c_str()) < 0)
-            perror("system kill port");        
-    }
-
-}
-
-static void clean_up_server(int num_servers){
-    if (system("killall -9 test") < 0)
-        perror("system killall test"); 
-    for(int i=0; i< num_servers; i++) {
-        stringstream killport;
-        killport << "kill -9 $(lsof -i:" << port_start+ i << " -t)";
-        cout << killport.str() << endl;
-        if (system(killport.str().c_str()) < 0)
-            perror("system kill port");        
-    }           
-}
-
 
 static void
 client_net(int num_clients){
     signal(SIGALRM, signalHandlerStart);
-    signal(SIGINT, signalHandlerEnd);
+    
+    if(system("ssh -A root@ud1.csail.mit.edu 'killall -9 test' >> trash_client 2>&1") < 0)
+            perror("ssh error on server");
 
     vector<pid_t> pid_list;
     for (int i=0; i< num_clients; i++) {
             pid_t pid = fork();
             if(pid == 0){
-                    stringstream ss;
-                    ss<<i;
-                    string filename = "client"+ss.str()+".txt";
-                    clientfile.open (filename.c_str(), ios::in | ios::out | ios::trunc);
                     clientnet_thread(port_start+i, port_start+i);
-                    assert_s(false, "Client should have exited with signalEnd");
                     exit(rv);
             }else{
+                    assert_s(pid > 0, "error in client child fork");
 //                    cout<<"pid: "<<pid<<endl;
                     pid_list.push_back(pid);
             }
@@ -414,34 +328,45 @@ client_net(int num_clients){
     stringstream parse_num;
     parse_num << num_clients;
     string cmd = "cd /; ./home/frankli/cryptdb/obj/test/test servernet "+parse_num.str();
-    string ssh = "ssh -A root@ud1.csail.mit.edu '" + cmd + "'";
-    sleep(3);
+    string ssh = "ssh -A root@ud1.csail.mit.edu '" + cmd + "' >> trash_client 2>&1";
+
+    int sleep_rv;
+
     pid_t pid = fork();
     if(pid == 0) {
         if(system(ssh.c_str()) < 0)
             perror("ssh error on server");
-        exit(1);    
+        exit(sleep_rv);    
     }
     sleep(5);
+
+    struct timeval begin_net_time;
+    struct timeval end_net_time;
+
+    gettimeofday(&begin_net_time, 0);    
     for(uint i = 0; i < pid_list.size(); i++){
             kill(pid_list[i], SIGALRM);
-    }
-    sleep(60);
-    for(uint i = 0; i < pid_list.size(); i++){
-            kill(pid_list[i], SIGINT);
     }
 
     int t= pid_list.size();
     while(t>0){
             wait(&rv);
             t--;
-            if(DEBUG) cout<<"Client closed, " << t << " remaining threads" <<endl;
     }
+    gettimeofday(&end_net_time, 0);
+
+    float time_passed = end_net_time.tv_sec - begin_net_time.tv_sec + \
+        (end_net_time.tv_usec*1.0)/(1000000.0) - (begin_net_time.tv_usec*1.0)/(1000000.0);
+
+    fstream throughput_f;
+    throughput_f.open ("throughput.txt", ios::out | ios::app);
+    throughput_f << "  \"dv:enctime_ms\": " << (time_passed*1000.0)/(num_clients * net_workload *1.0) << ",\n";
+    throughput_f << "}";
+    datadelim = ",\n";
+    throughput_f.close();
+
+    wait(&sleep_rv);
     if(DEBUG) cout << "All clients closed" << endl;
-
-    parse_client_files(num_clients);
-    clean_up_client(num_clients);
-
 }
 
 static void
@@ -460,7 +385,6 @@ server_net(int num_servers){
             pid_t pid = fork();
             if(pid == 0){
                     servernet_thread(port_start+i, port_start+i);
-                    assert_s(false, "Server should have exited with in servernet_thread");
                     exit(rv);
             }else{
                     //cout<<"pid: "<<pid<<endl;
@@ -475,7 +399,6 @@ server_net(int num_servers){
             t--;
             if(DEBUG) cout<<"Server closed, " << t << " remaining threads" <<endl;            
     }
-    clean_up_server(num_servers);
 }
 
 
@@ -1120,19 +1043,16 @@ void measure_bclo(bclo_conf c) {
 
 static void measure_net_instance(net_conf c) {
     fstream throughput_f;
-    set_workload(1000000, c.plain_size, c.w);
+    set_workload(net_workload, c.plain_size, c.w);
     plain_size = c.plain_size;
     is_malicious = 0;
-    cout << c.latencies.size() << endl;
     for(uint j = 0; j < c.latencies.size(); j++){
         stringstream ss;
         ss << "ssh root@ud1.csail.mit.edu ' tc qdisc add dev eth0 root netem delay " << c.latencies[j] << "ms'";
 
         if (system(ss.str().c_str()) < 0)
             perror("tc add failed");
-        sleep(1);
 
-        cout << c.num_threads.size() << endl;
         for(uint i = 0; i < c.num_threads.size(); i++) {
             uint num_clients = c.num_threads[i];           
             for(uint trial = 0; trial < c.trials; trial++) {
@@ -1148,14 +1068,13 @@ static void measure_net_instance(net_conf c) {
                                                                       : "\"random\"") << ",\n";
                 throughput_f.close(); 
 
-                client_net(num_clients);                
+                client_net(num_clients);             
             }
 
 
         }
         if (system("ssh root@ud1.csail.mit.edu ' tc qdisc del dev eth0 root'") < 0)
-            perror("tc del failed");  
-        sleep(1);      
+            perror("tc del failed");   
 
     }
 }
@@ -1238,8 +1157,8 @@ vector<bclo_conf> BCLO_confs =
 
 vector<net_conf> net_confs = 
 {// trials  plain_size  workload            num_threads                             latencies
-    {5,     64,         INCREASING, {1, 10, 50, 100, 200, 500, 750, 1000, 2000},     {0, 5, 10, 15, 20, 25}},
-    {5,     64,         RANDOM,     {1, 10, 50, 100, 200, 500, 750, 1000, 2000},     {0, 5, 10, 15, 20, 25}}
+    {3,     64,         INCREASING, {1, 10, 50, 100, 200, 500, 750, 1000, 2000},     {0, 5, 10, 15, 20, 25}},
+    {3,     64,         RANDOM,     {1, 10, 50, 100, 200, 500, 750, 1000, 2000},     {0, 5, 10, 15, 20, 25}}
 };
 
 static 
@@ -1252,7 +1171,7 @@ void measure_net () {
     uname(&uts);
 
     fstream throughput_f;
-    throughput_f.open ("throughput.txt", ios::out | ios::app);
+    throughput_f.open ("throughput.txt", ios::out | ios::trunc);
     throughput_f << "{ \"hostname\": \"" << uts.nodename << "\",\n"
          << "  \"username\": \"" << getenv("USER") << "\",\n"
          << "  \"start_time\": " << curtime << ",\n"
@@ -1481,6 +1400,7 @@ int main(int argc, char ** argv)
     
     int num_servers = atoi(argv[2]);
     is_malicious = 0;
+    plain_size = 64;
 
     server_net(num_servers);
 

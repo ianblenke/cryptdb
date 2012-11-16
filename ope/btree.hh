@@ -175,9 +175,12 @@ public:
     // which has only a subtree, no key value or payload.
     unsigned int m_count;
     Node* mp_parent;
-    
 
     /***** HELPER FUNCTIONS ***************/
+
+    //Dump to file so we can measure size
+
+    void dump_to_file();
 
     // locality of reference, beneficial to effective cache utilization,
     // is provided by a "vector" container rather than a "list"
@@ -318,6 +321,8 @@ public:
     std::string m_key;
     Node* mp_subtree;
     bool has_subtree() const {return valid() && (mp_subtree != null_ptr) && mp_subtree; }
+
+    void dump_to_file();
 private:
     friend class Node;
     friend class NodeMerkleInfo;
