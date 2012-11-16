@@ -105,7 +105,8 @@ Server::handle_enc(int csock, istringstream & iss, bool do_ins, string table_nam
     	    ts->refcount++;
 	    stringstream ss;
 	    ss << "INSERT INTO " << table_name << " VALUES (0, " << ts->ope << ");";
-	    assert_s(db->execute(ss.str()), "could not insert into table value found in ope table");
+        if (WITH_DB)
+	       assert_s(db->execute(ss.str()), "could not insert into table value found in ope table");
     	}
 	response << ts->ope;
 
@@ -237,7 +238,7 @@ Server::~Server() {
 uint64_t
 Server::store_tree(){
     fstream f;
-    f.open("tree.dump", std::ios::out | std::ios::trunc);
+    f.open("tree.dump", std::ios::out | std::ios::binary | std::ios::trunc);
     ( (BTree*) ope_tree())->store_tree(f);
     f.close();
     struct stat filestatus;

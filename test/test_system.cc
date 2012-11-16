@@ -125,16 +125,32 @@ class WorkloadGen<string> {
 public:
     static string get_query(uint index, uint plain_size, workload w) {
 	if (w == INCREASING) {
-	    string s = strFromVal(index);
-	    string r ="";
-	    if (plain_size/8 > s.size()) {
-		for (uint i = 0; i < plain_size/8 - s.size(); i++) {
-		    r = r + " ";
-		}
-	    }
-	    s = r + s;
-	    assert_s(s.size() == plain_size/8, "logic error");
-	    return s;
+
+        string s = "";
+        if(plain_size > 64) {
+	       s = strFromVal(index);
+    	    string r;
+    	    for (uint i = 0; i < plain_size/8 - s.size(); i++) {
+    		r = r + " ";
+    	    }
+    	    s = r + s;
+    	    assert_s(s.size() == plain_size/8, "logic error");
+    	    return s;
+        } else if (plain_size == 32) {
+            uint num = index;
+            while ( num > 0) {
+                s = s + (char) ((int) num % 256);
+                num = num/256;
+            }
+
+            assert_s(s.size() <= 4, "get_query32 bit oversized");
+            string r;
+            for (uint i = 0; i < plain_size/8 - s.size(); i++) {
+            r = r + " ";
+            }
+            s = r + s;
+        }
+
 	}
 	// random
 	return randomBytes(plain_size/8);
@@ -233,7 +249,7 @@ static void
 clientgeneric(BC * bc) {
 
 
-    cerr << "rewrites is " << db_rewrites << "\n";
+    if (DEBUG_EXP) cerr << "rewrites is " << db_rewrites << "\n";
 
     ope_client<A, BC> * ope_cl = new ope_client<A, BC>(bc, is_malicious);
     if (DEBUG_EXP) cerr << "client created \n";
@@ -247,7 +263,7 @@ clientgeneric(BC * bc) {
          << "  \"iv:ptsize\": " << plain_size << ",\n"
          << "  \"iv:malicious\": " << is_malicious << ",\n"
          << "  \"iv:workload\": " <<  "\"sql_incr\"" << ",\n"
-    	 << "  \"iv:dbrewrites\": " << "\"" << (db_rewrites==0 ? "yes" : "no") << "\"" << ",\n";
+    	 << "  \"iv:dbrewrites\": " << "\"" << (db_rewrites==1 ? "yes" : "no") << "\"" << ",\n";
     
     Timer t;
     for (uint i = 0; i < vs->size(); i++) {
@@ -263,6 +279,7 @@ clientgeneric(BC * bc) {
 static void
 client_thread() {
 
+    if (DEBUG_EXP) {cerr << "increasing\n";}
     time_t curtime = time(0);
     char timebuf[128];
     strftime(timebuf, sizeof(timebuf), "%a, %d %b %Y %T %z", localtime(&curtime));
@@ -289,6 +306,8 @@ client_thread() {
 	return;
 	
     }
+
+    assert_s(false, "only 64 in this experiment");
 
     if (plain_size >= 128) {
 	cerr << "creating string, aes cbc client\n";
@@ -503,13 +522,17 @@ static void
 run_server(bool is_tpcc, bool db_updates) {
     assert_s(!is_tpcc || WITH_DB, "for tpcc need to be in Db mode");
 
+    if (DEBUG_EXP) cerr << "updates " << db_updates << "\n";
+
     list<string> * tables = new list<string>();
     if (is_tpcc) {
+	if (DEBUG_EXP) cerr << "tpcc\n";
 	tables->push_back("new_order");
 	tables->push_back("oorder");
 	tables->push_back("order_line");
 	//tables->push_back("stock");
     } else {
+	if (DEBUG_EXP) cerr << "increasing\n";
 	tables->push_back("testope");
     }
     Server * serv = new Server(is_malicious, OPE_CLIENT_PORT, OPE_SERVER_PORT, tables, db_updates);
@@ -1128,37 +1151,37 @@ static void measure_net_instance(net_conf c) {
 vector<our_conf> our_confs =
 {// num_elems              workload       plain_size    is_malicious   storage
     {{10,100,1000,10000},
-                            INCREASING,     32,         false,           false},
+                            INCREASING,     32,         false,           true},
     {{10,100,1000,10000},
-                            RANDOM,         32,         false,           false},
+                            RANDOM,         32,         false,           true},
     {{10,100,1000,10000},
-                            INCREASING,     32,         true,           false},
+                            INCREASING,     32,         true,           true},
     {{10,100,1000,10000},
-                            RANDOM,         32,         true,           false},
+                            RANDOM,         32,         true,           true},
     {{10,100,1000,10000},
-                            INCREASING,     64,         false,           false},
+                            INCREASING,     64,         false,           true},
     {{10,100,1000,10000},
-                            RANDOM,         64,         false,          false},
+                            RANDOM,         64,         false,          true},
     {{10,100,1000,10000},
-                            INCREASING,     64,         true,        false},
+                            INCREASING,     64,         true,        true},
     {{10,100,1000,10000},
-                            RANDOM,         64,         true,       false},
+                            RANDOM,         64,         true,       true},
     {{10,100,1000,10000},
-                            INCREASING,     128,        false,       false},
+                            INCREASING,     128,        false,       true},
     {{10,100,1000,10000},
-                            RANDOM,         128,        false,      false},
+                            RANDOM,         128,        false,      true},
     {{10,100,1000,10000},
-                            INCREASING,     128,        true,       false},
+                            INCREASING,     128,        true,       true},
     {{10,100,1000,10000},
-                            RANDOM,         128,        true,           false},
+                            RANDOM,         128,        true,           true},
     {{10,100,1000,10000},
-                            INCREASING,     256,        false,           false},
+                            INCREASING,     256,        false,           true},
     {{10,100,1000,10000},
-                            RANDOM,         256,        false,           false},
+                            RANDOM,         256,        false,           true},
     {{10,100,1000,10000},
-                            INCREASING,     256,        true,           false},
+                            INCREASING,     256,        true,           true},
     {{10,100,1000,10000},
-                            RANDOM,         256,        true,           false},
+                            RANDOM,         256,        true,           true},
 };
 
 vector<our_conf> bulk_confs =
@@ -1334,7 +1357,9 @@ client_file(ope_client<uint64_t, blowfish> * ope_cl, string table,
 
 static void
 tpcc_client(uint numtests, bool rewrites) {
-  
+
+    if (DEBUG_EXP) {cerr <<"tpcc client";}
+    if (DEBUG_EXP) {cerr << "rewrites " << rewrites << "\n";}
     time_t curtime = time(0);
     char timebuf[128];
     strftime(timebuf, sizeof(timebuf), "%a, %d %b %Y %T %z", localtime(&curtime));
@@ -1358,7 +1383,7 @@ tpcc_client(uint numtests, bool rewrites) {
          << "  \"iv:ptsize\": " << 32 << ",\n"
          << "  \"iv:malicious\": " << is_malicious << ",\n"
          << "  \"iv:workload\": " << "\"tpcc\"" << ",\n"
-	 << "  \"iv:dbrewrites\": " << "\"" << (rewrites==0 ? "yes" : "no") << "\"" << ",\n";
+	 << "  \"iv:dbrewrites\": " << "\"" << (rewrites==1 ? "yes" : "no") << "\"" << ",\n";
     Timer t;
     uint tests_so_far = 0;
 
@@ -1406,7 +1431,7 @@ val_tpcc(string tpcc, string usage) {
 	cerr << "invalid tpcc option\n" << usage << "\n";
 	exit(0);
     }
-    if (rewrites == "tpcc") {
+    if (tpcc == "tpcc") {
 	return true;
     } else {
 	return false;
@@ -1487,9 +1512,9 @@ int main(int argc, char ** argv)
 	bool tpcc = val_tpcc(string(argv[5]), usage);
 	db_rewrites = val_rewrites(string(argv[6]), usage);
 	if (tpcc) {
-	    tpcc_client(num_tests, rewrites);
+	    tpcc_client(num_tests, db_rewrites);
 	} else {
-	    set_workload(num_tests, plain_size, INCREASING, rewrites);
+	    set_workload(num_tests, plain_size, INCREASING);
 	    client_thread();
 	}
 	
