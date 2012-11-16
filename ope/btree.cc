@@ -1589,11 +1589,10 @@ BTree::update_db(OPEType new_ope, ChangeInfo c) {
 	if  (DEBUG_COMM) {cerr << ss2.str() << "\n";}
 	assert_s(db->execute(ss2.str()),"could not execute batch update");
     } else {
-	cerr << "no need to rewrite anything in DB\n";
+	if (DEBUG_COMM) cerr << "no need to rewrite anything in DB\n";
     }
 
-    cerr << "------- \n\n";
-    cerr << "INSERT " << new_ope << "\n";
+    if (DEBUG_COMM) { cerr << "INSERT " << new_ope << "\n"; }
     // now insert the new value
     stringstream si;
     si << "INSERT INTO " << table_name << " VALUES (" << glb_counter++  << ", " << strFromVal(new_ope) << ");";

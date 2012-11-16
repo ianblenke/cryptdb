@@ -232,10 +232,10 @@ static void
 clientgeneric(BC * bc) {
 
     ope_client<A, BC> * ope_cl = new ope_client<A, BC>(bc, is_malicious);
-    cerr << "client created \n";
+    if (DEBUG_EXP) cerr << "client created \n";
 
     vector<A> * vs = (vector<A> * )vals;
-    cerr << "SIZE of workload is " << vs->size() << "\n";
+    if (DEBUG_EXP) cerr << "SIZE of workload is " << vs->size() << "\n";
 
     cout << datadelim
          << "{ \"iv:scheme\": " << "\"stOPE\"" << ",\n"
@@ -246,8 +246,8 @@ clientgeneric(BC * bc) {
     
     Timer t;
     for (uint i = 0; i < vs->size(); i++) {
-	OPEType ope =  ope_cl->encrypt(vs->at(i), true, "testope");
-	cerr << "ope is " << ope << " \n";
+	ope_cl->encrypt(vs->at(i), true, "testope");
+	// cerr << "ope is " << ope << " \n";
     }
     uint64_t time_interval = t.lap();
     cout << "  \"dv:enctime_ms\": " << (time_interval*1.0/(vs->size() *1000.0)) << "\n" << "}";
@@ -272,8 +272,13 @@ client_thread() {
          << "  \"data\": [";
   
     if (plain_size == 64) {
-	cerr << "creating uint64, blowfish client\n";
+	if (DEBUG_EXP) cerr << "creating uint64, blowfish client\n";
 	clientgeneric<uint64_t, blowfish>(bc);
+	cout << "],\n"
+	     << "  \"end_time\": " << curtime << ",\n"
+	     << "  \"end_asctime\": \"" << timebuf << "\"\n"
+	     << "}\n";
+	return;
 	
     }
 
@@ -286,10 +291,6 @@ client_thread() {
     curtime = time(0);
     strftime(timebuf, sizeof(timebuf), "%a, %d %b %Y %T %z", localtime(&curtime));
     
-    cout << "],\n"
-         << "  \"end_time\": " << curtime << ",\n"
-         << "  \"end_asctime\": \"" << timebuf << "\"\n"
-         << "}\n";
     
     
     assert_s(false, "not recognized ciphertext size; accepting 64, >= 128\n");
@@ -1296,7 +1297,7 @@ client_file(ope_client<uint64_t, blowfish> * ope_cl, string table,
     ifstream f(filename);
     assert_s(f.is_open(), "file not open");
 
-    cerr << "file" << filename << "\n";
+    if (DEBUG_EXP) cerr << "file" << filename << "\n";
     while (true) {
 	string s1;
 	f >> s1;
@@ -1308,7 +1309,8 @@ client_file(ope_client<uint64_t, blowfish> * ope_cl, string table,
 	f >> s2 >> v;
 	assert_s(s1 == "enc", "not parsed as expected");
 	if (s2 == "i") {
-	    cerr << "ope for " << v << "is " << ope_cl->encrypt(v, true, table) <<"\n";
+	    OPEType ope = ope_cl->encrypt(v, true, table);
+	    if (DEBUG_EXP) cerr << "ope for " << v << "is " << ope << "\n";
 	    tests_so_far++;  
 	}
 	if (tests_so_far >= numtests) {
@@ -1338,7 +1340,7 @@ tpcc_client(uint numtests) {
     
 
     ope_client<uint64_t, blowfish> * ope_cl = new ope_client<uint64_t, blowfish>(bc, is_malicious);
-    cerr << "tpcc client created \n";
+    //cerr << "tpcc client created \n";
 
     cout << datadelim
          << "{ \"iv:scheme\": " << "\"stOPE\"" << ",\n"
