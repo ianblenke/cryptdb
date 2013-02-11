@@ -272,7 +272,7 @@ clientgeneric(BC * bc) {
     }
     uint64_t time_interval = t.lap();
     cout << "  \"dv:enctime_ms\": " << (time_interval*1.0/(vs->size() *1000.0)) << "\n" << "}";
-
+    delete ope_cl;
     if (DEBUG_EXP) cerr << "DONE!\n";	
 }
 
@@ -434,6 +434,7 @@ servernet_thread(int c_port, int s_port){
     Server * serv = new Server(is_malicious, c_port, s_port);
     
     serv->work();
+    delete serv;
     exit(rv);
 }
 
@@ -540,6 +541,7 @@ run_server(bool is_tpcc, bool db_updates) {
     serv->work();
 
     delete serv;
+    delete tables;
 }
 
 
@@ -580,7 +582,7 @@ client_work(uint n, our_conf c, BC * bc) {
     }
     uint64_t time_interval = t.lap();
     cout << "  \"dv:enctime_ms\": " << (time_interval*1.0/(n *1000.0)) << ",\n";
-
+    delete ope_cl;
      if (DEBUG_EXP) cerr << "DONE!\n";
 }
 
@@ -1553,7 +1555,6 @@ int main(int argc, char ** argv)
     cerr << endl;
 
     cerr << usage << "\n";
- 
     return 0;
 }
 

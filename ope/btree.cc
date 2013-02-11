@@ -258,9 +258,13 @@ int Node::delete_all_subtrees () {
 
         }
 
-        else
-
+        else{
             count_deleted += m_vector[i].mp_subtree->delete_all_subtrees();
+            delete m_vector[i].mp_subtree;
+            count_deleted++;
+        }
+
+
 
     }
 
@@ -1493,12 +1497,12 @@ BTree::BTree(OPETable<string> * ot, Connect * _db, bool malicious,
 		     "cannot drop if exists set_udftransform");
 	assert_s(db->execute("DROP FUNCTION IF EXISTS udftransform;"),
 	    "cannot drop if exists udftransform");
-
-	assert_s(db->execute("CREATE FUNCTION set_udftransform RETURNS INTEGER soname 'edb.so';"),
-		     "failed to create udf set_transform");
 	assert_s(db->execute("CREATE FUNCTION udftransform RETURNS INTEGER soname 'edb.so';"),
 	    "could not create UDF transform");
 
+
+	assert_s(db->execute("CREATE FUNCTION set_udftransform RETURNS INTEGER soname 'edb.so';"),
+		     "failed to create udf set_transform");
 	assert_s(db->execute("DROP TABLE IF EXISTS " + table_name + ";"),
 		 "cannot drop if exists table");	
 	assert_s(db->execute("CREATE TABLE " + table_name + " ( "+ "counter bigint, " + field_name+ " bigint unsigned );"),
@@ -1510,6 +1514,7 @@ BTree::BTree(OPETable<string> * ot, Connect * _db, bool malicious,
 
 
 BTree::~BTree() {
+    if(DEBUG_BTREE) cerr <<"Deleting BTree " << endl;
     delete tracker;
     if (WITH_DB) {
 	assert_s(db->execute("DROP FUNCTION IF EXISTS set_transform;"), "could not drop func");
@@ -1601,7 +1606,7 @@ must_rewrite(ChangeInfo c) {
 }
 void
 BTree::update_db(OPEType new_ope, ChangeInfo c) {
-
+    assert_s(WITH_DB, "Trying to update_db with DB set to off");
     
     if (db_updates && must_rewrite(c)) {
 	// compute transform from c

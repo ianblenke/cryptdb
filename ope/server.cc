@@ -98,7 +98,7 @@ Server::handle_enc(int csock, istringstream & iss, bool do_ins, string table_nam
     auto ts = ope_table->find(ciph);
     
     if (ts) { // found in OPE Table
-    	if (DEBUG) {cerr << "found in ope table"; }
+    	if (DEBUG) {cerr << "found in ope table\n"; }
 
   	// if this is an insert, increase ref count
     	if (do_ins) {
@@ -111,6 +111,7 @@ Server::handle_enc(int csock, istringstream & iss, bool do_ins, string table_nam
 	response << ts->ope;
 
 	if (MALICIOUS) {
+        if(DEBUG) cerr << " Adding malicious proof to ope_table response" << endl;
 	    response <<" " << PF_QUERY << " ";
 	    ope_tree->merkle_proof(ts->n) >> response;
 	}
@@ -216,7 +217,9 @@ Server::Server(bool malicious, int cport, int sport, list<string> * itables, boo
 	tablemeta * tm = new tablemeta(ope_tree, ope_table);
 	tables[table] = tm;
     }
-    
+    if(!WITH_DB){
+        delete itables;
+    }
     sock_cl = create_and_connect(OPE_CLIENT_HOST, cport);
     sock_req = create_and_bind(sport);
     
@@ -226,8 +229,7 @@ Server::~Server() {
     close(sock_cl);
     close(sock_req);
     for (auto tm : tables) {
-	delete tm.second->ope_tree;
-	delete tm.second->ope_table;
+	delete tm.second;
     }
     tables.clear();
     if (WITH_DB) {
