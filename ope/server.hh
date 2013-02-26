@@ -29,6 +29,12 @@ struct tablemeta {
 	ope_tree = otree;
 	ope_table = otable;
     }
+
+    ~tablemeta() {
+    delete ope_tree;
+    delete ope_table;
+    }
+
 };
 
 const string auto_table = "opetable";

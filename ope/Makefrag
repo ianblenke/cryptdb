@@ -1,5 +1,5 @@
 OBJDIRS     += ope
-OPESRC  := merkle.cc opetable.cc stree.cc btree.cc server.cc client.cc
+OPESRC  := merkle.cc opetable.cc stree.cc btree.cc server.cc client.cc mem_leak.cc
 
 
 all:    $(OBJDIR)/libope.so $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbcrypto.so
@@ -37,6 +37,9 @@ all:    $(OBJDIR)/ope/boost_client
 $(OBJDIR)/ope/boost_client: $(OBJDIR)/ope/boost_client.o $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbutil.so $(OBJDIR)/libope.so
 	$(CXX) $< -o $@ $(LDFLAGS) -ledbcrypto -ledbutil -lope -lcryptdb -lpthread -lboost_system
 
+all:    $(OBJDIR)/ope/mem_leak
+$(OBJDIR)/ope/mem_leak: $(OBJDIR)/ope/mem_leak.o $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbutil.so $(OBJDIR)/libope.so
+	$(CXX) $< -o $@ $(LDFLAGS) -ledbcrypto -ledbutil -lope -lcryptdb -lpthread -lboost_system
 
 install: install_ope
 
