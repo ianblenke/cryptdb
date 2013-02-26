@@ -151,8 +151,8 @@ public:
 	cerr << "Testing B tree.. \n";
 
 	// Frequency of testing certain aspects
-	uint no_inserted_checks = 1; // int(sqrt(no_elems)) + 1;
-	uint no_not_in_tree = 10; //no_inserted_checks;
+	uint no_inserted_checks = no_elems+1; // int(sqrt(no_elems)) + 1;
+	//uint no_not_in_tree = 10; //no_inserted_checks;
 	//uint delete_freq = 2; //one in deletes_freq will be deleted
 	uint period_Merkle_check = no_inserted_checks;
 	//uint period_Merkle_del_check = 1;
@@ -171,10 +171,10 @@ public:
 	    elem.m_key = vals[i];
 	    UpdateMerkleProof p;
 	    string merkle_root_before = tracker->get_root()->merkle_hash;
-	    cerr << "merkle root before " << merkle_root_before << "\n";
-	    bool inserted = tracker->get_root()->tree_insert(elem, p);
+	    //cerr << "merkle root before " << merkle_root_before << "\n";
+	    tracker->get_root()->tree_insert(elem, p);
 	    
-	    assert_s(inserted, "element was not inserted");
+	    //assert_s(inserted, "element was not inserted");
 	    
 	    // check Merkle hash tree integrity
 	    if (i % period_Merkle_check == 0) {
@@ -192,7 +192,11 @@ public:
 	}
 
 	// Check tree is correct
-	check_good_tree(tracker, vals, no_elems);
+//	check_good_tree(tracker, vals, no_elems);
+
+	
+	cerr << "good tree , rewrites" << tracker->nrewrites*1.0/(1.0 *no_elems) << "\n";
+/*
 	
 	// Check if some inserted values are indeed in the tree
 	for (uint i = 0 ; i < no_inserted_checks; i++) {
@@ -235,8 +239,12 @@ public:
 
 	}
 
+
+
 	// Check tree is correct
-	check_good_tree(tracker, vals, no_elems);
+
+     check_good_tree(tracker, vals, no_elems);
+*/   
 /*
 		
 	//Check that deletion works correctly
@@ -437,7 +445,7 @@ public:
 	test_help(vals, no_elems);
 
 	cerr << "test B complexity finished OK.\n";
- 
+
     }
 
 
@@ -790,9 +798,9 @@ public:
 int main(int argc, char ** argv)
 {
     //Test::test_search_tree();
-    // Test::testBMerkleTree(argc, argv);
+     Test::testBMerkleTree(argc, argv);
     //Test::testMerkleProof();
-    Test::test_transform();
+    //Test::test_transform();
 }
 
  

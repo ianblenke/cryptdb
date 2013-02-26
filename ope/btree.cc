@@ -73,7 +73,7 @@ compute_rewrites(ChangeInfo c) {
     for (auto lci : c) {
 	if (lci.index-1 >= (int)lci.node->m_count) {
 	    // done
-	    assert_s(sum > 0, " logic error with sum");
+	    //assert_s(sum >= 0, " logic error with sum");
 	    return sum;
 	}
 	for (uint i = lci.index; i< lci.node->m_count; i++) {
@@ -81,7 +81,7 @@ compute_rewrites(ChangeInfo c) {
 	}
     }
 
-    assert_s(sum > 0, "logic error with end sum");
+    //assert_s(sum > 0, "logic error with end sum");
     // the recently inserted node should not be counted
     return sum;
     
@@ -782,10 +782,13 @@ bool Node::tree_insert(Elem element, UpdateMerkleProof & p) {
 	cerr << "element to insert exists already\n";
         return false;
     }
+    
 
     ChangeInfo c;
-    return last_visited_ptr->do_insert(element, p, c);
 
+    bool r = last_visited_ptr->do_insert(element, p, c);
+    m_root->nrewrites += compute_rewrites(c);
+    return r;
 } 
 
 

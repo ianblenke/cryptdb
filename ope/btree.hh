@@ -367,7 +367,9 @@ protected:
     
 public:
 
-    RootTracker(bool malicious) { mp_root = null_ptr; MALICIOUS = malicious; }
+    uint nrewrites;
+
+    RootTracker(bool malicious) { mp_root = null_ptr; MALICIOUS = malicious; nrewrites = 0;}
 
     void set_root (Node* old_root, Node* new_root) {
 
