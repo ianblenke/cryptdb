@@ -122,6 +122,10 @@ public:
 		OPEType ope_path, uint64_t nbits, uint64_t index,
 		UpdateMerkleProof & p);
 
+    void remove(std::string ciph, TreeNode * tnode,
+		OPEType ope_path, uint64_t nbits, uint64_t index,
+		UpdateMerkleProof & p);
+
      MerkleProof merkle_proof(TreeNode * n);
     
     void update_db(OPEType ciph, ChangeInfo  c);
@@ -204,7 +208,7 @@ public:
     // performs tree insert/delete as in the OPE tree where order of values at
     // nodes does not apply
     bool do_insert(Elem element, UpdateMerkleProof & p, ChangeInfo & c, int index = -1);
-    bool do_delete(Elem element, UpdateMerkleProof & p, ChangeInfo & c, index index = -1);
+    bool do_delete(Elem element, UpdateMerkleProof & p, ChangeInfo & c, int index = -1);
 
     //cleaning up
     int delete_all_subtrees();

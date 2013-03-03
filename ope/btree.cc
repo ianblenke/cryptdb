@@ -777,10 +777,11 @@ bool Node::do_insert(Elem element, UpdateMerkleProof & p, ChangeInfo & c, int in
 }
 
 bool
-Node::do_delete(Elem element, UpateMerkleProof & p, ChangeInfo & c, int index) {
+Node::do_delete(Elem element, UpdateMerkleProof & p, ChangeInfo & c, int index) {
     assert_s(m_root->MALICIOUS == false, "stOPE only implemented in honest but curious mode");
 
     //if (vector_delete)
+    return true;
 }
 
 bool Node::tree_insert(Elem element, UpdateMerkleProof & p) {
@@ -1712,7 +1713,7 @@ BTree::insert(string ciph, TreeNode * tnode,
 }
 
 void
-BTree::delete(string ciph, TreeNode * node,
+BTree::remove(string ciph, TreeNode * tnode,
 	      OPEType ope_path, uint64_t nbits, uint64_t index,
 	      UpdateMerkleProof & p) {
     Node * node = (Node *) tnode;
@@ -1725,7 +1726,7 @@ BTree::delete(string ciph, TreeNode * node,
     assert_s(node->m_vector[index].mp_subtree == NULL, "node is not terminal node");
     node->do_delete(ciph_elem, p, ci, index+1);
 
-    update_ot(opetabe, ci.back().node);
+    update_ot(opetable, ci.back().node);
 
     nrewrites += compute_rewrites(ci);
 

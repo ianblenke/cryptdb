@@ -322,15 +322,16 @@ public:
 	for (uint i=0; i< no_elems; i++) {
 	    elem.m_key = vals[i];
 	    UpdateMerkleProof p;
-	    tracker->get_root()->tree_insert(elem, p);
+	    bool inserted = tracker->get_root()->tree_insert(elem, p);
+	    assert_s(inserted, "elem was not inserted");
 	}
 
 	// Check tree is correct
 	check_good_tree(tracker, vals, no_elems);
 
 	
-	cerr << "good tree , rewrites" << tracker->nrewrites*1.0/(1.0 *no_elems) << "\n";
-/*
+	//cerr << "good tree , rewrites" << tracker->nrewrites*1.0/(1.0 *no_elems) << "\n";
+
 	
 	// Check if some inserted values are indeed in the tree
 	for (uint i = 0 ; i < no_inserted_checks; i++) {
@@ -340,10 +341,6 @@ public:
 	    Node * last;
 	    Elem& result = tracker->get_root()->search(desired, last);
 	    assert_s(desired.m_key == result.m_key, "could not find val that should be there");
-
-	    MerkleProof p = node_merkle_proof(last);
-	    test_serialize(p);
-	    assert_s(verify_merkle_proof(p, tracker->get_root()->merkle_hash), "merkle proof for get does not verify");
 	}
 	
 	// Check tree is correct
@@ -373,18 +370,9 @@ public:
 
 	}
 
-
-
-	// Check tree is correct
-
-     check_good_tree(tracker, vals, no_elems);
-*/   
-/*
 		
 	//Check that deletion works correctly
 	for (uint i = 0 ; i < no_elems/delete_freq; i++) {
-
-	    string old_merkle_hash = tracker.get_root()->merkle_hash;
 
 	    // value to delete
 	    uint index_to_del = i * delete_freq;
@@ -398,35 +386,18 @@ public:
 	    desired.m_key = test_val;
 	    //delete it
 	    UpdateMerkleProof delproof;
-	    bool deleted = tracker.get_root()->tree_delete(desired, delproof);
+	    bool deleted = tracker->get_root()->tree_delete(desired, delproof);
 	    assert_s(deleted, "tree delete does not delete");
 	    
 	    // check it is indeed deleted
 	    Node * last;
-	    Elem result = tracker.get_root()->search(desired, last);
+	    Elem result = tracker->get_root()->search(desired, last);
 	    assert_s(result == Node::m_failure, "found element that should have been deleted");
-
-	    // check Merkle hash tree integrity
-	    if (i % period_Merkle_del_check == 0) {
-		//cerr << "check Merkle \n";
-		tracker.get_root()->check_merkle_tree();
-
-		//check deletion proof only if deleted
-		string new_merkle_root;
-		bool r = verify_del_merkle_proof(delproof, test_val, old_merkle_hash, new_merkle_root);
-		assert_s(r, "deletion proof does not verify");
-		assert_s(new_merkle_root == tracker.get_root()->merkle_hash,
-		    	 "verify_del gives incorrect new merkle root");
-		cerr << "deletion proof verified\n";
-		
-	    }
 
 	}
 
-
 	// Check tree is still correct
-	check_good_tree(tracker);
-*/	
+	check_good_tree(tracker);	
     }
 
     
@@ -537,6 +508,15 @@ public:
 
     }
 
+    static void
+    test_helper(vector<string> & vals, uint no_elems, bool checkMerkle) {
+	if (checkMerkle) {
+	    test_help(vals, no_elems);
+	} else {
+	    test_help_noMerkle(vals, no_elems);
+	}
+    }
+
 // test the b-tree.
 // -- inserts many elements in random order, increasing order, decreasing order,
 // and checks that the tree is built correctly -- correct order and max height
@@ -544,7 +524,7 @@ public:
 // -- tests deletion
 // -- checks that Merkle hash tree is overall correct with some period
     static void
-    testBMerkleTree(int argc, char ** argv) {
+    testBMerkleTree(int argc, char ** argv, bool checkMerkle = true) {
 
 	if (argc != 2) {
 	    cerr << "usage: ./test_searchtree num_nodes_to_insert \n";
@@ -567,19 +547,19 @@ public:
 	    vals.push_back(s.str());
 	}
 
-	test_help(vals, no_elems);
+	test_helper(vals, no_elems, checkMerkle);
 
 	// test on values in increasing order
 	sort(vals.begin(), vals.end());
 	cerr << "\n\n- " << no_elems << " values in increasing order: \n";
-	test_help(vals, no_elems); 
+	test_helper(vals, no_elems, checkMerkle); 
 
 	// test on values in decreasing order
 	reverse(vals.begin(), vals.end());
 	cerr << "\n\n- " << no_elems << " values in decreasing order: \n";
-	test_help(vals, no_elems);
+	test_helper(vals, no_elems, checkMerkle);
 
-	cerr << "test B complexity finished OK.\n";
+	cerr << "test B tree finished OK.\n";
 
     }
 
