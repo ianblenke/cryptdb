@@ -776,6 +776,13 @@ bool Node::do_insert(Elem element, UpdateMerkleProof & p, ChangeInfo & c, int in
     return r;  
 }
 
+bool
+Node::do_delete(Elem element, UpateMerkleProof & p, ChangeInfo & c, int index) {
+    assert_s(m_root->MALICIOUS == false, "stOPE only implemented in honest but curious mode");
+
+    //if (vector_delete)
+}
+
 bool Node::tree_insert(Elem element, UpdateMerkleProof & p) {
 
     assert_s(!OPE_MODE, "cannot call tree_insert in OPE_MODE");
@@ -1615,7 +1622,7 @@ BTree::update_db(OPEType new_ope, ChangeInfo c) {
 	// compute transform from c
 	OPETransform t = compute_transform(c);
 	
-	//send tranform to server
+	//send transform to server
 	stringstream ss;
 	ss.clear();
 	ss << "SELECT set_udftransform('";
@@ -1680,12 +1687,6 @@ BTree::insert(string ciph, TreeNode * tnode,
     ChangeInfo ci; ci.clear();
     Elem ciph_elem = Elem(ciph);
 
-    /*   cerr << "remove code here:\n";
-    string old_merkle = tracker->get_root()->merkle_hash;
-    cerr << "old_merkle is " << old_merkle << "\n";
-    */
-    
-    //cerr << "to insert "<< ciph_elem.pretty() <<"\n";
     assert_s(node->m_vector[index].mp_subtree == NULL, "node is not terminal node!");
     node->do_insert(ciph_elem, p, ci, index+1);
     //cerr << "tree after insert is "; node->get_root()->dump(true); cerr << "\n";
@@ -1710,6 +1711,28 @@ BTree::insert(string ciph, TreeNode * tnode,
     }
 }
 
+void
+BTree::delete(string ciph, TreeNode * node,
+	      OPEType ope_path, uint64_t nbits, uint64_t index,
+	      UpdateMerkleProof & p) {
+    Node * node = (Node *) tnode;
+
+    ChangeInfo ci;
+    ci.clear();
+
+    Elem ciph_elem = Elem(ciph);
+
+    assert_s(node->m_vector[index].mp_subtree == NULL, "node is not terminal node");
+    node->do_delete(ciph_elem, p, ci, index+1);
+
+    update_ot(opetabe, ci.back().node);
+
+    nrewrites += compute_rewrites(ci);
+
+    if (WITH_DB) {
+	update_db(opetable->get(ciph).ope, ci);
+    }
+}
 
 
 Node* build_tree_wrapper(vector<string> & key_list, RootTracker * root_tracker, int start, int end){

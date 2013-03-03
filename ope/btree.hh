@@ -192,14 +192,19 @@ public:
     //std::vector<Elem> m_vector;
 
     
+    // performs tree insert/ delete as a in B tree and not in an OPE tree
+    // namely, left node is smaller than right node
     bool tree_insert (Elem element, UpdateMerkleProof &p);
     bool tree_delete(Elem & target, UpdateMerkleProof & m);
 
     void dump(bool recursive = true);
     void in_order_traverse(std::list<std::string> & res);
 
-    
+
+    // performs tree insert/delete as in the OPE tree where order of values at
+    // nodes does not apply
     bool do_insert(Elem element, UpdateMerkleProof & p, ChangeInfo & c, int index = -1);
+    bool do_delete(Elem element, UpdateMerkleProof & p, ChangeInfo & c, index index = -1);
 
     //cleaning up
     int delete_all_subtrees();

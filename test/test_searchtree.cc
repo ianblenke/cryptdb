@@ -61,10 +61,12 @@ public:
     }
 
     static void
-    check_good_tree(RootTracker * tracker, vector<string> & vals, uint no_elems) {
-	
-	tracker->get_root()->check_merkle_tree();
-	cerr << "merkle tree verifies after insert\n";
+    check_good_tree(RootTracker * tracker, vector<string> & vals, uint no_elems, bool testMerkle = true) {
+
+	if (testMerkle) {
+	    tracker->get_root()->check_merkle_tree();
+	    cerr << "merkle tree verifies after insert\n";
+	}
 	
 	// Check tree is in right order and has good height
 	list<string> treeorder;
@@ -295,6 +297,139 @@ public:
 */	
     }
 
+
+    // Tests correctness of Btree insert/delete/search but not the Merkle tree
+    static void
+    test_help_noMerkle(vector<string> & vals, uint no_elems) {
+
+	cerr << "Testing B tree.. \n";
+
+	// Frequency of testing certain aspects
+	uint no_inserted_checks = no_elems+1; // int(sqrt(no_elems)) + 1;
+	uint no_not_in_tree = 10; //no_inserted_checks;
+	uint delete_freq = 2; //one in deletes_freq will be deleted
+	
+
+	// Create tree
+	Node::m_failure.invalidate();
+	Node::m_failure.m_key = "";
+	RootTracker * tracker = new RootTracker(true);  // maintains a pointer to the current root of the b-tree
+	Node* root_ptr = new Node(tracker);
+	tracker->set_root(null_ptr, root_ptr);
+
+	// Insert into tree
+	Elem elem;
+	for (uint i=0; i< no_elems; i++) {
+	    elem.m_key = vals[i];
+	    UpdateMerkleProof p;
+	    tracker->get_root()->tree_insert(elem, p);
+	}
+
+	// Check tree is correct
+	check_good_tree(tracker, vals, no_elems);
+
+	
+	cerr << "good tree , rewrites" << tracker->nrewrites*1.0/(1.0 *no_elems) << "\n";
+/*
+	
+	// Check if some inserted values are indeed in the tree
+	for (uint i = 0 ; i < no_inserted_checks; i++) {
+	    string test_val = vals[rand() % no_elems];
+	    Elem desired;
+	    desired.m_key = test_val;
+	    Node * last;
+	    Elem& result = tracker->get_root()->search(desired, last);
+	    assert_s(desired.m_key == result.m_key, "could not find val that should be there");
+
+	    MerkleProof p = node_merkle_proof(last);
+	    test_serialize(p);
+	    assert_s(verify_merkle_proof(p, tracker->get_root()->merkle_hash), "merkle proof for get does not verify");
+	}
+	
+	// Check tree is correct
+	check_good_tree(tracker, vals, no_elems);
+
+	//Check that some values are indeed not in the tree
+	for (uint i = 0; i < no_not_in_tree; i++) {
+	    string test_val;
+	    uint counter = 100;
+	    while (true) {
+		stringstream s;
+		s << rand();
+		test_val =  s.str();
+		if (!mcontains(vals, test_val)) {
+		    break;
+		}
+		counter--;
+		if (counter > 0) {
+		    cerr << "could not find item not in vals for testing";
+		}
+	    }
+	    Elem desired;
+	    desired.m_key = test_val;
+	    Node * last;
+	    Elem& result = tracker->get_root()->search(desired, last);
+	    assert_s(result == Node::m_failure, "found elem that does not exist");
+
+	}
+
+
+
+	// Check tree is correct
+
+     check_good_tree(tracker, vals, no_elems);
+*/   
+/*
+		
+	//Check that deletion works correctly
+	for (uint i = 0 ; i < no_elems/delete_freq; i++) {
+
+	    string old_merkle_hash = tracker.get_root()->merkle_hash;
+
+	    // value to delete
+	    uint index_to_del = i * delete_freq;
+	    if (index_to_del >= no_elems) {
+		break;
+	    }
+	    string test_val = vals[index_to_del];
+
+	    // delete the value
+	    Elem desired;
+	    desired.m_key = test_val;
+	    //delete it
+	    UpdateMerkleProof delproof;
+	    bool deleted = tracker.get_root()->tree_delete(desired, delproof);
+	    assert_s(deleted, "tree delete does not delete");
+	    
+	    // check it is indeed deleted
+	    Node * last;
+	    Elem result = tracker.get_root()->search(desired, last);
+	    assert_s(result == Node::m_failure, "found element that should have been deleted");
+
+	    // check Merkle hash tree integrity
+	    if (i % period_Merkle_del_check == 0) {
+		//cerr << "check Merkle \n";
+		tracker.get_root()->check_merkle_tree();
+
+		//check deletion proof only if deleted
+		string new_merkle_root;
+		bool r = verify_del_merkle_proof(delproof, test_val, old_merkle_hash, new_merkle_root);
+		assert_s(r, "deletion proof does not verify");
+		assert_s(new_merkle_root == tracker.get_root()->merkle_hash,
+		    	 "verify_del gives incorrect new merkle root");
+		cerr << "deletion proof verified\n";
+		
+	    }
+
+	}
+
+
+	// Check tree is still correct
+	check_good_tree(tracker);
+*/	
+    }
+
+    
     static string
     inserted_here(UpInfo before, UpInfo after, int & pos) {
 	NodeInfo node1 = before.node;
