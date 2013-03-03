@@ -97,6 +97,7 @@ match(const std::vector<uint> & ope_path, const std::vector<uint> & repr) {
 
 uint
 minimum_keys (uint max_keys) {
+    // max keys contains empty slot, key "" and the normal keys
 
     // minus 1 for the empty slot left for splitting the node
 
@@ -113,7 +114,7 @@ minimum_keys (uint max_keys) {
     assert_s(res >= 0, "cannot have negative min keys");
     if (res <= 1){
 	res++;
-	assert_s((uint)res < max_keys, "cannot have min keys be the same as max_keys");
+	assert_s((uint)res < max_keys-1, "cannot have min keys be the same as max_keys-1");
     }
     
     return res;

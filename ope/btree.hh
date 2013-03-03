@@ -165,6 +165,7 @@ public:
     RootTracker * m_root;
     
     Node* get_root();
+    bool is_root();
     Elem& search (Elem& desired, Node*& last_visited);
  
     Elem& operator[] (int i) { return m_vector[i]; }
@@ -174,6 +175,8 @@ public:
     std::vector<std::string> get_keys();
     TreeNode * get_subtree(uint index);
 
+    // TO REMOVE
+    void print_counts();
   
     std::string pretty() const;
     
@@ -226,12 +229,13 @@ public:
     void insert_zeroth_subtree (Node* subtree);
 
     void set_debug();
+    // real keys, without empty slot or empty key
     int key_count () const { return m_count-1; }
 
     Elem& largest_key () { return m_vector[m_count-1]; }
     Elem& smallest_key ();
     Elem& smallest_key_in_subtree();
-    int index_has_subtree();
+    int index_in_parent();
 
     Node* right_sibling (int& parent_index_this);
     Node* left_sibling (int& parent_index_this);
@@ -248,11 +252,7 @@ public:
     bool
     tree_delete_help (Elem& target, UpdateMerkleProof & proof, Node* & start_node, Node * node);
 
-   
-
-    // outputs the index that this node has in his parent element list
-    int index_in_parent();
-    
+       
     // outputs the index that child has in this parent list
     // or a negative value if it does not exist  
     int index_of_child(Node * child);

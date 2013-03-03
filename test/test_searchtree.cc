@@ -44,9 +44,11 @@ class Test {
 public:
 
     static void
-    check_good_tree(RootTracker * tracker) {
-	
-	tracker->get_root()->check_merkle_tree();
+    check_good_tree(RootTracker * tracker, bool testMerkle = true) {
+
+	if (testMerkle) {
+	    tracker->get_root()->check_merkle_tree();
+	}
 	
 	// Check tree is in right order and has good height
 	list<string> treeorder;
@@ -302,18 +304,18 @@ public:
     static void
     test_help_noMerkle(vector<string> & vals, uint no_elems) {
 
-	cerr << "Testing B tree.. \n";
+	cerr << "Testing B tree (no Merkle).. \n";
 
 	// Frequency of testing certain aspects
 	uint no_inserted_checks = no_elems+1; // int(sqrt(no_elems)) + 1;
 	uint no_not_in_tree = 10; //no_inserted_checks;
-	uint delete_freq = 2; //one in deletes_freq will be deleted
+	uint delete_freq = 4; //one in deletes_freq will be deleted
 	
 
 	// Create tree
 	Node::m_failure.invalidate();
 	Node::m_failure.m_key = "";
-	RootTracker * tracker = new RootTracker(true);  // maintains a pointer to the current root of the b-tree
+	RootTracker * tracker = new RootTracker(false);  // maintains a pointer to the current root of the b-tree
 	Node* root_ptr = new Node(tracker);
 	tracker->set_root(null_ptr, root_ptr);
 
@@ -327,7 +329,8 @@ public:
 	}
 
 	// Check tree is correct
-	check_good_tree(tracker, vals, no_elems);
+	check_good_tree(tracker, vals, no_elems, false);
+
 
 	
 	//cerr << "good tree , rewrites" << tracker->nrewrites*1.0/(1.0 *no_elems) << "\n";
@@ -342,10 +345,13 @@ public:
 	    Elem& result = tracker->get_root()->search(desired, last);
 	    assert_s(desired.m_key == result.m_key, "could not find val that should be there");
 	}
+
 	
 	// Check tree is correct
-	check_good_tree(tracker, vals, no_elems);
+	check_good_tree(tracker, vals, no_elems, false);
 
+	cerr << "all inserted ok \n";
+	
 	//Check that some values are indeed not in the tree
 	for (uint i = 0; i < no_not_in_tree; i++) {
 	    string test_val;
@@ -397,7 +403,8 @@ public:
 	}
 
 	// Check tree is still correct
-	check_good_tree(tracker);	
+	check_good_tree(tracker, false);
+	cerr << "delete ok \n";
     }
 
     
@@ -913,7 +920,7 @@ public:
 int main(int argc, char ** argv)
 {
     //Test::test_search_tree();
-     Test::testBMerkleTree(argc, argv);
+    Test::testBMerkleTree(argc, argv, false);
     //Test::testMerkleProof();
     //Test::test_transform();
 }

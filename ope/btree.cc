@@ -51,7 +51,7 @@ get_ope_path(Node * n, OPEType & opepath, uint & nbits) {
     if (n->mp_parent) {
 	get_ope_path(n->mp_parent, opepath, nbits);
 	nbits = nbits+ num_bits;
-	opepath = (opepath << num_bits) + n->index_has_subtree();
+	opepath = (opepath << num_bits) + n->index_in_parent();
     } else {
 	nbits = 0;
 	opepath = 0;
@@ -479,7 +479,7 @@ bool Node::split_insert (Elem& element, ChangeInfo & ci, int index) {
     }
     //-----------------------------
     
-    uint upward_index = index_has_subtree() + 1;
+    uint upward_index = index_in_parent() + 1;
     
     // now insert the upward_element into the parent, splitting it if necessary
     if (mp_parent && mp_parent->vector_insert(upward_element, upward_index)) {
@@ -537,7 +537,7 @@ Node::extract_NodeInfo(int notextract = -1) {
 	ni.key = "";
 	ni.pos_in_parent = invalid_index;
     } else {
-	ni.pos_in_parent = index_has_subtree();
+	ni.pos_in_parent = index_in_parent();
 	ni.key = mp_parent->m_vector[ni.pos_in_parent].m_key;
     }
 	
@@ -557,14 +557,14 @@ Node::extract_NodeInfo(int notextract = -1) {
 
 // returns the index of this node in its parent vector
 // or negative if this does not have a parent (is root)
-int
+/*int
 Node::index_in_parent() {
     if (this == get_root()) {
 	    return -1;
     } else {
 	return mp_parent->index_of_child(this);
     }
-}
+    }*/
 
 MerkleProof
 node_merkle_proof(Node * start_node) {
@@ -836,6 +836,15 @@ record_state(Node * node, State & state) {
   
 }
 
+void
+Node::print_counts() {
+    cerr << key_count();
+    for (uint i = 0; i < m_count; i++) {
+	if (m_vector[i].mp_subtree != NULL)
+	    m_vector[i].mp_subtree->print_counts();
+    }
+}
+
 bool
 Node::tree_delete(Elem & target, UpdateMerkleProof & proof) {
 
@@ -848,6 +857,7 @@ Node::tree_delete(Elem & target, UpdateMerkleProof & proof) {
     Elem& found = search(target, node);
 
     if (!found.valid()) {
+	cerr << "did not find\n";
         return false;
     }
 
@@ -921,7 +931,7 @@ Node::tree_delete_help (Elem& target, UpdateMerkleProof & proof, Node * & start_
 	
 	return r;
     } else {
-	
+	assert_s(node->is_root() || (node->key_count() == (int)b_min_keys), "node key count was lower than b_min_keys");
 	node->vector_delete(target);
 	
 	// loop invariant: if _node_ is not null_ptr, it points to a node
@@ -962,7 +972,7 @@ Node::tree_delete_help (Elem& target, UpdateMerkleProof & proof, Node * & start_
 		break;
 	    }
 	    
-		else if (left && left->key_count() > (int)b_min_keys) {
+	    else if (left && left->key_count() > (int)b_min_keys) {
 		// check if an extra element is available from the left sibling (if any)
 		// node will be null after this function, because delete
 		// terminates, so the function will finalize the proof
@@ -976,9 +986,11 @@ Node::tree_delete_help (Elem& target, UpdateMerkleProof & proof, Node * & start_
 	    }
 	    else if (left) {
 		// current node will be deleted
+		//------ MALICIOUS -----
 		if (at_leaf_level) {
 		    start_node = left;
 		}
+		// ---------------------
 		if (DEBUG_PROOF) { cerr << "merge left \n";}
 		node = node->merge_left(parent_index_this);
 	    }
@@ -1171,7 +1183,7 @@ Node* Node::merge_left (int parent_index_this) {
 // outputs sibling and parent_index_this
 Node* Node::right_sibling (int& parent_index_this) {
 
-    parent_index_this = index_has_subtree (); // for element with THIS as subtree
+    parent_index_this = index_in_parent (); // for element with THIS as subtree
 
     if (parent_index_this == invalid_index)
 
@@ -1191,7 +1203,7 @@ Node* Node::right_sibling (int& parent_index_this) {
 // outputs sibling and parent_index_this
 Node* Node::left_sibling (int& parent_index_this) {
 
-    parent_index_this = index_has_subtree (); // for element with THIS as subtree
+    parent_index_this = index_in_parent (); // for element with THIS as subtree
 
     if (parent_index_this == invalid_index)
 
@@ -1213,7 +1225,7 @@ Node::smallest_key() {
     return m_vector[1];
 }
 
-int Node::index_has_subtree() {
+int Node::index_in_parent() {
 
 // return the element in this node's parent that has the "this" pointer as its subtree
 
@@ -1251,7 +1263,7 @@ int Node::index_has_subtree() {
 		return last;
 	    }
 	    else {
-		throw "error in index_has_subtree";
+		throw "error in index_in_parent";
 	    }
 	} else {
 	assert_s(false, "there must be at least two keys");
@@ -1287,11 +1299,11 @@ Elem& Node::search (Elem& desired, Node*& last_visited_ptr) {
 
     Node* current = this;
 
-    if (!key_count())
-        current = 0;
+    if (!key_count()) {
+	current = 0;
+    }
 
     while (current) {
-
         last_visited_ptr = current;
 
         // if desired is less than all values in current node
@@ -1735,6 +1747,9 @@ BTree::remove(string ciph, TreeNode * tnode,
     }
 }
 
+bool Node::is_root() {
+    return (this == get_root());
+}
 
 Node* build_tree_wrapper(vector<string> & key_list, RootTracker * root_tracker, int start, int end){
 

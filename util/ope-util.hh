@@ -56,7 +56,19 @@ const uint b_key_size = 50; //bytes of max size of key_size
 
 const int invalid_index = -1;
 
-const unsigned int b_max_keys = 4;  // max elements in a node
+const unsigned int b_max_keys = 6;  // max elements in a node: 3 real keys, 1
+				    // empty key so four subtrees, one slot kept
+				    // for insert
+
+// Various counts:
+// b_max_key = 1 (for empty key) + actual keys + 1 (insertion empty slot)
+// key_count = actual keys 
+// m_count = actual keys + 1
+// b_min_keys = minimum key count allowed
+// Note, if we pick b_max_keys < 6, after split in insert, key_count can be 1
+// and b_min_keys = 2 so it does not satisfy it by default
+
+
 
 /****** common between the trees ***/
 #if STREE
@@ -68,6 +80,7 @@ const unsigned int num_bits = (int)ceil(log2(b_max_keys+1.0));
 #endif
 
 // min keys in a B tree
+// this also includes the empty key, ""
 uint minimum_keys(uint max_keys);
 
 // the number of keys at a node that does not include the ""key
