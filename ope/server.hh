@@ -77,7 +77,6 @@ public:
 			     Tree * ope_tree, OPETable<std::string> * ope_table);
     
 
-
     
     /*
      * Given ciph, interacts with client and returns

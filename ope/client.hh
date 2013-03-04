@@ -306,6 +306,50 @@ ope_client<V, BlockCipher>::encrypt(V pt, bool imode, string tname) {
 
 
 template<class V, class BlockCipher>
+OPEType
+ope_client<V, BlockCipher>::insert(V pt, string rowid, string tname) {
+
+    assert(STOPE, "must be in stOPE mode for insert");
+    
+    
+    MsgType optype = MsgType::INS;
+
+    V ct = bc->encrypt(pt);
+
+    ostringstream msg;
+    msg << optype <<  " ";
+    if (WITH_DB) {
+	assert_s(tname.size(), "empty table name");
+	msg << tname << " ";
+    }
+    marshall_binary(msg, Cnv<V>::StrFromType(ct));
+    msg << " ";
+    if (WITH_DB) {
+	msg << rowid << " ";
+    }
+    
+    if (DEBUG_COMM) cerr << "cl: sending message to server " << msg.str() <<"\n";
+    string res = send_receive(sock_query, msg.str());
+    if (DEBUG_COMM) cerr << "response size " << res.size() << "\n";
+    //cerr << "Result for " << pt << " is\n" << res << endl << endl;
+
+    stringstream ss(res);
+    OPEType ope;
+    ss >> ope;
+    
+    if (MALICIOUS) { // check Merkle proofs
+	string new_mroot;
+	check_proof<V, BlockCipher>(ss, optype, ct, merkle_root, new_mroot, bc);
+	merkle_root = new_mroot;
+    }
+
+    if (DEBUG_BARE) cerr << "ope val is " << ope <<"\n";
+    
+    return ope;
+}
+
+
+template<class V, class BlockCipher>
 V
 ope_client<V, BlockCipher>::remove(V pt, string rowid, string tname) {
 
@@ -325,8 +369,10 @@ ope_client<V, BlockCipher>::remove(V pt, string rowid, string tname) {
     }
     marshall_binary(msg, Cnv<V>::StrFromType(ct));
     msg << " ";
-    msg << rowid << " ";
-
+    if (WITH_DB) {
+	msg << rowid << " ";
+    }
+    
     if (DEBUG_COMM) cerr << "cl: sending message to server " << msg.str() <<"\n";
     string res = send_receive(sock_query, msg.str());
     if (DEBUG_COMM) cerr << "response size " << res.size() << "\n";
