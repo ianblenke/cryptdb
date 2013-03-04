@@ -309,12 +309,12 @@ template<class V, class BlockCipher>
 OPEType
 ope_client<V, BlockCipher>::remove(V pt, string tname) {
 
+    assert_s(!MALICIOUS, "malicious not impl with stOPE");
+    
     MsgType optype;
-    if (imode) {
-	optype = MsgType::ENC_INS;
-    } else {
-	optype = MsgType::QUERY;
-    }
+
+    optype = MsgType::REMOVE;
+
     V ct = bc->encrypt(pt);
 
     ostringstream msg;
@@ -335,13 +335,8 @@ ope_client<V, BlockCipher>::remove(V pt, string tname) {
     OPEType ope;
     ss >> ope;
     
-    if (MALICIOUS) { // check Merkle proofs
-	string new_mroot;
-	check_proof<V, BlockCipher>(ss, optype, ct, merkle_root, new_mroot, bc);
-	merkle_root = new_mroot;
-    }
 
-    if (DEBUG_BARE) cerr << "ope val is " << ope <<"\n";
+    if (DEBUG_BARE) cerr << "ope val before removal is " << ope <<"\n";
     
     return ope;
 }
