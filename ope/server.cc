@@ -79,7 +79,7 @@ Server::interaction(string ciph,
 
 
 void 
-Server::handle_enc(int csock, istringstream & iss, bool do_ins, string table_name) {
+Server::mope_handle_enc(int csock, istringstream & iss, string table_name) {
 
     assert_s(tables.find(table_name) != tables.end(), "invalid table name " + table_name);
     tablemeta * tm = tables[table_name];
@@ -101,17 +101,16 @@ Server::handle_enc(int csock, istringstream & iss, bool do_ins, string table_nam
     	if (DEBUG) {cerr << "found in ope table\n"; }
 
   	// if this is an insert, increase ref count
-    	if (do_ins) {
-    	    ts->refcount++;
+	if (WITH_DB) {
 	    stringstream ss;
 	    ss << "INSERT INTO " << table_name << " VALUES (0, " << ts->ope << ");";
-        if (WITH_DB)
-	       assert_s(db->execute(ss.str()), "could not insert into table value found in ope table");
+	    assert_s(db->execute(ss.str()), "could not insert into table value found in ope table");
     	}
+	
 	response << ts->ope;
 
 	if (MALICIOUS) {
-        if(DEBUG) cerr << " Adding malicious proof to ope_table response" << endl;
+            if(DEBUG) cerr << " Adding malicious proof to ope_table response" << endl;
 	    response <<" " << PF_QUERY << " ";
 	    ope_tree->merkle_proof(ts->n) >> response;
 	}
@@ -130,33 +129,23 @@ Server::handle_enc(int csock, istringstream & iss, bool do_ins, string table_nam
     	
     	if (DEBUG) {cerr << "new ope_enc has "<< " path " << ope_path
     			 << " index " << index << "\n";}
-    	if (do_ins) {
-
-	    UpdateMerkleProof proof;
-    	    // insert in OPE Tree
-            // ope_insert also updates ope_table
-    	    ope_tree->insert(ciph, tnode, ope_path, nbits, index, proof);
-
-            table_entry te = ope_table->get(ciph); // ciph must be in ope_table
-            response << opeToStr(te.ope);
-	    if (MALICIOUS) {
-		response <<  " " << PF_INS << " ";
-		proof >> response;
-		response << " ";
-	    }
-        } else {
-
-            uint64_t ope_enc = compute_ope(ope_path, nbits, index);
-
-            //Fr: Subtract 1 b/c if ope points to existing value in tree, want this ope value
-            //to be less than // Ra: ??
-            response << opeToStr(ope_enc-1);
-	    if (MALICIOUS) {
-		response << " " << PF_QUERY << " ";
-		ope_tree->merkle_proof(tnode) >> response;
-	    }
-        }
+    	
+	
+	UpdateMerkleProof proof;
+	// insert in OPE Tree
+	// ope_insert also updates ope_table
+	ope_tree->insert(ciph, tnode, ope_path, nbits, index, proof);
+	
+	table_entry te = ope_table->get(ciph); // ciph must be in ope_table
+	response << opeToStr(te.ope);
+	if (MALICIOUS) {
+	    response <<  " " << PF_INS << " ";
+	    proof >> response;
+	    response << " ";
+	}
+        
     }
+
     if (DEBUG_COMM) cerr << "replying to request \n";
     string res = response.str();
     uint reslen = res.size();
@@ -166,6 +155,87 @@ Server::handle_enc(int csock, istringstream & iss, bool do_ins, string table_nam
 	     "problem with send");
     
 }
+
+
+
+
+void 
+Server::stope_handle_query_ins(int csock, istringstream & iss, bool do_ins, string table_name) {
+
+    assert_s(tables.find(table_name) != tables.end(), "invalid table name " + table_name);
+    tablemeta * tm = tables[table_name];
+    Tree * ope_tree = tm->ope_tree;
+    OPETable<std::string> * ope_table = tm->ope_table;
+    
+    string ciph = unmarshall_binary(iss);
+    
+    if(DEBUG_COMM) cout<< "ciph: "<< ciph << endl;
+
+    string rowid;
+    if (WITH_DB && do_ins) {
+	iss >> rowid;
+    }
+
+    string tree_ciph;
+    
+    uint index = 0;
+    uint64_t ope_path = 0;
+    bool equals = false;
+    uint nbits = 0;
+    
+    TreeNode * tnode = interaction(ciph, index, nbits, ope_path, equals, ope_tree);
+
+    if (!do_ins) {
+	uint64_t ope_enc = compute_ope(ope_path, nbits, index);
+	response << opeToStr(ope_enc-1);
+	goto wrapup;
+    }
+
+    // Case: to insert
+    
+    if (equals) {
+	//increase refcount in OPE Table and insert in DB
+	treeciph = tnode->get_ciph(index);
+
+	auto te = ope_table->get(treeciph);
+
+	te.ref_count++;
+
+	if (WITH_DB) {
+	    stringstream ss;
+	    ss << "INSERT INTO " << table_name << " VALUES (0, " << ts->ope << ", " << rowid << ");";
+	    assert_s(db->execute(ss.str()), "could not insert into table value found in ope table");
+	}
+
+	uint64_t ope_enc = compute_ope(ope_path, nbits, index);
+	response << opeToStr(ope_enc-1);
+
+	goto wrapup;
+
+    }
+
+    // Case: insert for the first time 
+
+    treeciph = ciph;
+    ope_tree->insert(ciph, rowid, tnode, ope_path, nbits, index, proof);
+    
+    response << ope_table->get(treeciph).ope; // ciph must be in ope_table
+
+    
+wrapup:  		        
+    stringstream response;
+    response.clear();
+
+    if (DEBUG_COMM) cerr << "replying to request \n";
+    string res = response.str();
+    uint reslen = res.size();
+    // cerr << "sending\n" <<res << "\n";
+    if (DEBUG_COMM) cerr << "sent " << reslen << " bytes \n";
+    assert_s(xmsg_send(csock, res) == (int)reslen,
+	     "problem with send");
+    
+}
+
 
 void 
 Server::handle_remove(int csock, istringstream & iss, string table_name) {
@@ -204,9 +274,11 @@ Server::handle_remove(int csock, istringstream & iss, string table_name) {
     } else {
 
 	string treeciph = tnode->get_ciph(index);
-	response << treeciph;
+
 		
 	table_entry te = ope_table->get(treeciph); // ciph must be in ope_table
+	response <<  OPEToStr(te.ope);
+	
 	bool del_from_tree;
 
 	if (te.refcount == 1) {

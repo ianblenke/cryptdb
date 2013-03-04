@@ -89,3 +89,21 @@ operator>>(std::istream & o, MsgType & mt);
 
 // UDF
 // ope_enc(det_val, i) -- i indicates whether the value should be inserted
+
+// mOPE encrypt initial client message
+// MsgType::ENC_INS ciph
+// server response ope
+
+//stOPE insert initial client message
+// MsgType::ENC_INS ciph rowid
+// rowid is necessary only if WITH_DB
+// server response: ope
+
+//stOPE query initial client message
+// MsgType::QUERY ciph
+//Server response ope
+
+//stOPE remove initial client message
+// MsgType::REMOVE ciph rowid
+// rowid is necessary only if WITH_DB
+// Server response: oldope
