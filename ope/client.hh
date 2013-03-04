@@ -47,7 +47,7 @@ template<class V, class BlockCipher>
 class ope_client {
 public:
   	
-    ope_client(BlockCipher *bc, bool malicious, 
+    ope_client(BlockCipher *bc, bool malicious, bool stope,
         int c_port = OPE_CLIENT_PORT, int s_port = OPE_SERVER_PORT);
     ~ope_client();
  
@@ -57,12 +57,17 @@ public:
      * tname is for DB setting
      */
  
-    uint64_t encrypt(V det, bool do_insert, string tname = "");
-    uint64_t remove(V rnd, string tname = "");
+    uint64_t encrypt(V det, string tname = "");
+    uint64_t insert(V pt, string rowid, string tname = "");
+    uint64_t query(V pt, string tname="");
+    uint64_t remove(V rnd, string rowid, string tname = "");
 
 
     //cipher
     BlockCipher *bc;
+
+    // whether stOPE or mOPE
+    bool STOPE;
 
     // network
     pthread_t net_thread;
@@ -161,10 +166,11 @@ comm_thread(void * p) {
 // must define here these few functions if we want to call them from other files..
 
 template<class V, class BlockCipher>
-ope_client<V, BlockCipher>::ope_client(BlockCipher * bc, bool malicious, 
+ope_client<V, BlockCipher>::ope_client(BlockCipher * bc, bool malicious, bool stope, 
     int c_port, int s_port) {
 
     MALICIOUS = malicious;
+    STOPE = stope;
     
     //Socket connection
     sock = create_and_bind(c_port);
@@ -222,7 +228,7 @@ check_proof(stringstream & ss, MsgType optype, V ins,
 	    const string & old_mroot, string & new_mroot, BC * bc) {
 
     string inserted = Cnv<V>::StrFromType(ins);
-    if (optype == MsgType::ENC_INS) {
+    if (optype == MsgType::ENC) {
 	int pft;
 	ss >> pft;
 	if ((ProofType)pft == PF_INS) {
@@ -261,18 +267,10 @@ check_proof(stringstream & ss, MsgType optype, V ins,
 
 template<class V, class BlockCipher>
 OPEType
-ope_client<V, BlockCipher>::encrypt(V pt, bool imode, string tname) {
+ope_client<V, BlockCipher>::encrypt(V pt, string tname) {
 
-    if (imode==false) {
-	std::cerr << "IMODE FALSE!" << std::endl;
-    }
-    
-    MsgType optype;
-    if (imode) {
-	optype = MsgType::ENC_INS;
-    } else {
-	optype = MsgType::QUERY;
-    }
+    MsgType optype = MsgType::ENC;
+
     V ct = bc->encrypt(pt);
 
     ostringstream msg;
@@ -309,7 +307,7 @@ template<class V, class BlockCipher>
 OPEType
 ope_client<V, BlockCipher>::insert(V pt, string rowid, string tname) {
 
-    assert(STOPE, "must be in stOPE mode for insert");
+    assert_s(STOPE, "must be in stOPE mode for insert");
     
     
     MsgType optype = MsgType::INS;
@@ -350,7 +348,7 @@ ope_client<V, BlockCipher>::insert(V pt, string rowid, string tname) {
 
 
 template<class V, class BlockCipher>
-V
+uint64_t
 ope_client<V, BlockCipher>::remove(V pt, string rowid, string tname) {
 
     assert_s(!MALICIOUS, "malicious not impl with stOPE");

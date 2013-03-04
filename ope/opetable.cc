@@ -69,6 +69,12 @@ OPETable<EncT>::update(EncT encval, uint64_t newope, TreeNode * n) {
     }
 }
 
+template<class EncT>
+bool
+OPETable<EncT>::remove(EncT encval) {
+    return (table.erase(encval) > 0);
+}
+
 /*
  * Explicitly instantiate the tree template for various ciphertext types.
  */

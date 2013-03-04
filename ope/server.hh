@@ -44,14 +44,15 @@ class Server {
 public:
     int sock_cl; //socket to client; server sends request to clients thru it
     int sock_req; //socket on which server receives requests from udfs or clients
-    
+
+    bool STOPE;
     bool MALICIOUS;
-   
+       
     std::map<string, tablemeta *> tables;
       
     Connect * db; 
     
-    Server(bool malicious, int cport = OPE_CLIENT_PORT, int sport = OPE_SERVER_PORT,
+    Server(bool malicious, bool stope, int cport = OPE_CLIENT_PORT, int sport = OPE_SERVER_PORT,
 	   std::list<string> * tables = NULL,
 	   bool db_updates = true);
     ~Server();

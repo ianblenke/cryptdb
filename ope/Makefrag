@@ -16,11 +16,6 @@ $(OBJDIR)/ope/wbtree: $(OBJDIR)/ope/wbtree.o $(OBJDIR)/libcryptdb.so $(OBJDIR)/l
 	$(CXX) $< -o $@ $(LDFLAGS) -ledbutil -lope -lcryptdb
 
 	
-all:	$(OBJDIR)/ope/bench
-$(OBJDIR)/ope/bench: $(OBJDIR)/ope/bench.o $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbutil.so $(OBJDIR)/libope.so
-	$(CXX) $< -o $@ $(LDFLAGS) -ledbutil -lope -lcryptdb
-
-
 all:    $(OBJDIR)/ope/tpcc_server
 $(OBJDIR)/ope/tpcc_server: $(OBJDIR)/ope/tpcc_server.o $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbutil.so $(OBJDIR)/libope.so
 	$(CXX) $< -o $@ $(LDFLAGS) -ledbutil -lope -lcryptdb -lpthread -lboost_system

@@ -251,7 +251,7 @@ clientgeneric(BC * bc) {
 
     if (DEBUG_EXP) cerr << "rewrites is " << db_rewrites << "\n";
 
-    ope_client<A, BC> * ope_cl = new ope_client<A, BC>(bc, is_malicious);
+    ope_client<A, BC> * ope_cl = new ope_client<A, BC>(bc, is_malicious, false);
     if (DEBUG_EXP) cerr << "client created \n";
 
     vector<A> * vs = (vector<A> * )vals;
@@ -267,7 +267,7 @@ clientgeneric(BC * bc) {
     
     Timer t;
     for (uint i = 0; i < vs->size(); i++) {
-	ope_cl->encrypt(vs->at(i), true, "testope");
+	ope_cl->encrypt(vs->at(i), "testope");
 	// cerr << "ope is " << ope << " \n";
     }
     uint64_t time_interval = t.lap();
@@ -335,7 +335,7 @@ clientnetgeneric(BC * bc, int c_port, int s_port) {
 
     pause();
     for (uint i = 0; i < vs->size(); i++) {
-        ope_cl->encrypt(vs->at(i), true);
+        ope_cl->encrypt(vs->at(i));
     }
     delete ope_cl;
 }
@@ -490,7 +490,7 @@ runtest() {
     
     pthread_t server_thd;
     cerr << "creating server ... ";
-    Server * s = new Server(is_malicious);
+    Server * s = new Server(is_malicious, false);
     cerr << "server created \n";
     
     int r = pthread_create(&server_thd, NULL, server_thread, (void *)s);
@@ -536,7 +536,7 @@ run_server(bool is_tpcc, bool db_updates) {
 	if (DEBUG_EXP) cerr << "increasing\n";
 	tables->push_back("testope");
     }
-    Server * serv = new Server(is_malicious, OPE_CLIENT_PORT, OPE_SERVER_PORT, tables, db_updates);
+    Server * serv = new Server(is_malicious, false, OPE_CLIENT_PORT, OPE_SERVER_PORT, tables, db_updates);
     
     serv->work();
 
@@ -573,12 +573,12 @@ template<class A, class BC>
 static void
 client_work(uint n, our_conf c, BC * bc) {
     if (DEBUG_EXP) cerr << "creating client...";
-    ope_client<A, BC> * ope_cl = new ope_client<A, BC>(bc, c.is_malicious);
+    ope_client<A, BC> * ope_cl = new ope_client<A, BC>(bc, c.is_malicious, false);
     if (DEBUG_EXP) cerr << "client created \n";
 
     Timer t;
     for (uint i = 0; i < n; i++) {
-	ope_cl->encrypt(WorkloadGen<A>::get_query(i, c.plain_size, c.w), true);
+	ope_cl->encrypt(WorkloadGen<A>::get_query(i, c.plain_size, c.w));
     }
     uint64_t time_interval = t.lap();
     cout << "  \"dv:enctime_ms\": " << (time_interval*1.0/(n *1000.0)) << ",\n";
@@ -998,7 +998,7 @@ static void
 measure_ours_instance(uint n, our_conf c, BC * bc) {
 
     cout << datadelim
-         << "{ \"iv:scheme\": " << "\"stOPE\"" << ",\n"
+         << "{ \"iv:scheme\": " << "\"mOPE\"" << ",\n"
          << "  \"iv:nelem\": " << n << ",\n"
          << "  \"iv:ptsize\": " << c.plain_size << ",\n"
          << "  \"iv:malicious\": " << c.is_malicious << ",\n"
@@ -1020,7 +1020,7 @@ measure_ours_instance(uint n, our_conf c, BC * bc) {
 
     pthread_t server_thd;
     if (DEBUG_EXP) cerr << "creating server ... ";
-    Server * s = new Server(c.is_malicious);
+    Server * s = new Server(c.is_malicious, false);
      if (DEBUG_EXP) cerr << "server created \n";
     
     int r = pthread_create(&server_thd, NULL, server_thread, (void *)s);
@@ -1344,7 +1344,7 @@ client_file(ope_client<uint64_t, blowfish> * ope_cl, string table,
 	f >> s2 >> v;
 	assert_s(s1 == "enc", "not parsed as expected");
 	if (s2 == "i") {
-	    OPEType ope = ope_cl->encrypt(v, true, table);
+	    OPEType ope = ope_cl->encrypt(v, table);
 	    if (DEBUG_EXP) cerr << "ope for " << v << "is " << ope << "\n";
 	    tests_so_far++;  
 	}
@@ -1376,7 +1376,7 @@ tpcc_client(uint numtests, bool rewrites) {
          << "  \"data\": [";
     
 
-    ope_client<uint64_t, blowfish> * ope_cl = new ope_client<uint64_t, blowfish>(bc, is_malicious);
+      ope_client<uint64_t, blowfish> * ope_cl = new ope_client<uint64_t, blowfish>(bc, is_malicious, false);
     //cerr << "tpcc client created \n";
 
     cout << datadelim

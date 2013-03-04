@@ -41,4 +41,7 @@ public:
 
     // returns true if encval was in the table and was thus updated
     bool update(EncT encval, uint64_t newope, TreeNode * n);
+
+    // removes entry and returns true if successfully removed
+    bool remove(EncT encval);
 };

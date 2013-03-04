@@ -1368,6 +1368,13 @@ Node::get_subtree(uint index) {
     return e.mp_subtree;
 }
 
+string
+Node::get_ciph(uint index) {
+    assert_s(index <= m_count, "invalid index");
+    Elem & e = m_vector[index];
+    return e.m_key;
+}
+
 
 // initialize static data at file scope
 Elem Node::m_failure = Elem();
@@ -1694,7 +1701,7 @@ BTree::size(Node * n) {
 void
 BTree::insert(string ciph, TreeNode * tnode,
 	      OPEType ope_path, uint64_t nbits, uint64_t index,
-	      UpdateMerkleProof & p) {
+	      UpdateMerkleProof & p, string rowid) {
     Node * node = (Node *) tnode;
 
     ChangeInfo ci; ci.clear();
@@ -1727,7 +1734,9 @@ BTree::insert(string ciph, TreeNode * tnode,
 void
 BTree::remove(string ciph, TreeNode * tnode,
 	      OPEType ope_path, uint64_t nbits, uint64_t index,
-	      UpdateMerkleProof & p) {
+	      UpdateMerkleProof & p, string rowid) {
+
+    assert_s(false, "code needs revision");
     Node * node = (Node *) tnode;
 
     ChangeInfo ci;

@@ -664,7 +664,7 @@ template<class EncT>
 void
 Stree<EncT>::insert(string encval, TreeNode * tnode,
 		    uint64_t v, uint64_t nbits, uint64_t index,
-		    UpdateMerkleProof & p){
+		    UpdateMerkleProof & p, string rowid){
     bool node_inserted;
 
     EncT eval = TFromString<EncT>(encval);
@@ -735,6 +735,16 @@ Stree<EncT>::insert(string encval, TreeNode * tnode,
     }
     
 }
+
+template<class EncT>
+void
+Stree<EncT>::remove(string encval, TreeNode * tnode,
+		    uint64_t v, uint64_t nbits, uint64_t index,
+		    UpdateMerkleProof & p, string rowid){
+
+    assert_s(false, "remove scapegoat unimplemented");
+}
+
 
 // updates ope encodings for the keys at node starting from index+1
 // in the ope table and the DB
@@ -1007,6 +1017,17 @@ Stree_node<EncT>::get_subtree(uint index) {
 
     return has_subtree(key);
 }
+
+
+template<class EncT>
+string
+Stree_node<EncT>::get_ciph(uint index) {
+
+    assert_s(false, "unimplemented");
+
+    return "";
+}
+
 
 template<class EncT>
 Stree_node<EncT> *

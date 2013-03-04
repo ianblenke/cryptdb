@@ -24,3 +24,6 @@ Server handle_remove:
  -- remove from DB by rowid
  -- if must delete (refcount was 1) call Tree::remove
      -- removes from tree and if there are rebalancings updates DB and OPEtable
+
+
+     

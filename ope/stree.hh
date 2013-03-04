@@ -59,7 +59,12 @@ public:
      */
     void insert(std::string encval, TreeNode * tnode,
 		OPEType v, uint64_t nbits, uint64_t index,
-		UpdateMerkleProof & p);
+		UpdateMerkleProof & p, string rowid = "");
+    
+    void remove(std::string ciph, TreeNode * tnode,
+		OPEType ope_path, uint64_t nbits, uint64_t index,
+		UpdateMerkleProof & p, string rowid = "");
+
 
     MerkleProof merkle_proof(TreeNode * n);
 
@@ -138,7 +143,8 @@ struct Stree_node : public TreeNode
 
     // implements the TreeNode interface
     Stree_node<EncT> * get_subtree(uint index);
-
+    string  get_ciph(uint index);
+    
     //creates a new subtree at index
     // asserts the subtree does not exist
     Stree_node<EncT> * new_subtree(uint index);

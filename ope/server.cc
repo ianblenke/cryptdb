@@ -154,29 +154,26 @@ Server::mope_handle_enc(int csock, istringstream & iss, string table_name,
 
 
 void 
-Server::stope_handle_query(int csock, istringstream & iss, bool do_ins, string table_name,
+Server::stope_handle_query(int csock, istringstream & iss, string table_name,
 			   Tree * ope_tree, OPETable<std::string> * ope_table) {
     
     string ciph = unmarshall_binary(iss);
     
     if(DEBUG_COMM) cout<< "ciph: "<< ciph << endl;
-
-    string tree_ciph;
     
     uint index = 0;
     uint64_t ope_path = 0;
     bool equals = false;
     uint nbits = 0;
     
-    TreeNode * tnode = interaction(ciph, index, nbits, ope_path, equals, ope_tree);
+    interaction(ciph, index, nbits, ope_path, equals, ope_tree);
 
+    stringstream response;
+    response.clear();
     
     uint64_t ope_enc = compute_ope(ope_path, nbits, index);
     response << opeToStr(ope_enc-1);
     
-    stringstream response;
-    response.clear();
-
     if (DEBUG_COMM) cerr << "replying to request \n";
     string res = response.str();
     uint reslen = res.size();
@@ -201,8 +198,9 @@ Server::stope_handle_ins(int csock, istringstream & iss, string table_name,
 	iss >> rowid;
     }
 
-    string tree_ciph;
-    
+    stringstream response;
+    response.clear();
+
     uint index = 0;
     uint64_t ope_path = 0;
     bool equals = false;
@@ -212,15 +210,15 @@ Server::stope_handle_ins(int csock, istringstream & iss, string table_name,
 
     if (equals) {
 	//increase refcount in OPE Table and insert in DB
-	treeciph = tnode->get_ciph(index);
-
+	string treeciph = tnode->get_ciph(index);
+	
 	auto te = ope_table->get(treeciph);
 
-	te.ref_count++;
+	te.refcount++;
 
 	if (WITH_DB) {
 	    stringstream ss;
-	    ss << "INSERT INTO " << table_name << " VALUES (0, " << ts->ope << ", " << rowid << ");";
+	    ss << "INSERT INTO " << table_name << " VALUES (0, " << te.ope << ", " << rowid << ");";
 	    assert_s(db->execute(ss.str()), "could not insert into table value found in ope table");
 	}
 
@@ -228,15 +226,14 @@ Server::stope_handle_ins(int csock, istringstream & iss, string table_name,
 	response << opeToStr(ope_enc-1);
 
     } else {
-	treeciph = ciph;
-	ope_tree->insert(ciph, rowid, tnode, ope_path, nbits, index, proof);
+	string treeciph = ciph;
+	UpdateMerkleProof p;
+	ope_tree->insert(ciph, tnode, ope_path, nbits, index, p, rowid);
 	
 	response << ope_table->get(treeciph).ope; // ciph must be in ope_table
     }
 
-    stringstream response;
-    response.clear();
-
+   
     if (DEBUG_COMM) cerr << "replying to request \n";
     string res = response.str();
     uint reslen = res.size();
@@ -251,15 +248,13 @@ void
 Server::stope_handle_remove(int csock, istringstream & iss, string table_name,
 			    Tree * ope_tree, OPETable<std::string> * ope_table) {
 
-    assert_s(STOPE && !MALICIOUS, "remove works in stOPE mode and not malicious");
-    
     string ciph = unmarshall_binary(iss);
     
     if(DEBUG_COMM) cout<< "ciph: "<< ciph << endl;
 
-    string row_id;
+    string rowid;
     if (WITH_DB) {
-	row_id << iss; 
+	iss >> rowid;
     }
 
     stringstream response;
@@ -283,12 +278,12 @@ Server::stope_handle_remove(int csock, istringstream & iss, string table_name,
 
 		
 	table_entry te = ope_table->get(treeciph); // ciph must be in ope_table
-	response <<  OPEToStr(te.ope);
+	response <<  opeToStr(te.ope);
 	
 	bool del_from_tree;
 
 	if (te.refcount == 1) {
-	    ope_table->remove(treeciph);
+	    assert_s(ope_table->remove(treeciph), "could not remove from OPE Table");
 	    del_from_tree = true;
 	} else {
 	    te.refcount--;
@@ -306,7 +301,7 @@ Server::stope_handle_remove(int csock, istringstream & iss, string table_name,
 	    UpdateMerkleProof proof;
 	    // insert in OPE Tree
 	    // ope_insert also updates ope_table
-	    ope_tree->remove(newciph, rowid, tnode, ope_path, nbits, index, proof);
+	    ope_tree->remove(treeciph, tnode, ope_path, nbits, index, proof, rowid);
 	}
 
     }
@@ -346,15 +341,19 @@ Server::dispatch(int csock, istringstream & iss) {
 
     switch (msgtype) {
     case MsgType::ENC: {
+	assert_s(!STOPE, "must be in mOPE mode");
 	return mope_handle_enc(csock, iss, table_name, ope_tree, ope_table);
     }
     case MsgType::INS: {
+	assert_s(STOPE && !MALICIOUS, "must be in stOPE mode");
 	return stope_handle_ins(csock, iss, table_name, ope_tree, ope_table);
     }
     case MsgType::QUERY: {
+	assert_s(STOPE && !MALICIOUS, "must be in stOPE mode");
 	return stope_handle_query(csock, iss, table_name, ope_tree, ope_table);
     }
     case MsgType::REMOVE: {
+	assert_s(STOPE && !MALICIOUS, "must be in stOPE mode");
 	return stope_handle_remove(csock, iss, table_name, ope_tree, ope_table);
     }
     default: {}
@@ -368,8 +367,9 @@ Server::ope_tree() {
     assert_s(tables.size() == 1, "invalid no, of tables for get_ope_Tree");
     return tables.begin()->second->ope_tree;
 }
-Server::Server(bool malicious, int cport, int sport, list<string> * itables, bool db_updates) {
+Server::Server(bool malicious, bool stope, int cport, int sport, list<string> * itables, bool db_updates) {
     MALICIOUS = malicious;
+    STOPE = stope;
 
     if (WITH_DB) {  
 	db = new Connect( "localhost", "root", "letmein","cryptdb", 3306);

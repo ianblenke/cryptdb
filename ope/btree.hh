@@ -120,11 +120,11 @@ public:
 
     void insert(std::string ciph, TreeNode * tnode,
 		OPEType ope_path, uint64_t nbits, uint64_t index,
-		UpdateMerkleProof & p);
+		UpdateMerkleProof & p, string rowid = "");
 
     void remove(std::string ciph, TreeNode * tnode,
 		OPEType ope_path, uint64_t nbits, uint64_t index,
-		UpdateMerkleProof & p);
+		UpdateMerkleProof & p, string rowid = "");
 
      MerkleProof merkle_proof(TreeNode * n);
     
@@ -174,6 +174,7 @@ public:
     // return all keys at the node -- do not return the "" key
     std::vector<std::string> get_keys();
     TreeNode * get_subtree(uint index);
+    string get_ciph(uint index);
 
     // TO REMOVE
     void print_counts();

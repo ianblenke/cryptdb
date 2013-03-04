@@ -18,6 +18,8 @@ public:
     /* Returns the subtree at index,
      * or NULL if there is no such subtree */
     virtual TreeNode * get_subtree(uint index) = 0;
+
+    virtual string get_ciph(uint index) = 0;
     
     virtual ~TreeNode() {}
 };    
@@ -36,11 +38,17 @@ public:
      * Requires that node has no subtree at index.
      * Updates ope_table and DB. 
      */ 
-    virtual void insert(std::string ciph,
+    virtual void insert(std::string ciph, 
 			TreeNode * node,
 			OPEType ope_path, uint64_t nbits, uint64_t index,
-	                UpdateMerkleProof & p) = 0;
- 
+	                UpdateMerkleProof & p, string rowid = "") = 0;
+
+    /* Removes item from OPE tree. Removes from DB as well */
+    virtual void remove(std::string ciph,
+			TreeNode * node,
+			OPEType ope_path, uint64_t nbits, uint64_t index,
+			UpdateMerkleProof & p, string rowid = "") = 0;
+    
     /* Computes Merkle proof of node n */
     virtual MerkleProof merkle_proof(TreeNode * n) = 0;
 
