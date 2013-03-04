@@ -314,37 +314,42 @@ bool Node::vector_insert (Elem & element, int index) {
 } 
 
  
-bool Node::vector_delete (Elem& target) {
+bool Node::vector_delete (Elem& target, int index) {
 
 // delete a single element in the vector belonging to *this node.
 // if the target is not found, do not look in subtrees, just return false.
 
     int target_pos = -1;
-    int first = 1;
-    int last = m_count-1;
-
-    // perform binary search
-    while (last-first > 1) {
-        int mid = first+(last-first)/2;
-
-        if (target>=m_vector[mid])
-            first = mid;
-        else
-            last = mid;
-    }
-
-    if (m_vector[first]==target) {
-        target_pos = first;
-    }
-
-    else if (m_vector[last]==target) {
-        target_pos = last;
-    }
-
-    else {
-        return false;
-    }
     
+    if (OPE_MODE) {
+	assert_s(index >= 0, "index must be >= 0 in OPE_MODE");
+	target_pos = index;
+    }
+    else {
+ 
+	int first = 1;
+	int last = m_count-1;
+	
+	// perform binary search
+	while (last-first > 1) {
+	    int mid = first+(last-first)/2;
+	    
+	    if (target>=m_vector[mid])
+		first = mid;
+	    else
+		last = mid;
+	}
+	
+	if (m_vector[first]==target) {
+	    target_pos = first;
+	}
+	else if (m_vector[last]==target) {
+	    target_pos = last;
+	}
+	else {
+	    return false;
+	}
+    }
     // the element's subtree, if it exists, is to be deleted or re-attached
     // in a different function.  not a concern here.  just shift all the
     // elements in positions greater than target_pos.
@@ -776,12 +781,38 @@ bool Node::do_insert(Elem element, UpdateMerkleProof & p, ChangeInfo & c, int in
     return r;  
 }
 
+//smallest key from all subtrees given by this node
+Elem &
+Node::ope_smallest_key_in_subtree(Node * &  node) {
+    if (is_leaf()) {
+	node = this;
+	return m_vector[1];
+    } else {
+	return m_vector[0].mp_subtree->ope_smallest_key_in_subtree(node);
+    }
+}
+
 bool
 Node::do_delete(Elem element, UpdateMerkleProof & p, ChangeInfo & c, int index) {
     assert_s(m_root->MALICIOUS == false, "stOPE only implemented in honest but curious mode");
 
-    //if (vector_delete)
-    return true;
+    bool r;
+    Node * start_node;
+
+    if (!is_leaf()) {
+	Elem & found = m_vector[index];
+	
+	Node * node2 = 0;
+	Elem & smallest_in_subtree = found.mp_subtree->ope_smallest_key_in_subtree(node2);
+
+	found.m_key = smallest_in_subtree.m_key;
+
+	r = found.mp_subtree->tree_delete_help(smallest_in_subtree, p, start_node, node2);
+    }
+    else {
+	r = tree_delete_help(element, p, start_node, this);
+    }
+    return r;
 }
 
 bool Node::tree_insert(Elem element, UpdateMerkleProof & p) {
@@ -1028,7 +1059,7 @@ Node::rotate_from_right(int parent_index_this){
 
     (*mp_parent)[parent_index_this+1].mp_subtree = right_sib;
 
-    vector_insert(underflow_filler);
+    vector_insert(underflow_filler, m_count);
 
     right_sib->vector_delete(0);
 
@@ -1068,7 +1099,7 @@ Node::rotate_from_left(int parent_index_this){
 
     (*mp_parent)[parent_index_this].mp_subtree = this;
 
-    vector_insert (underflow_filler);
+    vector_insert (underflow_filler, 1);
 
     left_sib->vector_delete(left_sib->m_count-1);
 
@@ -1091,10 +1122,10 @@ Node::merge_right (int parent_index_this) {
 
     parent_elem.mp_subtree = (*right_sib)[0].mp_subtree;
 
-    vector_insert (parent_elem);
+    vector_insert (parent_elem, m_count);
 
     for (unsigned int i=1; i<right_sib->m_count; i++) {
-        vector_insert ((*right_sib)[i]);
+        vector_insert ((*right_sib)[i], m_count);
     }
 
     mp_parent->vector_delete(parent_index_this+1);
@@ -1134,10 +1165,10 @@ Node* Node::merge_left (int parent_index_this) {
 
     Node* left_sib = (*mp_parent)[parent_index_this-1].mp_subtree;
 
-    left_sib->vector_insert(parent_elem);
+    left_sib->vector_insert(parent_elem, left_sib->m_count);
 
     for (unsigned int i=1; i<m_count; i++) {
-        left_sib->vector_insert(m_vector[i]);
+        left_sib->vector_insert(m_vector[i], left_sib->m_count);
     }
     
     mp_parent->vector_delete(parent_index_this);
@@ -1535,7 +1566,7 @@ BTree::BTree(OPETable<string> * ot, Connect * _db, bool malicious,
 		     "failed to create udf set_transform");
 	assert_s(db->execute("DROP TABLE IF EXISTS " + table_name + ";"),
 		 "cannot drop if exists table");	
-	assert_s(db->execute("CREATE TABLE " + table_name + " ( "+ "counter bigint, " + field_name+ " bigint unsigned );"),
+	assert_s(db->execute("CREATE TABLE " + table_name + " ( "+ "counter bigint, " + field_name+ " bigint unsigned, rowid bigint unsigned );"),
 		 "could not create bench table");
 	assert_s(db->execute("CREATE INDEX ind ON  " + table_name + " (" + field_name + ");"),
 		 "could not create index");
@@ -1736,7 +1767,6 @@ BTree::remove(string ciph, TreeNode * tnode,
 	      OPEType ope_path, uint64_t nbits, uint64_t index,
 	      UpdateMerkleProof & p, string rowid) {
 
-    assert_s(false, "code needs revision");
     Node * node = (Node *) tnode;
 
     ChangeInfo ci;

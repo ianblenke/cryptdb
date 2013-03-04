@@ -122,6 +122,7 @@ public:
 		OPEType ope_path, uint64_t nbits, uint64_t index,
 		UpdateMerkleProof & p, string rowid = "");
 
+    // removes item from three and updates DB and OPE table for any balancings
     void remove(std::string ciph, TreeNode * tnode,
 		OPEType ope_path, uint64_t nbits, uint64_t index,
 		UpdateMerkleProof & p, string rowid = "");
@@ -224,7 +225,7 @@ public:
     bool vector_insert_for_split (Elem& element, int index = -1);
     bool split_insert (Elem& element, ChangeInfo & ci, int index = -1);
 
-    bool vector_delete (Elem& target);
+    bool vector_delete (Elem& target, int index = -1);
     bool vector_delete (int target_pos);
 
     void insert_zeroth_subtree (Node* subtree);
@@ -236,6 +237,7 @@ public:
     Elem& largest_key () { return m_vector[m_count-1]; }
     Elem& smallest_key ();
     Elem& smallest_key_in_subtree();
+    Elem& ope_smallest_key_in_subtree(Node * & node);
     int index_in_parent();
 
     Node* right_sibling (int& parent_index_this);

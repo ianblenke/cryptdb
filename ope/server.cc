@@ -368,6 +368,9 @@ Server::ope_tree() {
     return tables.begin()->second->ope_tree;
 }
 Server::Server(bool malicious, bool stope, int cport, int sport, list<string> * itables, bool db_updates) {
+
+    assert_s(OPE_MODE, "must be in OPE mode");
+    
     MALICIOUS = malicious;
     STOPE = stope;
 
