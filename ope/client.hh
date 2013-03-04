@@ -306,8 +306,8 @@ ope_client<V, BlockCipher>::encrypt(V pt, bool imode, string tname) {
 
 
 template<class V, class BlockCipher>
-OPEType
-ope_client<V, BlockCipher>::remove(V pt, string tname) {
+V
+ope_client<V, BlockCipher>::remove(V pt, string rowid, string tname) {
 
     assert_s(!MALICIOUS, "malicious not impl with stOPE");
     
@@ -325,6 +325,7 @@ ope_client<V, BlockCipher>::remove(V pt, string tname) {
     }
     marshall_binary(msg, Cnv<V>::StrFromType(ct));
     msg << " ";
+    msg << rowid << " ";
 
     if (DEBUG_COMM) cerr << "cl: sending message to server " << msg.str() <<"\n";
     string res = send_receive(sock_query, msg.str());
@@ -332,13 +333,13 @@ ope_client<V, BlockCipher>::remove(V pt, string tname) {
     //cerr << "Result for " << pt << " is\n" << res << endl << endl;
 
     stringstream ss(res);
-    OPEType ope;
-    ss >> ope;
+    V treeciph;
+    ss >> treeciph;
     
 
-    if (DEBUG_BARE) cerr << "ope val before removal is " << ope <<"\n";
+    if (DEBUG_BARE) cerr << "treeciph was " << treeciph <<"\n";
     
-    return ope;
+    return treeciph;
 }
 
 /*

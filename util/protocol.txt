@@ -1,0 +1,26 @@
+
+mOPE Enc_ins at server: 
+
+-- see if entry found in OPE table
+-- if so: update DB, exit
+-- else:
+    -- interact
+    -- Tree:insert: inserts in OPE table, DB, and tree and takes
+    care of any rebalancings
+
+stOPE Enc_ins at server:
+
+-- interact
+-- if not insert exit
+-- if already exists: increase ref count, insert in DB, exit
+-- if insert and does not exist: Tree::insert: inserts in OPE table, DB, tree
+      and takes care of any balancings
+
+stOPE Removal
+
+Server handle_remove:
+ -- interact to find newciph (ciph from OPE Tree for same plaintext value)
+ -- decrease refcount or remove from OPEtable
+ -- remove from DB by rowid
+ -- if must delete (refcount was 1) call Tree::remove
+     -- removes from tree and if there are rebalancings updates DB and OPEtable

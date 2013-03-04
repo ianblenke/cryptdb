@@ -167,6 +167,84 @@ Server::handle_enc(int csock, istringstream & iss, bool do_ins, string table_nam
     
 }
 
+void 
+Server::handle_remove(int csock, istringstream & iss, string table_name) {
+
+    assert_s(STOPE && !MALICIOUS, "remove works in stOPE mode and not malicious");
+
+    assert_s(tables.find(table_name) != tables.end(), "invalid table name " + table_name);
+    tablemeta * tm = tables[table_name];
+    Tree * ope_tree = tm->ope_tree;
+    OPETable<std::string> * ope_table = tm->ope_table;
+    
+    string ciph = unmarshall_binary(iss);
+    
+    if(DEBUG_COMM) cout<< "ciph: "<< ciph << endl;
+
+    string row_id;
+    if (WITH_DB) {
+	row_id << iss; 
+    }
+
+    stringstream response;
+    response.clear();
+
+    uint index = 0;
+    uint64_t ope_path = 0;
+    bool equals = false;
+    uint nbits = 0;
+    
+    TreeNode * tnode = interaction(ciph, index, nbits, ope_path, equals, ope_tree);
+
+    if (DEBUG) {cerr << "new ope_enc has "<< " path " << ope_path
+			 << " index " << index << "\n";}
+	
+    if (!equals) {
+	response << "0"; //elm is not int tree so not deleted
+    } else {
+
+	string treeciph = tnode->get_ciph(index);
+	response << treeciph;
+		
+	table_entry te = ope_table->get(treeciph); // ciph must be in ope_table
+	bool del_from_tree;
+
+	if (te.refcount == 1) {
+	    ope_table->remove(treeciph);
+	    del_from_tree = true;
+	} else {
+	    te.refcount--;
+	    del_from_tree = false;
+	}
+
+	if (WITH_DB) {
+	    stringstream query;
+	    query << "DELETE FROM " << table_name <<
+		" WHERE rowid " << rowid << " AND " << " ope = " << te.ope << ";";
+	    assert_s(db->execute(query.str()), "cannot execute query");
+	}
+	
+	if (del_from_tree) {
+	    UpdateMerkleProof proof;
+	    // insert in OPE Tree
+	    // ope_insert also updates ope_table
+	    ope_tree->remove(newciph, rowid, tnode, ope_path, nbits, index, proof);
+	}
+
+    }
+
+
+    if (DEBUG_COMM) cerr << "replying to request \n";
+    string res = response.str();
+    uint reslen = res.size();
+    // cerr << "sending\n" <<res << "\n";
+    if (DEBUG_COMM) cerr << "sent " << reslen << " bytes \n";
+    assert_s(xmsg_send(csock, res) == (int)reslen,
+	     "problem with send");
+
+}
+
+
 void
 Server::dispatch(int csock, istringstream & iss) {
    
@@ -188,6 +266,9 @@ Server::dispatch(int csock, istringstream & iss) {
     }
     case MsgType::QUERY: {
 	return handle_enc(csock, iss, false, table_name);
+    }
+    case MsgType::REMOVE: {
+	return handle_
     }
     default: {}
     }

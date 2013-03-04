@@ -1,6 +1,5 @@
 #include "client.hh"
 
-#include <signal.h>
 
 static inline int
 ffsl(uint64_t ct)
