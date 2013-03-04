@@ -524,7 +524,7 @@ static
 void test_RND() {
     urandom u;
 
-    RND rnd("blahblah");
+    RND rnd("1234567890123456");
     
     for (uint i = 0; i < 1000; i++) {
 	string pt = u.rand_string(8);

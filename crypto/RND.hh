@@ -23,7 +23,7 @@ class RND {
     std::string decrypt(std::string ct) const {
 	std::string salt = ct.substr(0, saltlen);
 	std::string barect = ct.substr(saltlen, ct.length()-saltlen);
-        return decrypt_AES_CBC(ct, deckey, salt, true);
+        return decrypt_AES_CBC(barect, deckey, salt, true);
     }
 
 
