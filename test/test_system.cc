@@ -38,7 +38,7 @@ using namespace std;
 using boost::asio::ip::tcp;
 
 static blowfish * bc = new blowfish(passwd);
-static RND * rndbc = new RND(passwd);
+static RND * rnd = new RND(passwd);
 static aes_cbc * bc_aes = new aes_cbc(passwd, true);
 
 static uint net_workload = 1000;
@@ -329,40 +329,40 @@ client_thread() {
 static void
 stope_client(uint numtests) {
 
-    /*   ope_client<A, BC> * ope_cl = new ope_client<A, RND>(bc, false, true);
+    ope_client<string, RND> * ope_cl = new ope_client<string, RND>(rnd, false, true);
     if (DEBUG_EXP) cerr << "client created \n";
 
     if (DEBUG_EXP) cerr << "numtests " << numtests << "\n";
 
     
-    for (uint i = 0; i < vs->size(); i++) {
-	uint64_t ope = ope_cl->insert(vs->at(i));
+    for (uint i = 0; i < numtests; i++) {
+	uint64_t ope = ope_cl->insert(strFromVal(i));
 	cerr << "ope is " << ope << " \n";
     }
     cerr << "remove half of them \n";
 
     for (uint i = 0; i < numtests; i = i+2) {
-	assert_s(ope_cl->remove(i), "could not remove");
+	assert_s(ope_cl->remove(strFromVal(i)), "could not remove");
     }
 
     delete ope_cl;
     if (DEBUG_EXP) cerr << "DONE!\n";	
-    */
+  
 }
 
 
 static void
 stope_server() {
-/*
+
     list<string> * tables = new list<string>();
     tables->push_back("testope");
 
-    Server * serv = new Server(false, false, OPE_CLIENT_PORT, OPE_SERVER_PORT, tables, db_updates);
+    Server * serv = new Server(false, true, OPE_CLIENT_PORT, OPE_SERVER_PORT, tables, false);
     
     serv->work();
 
     delete serv;
-    delete tables;*/
+    delete tables;
 }
 
 

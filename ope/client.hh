@@ -58,9 +58,9 @@ public:
      */
  
     uint64_t encrypt(V det, string tname = "");
-    uint64_t insert(V pt, string rowid, string tname = "");
+    uint64_t insert(V pt, string rowid = "", string tname = "");
     uint64_t query(V pt, string tname="");
-    uint64_t remove(V rnd, string rowid, string tname = "");
+    uint64_t remove(V rnd, string rowid= "", string tname = "");
 
 
     //cipher
@@ -323,6 +323,7 @@ ope_client<V, BlockCipher>::insert(V pt, string rowid, string tname) {
     marshall_binary(msg, Cnv<V>::StrFromType(ct));
     msg << " ";
     if (WITH_DB) {
+	assert_s(rowid.size(), "empty rowid");
 	msg << rowid << " ";
     }
     
@@ -368,6 +369,7 @@ ope_client<V, BlockCipher>::remove(V pt, string rowid, string tname) {
     marshall_binary(msg, Cnv<V>::StrFromType(ct));
     msg << " ";
     if (WITH_DB) {
+	assert_s(rowid.size(), "empty rowid");
 	msg << rowid << " ";
     }
     
@@ -377,13 +379,13 @@ ope_client<V, BlockCipher>::remove(V pt, string rowid, string tname) {
     //cerr << "Result for " << pt << " is\n" << res << endl << endl;
 
     stringstream ss(res);
-    V treeciph;
-    ss >> treeciph;
+    OPEType ope;
+    ss >> ope;
     
 
-    if (DEBUG_BARE) cerr << "treeciph was " << treeciph <<"\n";
+    if (DEBUG_BARE) cerr << "ope was " << ope <<"\n";
     
-    return treeciph;
+    return ope;
 }
 
 /*
