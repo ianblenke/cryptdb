@@ -44,6 +44,7 @@ send_receive(int sock, const std::string & msg);
     m(ENC_INS)		   \
     m(QUERY)   \
     m(INTERACT_FOR_LOOKUP) \
+    m(REMOVE) \
     m(INVALID)
 
 typedef enum class MsgType {

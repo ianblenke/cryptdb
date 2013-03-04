@@ -58,6 +58,7 @@ public:
      */
  
     uint64_t encrypt(V det, bool do_insert, string tname = "");
+    uint64_t remove(V rnd, string tname = "");
 
 
     //cipher
@@ -303,6 +304,47 @@ ope_client<V, BlockCipher>::encrypt(V pt, bool imode, string tname) {
     return ope;
 }
 
+
+template<class V, class BlockCipher>
+OPEType
+ope_client<V, BlockCipher>::remove(V pt, string tname) {
+
+    MsgType optype;
+    if (imode) {
+	optype = MsgType::ENC_INS;
+    } else {
+	optype = MsgType::QUERY;
+    }
+    V ct = bc->encrypt(pt);
+
+    ostringstream msg;
+    msg << optype <<  " ";
+    if (WITH_DB) {
+	assert_s(tname.size(), "empty table name");
+	msg << tname << " ";
+    }
+    marshall_binary(msg, Cnv<V>::StrFromType(ct));
+    msg << " ";
+
+    if (DEBUG_COMM) cerr << "cl: sending message to server " << msg.str() <<"\n";
+    string res = send_receive(sock_query, msg.str());
+    if (DEBUG_COMM) cerr << "response size " << res.size() << "\n";
+    //cerr << "Result for " << pt << " is\n" << res << endl << endl;
+
+    stringstream ss(res);
+    OPEType ope;
+    ss >> ope;
+    
+    if (MALICIOUS) { // check Merkle proofs
+	string new_mroot;
+	check_proof<V, BlockCipher>(ss, optype, ct, merkle_root, new_mroot, bc);
+	merkle_root = new_mroot;
+    }
+
+    if (DEBUG_BARE) cerr << "ope val is " << ope <<"\n";
+    
+    return ope;
+}
 
 /*
 template<class V, class BlockCipher>
