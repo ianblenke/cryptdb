@@ -30,6 +30,7 @@
 #include <utility>
 #include <time.h>
 #include <unistd.h>
+#include <crypto/RND.hh>
 
 #define port_start 25566
 
@@ -37,6 +38,7 @@ using namespace std;
 using boost::asio::ip::tcp;
 
 static blowfish * bc = new blowfish(passwd);
+static RND * rndbc = new RND(passwd);
 static aes_cbc * bc_aes = new aes_cbc(passwd, true);
 
 static uint net_workload = 1000;
@@ -327,7 +329,7 @@ client_thread() {
 static void
 stope_client(uint numtests) {
 
-    ope_client<A, BC> * ope_cl = new ope_client<A, RND>(bc, false, true);
+    /*   ope_client<A, BC> * ope_cl = new ope_client<A, RND>(bc, false, true);
     if (DEBUG_EXP) cerr << "client created \n";
 
     if (DEBUG_EXP) cerr << "numtests " << numtests << "\n";
@@ -345,13 +347,13 @@ stope_client(uint numtests) {
 
     delete ope_cl;
     if (DEBUG_EXP) cerr << "DONE!\n";	
-    
+    */
 }
 
 
 static void
 stope_server() {
-
+/*
     list<string> * tables = new list<string>();
     tables->push_back("testope");
 
@@ -360,7 +362,7 @@ stope_server() {
     serv->work();
 
     delete serv;
-    delete tables;
+    delete tables;*/
 }
 
 
@@ -1582,7 +1584,7 @@ int main(int argc, char ** argv)
 	return 0;
     }
     if (argc == 2 && string(argv[1]) == "stopeser") {
-	run_stopeserver();
+	stope_server();
 	return 0;
     }
 

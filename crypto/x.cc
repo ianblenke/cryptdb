@@ -25,6 +25,7 @@
 #include <NTL/RR.h>
 #include <crypto/aes_cbc.hh>
 #include <util/util.hh>
+#include <crypto/RND.hh>
 #include <sstream>
 #include <iostream>
 
@@ -519,9 +520,28 @@ void test_marshall() {
     
 }
 
+static
+void test_RND() {
+    urandom u;
+
+    RND rnd("blahblah");
+    
+    for (uint i = 0; i < 1000; i++) {
+	string pt = u.rand_string(8);
+	string ciph = rnd.encrypt(pt);
+	string dec = rnd.decrypt(ciph);
+	assert_s(pt == dec, "incorrect decryption");
+    }
+
+    cerr << "RND test ok\n";
+}
+
 int
 main(int ac, char **av)
 {
+
+    test_RND();
+    
     test_marshall();
     test_aes_cbc();
 
