@@ -65,7 +65,20 @@ public:
 
     uint64_t store_tree();
 
-    void handle_enc(int csock, std::istringstream & iss, bool do_ins, string table_name = auto_table);
+    // handlers
+    
+    void mope_handle_enc(int csock, std::istringstream & iss, string table_name,
+			   Tree * ope_tree, OPETable<std::string> * ope_table);
+    void stope_handle_query(int csock, std::istringstream & iss, string table_name,
+			    Tree * ope_tree, OPETable<std::string> * ope_table);
+    void stope_handle_ins(int csock, std::istringstream & iss, string table_name,
+			  Tree * ope_tree, OPETable<std::string> * ope_table);
+    void stope_handle_remove(int csock, std::istringstream & iss, string table_name,
+			     Tree * ope_tree, OPETable<std::string> * ope_table);
+    
+
+
+    
     /*
      * Given ciph, interacts with client and returns
      * a pair (node, index of subtree of node) where node should be inserted

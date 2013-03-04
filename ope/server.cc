@@ -79,21 +79,15 @@ Server::interaction(string ciph,
 
 
 void 
-Server::mope_handle_enc(int csock, istringstream & iss, string table_name) {
+Server::mope_handle_enc(int csock, istringstream & iss, string table_name,
+			   Tree * ope_tree, OPETable<std::string> * ope_table) {
 
-    assert_s(tables.find(table_name) != tables.end(), "invalid table name " + table_name);
-    tablemeta * tm = tables[table_name];
-    Tree * ope_tree = tm->ope_tree;
-    OPETable<std::string> * ope_table = tm->ope_table;
-    
     string ciph = unmarshall_binary(iss);
     
     if(DEBUG_COMM) cout<< "ciph: "<< ciph << endl;
 
-
     stringstream response;
     response.clear();
-
     
     auto ts = ope_table->find(ciph);
     
@@ -160,19 +154,50 @@ Server::mope_handle_enc(int csock, istringstream & iss, string table_name) {
 
 
 void 
-Server::stope_handle_query_ins(int csock, istringstream & iss, bool do_ins, string table_name) {
+Server::stope_handle_query(int csock, istringstream & iss, bool do_ins, string table_name,
+			   Tree * ope_tree, OPETable<std::string> * ope_table) {
+    
+    string ciph = unmarshall_binary(iss);
+    
+    if(DEBUG_COMM) cout<< "ciph: "<< ciph << endl;
 
-    assert_s(tables.find(table_name) != tables.end(), "invalid table name " + table_name);
-    tablemeta * tm = tables[table_name];
-    Tree * ope_tree = tm->ope_tree;
-    OPETable<std::string> * ope_table = tm->ope_table;
+    string tree_ciph;
+    
+    uint index = 0;
+    uint64_t ope_path = 0;
+    bool equals = false;
+    uint nbits = 0;
+    
+    TreeNode * tnode = interaction(ciph, index, nbits, ope_path, equals, ope_tree);
+
+    
+    uint64_t ope_enc = compute_ope(ope_path, nbits, index);
+    response << opeToStr(ope_enc-1);
+    
+    stringstream response;
+    response.clear();
+
+    if (DEBUG_COMM) cerr << "replying to request \n";
+    string res = response.str();
+    uint reslen = res.size();
+    // cerr << "sending\n" <<res << "\n";
+    if (DEBUG_COMM) cerr << "sent " << reslen << " bytes \n";
+    assert_s(xmsg_send(csock, res) == (int)reslen,
+	     "problem with send");
+    
+}
+
+
+void 
+Server::stope_handle_ins(int csock, istringstream & iss, string table_name,
+			 Tree * ope_tree, OPETable<std::string> * ope_table) {
     
     string ciph = unmarshall_binary(iss);
     
     if(DEBUG_COMM) cout<< "ciph: "<< ciph << endl;
 
     string rowid;
-    if (WITH_DB && do_ins) {
+    if (WITH_DB) {
 	iss >> rowid;
     }
 
@@ -185,14 +210,6 @@ Server::stope_handle_query_ins(int csock, istringstream & iss, bool do_ins, stri
     
     TreeNode * tnode = interaction(ciph, index, nbits, ope_path, equals, ope_tree);
 
-    if (!do_ins) {
-	uint64_t ope_enc = compute_ope(ope_path, nbits, index);
-	response << opeToStr(ope_enc-1);
-	goto wrapup;
-    }
-
-    // Case: to insert
-    
     if (equals) {
 	//increase refcount in OPE Table and insert in DB
 	treeciph = tnode->get_ciph(index);
@@ -210,19 +227,13 @@ Server::stope_handle_query_ins(int csock, istringstream & iss, bool do_ins, stri
 	uint64_t ope_enc = compute_ope(ope_path, nbits, index);
 	response << opeToStr(ope_enc-1);
 
-	goto wrapup;
-
+    } else {
+	treeciph = ciph;
+	ope_tree->insert(ciph, rowid, tnode, ope_path, nbits, index, proof);
+	
+	response << ope_table->get(treeciph).ope; // ciph must be in ope_table
     }
 
-    // Case: insert for the first time 
-
-    treeciph = ciph;
-    ope_tree->insert(ciph, rowid, tnode, ope_path, nbits, index, proof);
-    
-    response << ope_table->get(treeciph).ope; // ciph must be in ope_table
-
-    
-wrapup:  		        
     stringstream response;
     response.clear();
 
@@ -236,16 +247,11 @@ wrapup:
     
 }
 
-
 void 
-Server::handle_remove(int csock, istringstream & iss, string table_name) {
+Server::stope_handle_remove(int csock, istringstream & iss, string table_name,
+			    Tree * ope_tree, OPETable<std::string> * ope_table) {
 
     assert_s(STOPE && !MALICIOUS, "remove works in stOPE mode and not malicious");
-
-    assert_s(tables.find(table_name) != tables.end(), "invalid table name " + table_name);
-    tablemeta * tm = tables[table_name];
-    Tree * ope_tree = tm->ope_tree;
-    OPETable<std::string> * ope_table = tm->ope_table;
     
     string ciph = unmarshall_binary(iss);
     
@@ -329,18 +335,27 @@ Server::dispatch(int csock, istringstream & iss) {
     } else {
 	table_name = auto_table;
     }
+    
+    assert_s(tables.find(table_name) != tables.end(), "invalid table name " + table_name);
+    tablemeta * tm = tables[table_name];
+    Tree * ope_tree = tm->ope_tree;
+    OPETable<std::string> * ope_table = tm->ope_table;
+
 
     if (DEBUG_COMM) {cerr << "message type is " << mtnames[(int) msgtype] << endl;}
 
     switch (msgtype) {
-    case MsgType::ENC_INS: {
-	return handle_enc(csock, iss, true, table_name);
+    case MsgType::ENC: {
+	return mope_handle_enc(csock, iss, table_name, ope_tree, ope_table);
+    }
+    case MsgType::INS: {
+	return stope_handle_ins(csock, iss, table_name, ope_tree, ope_table);
     }
     case MsgType::QUERY: {
-	return handle_enc(csock, iss, false, table_name);
+	return stope_handle_query(csock, iss, table_name, ope_tree, ope_table);
     }
     case MsgType::REMOVE: {
-	return handle_
+	return stope_handle_remove(csock, iss, table_name, ope_tree, ope_table);
     }
     default: {}
     }

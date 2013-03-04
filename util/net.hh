@@ -41,7 +41,8 @@ std::string
 send_receive(int sock, const std::string & msg);
 
 #define MsgType(m)    \
-    m(ENC_INS)		   \
+    m(ENC)		   \
+    m(INS)               \
     m(QUERY)   \
     m(INTERACT_FOR_LOOKUP) \
     m(REMOVE) \
@@ -90,20 +91,22 @@ operator>>(std::istream & o, MsgType & mt);
 // UDF
 // ope_enc(det_val, i) -- i indicates whether the value should be inserted
 
+
+
+// below tablename and rowid IFF WITH_DB
+
 // mOPE encrypt initial client message
-// MsgType::ENC_INS ciph
+// MsgType::ENC tablename ciph
 // server response ope
 
 //stOPE insert initial client message
-// MsgType::ENC_INS ciph rowid
-// rowid is necessary only if WITH_DB
+// MsgType::INS tablename ciph rowid
 // server response: ope
 
 //stOPE query initial client message
-// MsgType::QUERY ciph
+// MsgType::QUERY tablename ciph
 //Server response ope
 
 //stOPE remove initial client message
-// MsgType::REMOVE ciph rowid
-// rowid is necessary only if WITH_DB
+// MsgType::REMOVE tablename ciph rowid
 // Server response: oldope
