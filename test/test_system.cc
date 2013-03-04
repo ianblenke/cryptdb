@@ -322,6 +322,48 @@ client_thread() {
     return;
 }
 
+
+
+static void
+stope_client(uint numtests) {
+
+    ope_client<A, BC> * ope_cl = new ope_client<A, RND>(bc, false, true);
+    if (DEBUG_EXP) cerr << "client created \n";
+
+    if (DEBUG_EXP) cerr << "numtests " << numtests << "\n";
+
+    
+    for (uint i = 0; i < vs->size(); i++) {
+	uint64_t ope = ope_cl->insert(vs->at(i));
+	cerr << "ope is " << ope << " \n";
+    }
+    cerr << "remove half of them \n";
+
+    for (uint i = 0; i < numtests; i = i+2) {
+	assert_s(ope_cl->remove(i), "could not remove");
+    }
+
+    delete ope_cl;
+    if (DEBUG_EXP) cerr << "DONE!\n";	
+    
+}
+
+
+static void
+stope_server() {
+
+    list<string> * tables = new list<string>();
+    tables->push_back("testope");
+
+    Server * serv = new Server(false, false, OPE_CLIENT_PORT, OPE_SERVER_PORT, tables, db_updates);
+    
+    serv->work();
+
+    delete serv;
+    delete tables;
+}
+
+
 /*** Parallel client/server setup ***/
 
 int rv;
@@ -1451,7 +1493,9 @@ int main(int argc, char ** argv)
                  OR ./test net \n \
                  OR ./test net plain_size [num_client1] ... \n		\
                  OR ./test clientnet plain_size(64,>=128) num_clients \
-                 OR ./test servernet num_servers\n";
+                 OR ./test servernet num_servers\n \
+                 OR ./test stopeser \
+                 OR ./test stopecl numtests";
     
     if (argc < 2) {
 	cerr << usage;
@@ -1530,6 +1574,19 @@ int main(int argc, char ** argv)
 	return 0;
     }
 
+    
+    if (argc == 3 && string(argv[1]) == "stopecl") {
+	num_tests = atoi(argv[2]);
+	if (DEBUG_EXP) cerr << "num_tests is " << num_tests << "\n";
+	stope_client(num_tests);	
+	return 0;
+    }
+    if (argc == 2 && string(argv[1]) == "stopeser") {
+	run_stopeserver();
+	return 0;
+    }
+
+    
     if (argc==5 && string(argv[1]) == "sys") {
 	
 	plain_size = atoi(argv[2]);
