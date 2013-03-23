@@ -17,18 +17,18 @@
 #define WITH_NET 0
 
 // if ope mode is true then trees can no longer use the order operation
-// among keys because the real keys are encrypted
-#define OPE_MODE 0
+// among keys because these keys are encrypted
+#define OPE_MODE 1
 
 
 // Controls debugging output
-#define DEBUG_BARE 0
-#define DEBUG 0
-#define DEBUG_COMM 0
+#define DEBUG_BARE 1
+#define DEBUG 1
+#define DEBUG_COMM 1
 #define DEBUG_STREE 0
-#define DEBUG_BTREE 0
+#define DEBUG_BTREE 1
 #define DEBUG_PROOF 0
-#define DEBUG_EXP 0
+#define DEBUG_EXP 1
 
 #define DEBUG_TRANSF 0
 #define DEBUG_UDF 0
@@ -109,6 +109,9 @@ typedef  uint64_t OPEType;
 const uint  UNIT_VAL = (1 << num_bits);
 const uint MAX_INDEX = (1 << num_bits) -1 ;
 
+
+std::string
+niceciph(std::string ciph);
 
 // transforms an ope encoding into
 // a vector of uint each being an edge on the path

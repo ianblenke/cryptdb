@@ -724,7 +724,7 @@ public:
     }
 
     static string
-    ope_t_print(OPETransform t, vector<uint> vec) {
+    ope_t_print(OPEiTransform t, vector<uint> vec) {
 	cerr << "\n\n----------------\n";
 	cerr << "given path " << pretty_path(vec) << "\n";
 	OPEType val = vec_to_enc(vec);
@@ -749,7 +749,7 @@ public:
     }
     
     static void
-    ope_transform_check(OPETransform & t, OPEType omin, OPEType omax, vector<uint> ope_path, vector<uint> new_path){
+    ope_transform_check(OPEiTransform & t, OPEType omin, OPEType omax, vector<uint> ope_path, vector<uint> new_path){
 	cerr << "test on B tree path " << pretty_path(ope_path);
 	
 	assert_s(ope_path[ope_path.size()-1] > 0, "invalid test: last position needs > 0");
@@ -776,19 +776,19 @@ public:
     }
 
     static void
-    test_serialize(OPETransform t) {
+    test_serialize(OPEiTransform t) {
 	stringstream ss;
 	ss.clear();
 	t >> ss;
 	stringstream ss2(ss.str());
-	OPETransform t2;
+	OPEiTransform t2;
 	t2.from_stream(ss);
 
 	assert_s(t2.equals(t), "serialization does not work");
     }
     static void
     test_transform() {
-	OPETransform t;
+	OPEiTransform t;
 	t.push_change(vec_to_path({2, 1, 5}), 3, 1, 1);
 	t.push_change(vec_to_path({2, 1}), 2,    6, 3);
 	t.push_change(vec_to_path({2}), 1,       2, 3);
@@ -812,7 +812,7 @@ public:
 
 	cerr << "\n\n test root add simple \n";
 	//test root add
-	OPETransform t2;
+	OPEiTransform t2;
 	t2.push_change(vec_to_path({2, 1, 5}), 3, 1, 1);
 	t2.push_change(vec_to_path({2, 1}), 2,    6, 3);
 	t2.push_change(vec_to_path({2}), 1,       2, 3);
@@ -835,7 +835,7 @@ public:
 	ope_transform_check(t2, omin, omax,  {2, 1, 1, 5}, {0, 2, 1, 1, 5});
 
 	cerr << "\n\ntest root add complicated \n";
-	OPETransform t3;
+	OPEiTransform t3;
 	t3.push_change(vec_to_path({2, 1, 5}), 3, 1, 1);
 	t3.push_change(vec_to_path({2, 1}), 2,    6, 3);
 	t3.push_change(vec_to_path({2}), 1,       2, 3);

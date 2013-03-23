@@ -25,7 +25,7 @@ extern "C" {
 #include <mysql.h>
 #include <ctype.h>
 
-    OPETransform * opetransf;
+    OPEiTransform * opetransf;
     uint counter = 0;
 
 
@@ -218,7 +218,7 @@ extern "C" {
 	char * buf = getba(args, 0, len);
 	string s = string(buf, len);
 	stringstream ss(s);
-	opetransf = new OPETransform();
+	opetransf = new OPEiTransform();
 	opetransf->from_stream(ss);
 
 	ss.clear();

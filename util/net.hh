@@ -82,11 +82,15 @@ operator>>(std::istream & o, MsgType & mt);
 // INTERACT_FOR_LOOKUP
 // server sends
 // 1. type,
-// 2. det_val to encrypt,
-// 3. no keys at current node in tree,  det_val of each key
+// 2. det_val to decrypt,
+// 3. no keys at current node in tree,  det_val of each key but only for keys
+// not ""
 // client replies
-// 1. the index of the item >= det_val and if there is no such value index = size
-// 2. bool value if the index is in fact equal to det_val
+// 1. the index of the item >= dec(det_val) and if there is no such value index
+// = size
+// 2. bool value" "equals"if the item at index is in fact equal to dec(det_val)
+// e.g., if index = 0 and equals is false, go in the zero-th subtree; if index
+// is true, take the first key that is not "" 
 
 // UDF
 // ope_enc(det_val, i) -- i indicates whether the value should be inserted

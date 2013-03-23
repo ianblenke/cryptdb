@@ -342,6 +342,7 @@ stope_client(uint numtests) {
     cerr << "remove half of them \n";
 
     for (uint i = 0; i < numtests; i = i+2) {
+	cerr << "remove " << strFromVal(i) << "\n";
 	assert_s(ope_cl->remove(strFromVal(i)), "could not remove");
     }
 

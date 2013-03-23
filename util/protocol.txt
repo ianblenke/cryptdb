@@ -1,20 +1,21 @@
 
-mOPE Enc_ins at server: 
+Tree::insert : inserts in OPE table, DB, and tree and takes care of rebalancings
+   -- assumes value does not exist in OPE table 
+
+mOPE Enc at server: 
 
 -- see if entry found in OPE table
 -- if so: update DB, exit
 -- else:
     -- interact
-    -- Tree:insert: inserts in OPE table, DB, and tree and takes
-    care of any rebalancings
+    -- Tree::insert: 
 
 stOPE Enc_ins at server:
 
 -- interact
 -- if not insert exit
 -- if already exists: increase ref count, insert in DB, exit
--- if insert and does not exist: Tree::insert: inserts in OPE table, DB, tree
-      and takes care of any balancings
+-- if insert and does not exist: Tree::insert: 
 
 stOPE Removal
 

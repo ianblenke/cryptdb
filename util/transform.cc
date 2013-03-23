@@ -4,17 +4,17 @@
 
 using namespace std;
 
-OPETransform::OPETransform() {
+OPEiTransform::OPEiTransform() {
     new_root = false;
 }
 
-OPETransform::~OPETransform() {
+OPEiTransform::~OPEiTransform() {
     ts.clear();
 }
 void
-OPETransform::push_change(OPEType ope_path, int num, int index_inserted, int split_point) {
+OPEiTransform::push_change(OPEType ope_path, int num, int index_inserted, int split_point) {
 
-    transf t;
+    itransf t;
     t.ope_path = path_to_vec(ope_path, num);
     if (DEBUG_TRANSF) {
 	cerr << "push change: ope_path " << ope_path << ": " << pretty_path(t.ope_path) << "  "
@@ -22,7 +22,7 @@ OPETransform::push_change(OPEType ope_path, int num, int index_inserted, int spl
     }
     t.index_inserted = index_inserted;
     if (ts.size()) {
-	transf last_t = ts.back();
+	itransf last_t = ts.back();
 	assert_s(index_inserted == (int)(1 + last_t.ope_path[last_t.ope_path.size() - 1]), " inconsistent insert");
     }
     t.split_point = split_point;
@@ -31,7 +31,7 @@ OPETransform::push_change(OPEType ope_path, int num, int index_inserted, int spl
 }
 
 void
-OPETransform::add_root() {
+OPEiTransform::add_root() {
     assert_s(ts.back().split_point >= 0, "cannot add root if old root was not split");
     new_root = true;
 
@@ -46,7 +46,7 @@ OPETransform::add_root() {
 }
 
 void
-OPETransform::get_interval(OPEType & omin, OPEType & omax) {
+OPEiTransform::get_interval(OPEType & omin, OPEType & omax) {
     /*
      * Interval depends on the highest node affected in which there was just an
      * insert and no split.
@@ -60,7 +60,7 @@ OPETransform::get_interval(OPEType & omin, OPEType & omax) {
     }
 
     assert_s(ts.size() > 0, "there is no transformation");
-    transf t = ts.back();
+    itransf t = ts.back();
     assert_s(t.split_point < 0, "last transformation should have no split point");
 
     OPEType common_path = vec_to_path(t.ope_path);
@@ -101,7 +101,7 @@ OPETransform::get_interval(OPEType & omin, OPEType & omax) {
 }
 
 OPEType
-OPETransform::transform(OPEType val) {
+OPEiTransform::transform(OPEType val) {
 
     if (DEBUG_TRANSF) std::cerr << "val " << val << " \n";
   
@@ -164,7 +164,7 @@ OPETransform::transform(OPEType val) {
 
 
 static ostream&
-operator>>(transf t, ostream & out) {
+operator>>(itransf t, ostream & out) {
     out <<  " " << t.ope_path.size() << " ";
     for (uint i = 0; i < t.ope_path.size(); i++) {
 	out << t.ope_path[i] << " ";
@@ -176,7 +176,7 @@ operator>>(transf t, ostream & out) {
 }
 
 static istream&
-operator<<(transf & t, istream & is) {
+operator<<(itransf & t, istream & is) {
     uint size;
     is >> size;
     t.ope_path.resize(size);
@@ -191,7 +191,7 @@ operator<<(transf & t, istream & is) {
 }
 
 ostream &
-OPETransform::operator>>(ostream &out) {
+OPEiTransform::operator>>(ostream &out) {
     out << " " << ts.size();
 
     for (auto t: ts) {
@@ -205,18 +205,18 @@ OPETransform::operator>>(ostream &out) {
 }
 
 istream &
-OPETransform::operator<<(istream & is) {
+OPEiTransform::operator<<(istream & is) {
     from_stream(is);
     return is;
 }
 
 void
-OPETransform::from_stream(istream & is){
+OPEiTransform::from_stream(istream & is){
     uint size;
     is >> size;
 
     for (uint i = 0; i < size; i++) {
-	transf t;
+	itransf t;
 	t << is;
 	ts.push_back(t);
     }
@@ -226,7 +226,7 @@ OPETransform::from_stream(istream & is){
 }
 
 static bool
-tr_equals(transf t1, transf t2) {
+tr_equals(itransf t1, itransf t2) {
     if (t1.index_inserted != t2.index_inserted) {
 	return false;
     }
@@ -249,7 +249,7 @@ tr_equals(transf t1, transf t2) {
  }
 
 bool
-OPETransform::equals(OPETransform t) {
+OPEiTransform::equals(OPEiTransform t) {
     if (new_root != t.new_root) {
 	return false;
     }
@@ -269,4 +269,263 @@ OPETransform::equals(OPETransform t) {
     }
 
     return true;
+}
+
+
+///////////////////////////////////////////////////////////////////////
+
+OPEdTransform::OPEdTransform() {
+    ts.clear();
+}
+
+OPEdTransform::~OPEdTransform() {
+    ts.clear();
+}
+void
+OPEdTransform::push_change(OPEType ope_path, int num, int parent_index, int left_mcount) {
+
+    dtransf t;
+    t.ope_path = path_to_vec(ope_path, num);
+    if (DEBUG_TRANSF) {
+	cerr << "push change: ope_path " << ope_path << ": " << pretty_path(t.ope_path) << "  "
+	     << " num " << num << " parent_index " << parent_index << " left_mcount " << left_mcount << "\n";
+    }
+    t.parent_index = parent_index;
+    t.left_mcount = left_mcount;
+    if (ts.size()) {
+	dtransf last_t = ts.back();
+	assert_s(last_t.optype != TransType::SIMPLE &&
+		 last_t.optype != TransType::ROTATE_FROM_RIGHT &&
+		 last_t.optype != TransType::ROTATE_FROM_LEFT,
+		 "pushing a transformation after a termina transformation!");
+
+    }
+
+    ts.push_back(t);
+}
+
+void
+OPEdTransform::get_interval(OPEType & omin, OPEType & omax) {
+    /*
+     * See OPEiTransform::get_interval for example
+     * 
+     */
+
+    //TODO
+	
+}
+
+
+static void
+handle_rotate_from_right(dtransf t, vector<uint> & repr) {
+    uint tsize = t.ope_path.size();
+    uint & cur_index = repr[tsize];
+    
+    // Case: key is in parent
+    if (repr.size() - 1 == tsize) { // key is in parent
+	if ((int)cur_index == t.parent_index) {
+	    repr.push_back(t.left_mcount);
+	    cur_index--;
+	}
+	return;
+    }
+
+    // Case: key is lower than parent
+
+    uint & child_index = repr[tsize + 1];
+
+    // key is in right subtree
+    if ((int)cur_index == t.parent_index) {
+
+        // Case: it is a key
+
+	if (repr.size() == tsize + 2) {
+	    if (child_index == 1) {// it is key which gets moved in parent
+		repr.resize(tsize+1);
+	    } else {
+		child_index--;
+	    }
+	    return;
+	}
+
+	// Case: it is in a subtree
+	
+	if (child_index == 0) {//it is in zeroth subtree
+	    child_index = t.left_mcount;
+	    cur_index = t.parent_index - 1;
+	    return;
+	} else {
+	    child_index--;
+	}
+	return;
+    }
+    
+    // Case: key is in left subtree: nothing changes
+    
+}
+
+/* Merging from right node into this node */
+static void
+handle_merge(dtransf t, vector<uint> & repr) {
+    uint tsize = t.ope_path.size();
+
+    uint & cur_index = repr[tsize];
+
+    if ((int)cur_index < t.parent_index) {
+	//nothing happens
+	return;
+    }
+
+    if ((int)cur_index > t.parent_index) {
+	cur_index--;
+	return;
+    }
+
+    // Now cur_index == t.parent_index
+
+    if (tsize == repr.size() - 1) {
+	// this is the node that moves to left sib
+	repr.push_back(t.left_mcount);
+	cur_index--;
+    } else {
+	// in the right subtree
+	cur_index--;
+	uint & child_index = repr[tsize + 1];
+	child_index = child_index + t.left_mcount;
+    }
+}
+
+
+
+static void
+handle_rotate_from_left(dtransf t, vector<uint> & repr) {
+    uint tsize = t.ope_path.size();
+    uint & cur_index = repr[tsize]; // index in parent node
+
+    // Case: key in parent
+    if (repr.size() - 1 == tsize) {
+	if ((int)cur_index == t.parent_index) {
+	    repr.push_back(1);
+	}
+	return;
+    }
+
+
+    // Case: key in children or their subtrees
+
+    uint & child_index = repr[tsize + 1];
+
+    if ((int)cur_index == t.parent_index - 1) { // in left subtree
+	if ((int)child_index == t.left_mcount -1) { // only last key or subtree change
+	    if (repr.size() - 2  == tsize) {//key is in left sibling
+		// move to parent
+		repr.resize(tsize + 1);
+		cur_index++;
+	    } else { // key is in some left subtree
+		cur_index++;
+		child_index = 0;
+	    }
+	}
+	return;   
+    }
+
+    if ((int)cur_index == t.parent_index) { // in right subtree, all moves right
+	child_index++;
+    }
+    
+}
+
+
+OPEType
+OPEdTransform::transform(OPEType val) {
+
+    if (DEBUG_TRANSF) std::cerr << "val " << val << " \n";
+  
+    // repr consists of ope path followed by index
+    vector<uint> repr = enc_to_vec(val);
+    // ope encodings have the last index one less than the one in the btree
+    repr[repr.size()-1]++;
+
+    // now repr is the path in B tree
+    
+     if (DEBUG_TRANSF) cerr << "its path " << pretty_path(repr) << "\n";
+    
+    // loop thru each transf
+    for (auto t :  ts) {
+
+	if (match(t.ope_path, repr)) { // need to transform
+	    if (DEBUG_TRANSF) cerr << "match with ope path " << pretty_path(t.ope_path) << "\n";
+	    
+	    switch (t.optype) {
+	    case TransType::ROTATE_FROM_RIGHT: {
+		handle_rotate_from_right(t, repr);
+		break;
+	    }
+	    case TransType::ROTATE_FROM_LEFT: {
+		handle_rotate_from_left(t, repr);
+		break;
+	    }
+	    case TransType::MERGE_WITH_LEFT:
+	    case TransType::MERGE_WITH_RIGHT: {
+		handle_merge(t, repr);
+		break;
+	    }
+	    default: assert_s(false, "invalid OpType");
+	    }
+
+	}
+    }
+
+    // ope encodings have the last index one less than the one in the btree
+    assert_s(repr.size() > 0 && repr[repr.size() -1 ] > 0, "index must be > 0");
+    repr[repr.size()-1]--;
+    return vec_to_enc(repr);
+}
+
+/* TODO
+static ostream&
+operator>>(dtransf t, ostream & out) {
+    //TODO: see the same operator for insert
+    return out;
+}
+
+static istream&
+operator<<(dtransf & t, istream & is) {
+    //TODO  
+    return is;
+}
+
+ostream &
+OPEdTransform::operator>>(ostream &out) {
+    //TODO
+
+    return out;
+}
+*/
+
+istream &
+OPEdTransform::operator<<(istream & is) {
+    from_stream(is);
+    return is;
+}
+
+void
+OPEdTransform::from_stream(istream & is){
+    //TODO 
+
+}
+/*
+static bool
+tr_equals(dtransf t1, dtransf t2) {
+    //TODO
+
+    assert_s(false, "unimplemented");
+    return true; 
+ }
+*/
+bool
+OPEdTransform::equals(OPEdTransform t) {
+    //TODO
+    assert_s(false, "unimplemented");
+    return false;
 }

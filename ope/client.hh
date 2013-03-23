@@ -97,7 +97,7 @@ ope_client<V, BC>::handle_interaction(istringstream & iss){
     assert_s(func_d == MsgType::INTERACT_FOR_LOOKUP, "Incorrect function type in handle_server!");
     if (func_d == MsgType::INTERACT_FOR_LOOKUP){
         
-        V det, pt, tmp_pt;
+        V det, pt, tree_pt;
         int size, index;
         bool some_flag = false;
 
@@ -108,12 +108,15 @@ ope_client<V, BC>::handle_interaction(istringstream & iss){
         pt = bc->decrypt(det);
 
         for(index=0; index<size; index++){
-	    V tmp_key;
-	    tmp_key = Cnv<V>::TypeFromStr(unmarshall_binary(iss));
-            tmp_pt = bc->decrypt(tmp_key);
-            some_flag = (tmp_pt==pt);
+	    V tree_ciph;
+	    tree_ciph = Cnv<V>::TypeFromStr(unmarshall_binary(iss));
+            tree_pt = bc->decrypt(tree_ciph);
+            some_flag = (tree_pt==pt);
+	    if (some_flag) {
+		cerr << "equals for index " << index << "\n";
+	    }
 
-            if (tmp_pt >= pt){
+            if (tree_pt >= pt){
                 break;
             }
         }

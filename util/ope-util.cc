@@ -21,6 +21,9 @@ path_append(uint64_t v, uint index) {
     return (v << num_bits | index);
 }
 
+string niceciph(string ciph) {
+    return read_short(short_string(ciph));
+}
 
 
 std::vector<uint>

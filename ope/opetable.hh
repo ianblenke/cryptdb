@@ -44,4 +44,6 @@ public:
 
     // removes entry and returns true if successfully removed
     bool remove(EncT encval);
+
+    void dump();
 };

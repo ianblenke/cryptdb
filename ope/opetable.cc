@@ -75,6 +75,15 @@ OPETable<EncT>::remove(EncT encval) {
     return (table.erase(encval) > 0);
 }
 
+template<class EncT>
+void
+OPETable<EncT>::dump() {
+    cerr << "OPE table dump:\n";
+    for (auto e : table) {
+	cerr << "ciph " << niceciph(Cnv<EncT>::StrFromType(e.first)) << " ope " << e.second.ope << " ref count " << e.second.refcount << "\n";
+    }
+}
+
 /*
  * Explicitly instantiate the tree template for various ciphertext types.
  */

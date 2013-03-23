@@ -12,6 +12,7 @@
 #include <util/ope-util.hh>
 #include <ope/opetable.hh>
 #include <fstream>
+#include <util/transform.hh>
 
 // uint Merklecost = 0;
 
@@ -70,10 +71,12 @@ verify_ins_merkle_proof(const UpdateMerkleProof & p,
 ///// Helper data structures //////
 
 /* Contains information about
- * a split at a level in a tree.
+ * a split  or a merge at a level in a tree.
+ * Split:
  * The node was split at split_point into itself and right.
  * split_point is negative if there was no split
  * index is index where element was inserted
+ * Merge: 
  */
 
 struct LevelChangeInfo {
@@ -97,6 +100,14 @@ struct LevelChangeInfo {
 	index(_index), split_point(_split_point),
 	is_new_root(new_root){}
 };
+
+struct DelChangeInfo {
+    Node * upmost_node;
+    OPEdTransform t;
+    // n is this node for a simple delete operation or the parent otherwise
+    void add_change(TransType optype, Node * n, int parent_index, int left_mcount);
+};
+
 
 
 // list of LevelChangeInfo where first is a leaf and last is the last
@@ -122,7 +133,8 @@ public:
 		OPEType ope_path, uint64_t nbits, uint64_t index,
 		UpdateMerkleProof & p, string rowid = "");
 
-    // removes item from three and updates DB and OPE table for any balancings
+    // removes item from tree and updates DB and OPE table for any balancings
+    // remove the item in node at index
     void remove(std::string ciph, TreeNode * tnode,
 		OPEType ope_path, uint64_t nbits, uint64_t index,
 		UpdateMerkleProof & p, string rowid = "");
@@ -213,7 +225,7 @@ public:
     // performs tree insert/delete as in the OPE tree where order of values at
     // nodes does not apply
     bool do_insert(Elem element, UpdateMerkleProof & p, ChangeInfo & c, int index = -1);
-    bool do_delete(Elem element, UpdateMerkleProof & p, ChangeInfo & c, int index = -1);
+    bool do_delete(Elem element, UpdateMerkleProof & p, DelChangeInfo & c, int index = -1);
 
     //cleaning up
     int delete_all_subtrees();
@@ -253,7 +265,7 @@ public:
     bool merge_into_root ();
 
     bool
-    tree_delete_help (Elem& target, UpdateMerkleProof & proof, Node* & start_node, Node * node);
+    tree_delete_help (DelChangeInfo & ci, Elem& target, UpdateMerkleProof & proof, Node* & start_node, Node * node, int target_pos = -1);
 
        
     // outputs the index that child has in this parent list

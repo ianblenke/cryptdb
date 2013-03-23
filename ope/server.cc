@@ -47,19 +47,18 @@ Server::interaction(string ciph,
 	    msg << " ";
     	}
 
-	if (DEBUG_COMM) cerr << "sending " << msg.str() << "\n";
-
     	string _reply = send_receive(sock_cl, msg.str());
     	istringstream reply(_reply);
 
     	uint index;
-    	bool equals = false;
+    	
     	reply >> index >> equals;
 
     	assert_s(len >= index, "index returned by client is incorrect");
 
 	if (equals) {
 	    rindex = index;
+	    cerr << "equals at index " << index << "\n";
 	    return curr;
 	}
 
@@ -67,6 +66,7 @@ Server::interaction(string ciph,
 	if (!subtree) {
 	    if (DEBUG_COMM) cerr << "no subtree at index " << index << "\n";
 	    rindex = index;
+	    cerr << "not equals, index " << index << "\n";
 	    return curr;
 	}
 	
@@ -159,7 +159,7 @@ Server::stope_handle_query(int csock, istringstream & iss, string table_name,
     
     string ciph = unmarshall_binary(iss);
     
-    if(DEBUG_COMM) cout<< "ciph: "<< ciph << endl;
+    if(DEBUG_COMM) cout<< "QUERY ciph: "<< ciph << endl;
     
     uint index = 0;
     uint64_t ope_path = 0;
@@ -191,7 +191,7 @@ Server::stope_handle_ins(int csock, istringstream & iss, string table_name,
     
     string ciph = unmarshall_binary(iss);
     
-    if(DEBUG_COMM) cout<< "ciph: "<< ciph << endl;
+    if (DEBUG_COMM) { cerr<< " INSERT ciph: "<< niceciph(ciph) << endl;}
 
     string rowid;
     if (WITH_DB) {
@@ -211,6 +211,8 @@ Server::stope_handle_ins(int csock, istringstream & iss, string table_name,
     if (equals) {
 	//increase refcount in OPE Table and insert in DB
 	string treeciph = tnode->get_ciph(index);
+
+	cerr << "Tree ciph " << niceciph(treeciph) << "\n";
 	
 	auto te = ope_table->get(treeciph);
 
@@ -233,6 +235,7 @@ Server::stope_handle_ins(int csock, istringstream & iss, string table_name,
 	response << ope_table->get(treeciph).ope; // ciph must be in ope_table
     }
 
+    ope_table->dump();
    
     if (DEBUG_COMM) cerr << "replying to request \n";
     string res = response.str();
@@ -250,7 +253,7 @@ Server::stope_handle_remove(int csock, istringstream & iss, string table_name,
 
     string ciph = unmarshall_binary(iss);
     
-    if(DEBUG_COMM) cout<< "ciph: "<< ciph << endl;
+    if (DEBUG_COMM) { cerr<< " REMOVE ciph: "<< ciph << endl;}
 
     string rowid;
     if (WITH_DB) {
@@ -267,15 +270,19 @@ Server::stope_handle_remove(int csock, istringstream & iss, string table_name,
     
     TreeNode * tnode = interaction(ciph, index, nbits, ope_path, equals, ope_tree);
 
-    if (DEBUG) {cerr << "new ope_enc has "<< " path " << ope_path
-			 << " index " << index << "\n";}
+    if (DEBUG_COMM) {cerr << "new ope_enc has path " << ope_path
+		     << " index " << index << " equals " << equals << "\n";}
 	
     if (!equals) {
+	cerr << "cannot remove: not equals \n";
 	response << "0"; //elm is not int tree so not deleted
     } else {
 
-	string treeciph = tnode->get_ciph(index);
+	uint index_found = index + 1;
+	
+	string treeciph = tnode->get_ciph(index_found);
 
+	cerr << "Tree ciph <" << niceciph(treeciph) << "> \n";
 		
 	table_entry te = ope_table->get(treeciph); // ciph must be in ope_table
 	response <<  opeToStr(te.ope);
@@ -301,7 +308,7 @@ Server::stope_handle_remove(int csock, istringstream & iss, string table_name,
 	    UpdateMerkleProof proof;
 	    // insert in OPE Tree
 	    // ope_insert also updates ope_table
-	    ope_tree->remove(treeciph, tnode, ope_path, nbits, index, proof, rowid);
+	    ope_tree->remove(treeciph, tnode, ope_path, nbits, index_found, proof, rowid);
 	}
 
     }
@@ -323,6 +330,10 @@ Server::dispatch(int csock, istringstream & iss) {
    
     MsgType msgtype;
     iss >> msgtype;
+
+    if (DEBUG_COMM) {
+	cerr << msgtype << "----------\n";
+    }
 
     string table_name;
     if (WITH_DB) {

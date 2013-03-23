@@ -426,6 +426,17 @@ bool Node::vector_insert_for_split (Elem& element, int index) {
 
 }
 
+void
+DelChangeInfo::add_change(TransType optype, Node * n, int parent_index, int left_mcount) {
+
+    upmost_node = n;
+    
+    OPEType opepath;
+    uint nbits;
+    get_ope_path(n, opepath, nbits);
+
+    t.push_change(opepath, nbits/num_bits, parent_index, left_mcount);
+}
 
 static void
 add_change(ChangeInfo & ci, Node * n, Node * r, int index, int split_point, bool is_new_root = false) {
@@ -793,7 +804,7 @@ Node::ope_smallest_key_in_subtree(Node * &  node) {
 }
 
 bool
-Node::do_delete(Elem element, UpdateMerkleProof & p, ChangeInfo & c, int index) {
+Node::do_delete(Elem element, UpdateMerkleProof & p, DelChangeInfo & c, int index) {
     assert_s(m_root->MALICIOUS == false, "stOPE only implemented in honest but curious mode");
 
     bool r;
@@ -807,10 +818,11 @@ Node::do_delete(Elem element, UpdateMerkleProof & p, ChangeInfo & c, int index) 
 
 	found.m_key = smallest_in_subtree.m_key;
 
-	r = found.mp_subtree->tree_delete_help(smallest_in_subtree, p, start_node, node2);
+	// smallest_in_subtree always is in pos 1
+	r = found.mp_subtree->tree_delete_help(c, smallest_in_subtree, p, start_node, node2, 1);
     }
     else {
-	r = tree_delete_help(element, p, start_node, this);
+	r = tree_delete_help(c, element, p, start_node, this, index);
     }
     return r;
 }
@@ -893,6 +905,7 @@ Node::tree_delete(Elem & target, UpdateMerkleProof & proof) {
     }
 
     bool r;
+    DelChangeInfo ci;
 
     if (!node->is_leaf()) {
 
@@ -914,8 +927,8 @@ Node::tree_delete(Elem & target, UpdateMerkleProof & proof) {
 	// -----------------
 
         found.m_key = smallest_in_subtree.m_key;
-	
-        r = found.mp_subtree->tree_delete_help(smallest_in_subtree, proof, start_node, node2);
+
+        r = found.mp_subtree->tree_delete_help(ci, smallest_in_subtree, proof, start_node, node2);
 	
     } else {
 	// ---- Merkle ----------------
@@ -926,7 +939,7 @@ Node::tree_delete(Elem & target, UpdateMerkleProof & proof) {
 	}
 	// ------------------------------
 
-	r = tree_delete_help(target, proof, start_node, node);
+	r = tree_delete_help(ci, target, proof, start_node, node);
 	
     }
 
@@ -942,8 +955,8 @@ Node::tree_delete(Elem & target, UpdateMerkleProof & proof) {
 }
 
 bool
-Node::tree_delete_help (Elem& target, UpdateMerkleProof & proof, Node * & start_node, Node * node) {
-
+Node::tree_delete_help (DelChangeInfo & ci, Elem& target, UpdateMerkleProof & proof, Node * & start_node, Node * node, int target_pos) {
+    
 // target is just a package for the key value.  the reference does not
 // provide the address of the Elem instance to be deleted.
 
@@ -957,13 +970,15 @@ Node::tree_delete_help (Elem& target, UpdateMerkleProof & proof, Node * & start_
 	if (DEBUG_PROOF) { cerr << "basic delete enough elems; my key count " << node->key_count()
 			  << " min " << b_min_keys << " \n"; }
 	
-	bool r = node->vector_delete(target);
+	bool r = node->vector_delete(target, target_pos);
 
-	
+	ci.add_change(TransType::SIMPLE, node, target_pos, -1);
 	return r;
     } else {
 	assert_s(node->is_root() || (node->key_count() == (int)b_min_keys), "node key count was lower than b_min_keys");
-	node->vector_delete(target);
+	ci.add_change(TransType::SIMPLE, node, target_pos, -1);
+	node->vector_delete(target, target_pos);
+
 	
 	// loop invariant: if _node_ is not null_ptr, it points to a node
 	// that has lost an element and needs to import one from a sibling
@@ -982,7 +997,7 @@ Node::tree_delete_help (Elem& target, UpdateMerkleProof & proof, Node * & start_
 	    // iteration of this loop!!!
 	    
 	    if (node==node->get_root() && node->is_leaf()) {
-		cerr << "delete root \n";
+		cerr << "deleted from  root \n";
 		//empty tree
 		break;
 	    }
@@ -999,7 +1014,9 @@ Node::tree_delete_help (Elem& target, UpdateMerkleProof & proof, Node * & start_
 		// node will be null after this function, because delete
 		// terminates, so the function will finalize the proof
 		if (DEBUG_PROOF) { cerr << "rotate right \n";}
+		ci.add_change(TransType::ROTATE_FROM_RIGHT, node->mp_parent, parent_index_this+1, node->m_count);
 		node->rotate_from_right(parent_index_this);
+
 		break;
 	    }
 	    
@@ -1008,11 +1025,14 @@ Node::tree_delete_help (Elem& target, UpdateMerkleProof & proof, Node * & start_
 		// node will be null after this function, because delete
 		// terminates, so the function will finalize the proof
 		if (DEBUG_PROOF) { cerr << "rotate left \n";}
+		ci.add_change(TransType::ROTATE_FROM_LEFT, node->mp_parent, parent_index_this, left->m_count);
 		node->rotate_from_left(parent_index_this);
+
 		break;
 	    }
 	    else if (right) {
 		if (DEBUG_PROOF) { cerr << "merge right \n";}
+		ci.add_change(TransType::MERGE_WITH_RIGHT, node->mp_parent, parent_index_this + 1, this->m_count);
 		node = node->merge_right(parent_index_this);
 	    }
 	    else if (left) {
@@ -1023,7 +1043,9 @@ Node::tree_delete_help (Elem& target, UpdateMerkleProof & proof, Node * & start_
 		}
 		// ---------------------
 		if (DEBUG_PROOF) { cerr << "merge left \n";}
+		ci.add_change(TransType::MERGE_WITH_LEFT, node->mp_parent, parent_index_this, left->m_count);
 		node = node->merge_left(parent_index_this);
+
 	    }
 	    
 	    at_leaf_level = false;
@@ -1038,7 +1060,9 @@ Node::tree_delete_help (Elem& target, UpdateMerkleProof & proof, Node * & start_
     return true;
 
 }
-
+//Takes a key from the right sibling, moves it in the parent, and takes the
+//parent key and inserts it at the end in the left node/this together with the
+//zeroth subtree of the right sibling
 void
 Node::rotate_from_right(int parent_index_this){
 
@@ -1402,8 +1426,7 @@ Node::get_subtree(uint index) {
 string
 Node::get_ciph(uint index) {
     assert_s(index <= m_count, "invalid index");
-    Elem & e = m_vector[index];
-    return e.m_key;
+    return m_vector[index].m_key;
 }
 
 
@@ -1589,7 +1612,11 @@ BTree::get_root(){
     return (TreeNode *)tracker->get_root();
 }
 
-
+/*
+ * Updates OPE table. Given highest node affected, goes through all keys in the
+ * subtree of this node, computes their new OPE paths and updates these paths in
+ * the OPE table.
+ */
 static void
 update_ot_help(OPETable<string> * ope_table, Node * n, OPEType path, uint nbits, uint & counter) {
 
@@ -1622,19 +1649,21 @@ update_ot_help(OPETable<string> * ope_table, Node * n, OPEType path, uint nbits,
  */
 static void
 update_ot(OPETable<string> * ope_table, Node * n) {
+
     uint nbits = 0;
     OPEType opepath = 0;
     get_ope_path(n, opepath, nbits);
 
     uint counter = 0;
     update_ot_help(ope_table, n, opepath, nbits, counter);
+        
     if (DEBUG)
         cerr << "OT UPDATES " << counter << "\n";
 }
 
-static OPETransform
+static OPEiTransform
 compute_transform(ChangeInfo c) {
-    OPETransform t;
+    OPEiTransform t;
 
     for (auto lc: c) {
 	if (!lc.is_new_root) {
@@ -1671,7 +1700,7 @@ BTree::update_db(OPEType new_ope, ChangeInfo c) {
     
     if (db_updates && must_rewrite(c)) {
 	// compute transform from c
-	OPETransform t = compute_transform(c);
+	OPEiTransform t = compute_transform(c);
 	
 	//send transform to server
 	stringstream ss;
@@ -1769,20 +1798,19 @@ BTree::remove(string ciph, TreeNode * tnode,
 
     Node * node = (Node *) tnode;
 
-    ChangeInfo ci;
-    ci.clear();
+    DelChangeInfo ci;
 
     Elem ciph_elem = Elem(ciph);
 
     assert_s(node->m_vector[index].mp_subtree == NULL, "node is not terminal node");
-    node->do_delete(ciph_elem, p, ci, index+1);
+    node->do_delete(ciph_elem, p, ci, index);
 
-    update_ot(opetable, ci.back().node);
+    update_ot(opetable, ci.upmost_node);
 
-    nrewrites += compute_rewrites(ci);
+    // nrewrites += compute_rewrites(ci);
 
     if (WITH_DB) {
-	update_db(opetable->get(ciph).ope, ci);
+	//update_db(opetable->get(ciph).ope, ci);
     }
 }
 
