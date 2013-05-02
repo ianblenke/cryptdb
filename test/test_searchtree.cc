@@ -920,9 +920,9 @@ public:
 int main(int argc, char ** argv)
 {
     //Test::test_search_tree();
-    Test::testBMerkleTree(argc, argv, false);
+    //Test::testBMerkleTree(argc, argv, false);
     //Test::testMerkleProof();
-    //Test::test_transform();
+    Test::test_transform();
 }
 
  

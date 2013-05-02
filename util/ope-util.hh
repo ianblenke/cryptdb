@@ -172,7 +172,7 @@ parse_ope(const uint64_t ctxt, uint64_t &v, uint64_t &nbits, uint64_t &index)
         tmp_ctxt = (uint64_t) tmp_ctxt >> 1;
     nbits = 64 - bit;
     uint64_t tmp_v = ctxt >> nbits;
-    index = tmp_v || s_mask;
+    index = tmp_v | s_mask;
     v = tmp_v >> num_bits;
 }
 

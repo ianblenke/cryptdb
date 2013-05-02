@@ -1,6 +1,7 @@
 #include <util/transform.hh>
 
 #include <util/util.hh>
+#include <util/ope-util.hh>
 
 using namespace std;
 
@@ -312,6 +313,79 @@ OPEdTransform::get_interval(OPEType & omin, OPEType & omax) {
      */
 
     //TODO
+    omin = -1;
+    omax = 0;
+
+    for (auto t: ts) {
+	OPEType omin_tmp, omax_tmp;
+	OPEType common_path = vec_to_path(t.ope_path);
+	OPEType common_bits = t.ope_path.size() * num_bits;
+
+	switch (t.optype) {
+	case TransType::SIMPLE: {
+		OPEType min_path = (common_path << num_bits) | (t.parent_index - 1); // -1 b/c OPE index at leaf is 1 less than BTree leaf index
+		omin = compute_ope(min_path, common_bits + num_bits);
+		omax = compute_ope(common_path, common_bits);
+		break;
+	}
+	case TransType::ROTATE_FROM_RIGHT: {
+		//left sibling has left_mcount - 1 real keys
+		OPEType parent_elem_path = (common_path << num_bits) | (t.parent_index - 1);
+		omin_tmp = compute_ope(parent_elem_path, common_bits + num_bits);
+		//This is ope enc for elem next to the elem at parent_index
+		OPEType parent_next_elem_path = (common_path << num_bits) | t.parent_index;
+		omax_tmp = compute_ope(parent_next_elem_path, common_bits + num_bits);
+		if (omin_tmp < omin) {
+			omin=omin_tmp;
+			cout <<"Hmm why is omin_tmp<omin in ROTATE RIGHT?" << endl;
+		}
+		if (omax_tmp > omax) omax=omax_tmp;	
+		break;
+	}
+	case TransType::ROTATE_FROM_LEFT: {
+		OPEType left_max_elem_path = (common_path << num_bits) | (t.parent_index - 1);
+		left_max_elem_path = (left_max_elem_path << num_bits) | (t.left_mcount - 1);
+		omin_tmp = compute_ope(left_max_elem_path, common_bits + 2*num_bits);
+		//This is ope enc for elem next to the elem at parent_index
+		OPEType parent_next_elem_path = (common_path << num_bits) | t.parent_index;
+		omax_tmp = compute_ope(parent_next_elem_path, common_bits + num_bits);
+		if (omin_tmp < omin) omin=omin_tmp;
+		if (omax_tmp > omax) {
+			omax=omax_tmp;
+			cout << "Hmm why is omax_tmp > omax in ROTATE LEFT?" << endl;
+		}
+		break;
+	}
+	case TransType::MERGE_WITH_RIGHT:
+	case TransType::MERGE_WITH_LEFT: {
+		OPEType parent_del_path = (common_path << num_bits) | (t.parent_index - 1);
+		omin_tmp = compute_ope(parent_del_path, common_bits + num_bits);
+
+		//Zero out last num_bits
+		OPEType max_path = (common_path >> num_bits) << num_bits;
+		//common_path & s_mask is the index of the parent's parent elem
+		max_path = max_path | (common_path & s_mask);
+		omax_tmp = compute_ope(max_path, common_bits - num_bits); 
+		if (omin_tmp < omin) omin=omin_tmp;
+		if (omax_tmp > omax) omax=omax_tmp;
+		break;
+	
+	}
+	// I assume NONLEAF type has ope_path to non-leaf node, and parent_index is index of elem deleted
+	case TransType::NONLEAF: {
+		OPEType nonleaf_elem_path = (common_path << num_bits) | (t.parent_index - 1);
+		omin_tmp = compute_ope(nonleaf_elem_path, common_bits + num_bits);
+		omax_tmp = omin_tmp;
+		if (omin_tmp < omin) omin=omin_tmp;
+		if (omax_tmp > omax) omax=omax_tmp;
+		break;
+	}
+
+	}//end of switch
+	
+    }//end of for loop
+
+
 	
 }
 
