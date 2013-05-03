@@ -461,7 +461,7 @@ handle_merge(dtransf t, vector<uint> & repr) {
     // Now cur_index == t.parent_index
 
     if (tsize == repr.size() - 1) {
-	// this is the node that moves to left sib
+	// this is the parent elem that moves to left sib
 	repr.push_back(t.left_mcount);
 	cur_index--;
     } else {

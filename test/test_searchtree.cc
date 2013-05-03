@@ -922,6 +922,8 @@ public:
 
 	omin = 0, omax = 0;
 	t2.get_interval(omin, omax);
+	cout << compute_ope(vec_to_path({2,1,2,1}),num_bits*4) << endl;
+	cout << compute_ope(vec_to_path({2,1}),num_bits*2) << endl;
 	
 	ope_dtransform_check(t2, omin, omax, {2,1,2,1},{2,1,2,1});
 	ope_dtransform_check(t2, omin, omax, {2,1,3},{2,1,2,2});
