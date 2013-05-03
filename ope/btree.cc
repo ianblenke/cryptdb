@@ -435,7 +435,7 @@ DelChangeInfo::add_change(TransType optype, Node * n, int parent_index, int left
     uint nbits;
     get_ope_path(n, opepath, nbits);
 
-    t.push_change(opepath, nbits/num_bits, parent_index, left_mcount);
+    t.push_change(opepath, nbits/num_bits, parent_index, left_mcount, optype);
 }
 
 static void

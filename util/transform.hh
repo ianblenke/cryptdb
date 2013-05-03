@@ -66,7 +66,7 @@ public:
      * Push_change should only be called for changes that happended to old
      * nodes; for a new root, call add_root()
      */
-    void push_change(OPEType ope_path, int num, int parent_index, int left_mcount);
+    void push_change(OPEType ope_path, int num, int parent_index, int left_mcount, TransType optype);
     
     // returns the interval of values affected by the transformation
     // min and max can also be affected

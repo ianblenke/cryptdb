@@ -283,7 +283,7 @@ OPEdTransform::~OPEdTransform() {
     ts.clear();
 }
 void
-OPEdTransform::push_change(OPEType ope_path, int num, int parent_index, int left_mcount) {
+OPEdTransform::push_change(OPEType ope_path, int num, int parent_index, int left_mcount, TransType optype) {
 
     dtransf t;
     t.ope_path = path_to_vec(ope_path, num);
@@ -293,7 +293,8 @@ OPEdTransform::push_change(OPEType ope_path, int num, int parent_index, int left
     }
     t.parent_index = parent_index;
     t.left_mcount = left_mcount;
-    if (ts.size()) {
+    t.optype = optype;
+/*    if (ts.size()) {
 	dtransf last_t = ts.back();
 	assert_s(last_t.optype != TransType::SIMPLE &&
 		 last_t.optype != TransType::ROTATE_FROM_RIGHT &&
@@ -301,10 +302,12 @@ OPEdTransform::push_change(OPEType ope_path, int num, int parent_index, int left
 		 "pushing a transformation after a termina transformation!");
 
     }
-
+*/
     ts.push_back(t);
 }
 
+
+//Assume's t.parent_index is the index in the BTree not the OPE tree (BTree index is 1 larger)
 void
 OPEdTransform::get_interval(OPEType & omin, OPEType & omax) {
     /*
@@ -509,6 +512,21 @@ handle_rotate_from_left(dtransf t, vector<uint> & repr) {
     
 }
 
+static void
+handle_simple(dtransf t, vector<uint> & repr) {
+
+    uint tsize = t.ope_path.size();
+    uint & cur_index = repr[tsize]; // index in node
+
+    if (tsize + 1 != repr.size()){
+	cerr << "Simple dtransf doesn't have right length ope_path" << endl;
+    }
+
+    if (cur_index > (uint) t.parent_index) {
+	cur_index--;
+    }
+    return;
+}
 
 OPEType
 OPEdTransform::transform(OPEType val) {
@@ -526,11 +544,14 @@ OPEdTransform::transform(OPEType val) {
     
     // loop thru each transf
     for (auto t :  ts) {
-
 	if (match(t.ope_path, repr)) { // need to transform
 	    if (DEBUG_TRANSF) cerr << "match with ope path " << pretty_path(t.ope_path) << "\n";
 	    
 	    switch (t.optype) {
+	    case TransType::SIMPLE: {
+		handle_simple(t, repr);
+		break;
+	    }
 	    case TransType::ROTATE_FROM_RIGHT: {
 		handle_rotate_from_right(t, repr);
 		break;
@@ -551,6 +572,7 @@ OPEdTransform::transform(OPEType val) {
     }
 
     // ope encodings have the last index one less than the one in the btree
+
     assert_s(repr.size() > 0 && repr[repr.size() -1 ] > 0, "index must be > 0");
     repr[repr.size()-1]--;
     return vec_to_enc(repr);

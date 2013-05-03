@@ -787,7 +787,7 @@ public:
 	assert_s(t2.equals(t), "serialization does not work");
     }
     static void
-    test_transform() {
+    test_itransform() {
 	OPEiTransform t;
 	t.push_change(vec_to_path({2, 1, 5}), 3, 1, 1);
 	t.push_change(vec_to_path({2, 1}), 2,    6, 3);
@@ -865,7 +865,75 @@ public:
 	cerr << "OK!\n";
 	
     }
-    
+
+    static void
+    ope_dtransform_check(OPEdTransform & t, OPEType omin, OPEType omax, vector<uint> ope_path, vector<uint> new_path){
+	cerr << "test on B tree path " << pretty_path(ope_path);
+	
+	assert_s(ope_path[ope_path.size()-1] > 0, "invalid test: last position needs > 0");
+	ope_path[ope_path.size()-1]--; //because index in ope encoding is 1 less
+				       //than in Btre..
+	OPEType before_ope = vec_to_enc(ope_path);
+
+
+	cerr << " ope enc " << before_ope << " "
+	     << "ope enc to vec back " << pretty_path(enc_to_vec(before_ope)) << "\n";
+
+	OPEType new_ope = t.transform(before_ope);
+	if (before_ope != new_ope) {
+	    cerr <<"omin, before_ope, omax"<<"\n"<< omin << "\n" << before_ope << "\n" << omax <<"\n";
+	    assert_s(omin <= before_ope && omax >= before_ope, "ope changed yet intervals did not contain it");
+	}
+	cerr << "new ope is " << new_ope << " path is " << pretty_path(enc_to_vec(new_ope)) << "\n";
+	vector<uint> compute_path = enc_to_vec(new_ope);
+	compute_path[compute_path.size()-1]++;
+	if (!check_equals(compute_path, new_path)) {
+	    cerr << "expected " << pretty_path(new_path) << " computed " << pretty_path(compute_path) << "\n";
+	    assert_s(false, "");
+	}
+    }
+
+
+   
+    static void
+    test_dtransform() {
+	
+	//Test simple leaf delete
+	OPEdTransform t;
+	//Deleting index 3, which is 2nd index in OPE tree leaf.
+	t.push_change(vec_to_path({2,1,2}), 3, 3, -1, TransType::SIMPLE);
+	OPEType omin = 0, omax = 0;
+	t.get_interval(omin, omax);
+
+	ope_dtransform_check(t, omin, omax, {2,1,2,1},{2,1,2,1});
+	ope_dtransform_check(t, omin, omax, {2,1,2,2},{2,1,2,2});
+	ope_dtransform_check(t, omin, omax, {2,1,2,4},{2,1,2,3});
+	ope_dtransform_check(t, omin, omax, {2,1,2,5},{2,1,2,4});
+	ope_dtransform_check(t, omin, omax, {2,1,2},{2,1,2});
+	cout << num_bits << " " << b_min_keys << " : " << b_max_keys << endl;
+
+	cerr<< "Simple OK!\n";
+
+	//Simple -> Merge Righti
+	OPEdTransform t2;
+	//Deleting index 3, which is 2nd index in OPE tree leaf.
+	t2.push_change(vec_to_path({2,1,2}), 3, 2, -1, TransType::SIMPLE);
+	t2.push_change(vec_to_path({2,1}), 2, 3, 1, TransType::MERGE_WITH_RIGHT);
+
+	omin = 0, omax = 0;
+	t2.get_interval(omin, omax);
+	
+	ope_dtransform_check(t2, omin, omax, {2,1,2,1},{2,1,2,1});
+	ope_dtransform_check(t2, omin, omax, {2,1,3},{2,1,2,2});
+	ope_dtransform_check(t2, omin, omax, {2,1,3,1},{2,1,2,3});
+	ope_dtransform_check(t2, omin, omax, {2,1,3,2},{2,1,2,4});
+
+
+
+	cerr << "OK!\n";
+	
+    }
+
     // Inputs: the number of values to test the tree on and the
     // frequency of testing (check tree every test_freq insertions)
     //
@@ -922,7 +990,8 @@ int main(int argc, char ** argv)
     //Test::test_search_tree();
     //Test::testBMerkleTree(argc, argv, false);
     //Test::testMerkleProof();
-    Test::test_transform();
+    //Test::test_itransform();
+    Test::test_dtransform();
 }
 
  
