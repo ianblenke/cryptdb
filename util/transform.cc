@@ -363,12 +363,7 @@ OPEdTransform::get_interval(OPEType & omin, OPEType & omax) {
 	case TransType::MERGE_WITH_LEFT: {
 		OPEType parent_del_path = (common_path << num_bits) | (t.parent_index - 1);
 		omin_tmp = compute_ope(parent_del_path, common_bits + num_bits);
-
-		//Zero out last num_bits
-		OPEType max_path = (common_path >> num_bits) << num_bits;
-		//common_path & s_mask is the index of the parent's parent elem
-		max_path = max_path | (common_path & s_mask);
-		omax_tmp = compute_ope(max_path, common_bits - num_bits); 
+		omax_tmp = compute_ope(common_path, common_bits); 
 		if (omin_tmp < omin) omin=omin_tmp;
 		if (omax_tmp > omax) omax=omax_tmp;
 		break;
@@ -462,13 +457,13 @@ handle_merge(dtransf t, vector<uint> & repr) {
 
     if (tsize == repr.size() - 1) {
 	// this is the parent elem that moves to left sib
-	repr.push_back(t.left_mcount);
 	cur_index--;
+	repr.push_back(t.left_mcount+1);
     } else {
 	// in the right subtree
 	cur_index--;
 	uint & child_index = repr[tsize + 1];
-	child_index = child_index + t.left_mcount;
+	child_index = child_index + 1 + t.left_mcount;
     }
 }
 

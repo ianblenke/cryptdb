@@ -914,7 +914,7 @@ public:
 
 	cerr<< "Simple OK!\n";
 
-	//Simple -> Merge Righti
+	//Simple -> Merge Right
 	OPEdTransform t2;
 	//Deleting index 3, which is 2nd index in OPE tree leaf.
 	t2.push_change(vec_to_path({2,1,2}), 3, 2, -1, TransType::SIMPLE);
@@ -922,14 +922,38 @@ public:
 
 	omin = 0, omax = 0;
 	t2.get_interval(omin, omax);
-	cout << compute_ope(vec_to_path({2,1,2,1}),num_bits*4) << endl;
-	cout << compute_ope(vec_to_path({2,1}),num_bits*2) << endl;
 	
 	ope_dtransform_check(t2, omin, omax, {2,1,2,1},{2,1,2,1});
 	ope_dtransform_check(t2, omin, omax, {2,1,3},{2,1,2,2});
 	ope_dtransform_check(t2, omin, omax, {2,1,3,1},{2,1,2,3});
 	ope_dtransform_check(t2, omin, omax, {2,1,3,2},{2,1,2,4});
+	ope_dtransform_check(t2, omin, omax, {2,1,4,2},{2,1,3,2});
+	ope_dtransform_check(t2, omin, omax, {2,1,5,4},{2,1,4,4});
+	ope_dtransform_check(t2, omin, omax, {2,2,1},{2,2,1});
+	ope_dtransform_check(t2, omin, omax, {2,0,1},{2,0,1});
 
+	cerr << "Simpe -> Merge Right OK!\n";
+
+
+	//Simple -> Merge Left
+	OPEdTransform t3;
+	//Deleting index 3, which is 2nd index in OPE tree leaf.
+	t3.push_change(vec_to_path({2,1,3}), 3, 2, -1, TransType::SIMPLE);
+	t3.push_change(vec_to_path({2,1}), 2, 3, 2, TransType::MERGE_WITH_LEFT);
+
+	omin = 0, omax = 0;
+	t3.get_interval(omin, omax);
+	
+	ope_dtransform_check(t3, omin, omax, {2,1,2,1},{2,1,2,1});
+	ope_dtransform_check(t3, omin, omax, {2,1,2,2},{2,1,2,2});
+	ope_dtransform_check(t3, omin, omax, {2,1,3},{2,1,2,3});
+	ope_dtransform_check(t3, omin, omax, {2,1,3,1},{2,1,2,4});
+	ope_dtransform_check(t3, omin, omax, {2,1,4,2},{2,1,3,2});
+	ope_dtransform_check(t3, omin, omax, {2,1,5,4},{2,1,4,4});
+	ope_dtransform_check(t3, omin, omax, {2,2,1},{2,2,1});
+	ope_dtransform_check(t3, omin, omax, {2,0,1},{2,0,1});
+
+	cerr << "Simple -> Merge Left OK!\n";
 
 
 	cerr << "OK!\n";
