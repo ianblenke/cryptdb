@@ -916,7 +916,6 @@ public:
 
 	//Simple -> Merge Right
 	OPEdTransform t2;
-	//Deleting index 3, which is 2nd index in OPE tree leaf.
 	t2.push_change(vec_to_path({2,1,2}), 3, 2, -1, TransType::SIMPLE);
 	t2.push_change(vec_to_path({2,1}), 2, 3, 1, TransType::MERGE_WITH_RIGHT);
 
@@ -937,7 +936,6 @@ public:
 
 	//Simple -> Merge Left
 	OPEdTransform t3;
-	//Deleting index 3, which is 2nd index in OPE tree leaf.
 	t3.push_change(vec_to_path({2,1,3}), 3, 2, -1, TransType::SIMPLE);
 	t3.push_change(vec_to_path({2,1}), 2, 3, 2, TransType::MERGE_WITH_LEFT);
 
@@ -954,6 +952,43 @@ public:
 	ope_dtransform_check(t3, omin, omax, {2,0,1},{2,0,1});
 
 	cerr << "Simple -> Merge Left OK!\n";
+
+	//Simple -> Rotate Right
+	OPEdTransform t4;
+	t4.push_change(vec_to_path({2,1,2}), 3, 2, -1, TransType::SIMPLE);
+	t4.push_change(vec_to_path({2,1}), 2, 3, 1, TransType::ROTATE_FROM_RIGHT);
+
+	omin = 0, omax = 0;
+	t4.get_interval(omin, omax);
+	
+	ope_dtransform_check(t4, omin, omax, {2,1,2,1},{2,1,2,1});
+	ope_dtransform_check(t4, omin, omax, {2,1,3},{2,1,2,2});
+	ope_dtransform_check(t4, omin, omax, {2,1,3,1},{2,1,3});
+	ope_dtransform_check(t4, omin, omax, {2,1,3,2},{2,1,3,1});
+	ope_dtransform_check(t4, omin, omax, {2,1,3,3},{2,1,3,2});
+	ope_dtransform_check(t4, omin, omax, {2,1,2},{2,1,2});
+	ope_dtransform_check(t4, omin, omax, {2,1,4,1},{2,1,4,1});
+
+	cerr << "Simple -> Rotate from Right OK!\n";
+
+	//Simple -> Rotate Left
+	OPEdTransform t5;
+	t5.push_change(vec_to_path({2,1,3}), 3, 2, -1, TransType::SIMPLE);
+	t5.push_change(vec_to_path({2,1}), 2, 3, 3, TransType::ROTATE_FROM_LEFT);
+
+	omin = 0, omax = 0;
+	t5.get_interval(omin, omax);
+	
+	ope_dtransform_check(t5, omin, omax, {2,1,2,1},{2,1,2,1});
+	ope_dtransform_check(t5, omin, omax, {2,1,2,2},{2,1,2,2});
+	ope_dtransform_check(t5, omin, omax, {2,1,2,3},{2,1,3});
+	ope_dtransform_check(t5, omin, omax, {2,1,3},{2,1,3,1});
+	ope_dtransform_check(t5, omin, omax, {2,1,3,1},{2,1,3,2});
+	ope_dtransform_check(t5, omin, omax, {2,1,2},{2,1,2});
+	ope_dtransform_check(t5, omin, omax, {2,1,4,1},{2,1,4,1});
+	cerr << "Simple -> Rotate from Left OK!\n";
+
+
 
 
 	cerr << "OK!\n";

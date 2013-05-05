@@ -396,8 +396,8 @@ handle_rotate_from_right(dtransf t, vector<uint> & repr) {
     // Case: key is in parent
     if (repr.size() - 1 == tsize) { // key is in parent
 	if ((int)cur_index == t.parent_index) {
-	    repr.push_back(t.left_mcount);
 	    cur_index--;
+	    repr.push_back(t.left_mcount + 1);
 	}
 	return;
     }
@@ -423,8 +423,8 @@ handle_rotate_from_right(dtransf t, vector<uint> & repr) {
 	// Case: it is in a subtree
 	
 	if (child_index == 0) {//it is in zeroth subtree
-	    child_index = t.left_mcount;
-	    cur_index = t.parent_index - 1;
+	    child_index = t.left_mcount+1;
+	    cur_index--;
 	    return;
 	} else {
 	    child_index--;
@@ -488,11 +488,11 @@ handle_rotate_from_left(dtransf t, vector<uint> & repr) {
     uint & child_index = repr[tsize + 1];
 
     if ((int)cur_index == t.parent_index - 1) { // in left subtree
-	if ((int)child_index == t.left_mcount -1) { // only last key or subtree change
+	if ((int)child_index == t.left_mcount) { // only last key or subtree change
 	    if (repr.size() - 2  == tsize) {//key is in left sibling
 		// move to parent
-		repr.resize(tsize + 1);
 		cur_index++;
+		repr.resize(tsize + 1);
 	    } else { // key is in some left subtree
 		cur_index++;
 		child_index = 0;
@@ -514,7 +514,7 @@ handle_simple(dtransf t, vector<uint> & repr) {
     uint & cur_index = repr[tsize]; // index in node
 
     if (tsize + 1 != repr.size()){
-	cerr << "Simple dtransf doesn't have right length ope_path" << endl;
+	assert_s(false,"Simple dtransf doesn't have right length ope_path");
     }
 
     if (cur_index > (uint) t.parent_index) {
