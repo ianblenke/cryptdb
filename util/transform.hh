@@ -41,8 +41,11 @@ struct dtransf {
 		      //during merge 
     int left_mcount; // the number of keys in the left node affected by this
 		     // operation at the time  before this operation
-    
     TransType optype;
+
+    std::vector<uint> smallest_elem_path; //in non-leaf delete case, path to the leaf elem 
+					  //moved to the non-leaf delete index.
+
 };
 
 

@@ -523,6 +523,17 @@ handle_simple(dtransf t, vector<uint> & repr) {
     return;
 }
 
+static void
+handle_nonleaf(dtransf t, vector<uint> & repr) {
+
+    if (match(repr, t.smallest_elem_path)){
+	repr = t.ope_path;
+	repr.push_back(t.parent_index);
+	return;	
+    }
+
+}
+
 OPEType
 OPEdTransform::transform(OPEType val) {
 
@@ -543,6 +554,10 @@ OPEdTransform::transform(OPEType val) {
 	    if (DEBUG_TRANSF) cerr << "match with ope path " << pretty_path(t.ope_path) << "\n";
 	    
 	    switch (t.optype) {
+	    case TransType::NONLEAF: {
+		handle_nonleaf(t, repr);
+		break;
+	    }
 	    case TransType::SIMPLE: {
 		handle_simple(t, repr);
 		break;
