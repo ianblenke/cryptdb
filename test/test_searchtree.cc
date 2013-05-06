@@ -1062,11 +1062,7 @@ public:
 
 	cerr << "Nonleaf -> Simple -> Merge Right -> Rotate From Right!\n";
 
-
-
-
-
-	cerr << "OK!\n";
+	cerr << "All delete transform tests OK!\n";
 	
     }
 
