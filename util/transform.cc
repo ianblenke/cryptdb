@@ -282,6 +282,25 @@ OPEdTransform::OPEdTransform() {
 OPEdTransform::~OPEdTransform() {
     ts.clear();
 }
+
+/*
+* If SIMPLE or NONLEAF, ope_path is the path to the node with the deleted elem. Otherwise
+* ope_path is path to parent of affected nodes. num is the # of nodes in this path.
+*
+* If SIMPLE or NONLEAF, parent_index is the index of the deleted elem. Otherwise its the single
+* index of the elem affected in the parent due to the tree operation. NOTE: parent_index uses
+* Btree indexing! So for the first key, parent_index = 1, not 0. (So +1 from ope index)
+*
+* left_mcount is # of keys in the left node of the operation. Note really used unless operation
+* if a MERGE or a ROTATE. NOTE: left_mcount is # of keys, which is # of elems - 1. So if
+* the left node has 2 keys, it has left_mcount = 2. This is equivalent to the BTrees m_count-1 or
+* m_vector.size()-1
+*
+* optype is one of the defined transformation types
+*
+* smallest_elem_path is used only NONLEAF deletes, where its the path to the elem that replaces
+* the deleted nonleaf elem. smallest_elem_path_num is the number of nodes in the path
+*/
 void
 OPEdTransform::push_change(OPEType ope_path, int num, int parent_index, int left_mcount, TransType optype, OPEType smallest_elem_path, int smallest_elem_path_num) {
 
@@ -295,15 +314,13 @@ OPEdTransform::push_change(OPEType ope_path, int num, int parent_index, int left
     t.left_mcount = left_mcount;
     t.optype = optype;
     t.smallest_elem_path = path_to_vec(smallest_elem_path, smallest_elem_path_num);
-/*    if (ts.size()) {
+    if (ts.size()) {
 	dtransf last_t = ts.back();
-	assert_s(last_t.optype != TransType::SIMPLE &&
-		 last_t.optype != TransType::ROTATE_FROM_RIGHT &&
+	assert_s(last_t.optype != TransType::ROTATE_FROM_RIGHT &&
 		 last_t.optype != TransType::ROTATE_FROM_LEFT,
 		 "pushing a transformation after a termina transformation!");
-
     }
-*/
+
     ts.push_back(t);
 }
 
@@ -311,12 +328,6 @@ OPEdTransform::push_change(OPEType ope_path, int num, int parent_index, int left
 //Assume's t.parent_index is the index in the BTree not the OPE tree (BTree index is 1 larger)
 void
 OPEdTransform::get_interval(OPEType & omin, OPEType & omax) {
-    /*
-     * See OPEiTransform::get_interval for example
-     * 
-     */
-
-    //TODO
     omin = -1;
     omax = 0;
 
@@ -372,6 +383,7 @@ OPEdTransform::get_interval(OPEType & omin, OPEType & omax) {
 	}
 	// I assume NONLEAF type has ope_path to non-leaf node, and parent_index is index of elem deleted
 	case TransType::NONLEAF: {
+		//Only OPE val that changes it the smallest elem (that replaces the nonleaf deleted elem
 		OPEType leaf_elem_path = vec_to_path(t.smallest_elem_path)-1;
 		omin_tmp = compute_ope(leaf_elem_path, t.smallest_elem_path.size()*num_bits);
 		omax_tmp = omin_tmp;

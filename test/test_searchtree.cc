@@ -1122,7 +1122,7 @@ int main(int argc, char ** argv)
     //Test::test_search_tree();
     //Test::testBMerkleTree(argc, argv, false);
     //Test::testMerkleProof();
-    //Test::test_itransform();
+    Test::test_itransform();
     Test::test_dtransform();
 }
 
