@@ -1001,7 +1001,36 @@ public:
 	ope_dtransform_check(t6, omin, omax, {2,4},{2,4});
 	ope_dtransform_check(t6, omin, omax, {2,3,1},{2,3,1});
 	ope_dtransform_check(t6, omin, omax, {2,3,0,1},{2,3,0,1});
+	cerr << "Nonleaf -> Simple OK!\n";
 
+	//Nonleaf -> Simple -> Merge Right -> Merge Right
+	OPEdTransform t7;
+	t7.push_change(vec_to_path({2}), 1, 3, -1, TransType::NONLEAF, vec_to_path({2,3,0,0,0,1}),6);
+	t7.push_change(vec_to_path({2,3,0,0,0}), 5, 1, -1, TransType::SIMPLE, vec_to_path({}),0);
+	t7.push_change(vec_to_path({2,3,0,0}), 4, 1, 1, TransType::MERGE_WITH_RIGHT, vec_to_path({}),0);
+	t7.push_change(vec_to_path({2,3,0}), 3, 1, 1, TransType::MERGE_WITH_RIGHT, vec_to_path({}),0);
+
+	omin = 0, omax = 0;
+	t7.get_interval(omin, omax);
+	
+	ope_dtransform_check(t7, omin, omax, {2,3,0,0,0,1},{2,3});
+	ope_dtransform_check(t7, omin, omax, {2,3,0,0,0,2},{2,3,0,0,0,1});
+	ope_dtransform_check(t7, omin, omax, {2,3,0,0,1},{2,3,0,0,0,2});
+	ope_dtransform_check(t7, omin, omax, {2,3,0,0,1,1},{2,3,0,0,0,3});
+	ope_dtransform_check(t7, omin, omax, {2,3,0,0,1,2},{2,3,0,0,0,4});
+	ope_dtransform_check(t7, omin, omax, {2,3,0,0,2,1},{2,3,0,0,1,1});
+	ope_dtransform_check(t7, omin, omax, {2,3,0,0,2,2},{2,3,0,0,1,2});
+	ope_dtransform_check(t7, omin, omax, {2,3,0,1},{2,3,0,0,2});
+	ope_dtransform_check(t7, omin, omax, {2,3,0,1,0,1},{2,3,0,0,2,1});
+	ope_dtransform_check(t7, omin, omax, {2,3,0,1,0,2},{2,3,0,0,2,2});
+	ope_dtransform_check(t7, omin, omax, {2,3,0,1,1},{2,3,0,0,3});
+	ope_dtransform_check(t7, omin, omax, {2,3,0,1,2},{2,3,0,0,4});
+	ope_dtransform_check(t7, omin, omax, {2,3,0,1,1,1},{2,3,0,0,3,1});
+	ope_dtransform_check(t7, omin, omax, {2,3,0,1,2,3},{2,3,0,0,4,3});
+	ope_dtransform_check(t7, omin, omax, {2,3,0,2},{2,3,0,1});
+	ope_dtransform_check(t7, omin, omax, {2,3,0,3},{2,3,0,2});
+
+	cerr << "Nonleaf -> Simple -> Double Merge Rights OK!\n";
 
 
 
