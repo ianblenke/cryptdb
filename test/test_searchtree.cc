@@ -901,7 +901,7 @@ public:
 	//Test simple leaf delete
 	OPEdTransform t;
 	//Deleting index 3, which is 2nd index in OPE tree leaf.
-	t.push_change(vec_to_path({2,1,2}), 3, 3, -1, TransType::SIMPLE);
+	t.push_change(vec_to_path({2,1,2}), 3, 3, -1, TransType::SIMPLE, vec_to_path({}),0);
 	OPEType omin = 0, omax = 0;
 	t.get_interval(omin, omax);
 
@@ -916,8 +916,8 @@ public:
 
 	//Simple -> Merge Right
 	OPEdTransform t2;
-	t2.push_change(vec_to_path({2,1,2}), 3, 2, -1, TransType::SIMPLE);
-	t2.push_change(vec_to_path({2,1}), 2, 3, 1, TransType::MERGE_WITH_RIGHT);
+	t2.push_change(vec_to_path({2,1,2}), 3, 2, -1, TransType::SIMPLE, vec_to_path({}),0);
+	t2.push_change(vec_to_path({2,1}), 2, 3, 1, TransType::MERGE_WITH_RIGHT, vec_to_path({}),0);
 
 	omin = 0, omax = 0;
 	t2.get_interval(omin, omax);
@@ -936,8 +936,8 @@ public:
 
 	//Simple -> Merge Left
 	OPEdTransform t3;
-	t3.push_change(vec_to_path({2,1,3}), 3, 2, -1, TransType::SIMPLE);
-	t3.push_change(vec_to_path({2,1}), 2, 3, 2, TransType::MERGE_WITH_LEFT);
+	t3.push_change(vec_to_path({2,1,3}), 3, 2, -1, TransType::SIMPLE, vec_to_path({}),0);
+	t3.push_change(vec_to_path({2,1}), 2, 3, 2, TransType::MERGE_WITH_LEFT, vec_to_path({}),0);
 
 	omin = 0, omax = 0;
 	t3.get_interval(omin, omax);
@@ -955,8 +955,8 @@ public:
 
 	//Simple -> Rotate Right
 	OPEdTransform t4;
-	t4.push_change(vec_to_path({2,1,2}), 3, 2, -1, TransType::SIMPLE);
-	t4.push_change(vec_to_path({2,1}), 2, 3, 1, TransType::ROTATE_FROM_RIGHT);
+	t4.push_change(vec_to_path({2,1,2}), 3, 2, -1, TransType::SIMPLE, vec_to_path({}),0);
+	t4.push_change(vec_to_path({2,1}), 2, 3, 1, TransType::ROTATE_FROM_RIGHT, vec_to_path({}),0);
 
 	omin = 0, omax = 0;
 	t4.get_interval(omin, omax);
@@ -973,8 +973,8 @@ public:
 
 	//Simple -> Rotate Left
 	OPEdTransform t5;
-	t5.push_change(vec_to_path({2,1,3}), 3, 2, -1, TransType::SIMPLE);
-	t5.push_change(vec_to_path({2,1}), 2, 3, 3, TransType::ROTATE_FROM_LEFT);
+	t5.push_change(vec_to_path({2,1,3}), 3, 2, -1, TransType::SIMPLE, vec_to_path({}),0);
+	t5.push_change(vec_to_path({2,1}), 2, 3, 3, TransType::ROTATE_FROM_LEFT, vec_to_path({}),0);
 
 	omin = 0, omax = 0;
 	t5.get_interval(omin, omax);
@@ -987,6 +987,23 @@ public:
 	ope_dtransform_check(t5, omin, omax, {2,1,2},{2,1,2});
 	ope_dtransform_check(t5, omin, omax, {2,1,4,1},{2,1,4,1});
 	cerr << "Simple -> Rotate from Left OK!\n";
+
+	//Nonleaf -> Simple
+	OPEdTransform t6;
+	t6.push_change(vec_to_path({2}), 1, 3, -1, TransType::NONLEAF, vec_to_path({2,3,0,0,1}),5);
+	t6.push_change(vec_to_path({2,3,0,0}), 4, 1, -1, TransType::SIMPLE, vec_to_path({}),0);
+
+	omin = 0, omax = 0;
+	t6.get_interval(omin, omax);
+	
+	ope_dtransform_check(t6, omin, omax, {2,3,0,0,1},{2,3});
+	ope_dtransform_check(t6, omin, omax, {2,3,0,0,2},{2,3,0,0,1});
+	ope_dtransform_check(t6, omin, omax, {2,4},{2,4});
+	ope_dtransform_check(t6, omin, omax, {2,3,1},{2,3,1});
+	ope_dtransform_check(t6, omin, omax, {2,3,0,1},{2,3,0,1});
+
+
+
 
 
 

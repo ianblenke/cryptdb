@@ -427,7 +427,7 @@ bool Node::vector_insert_for_split (Elem& element, int index) {
 }
 
 void
-DelChangeInfo::add_change(TransType optype, Node * n, int parent_index, int left_mcount) {
+DelChangeInfo::add_change(TransType optype, Node * n, int parent_index, int left_mcount, Node* smallest_elem_node) {
 
     upmost_node = n;
     
@@ -435,7 +435,11 @@ DelChangeInfo::add_change(TransType optype, Node * n, int parent_index, int left
     uint nbits;
     get_ope_path(n, opepath, nbits);
 
-    t.push_change(opepath, nbits/num_bits, parent_index, left_mcount, optype);
+    OPEType smallest_elem_path;
+    uint smallest_elem_path_bits;
+    get_ope_path(smallest_elem_node, smallest_elem_path, smallest_elem_path_bits);
+
+    t.push_change(opepath, nbits/num_bits, parent_index, left_mcount, optype, smallest_elem_path, smallest_elem_path_bits/num_bits);
 }
 
 static void
@@ -972,11 +976,11 @@ Node::tree_delete_help (DelChangeInfo & ci, Elem& target, UpdateMerkleProof & pr
 	
 	bool r = node->vector_delete(target, target_pos);
 
-	ci.add_change(TransType::SIMPLE, node, target_pos, -1);
+	ci.add_change(TransType::SIMPLE, node, target_pos, -1, 0);
 	return r;
     } else {
 	assert_s(node->is_root() || (node->key_count() == (int)b_min_keys), "node key count was lower than b_min_keys");
-	ci.add_change(TransType::SIMPLE, node, target_pos, -1);
+	ci.add_change(TransType::SIMPLE, node, target_pos, -1,0);
 	node->vector_delete(target, target_pos);
 
 	
@@ -1014,7 +1018,7 @@ Node::tree_delete_help (DelChangeInfo & ci, Elem& target, UpdateMerkleProof & pr
 		// node will be null after this function, because delete
 		// terminates, so the function will finalize the proof
 		if (DEBUG_PROOF) { cerr << "rotate right \n";}
-		ci.add_change(TransType::ROTATE_FROM_RIGHT, node->mp_parent, parent_index_this+1, node->m_count);
+		ci.add_change(TransType::ROTATE_FROM_RIGHT, node->mp_parent, parent_index_this+1, node->m_count,0);
 		node->rotate_from_right(parent_index_this);
 
 		break;
@@ -1025,14 +1029,14 @@ Node::tree_delete_help (DelChangeInfo & ci, Elem& target, UpdateMerkleProof & pr
 		// node will be null after this function, because delete
 		// terminates, so the function will finalize the proof
 		if (DEBUG_PROOF) { cerr << "rotate left \n";}
-		ci.add_change(TransType::ROTATE_FROM_LEFT, node->mp_parent, parent_index_this, left->m_count);
+		ci.add_change(TransType::ROTATE_FROM_LEFT, node->mp_parent, parent_index_this, left->m_count,0);
 		node->rotate_from_left(parent_index_this);
 
 		break;
 	    }
 	    else if (right) {
 		if (DEBUG_PROOF) { cerr << "merge right \n";}
-		ci.add_change(TransType::MERGE_WITH_RIGHT, node->mp_parent, parent_index_this + 1, this->m_count);
+		ci.add_change(TransType::MERGE_WITH_RIGHT, node->mp_parent, parent_index_this + 1, this->m_count,0);
 		node = node->merge_right(parent_index_this);
 	    }
 	    else if (left) {
@@ -1043,7 +1047,7 @@ Node::tree_delete_help (DelChangeInfo & ci, Elem& target, UpdateMerkleProof & pr
 		}
 		// ---------------------
 		if (DEBUG_PROOF) { cerr << "merge left \n";}
-		ci.add_change(TransType::MERGE_WITH_LEFT, node->mp_parent, parent_index_this, left->m_count);
+		ci.add_change(TransType::MERGE_WITH_LEFT, node->mp_parent, parent_index_this, left->m_count,0);
 		node = node->merge_left(parent_index_this);
 
 	    }

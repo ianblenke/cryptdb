@@ -105,7 +105,7 @@ struct DelChangeInfo {
     Node * upmost_node;
     OPEdTransform t;
     // n is this node for a simple delete operation or the parent otherwise
-    void add_change(TransType optype, Node * n, int parent_index, int left_mcount);
+    void add_change(TransType optype, Node * n, int parent_index, int left_mcount, Node* smallest_elem_node);
 };
 
 

@@ -283,7 +283,7 @@ OPEdTransform::~OPEdTransform() {
     ts.clear();
 }
 void
-OPEdTransform::push_change(OPEType ope_path, int num, int parent_index, int left_mcount, TransType optype) {
+OPEdTransform::push_change(OPEType ope_path, int num, int parent_index, int left_mcount, TransType optype, OPEType smallest_elem_path, int smallest_elem_path_num) {
 
     dtransf t;
     t.ope_path = path_to_vec(ope_path, num);
@@ -294,6 +294,7 @@ OPEdTransform::push_change(OPEType ope_path, int num, int parent_index, int left
     t.parent_index = parent_index;
     t.left_mcount = left_mcount;
     t.optype = optype;
+    t.smallest_elem_path = path_to_vec(smallest_elem_path, smallest_elem_path_num);
 /*    if (ts.size()) {
 	dtransf last_t = ts.back();
 	assert_s(last_t.optype != TransType::SIMPLE &&
@@ -371,8 +372,8 @@ OPEdTransform::get_interval(OPEType & omin, OPEType & omax) {
 	}
 	// I assume NONLEAF type has ope_path to non-leaf node, and parent_index is index of elem deleted
 	case TransType::NONLEAF: {
-		OPEType nonleaf_elem_path = (common_path << num_bits) | (t.parent_index - 1);
-		omin_tmp = compute_ope(nonleaf_elem_path, common_bits + num_bits);
+		OPEType leaf_elem_path = vec_to_path(t.smallest_elem_path)-1;
+		omin_tmp = compute_ope(leaf_elem_path, t.smallest_elem_path.size()*num_bits);
 		omax_tmp = omin_tmp;
 		if (omin_tmp < omin) omin=omin_tmp;
 		if (omax_tmp > omax) omax=omax_tmp;
@@ -525,10 +526,10 @@ handle_simple(dtransf t, vector<uint> & repr) {
 
 static void
 handle_nonleaf(dtransf t, vector<uint> & repr) {
-
-    if (match(repr, t.smallest_elem_path)){
+    if (repr == t.smallest_elem_path){
 	repr = t.ope_path;
 	repr.push_back(t.parent_index);
+	cout << pretty_path(repr) << endl;
 	return;	
     }
 
