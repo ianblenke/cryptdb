@@ -9,9 +9,9 @@
 #include <resolv.h>
 #include <sstream>
 
-const int OPE_SERVER_PORT = 1111;
-const int OPE_SERVER_PORT2 = 1113;
-const int OPE_CLIENT_PORT = 1112; 
+const int OPE_SERVER_PORT = 2111;
+const int OPE_SERVER_PORT2 = 2113;
+const int OPE_CLIENT_PORT = 2112; 
 
 
 #if WITH_NET

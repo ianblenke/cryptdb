@@ -258,7 +258,7 @@ clientgeneric(BC * bc) {
     if (DEBUG_EXP) cerr << "SIZE of workload is " << vs->size() << "\n";
 
     cout << datadelim
-         << "{ \"iv:scheme\": " << "\"stOPE\"" << ",\n"
+         << "{ \"iv:scheme\": " << "\"mOPE\"" << ",\n"
          << "  \"iv:nelem\": " << vs->size() << ",\n"
          << "  \"iv:ptsize\": " << plain_size << ",\n"
          << "  \"iv:malicious\": " << is_malicious << ",\n"
@@ -307,12 +307,12 @@ client_thread() {
 	
     }
 
-    assert_s(false, "only 64 in this experiment");
+    //assert_s(false, "only 64 in this experiment");
 
     if (plain_size >= 128) {
 	cerr << "creating string, aes cbc client\n";
 	clientgeneric<string, aes_cbc>(bc_aes);
-	
+  return;	
     }
 
     
@@ -955,7 +955,7 @@ static void
 measure_bulk_instance(uint n, our_conf c) {
 
     cout << datadelim
-         << "{ \"iv:scheme\": " << "\"stOPE\"" << ",\n"
+         << "{ \"iv:scheme\": " << "\"mOPE\"" << ",\n"
          << "  \"iv:nelem\": " << n << ",\n"
          << "  \"iv:ptsize\": " << c.plain_size << ",\n"
          << "  \"iv:malicious\": " << c.is_malicious << ",\n"
@@ -998,7 +998,7 @@ static void
 measure_ours_instance(uint n, our_conf c, BC * bc) {
 
     cout << datadelim
-         << "{ \"iv:scheme\": " << "\"stOPE\"" << ",\n"
+         << "{ \"iv:scheme\": " << "\"mOPE\"" << ",\n"
          << "  \"iv:nelem\": " << n << ",\n"
          << "  \"iv:ptsize\": " << c.plain_size << ",\n"
          << "  \"iv:malicious\": " << c.is_malicious << ",\n"
@@ -1380,7 +1380,7 @@ tpcc_client(uint numtests, bool rewrites) {
     //cerr << "tpcc client created \n";
 
     cout << datadelim
-         << "{ \"iv:scheme\": " << "\"stOPE\"" << ",\n"
+         << "{ \"iv:scheme\": " << "\"mOPE\"" << ",\n"
          << "  \"iv:nelem\": " << numtests << ",\n"
          << "  \"iv:ptsize\": " << 32 << ",\n"
          << "  \"iv:malicious\": " << is_malicious << ",\n"
