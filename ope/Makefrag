@@ -1,5 +1,5 @@
 OBJDIRS     += ope
-OPESRC  := merkle.cc opetable.cc stree.cc btree.cc server.cc client.cc mem_leak.cc
+OPESRC  := merkle.cc opetable.cc stree.cc btree.cc server.cc client.cc #mem_leak.cc
 
 
 all:    $(OBJDIR)/libope.so $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbcrypto.so
@@ -7,39 +7,39 @@ $(OBJDIR)/libope.so: $(patsubst %.cc,$(OBJDIR)/ope/%.o,$(OPESRC))
 	$(CXX) -shared -o $@ $^ $(LDFLAGS) -ledbutil -ledbcrypto
 
 
-all:	$(OBJDIR)/ope/user
-$(OBJDIR)/ope/user: $(OBJDIR)/ope/user.o $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbutil.so $(OBJDIR)/libope.so
-	$(CXX) $< -o $@ $(LDFLAGS) -ledbutil -lope -lcryptdb 
+#all:	$(OBJDIR)/ope/user
+#$(OBJDIR)/ope/user: $(OBJDIR)/ope/user.o $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbutil.so $(OBJDIR)/libope.so
+#	$(CXX) $< -o $@ $(LDFLAGS) -ledbutil -lope -lcryptdb 
 
 all:	$(OBJDIR)/ope/wbtree
 $(OBJDIR)/ope/wbtree: $(OBJDIR)/ope/wbtree.o $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbutil.so $(OBJDIR)/libope.so
 	$(CXX) $< -o $@ $(LDFLAGS) -ledbutil -lope -lcryptdb
 
 	
-all:	$(OBJDIR)/ope/bench
-$(OBJDIR)/ope/bench: $(OBJDIR)/ope/bench.o $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbutil.so $(OBJDIR)/libope.so
-	$(CXX) $< -o $@ $(LDFLAGS) -ledbutil -lope -lcryptdb
+#all:	$(OBJDIR)/ope/bench
+#$(OBJDIR)/ope/bench: $(OBJDIR)/ope/bench.o $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbutil.so $(OBJDIR)/libope.so
+#	$(CXX) $< -o $@ $(LDFLAGS) -ledbutil -lope -lcryptdb
 
 
-all:    $(OBJDIR)/ope/tpcc_server
-$(OBJDIR)/ope/tpcc_server: $(OBJDIR)/ope/tpcc_server.o $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbutil.so $(OBJDIR)/libope.so
-	$(CXX) $< -o $@ $(LDFLAGS) -ledbutil -lope -lcryptdb -lpthread -lboost_system
+#all:    $(OBJDIR)/ope/tpcc_server
+#$(OBJDIR)/ope/tpcc_server: $(OBJDIR)/ope/tpcc_server.o $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbutil.so $(OBJDIR)/libope.so
+#	$(CXX) $< -o $@ $(LDFLAGS) -ledbutil -lope -lcryptdb -lpthread -lboost_system
 
-all:    $(OBJDIR)/ope/tpcc_client
-$(OBJDIR)/ope/tpcc_client: $(OBJDIR)/ope/tpcc_client.o $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbutil.so $(OBJDIR)/libope.so
-	$(CXX) $< -o $@ $(LDFLAGS) -ledbcrypto -ledbutil -lope -lcryptdb -lpthread -lboost_system
+#all:    $(OBJDIR)/ope/tpcc_client
+#$(OBJDIR)/ope/tpcc_client: $(OBJDIR)/ope/tpcc_client.o $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbutil.so $(OBJDIR)/libope.so
+#	$(CXX) $< -o $@ $(LDFLAGS) -ledbcrypto -ledbutil -lope -lcryptdb -lpthread -lboost_system
 
-all:    $(OBJDIR)/ope/boost_server
-$(OBJDIR)/ope/boost_server: $(OBJDIR)/ope/boost_server.o $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbutil.so $(OBJDIR)/libope.so
-	$(CXX) $< -o $@ $(LDFLAGS) -ledbutil -lope -lcryptdb -lpthread -lboost_system
+#all:    $(OBJDIR)/ope/boost_server
+#$(OBJDIR)/ope/boost_server: $(OBJDIR)/ope/boost_server.o $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbutil.so $(OBJDIR)/libope.so
+#	$(CXX) $< -o $@ $(LDFLAGS) -ledbutil -lope -lcryptdb -lpthread -lboost_system
 
-all:    $(OBJDIR)/ope/boost_client
-$(OBJDIR)/ope/boost_client: $(OBJDIR)/ope/boost_client.o $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbutil.so $(OBJDIR)/libope.so
-	$(CXX) $< -o $@ $(LDFLAGS) -ledbcrypto -ledbutil -lope -lcryptdb -lpthread -lboost_system
+#all:    $(OBJDIR)/ope/boost_client
+#$(OBJDIR)/ope/boost_client: $(OBJDIR)/ope/boost_client.o $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbutil.so $(OBJDIR)/libope.so
+#	$(CXX) $< -o $@ $(LDFLAGS) -ledbcrypto -ledbutil -lope -lcryptdb -lpthread -lboost_system
 
-all:    $(OBJDIR)/ope/mem_leak
-$(OBJDIR)/ope/mem_leak: $(OBJDIR)/ope/mem_leak.o $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbutil.so $(OBJDIR)/libope.so
-	$(CXX) $< -o $@ $(LDFLAGS) -ledbcrypto -ledbutil -lope -lcryptdb -lpthread -lboost_system
+#all:    $(OBJDIR)/ope/mem_leak
+#$(OBJDIR)/ope/mem_leak: $(OBJDIR)/ope/mem_leak.o $(OBJDIR)/libcryptdb.so $(OBJDIR)/libedbutil.so $(OBJDIR)/libope.so
+#	$(CXX) $< -o $@ $(LDFLAGS) -ledbcrypto -ledbutil -lope -lcryptdb -lpthread -lboost_system
 
 install: install_ope
 
