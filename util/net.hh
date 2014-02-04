@@ -8,22 +8,7 @@
 #include <unistd.h>
 #include <resolv.h>
 #include <sstream>
-
-const int OPE_SERVER_PORT = 3111;
-const int OPE_CLIENT_PORT = 3112; 
-
-
-#if WITH_NET
-//ud0 is server, ud1 is client
-const std::string OPE_SERVER_HOST = "18.26.4.148"; // we will need to get these in
-						 // as inputs instead
-const std::string OPE_CLIENT_HOST = "18.26.4.145";
-#else
-//ud0 is server, ud1 is client
-const std::string OPE_SERVER_HOST = "127.0.0.1"; // we will need to get these in
-						 // as inputs instead
-const std::string OPE_CLIENT_HOST = "127.0.0.1";
-#endif
+#include <util/ope_conf.hh>
 
 // creates a socket and binds it on port
 // and returns it

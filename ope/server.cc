@@ -204,7 +204,7 @@ Server::Server(bool malicious, int cport, int sport, list<string> * itables, boo
     MALICIOUS = malicious;
 
     if (WITH_DB) {  
-	db = new Connect( "localhost", "root", "letmein","cryptdb", 3306);
+	db = new Connect( db_host, db_user, db_passwd, db_name, db_port); //Set in database_conf.hh
 	assert_s(itables, "lacking tables info");
     } else {
 	db = NULL;

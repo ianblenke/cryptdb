@@ -13,14 +13,15 @@
 #include <list>
 
 #include <edb/Connect.hh>
+#include <ope/opetable.hh>
 #include <ope/tree.hh>
-#include <ope/stree.hh>
 #include <ope/btree.hh>
 #include <fstream>
 #include <sys/stat.h>
 #include <unistd.h>
-
-
+#include <util/ope_conf.hh>
+#include <util/net.hh>
+#include <util/ope-util.hh>
 
 struct tablemeta {
     Tree * ope_tree;

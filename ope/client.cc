@@ -1,5 +1,4 @@
 #include "client.hh"
-
 #include <signal.h>
 
 static inline int
@@ -13,4 +12,5 @@ ffsl(uint64_t ct)
         ct = (uint64_t)ct >> 1;
     return (bit+num_bits-1);
 }
+
 

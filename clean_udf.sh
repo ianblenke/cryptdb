@@ -1,3 +1,5 @@
+#!/bin/sh
+
 cd ~/ope/cryptdb/ ; \
 make;\
 sudo make install;\

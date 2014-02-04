@@ -78,8 +78,6 @@ public:
     string handle_interaction(istringstream & iss);   
 };
 
-
-
 template<class V, class BC>
 string
 ope_client<V, BC>::handle_interaction(istringstream & iss){
@@ -157,7 +155,8 @@ comm_thread(void * p) {
     return NULL;
 
 }
-// must define here these few functions if we want to call them from other files..
+
+
 
 template<class V, class BlockCipher>
 ope_client<V, BlockCipher>::ope_client(BlockCipher * bc, bool malicious, 
@@ -206,14 +205,6 @@ ope_client<V, BlockCipher>::~ope_client(){
     if (DEBUG_BARE) cerr<<"Done with client, closing now\n";
     delete bc;
 }
-
-
-/*OLD: Server protocol code:
- * lookup(encrypted_plaintext) = 1
- * lookup(v, nbits) = 2
- * insert(v, nbits, index, encrypted_laintext) = 3
- * delete(v, nbits, index) = 4
- */
 
 template<class V, class BC>
 static void
@@ -303,194 +294,3 @@ ope_client<V, BlockCipher>::encrypt(V pt, bool imode, string tname) {
     return ope;
 }
 
-
-/*
-template<class V, class BlockCipher>
-int
-ope_client<V, BlockCipher>::predIndex(vector<V> vec, V pt){
-    //Assumes vec is filled with decrypted non-DET values (original pt values)
-    int tmp_index = 0;
-    V tmp_pred_key =0;
-    bool pred_found=false;
-    for (int i = 0; i< (int) vec.size(); i++)
-    {
-	if(vec[i]==pt) return -1;
-	if (vec[i] < pt && vec[i] > tmp_pred_key)
-	{
-	    pred_found=true;
-	    tmp_pred_key = vec[i];
-	    tmp_index = i;
-	}
-    }
-    if(vec.size()<N-1) throw ope_lookup_failure();      
-    if(pred_found) return tmp_index+1;
-    else return 0;
-}
-
-template<class V, class BlockCipher>
-V
-ope_client<V, BlockCipher>::decrypt(uint64_t ct) const {
-    uint64_t nbits = 64 - ffsl((uint64_t)ct);
-    uint64_t v= ct>>(64-nbits); //Orig v
-    uint64_t path = v>>num_bits; //Path part of v
-    int index = (int) v & s_mask; //Index (last num_bits) of v
-    if(DEBUG) cout<<"Decrypt lookup with path="<<path<<" nbits="<<nbits-num_bits<<" index="<<index<<endl;
-    //vector<V> vec = s->lookup(path, nbits- num_bits);
-
-    ostringstream o;
-    o.str("");
-    o.clear();
-    o<<"2 "<<path<<" "<<(nbits-num_bits);
-    string msg = o.str();
-    if(DEBUG_COMM) cout<<"Sending decrypt msg: "<<msg<<endl;
-    if( xmsg_send(hsock, msg) != msg.size()){
-        assert_s(false, "decrypt send failed");
-    }
-    string buffer;
-    if( xmsg_recv(hsock, &buffer) <= 0){
-        assert_s(false, "decrypt recv failed");
-    }
-
-    if(DEBUG_BTREE) cout<<"Decrypt recv="<<buffer<<endl;
-    istringstream iss_tmp(buffer);
-    vector<V> xct_vec;
-    V xct;
-    string checker="";
-    while(true){
-        iss_tmp >> checker;
-        if(checker==";") break;
-        stringstream tmpss;
-        tmpss<<checker; 
-        tmpss>>xct;
-        if(DEBUG_BTREE) cout<<"decrypt xct: "<<tmpss.str()<<endl;       
-        
-
-        xct_vec.push_back(xct);
-    }        
-    return block_decrypt(xct_vec[index]);
-
-}
-
-template<class V, class BlockCipher>
-void
-ope_client<V, BlockCipher>::delete_value(V pt){
-    uint64_t ct = encrypt(pt);
-
-
-    uint64_t nbits = 64 - ffsl((uint64_t)ct);
-    uint64_t v= ct>>(64-nbits); //Orig v
-    uint64_t path = v>>num_bits; //Path part of v
-    int index = (int) v & s_mask; //Index (last num_bits) of v
-
-    ostringstream o;
-    o.str("");
-    o.clear();
-    o<<"4 "<<path<<" "<<nbits-num_bits<<" "<<index;
-    string msg = o.str();
-    if(DEBUG) cout<<"Deleting pt="<<pt<<" with msg "<<msg<<endl;
-
-    if( xmsg_send(hsock, msg) != msg.size()){
-        assert_s(false, "delete_value send failed");
-    }
-    string buffer;
-    if( xmsg_recv(hsock, &buffer) <= 0){
-        assert_s(false, "delete_value recv failed");
-    }
-
-#if MALICIOUS
-    XXX_this_is_likely_broken();
-    if(DEBUG_BTREE){
-        cout<<"Delete_value buffer recv: "<<buffer<<endl;
-    }
-    const string tmp_merkle_hash = cur_merkle_hash;
-    string new_merkle_hash;
-    UpdateMerkleProof dmp;
-    stringstream iss(buffer);
-    iss>>new_merkle_hash;
-    string tmp_hash_str (buffer);
-    size_t hash_end = tmp_hash_str.find("hash_end");
-    string new_hash_str (buffer, 0, hash_end);
-    cur_merkle_hash = new_hash_str;
-    iss>>dmp;
-    char tmp_hash[10240];
-    strcpy(tmp_hash, buffer);
-    *space='\0';
-    string tmp_hash_str (tmp_hash);
-    cur_merkle_hash=tmp_hash_str;  
-    //cur_merkle_hash=new_merkle_hash;   
-
-    if(DEBUG_BTREE){
-        cout<<"Delete_value new mh="<<cur_merkle_hash<<endl;
-        cout<<"DMP="<<dmp<<endl;
-    }
-    if(!verify_del_merkle_proof(dmp, "to_delete", tmp_merkle_hash, new_merkle_hash)){
-        cout<<"Deletion merkle proof failed!"<<endl;
-        exit(-1);
-    }
-    if(DEBUG_BTREE) cout<<"Deletion merkle proof succeeded"<<endl;
-
-#endif
-
-}
-
-
-template<class V, class BlockCipher>
-void
-ope_client<V, BlockCipher>::insert(uint64_t v, uint64_t nbits, uint64_t index, V pt, V det) const{
-    if(DEBUG) cout<<"pt: "<<pt<<" det: "<<det<<"  not in tree. "<<nbits<<": "<<" v: "<<v<<endl;
-    
-    //s->insert(v, nbits, index, pt);
-    ostringstream o;
-    o.str("");
-    o.clear();
-    o<<"3 "<<v<<" "<<nbits<<" "<<index<<" "<<det;
-    string msg = o.str();
-    if(DEBUG_COMM) cout<<"Sending msg: "<<msg<<endl;
-
-    char buffer[10240];
-    memset(buffer, '\0', 10240);
-    if( xmsg_send(hsock, msg) != (int)msg.size() ){
-        assert_s(false, "insert send failed");
-    }
-    if (xmsg_recv(hsock, buffer, 10240) <= 0 ){
-        assert_s(false, "insert recv failed");
-    }
-
-
-#if MALICIOUS
-    XXX_this_is_likely_broken();
-    if(DEBUG_BTREE) cout<<"Insert buffer="<<buffer<<endl;
-    const string tmp_merkle_hash = cur_merkle_hash;
-    string new_merkle_hash;
-    InsMerkleProof imp;
-    stringstream iss(buffer);
-    iss>>new_merkle_hash;
-    string tmp_hash_str (buffer, 10240);
-    size_t hash_end = tmp_hash_str.find("hash_end");
-    string new_hash_str (buffer, hash_end-1);
-    cur_merkle_hash = new_hash_str;
-    iss>>imp;
-    char tmp_hash[10240];
-    strcpy(tmp_hash, buffer);
-    char* space = strchr(tmp_hash,' ');
-    *space='\0';
-    string tmp_hash_str (tmp_hash);
-    cur_merkle_hash=tmp_hash_str;
-    
-    if(DEBUG_BTREE){
-        cout<<"Insert New mh="<<cur_merkle_hash<<endl;
-        cout<<"Insert proof="<<imp<<endl;
-    }
-    if(!verify_ins_merkle_proof(imp, tmp_merkle_hash, new_merkle_hash)){
-        cout<<"Insertion merkle proof failed!"<<endl;
-        exit(-1);
-    }
-    if(DEBUG_BTREE) cout<<"Insert mp succeeded"<<endl;
-#endif    
-
-    //relabeling may have been triggered so we need to lookup value again
-    //todo: optimize by avoiding extra tree lookup
-    //return encrypt(pt);
-
-}
-*/

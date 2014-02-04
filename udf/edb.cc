@@ -28,6 +28,7 @@ extern "C" {
     OPETransform * opetransf;
     uint counter = 0;
 
+//NOTE: ops server means ope tree server here
 
 //UDF that creates the ops server
     my_bool  create_ops_server_init(UDF_INIT *initid, UDF_ARGS *args, char *message);
@@ -139,7 +140,7 @@ extern "C" {
 	if (pid == 0) {
 	    // child
 	    cerr<<"In child now \n";
-	    // Frank, below replace exampleserver with the name of the
+	    // below replace exampleserver with the name of the
 	    // ope server. 
 	    errno = 0;
 	    execl(command.c_str(),
@@ -191,7 +192,7 @@ extern "C" {
     get_ops_server(UDF_INIT *initid, UDF_ARGS *args,
 		   char *result, unsigned long *length,
 		   char *is_null, char *error) {
-   
+  // Assumes database is on same machine as mOPE server
 	string addr = "127.0.0.1:1111";
 	char * res = (char*) addr.c_str();
 	initid->ptr = res;

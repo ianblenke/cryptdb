@@ -10,60 +10,10 @@
 #include <vector>
 
 #include <util/util.hh>
+#include <util/ope_conf.hh>
 
-//whether we run with a database or not
-#define WITH_DB 0
-
-#define WITH_NET 0
-
-// if ope mode is true then trees can no longer use the order operation
-// among keys because the real keys are encrypted
-#define OPE_MODE 1
-
-
-// Controls debugging output
-#define DEBUG_BARE 0
-#define DEBUG 0
-#define DEBUG_COMM 0
-#define DEBUG_STREE 0
-#define DEBUG_BTREE 0
-#define DEBUG_PROOF 0
-#define DEBUG_EXP 0
-
-#define DEBUG_TRANSF 0
-#define DEBUG_UDF 0
-
-// Controls tree type
-#define STREE 0
-
-
-
-// hardcoding passwords for our eval
-const std::string passwd = "opeopeopeopeopeo";
-
-/**** Scapegoat paramters ****/
-const int N = 4;
-const double alpha = 0.75;
-// alpha > 1/N else constant rebalancing
-
-
-/**** B tree parameters ****/
-
-// size of key in B tree
-const uint b_key_size = 50; //bytes of max size of key_size
-
-const int invalid_index = -1;
-
-const unsigned int b_max_keys = 4;  // max elements in a node
-
-/****** common between the trees ***/
-#if STREE
-// for N not a power of two, we want ceil(log_2(N))
-// for N power of two we want log_2(N) + 1
-const int num_bits = (int) ceil(log2(N+1.0));
-#else  /*Btree*/
+// number of bits needed to represent each node of the B-tree
 const unsigned int num_bits = (int)ceil(log2(b_max_keys+1.0));
-#endif
 
 // min keys in a B tree
 uint minimum_keys(uint max_keys);
