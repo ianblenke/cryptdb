@@ -49,7 +49,7 @@ create_and_connect(string host_name, int host_port, bool fail) {
     if (DEBUG_BARE) cerr << "trying to connect to " << host_name << " " << host_port << "\n";
     if (connect(hsock, (struct sockaddr*) &my_addr, sizeof(my_addr))<0){
 	if (fail) {
-	    assert_s(false, "cannot connect");
+	    assert_s(false, "cannot connect on network");
 	} else {
 	    return -1;
 	}

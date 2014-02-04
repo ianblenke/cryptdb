@@ -135,7 +135,7 @@ comm_thread(void * p) {
 	uint len = 0;
 	std::string buffer;
         assert_s((len = xmsg_recv(oc->csock, &buffer)) > 0,
-		 "receive gets  <=0 bytes");
+		 "client received 0 bytes, closing connection now");
 	if (DEBUG_COMM) {cerr << "bytes received during interaction is " << len << "\n";}
 	
         istringstream iss(buffer);
