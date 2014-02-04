@@ -15,15 +15,17 @@ to both existing CryptDB code and mOPE code.
 
 Follow instructions in doc/CRYPTDB_README and doc/BUILD, which builds both 
 CryptDB and mOPE together (note: mOPE is NOT currently integrated into CryptDB).
-Run "./obj/test/test sys 64 100 0" to quickly check if the build is correct.
+Run "./obj/test/test sys 64 100 0" to quickly check if the build is correct,
+(errors may depend on your configurations in util/ope_conf.hh).
 
 
-RUNNING THE CODE:
+RUNNING/CHANGING THE CODE:
 
-The code is strictly research code, and is NOT production quality. 
+The code is strictly research code, and is provided as is. The purely mOPE code
+base consists of ope/*, test/* udf/*, and util/ope*.
 
-The modifiable parameters for the mOPE scheme are all listed in
-util/ope_conf.hh. Set as appropriate and build.
+The configurable parameters for the mOPE scheme are all listed in
+util/ope_conf.hh. Set as appropriate before build.
 
 test/test_system.cc contains part of the code used to generate the experimental
 results in our paper. It also serves as examples of running the mOPE code, in

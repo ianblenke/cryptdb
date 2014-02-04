@@ -2,7 +2,7 @@
 
 #include <string>
 
-/*** SET mOPE PARAMETERS HERE *****/
+/*** Configurable mOPE parameters *****/
 
 // For all following defines: 0 = No, 1 = Yes
 

@@ -569,62 +569,69 @@ val_rewrites(string rewrites, string usage) {
 
 int main(int argc, char ** argv)
 {
-    assert_s(OPE_MODE, "code must be in OPE_MODE to run this test");
+  assert_s(OPE_MODE, "code must be in OPE_MODE to run this test");
 
-    string usage = "usage ./test client plain_size(64,>=128) num_to_enc is_malicious(0/1) do_db_updates(up/noup)\n \
+  string usage = "usage ./test client plain_size(64,>=128) num_to_enc is_malicious(0/1) do_db_updates(up/noup)\n \
                  OR ./test server is_malicious do_db_updates(up/noup)\n			\
                  OR ./test sys plain_size num_tests is_malicious\n	\
                  OR ./test bench \n";
 
   if (argc < 2) {
-	cerr << usage;
-	return 0;
-    }
-
-    if (argc == 6 && string(argv[1]) == "client") {
-	plain_size = atoi(argv[2]);
-	num_tests = atoi(argv[3]);
-	if (DEBUG_EXP) cerr << "num_tests is " << num_tests << "\n";
-	is_malicious = atoi(argv[4]);
-	db_rewrites = val_rewrites(string(argv[5]), usage);
-	set_workload(num_tests, plain_size, INCREASING);
-	client_thread();
-	return 0;
-    }
-  
-    if (argc == 4 && string(argv[1]) == "server") {
-	is_malicious = atoi(argv[2]);
-	bool db_updates = val_rewrites(argv[3], usage);
-	run_server(db_updates);
-	return 0;
-    }
-
-    if (argc==5 && string(argv[1]) == "sys") {
-	
-	plain_size = atoi(argv[2]);
-	num_tests = atoi(argv[3]);
-	is_malicious = atoi(argv[4]);
-	set_workload(num_tests, plain_size, RANDOM);
-	
-	runtest();
-
-	return 0;
-    }
-
-    if (argc == 2 && string(argv[1]) == "bench") {
-	test_bench();
-	return 0;
-    }
-   
-    cerr << "invalid test \n";
-
-    for(int i = 0; i < argc; i++ ){
-        cerr << string(argv[i]) << " ";
-    }
-    cerr << endl;
-
-    cerr << usage << "\n";
+    cerr << usage;
     return 0;
+  }
+
+  //This spins up just an mOPE client
+  if (argc == 6 && string(argv[1]) == "client") {
+	  plain_size = atoi(argv[2]);
+  	num_tests = atoi(argv[3]);
+  	if (DEBUG_EXP) cerr << "num_tests is " << num_tests << "\n";
+  	is_malicious = atoi(argv[4]); // Are we in the mode where the server may be malicious?
+  	db_rewrites = val_rewrites(string(argv[5]), usage); // Are we connected to a MySQL db? If so, we need updates.
+
+    // Create a workload of num_tests elements of size plain_size, in increasing
+    // order.
+  	set_workload(num_tests, plain_size, INCREASING);
+  	client_thread();
+  	return 0;
+  }
+  
+  //This spins up just an mOPE server
+  if (argc == 4 && string(argv[1]) == "server") {
+	  is_malicious = atoi(argv[2]); // Are we in the mode where the server may be malicious?
+  	bool db_updates = val_rewrites(argv[3], usage); // Are we connect to a MySQL db? If so, we need updates.
+  	run_server(db_updates);
+  	return 0;
+  }
+
+  //This runs an mOPE client and server locally and does a simple random
+  //workload, checking for correctness. Useful for quick system checks.
+  if (argc==5 && string(argv[1]) == "sys") {
+	
+  	plain_size = atoi(argv[2]);
+  	num_tests = atoi(argv[3]);
+  	is_malicious = atoi(argv[4]);
+  	set_workload(num_tests, plain_size, RANDOM);
+  	runtest();
+
+	  return 0;
+  }
+
+  // Run the benchmark workloads specified in our_confs struct (see above). 
+  // Useful for measuring performance.
+  if (argc == 2 && string(argv[1]) == "bench") {
+  	test_bench();
+	  return 0;
+  }
+   
+  cerr << "invalid test \n";
+  for(int i = 0; i < argc; i++ ){
+    cerr << string(argv[i]) << " ";
+  }
+  cerr << endl;
+
+  cerr << usage << "\n";
+  return 0;
 }
 
  

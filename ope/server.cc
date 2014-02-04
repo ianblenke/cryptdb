@@ -213,6 +213,7 @@ Server::Server(bool malicious, int cport, int sport, list<string> * itables, boo
     
     for (auto table : *itables) {
 	OPETable<string> *ope_table = new OPETable<string>();
+  
 	Tree * ope_tree = (Tree*) new BTree(ope_table, db, malicious, table, "opefield", db_updates);
 	tablemeta * tm = new tablemeta(ope_tree, ope_table);
 	tables[table] = tm;

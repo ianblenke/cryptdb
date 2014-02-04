@@ -6,6 +6,10 @@
  * for a generic search tree.
  **************/
 
+// We initially planned to use a scapegoat tree, before
+// switching to a B-tree. The scapegoat tree implementation has been removed as
+// it is not up-to-date.
+
 #include <util/ope-util.hh>
 #include <edb/Connect.hh>
 #include <vector>
