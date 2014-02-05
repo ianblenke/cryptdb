@@ -581,7 +581,8 @@ int main(int argc, char ** argv)
     return 0;
   }
 
-  //This spins up just an mOPE client. Must be run before server starts!
+  //This spins up just an mOPE client. Must be run before server starts! This is
+  //because the server talks to the client first.
   if (argc == 6 && string(argv[1]) == "client") {
 	  plain_size = atoi(argv[2]);
   	num_tests = atoi(argv[3]);
@@ -597,7 +598,8 @@ int main(int argc, char ** argv)
   }
   
   //This spins up just an mOPE server. Must be run after client starts,
-  //otherwise we get a network connection failure.
+  //otherwise we get a network connection failure. This is because the server
+  //talks to the client first.
   if (argc == 4 && string(argv[1]) == "server") {
 	  is_malicious = atoi(argv[2]); // Are we in the mode where the server may be malicious?
   	bool db_updates = val_rewrites(argv[3], usage); // Are we connect to a MySQL db? If so, we need updates.
