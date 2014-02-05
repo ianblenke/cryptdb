@@ -13,12 +13,10 @@ You will need g++ version 4.6 or higher to build mOPE.  Ubuntu Oneiric
   % apt-get update
   % apt-get install gcc-4.6 g++-4.6
 
-You will need to build mysql-5.5.14, which our mOPE server interfaces with:
+We use some libraries from mysql-5.5.14, to build:
 
   % wget http://es.csail.mit.edu/mysql-5.5.14.tar.gz
   % tar zxf mysql-5.5.14.tar.gz
-  % cp -R .../cryptdb/parser/mysql_mods/* mysql-5.5.14/
-  % rm mysql-5.5.14/sql/sql_yacc.{cc,h}
   % cd mysql-5.5.14
   % mkdir build
   % cd build
