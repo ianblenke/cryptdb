@@ -19,7 +19,6 @@
 #include <ope/client.hh>
 #include <ope/tree.hh>
 #include <ope/btree.hh>
-#include <crypto/blowfish.hh>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/utsname.h>
@@ -263,7 +262,7 @@ clientgeneric(BC * bc) {
     Timer t;
     for (uint i = 0; i < vs->size(); i++) {
 	ope_cl->encrypt(vs->at(i), true, "testope");
-	// cerr << "ope is " << ope << " \n";
+//	cerr << "ope is " << ope << " \n";
     }
     uint64_t time_interval = t.lap();
     cout << "  \"dv:enctime_ms\": " << (time_interval*1.0/(vs->size() *1000.0)) << "\n" << "}";
@@ -305,9 +304,16 @@ client_thread() {
     //assert_s(false, "only 64 in this experiment");
 
     if (plain_size >= 128) {
-	cerr << "creating string, aes cbc client\n";
+	if (DEBUG_EXP) cerr << "creating string, aes cbc client\n";
 	clientgeneric<string, aes_cbc>(bc_aes);
-  return;	
+	curtime = time(0);
+	strftime(timebuf, sizeof(timebuf), "%a, %d %b %Y %T %z", localtime(&curtime));
+   
+	cout << "],\n"
+	     << "  \"end_time\": " << curtime << ",\n"
+	     << "  \"end_asctime\": \"" << timebuf << "\"\n"
+	     << "}\n";
+	return;
     }
 
     

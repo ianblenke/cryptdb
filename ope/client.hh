@@ -132,12 +132,12 @@ comm_thread(void * p) {
 
 	if (DEBUG_COMM) { cerr << "comm_th: waiting to receive \n";}
         //Receive message to process
-	uint len = 0;
-	std::string buffer;
-        assert_s((len = xmsg_recv(oc->csock, &buffer)) > 0,
-		 "client received 0 bytes, closing connection now");
-	if (DEBUG_COMM) {cerr << "bytes received during interaction is " << len << "\n";}
-	
+  std::string buffer;
+	uint len = xmsg_recv(oc->csock, &buffer);
+  if(len == 0) break;
+  	if (DEBUG_COMM) {cerr << "bytes received during interaction is " << len << "\n";}
+//	      assert_s(len > 0, "client received 0 bytes, closing connection now");
+
         istringstream iss(buffer);
 	
         interaction_rslt = oc->handle_interaction(iss);
