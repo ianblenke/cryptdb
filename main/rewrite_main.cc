@@ -1499,6 +1499,8 @@ executeQuery(const ProxyState &ps, const std::string &q,
              const std::string &default_db,
              SchemaCache *const schema_cache, bool pp)
 {
+    pp = true;
+    
     assert(schema_cache);
 
     std::unique_ptr<QueryRewrite> qr;
@@ -1529,34 +1531,63 @@ executeQuery(const ProxyState &ps, const std::string &q,
     return queryEpilogue(ps, *qr.get(), res, q, default_db, pp);
 }
 
-void
+
+#define PRETTY_OFFSET 25
+
+
+static void
+prettyLine(uint num) {
+    std::cerr << "+";
+
+    for (uint i = 0; i < num; i++) {
+	for (uint j = 0; j < PRETTY_OFFSET; j++) {
+	    std::cerr << "-";
+	}
+	std::cerr << "+";
+    }
+    std::cerr << "\n";
+    
+}
+
+void 
 printRes(const ResType &r) {
 
     //if (!cryptdb_logger::enabled(log_group::log_edb_v))
     //return;
 
+    uint num_cols = r.names.size();
+
+    prettyLine(num_cols);
+
     std::stringstream ssn;
-    for (unsigned int i = 0; i < r.names.size(); i++) {
+    ssn << "|";
+    for (unsigned int i = 0; i < num_cols; i++) {
         char buf[400];
-        snprintf(buf, sizeof(buf), "%-25s", r.names[i].c_str());
+        snprintf(buf, sizeof(buf), "%-25s|", r.names[i].c_str());
         ssn << buf;
     }
+    
     std::cerr << terminalEscape(ssn.str()) << std::endl;
     //LOG(edb_v) << ssn.str();
 
+    prettyLine(num_cols);
+       
     /* next, print out the rows */
     for (unsigned int i = 0; i < r.rows.size(); i++) {
         std::stringstream ss;
+        ss << "|";
         for (unsigned int j = 0; j < r.rows[i].size(); j++) {
             char buf[400];
             std::stringstream sstr;
             sstr << *r.rows[i][j];
-            snprintf(buf, sizeof(buf), "%-25s", sstr.str().c_str());
+            snprintf(buf, sizeof(buf), "%-25s|", sstr.str().c_str());
             ss << buf;
         }
         std::cerr << terminalEscape(ss.str()) << std::endl;
         //LOG(edb_v) << ss.str();
     }
+
+    prettyLine(num_cols);
 }
 
 EncLayer &OnionMetaAdjustor::getBackEncLayer() const

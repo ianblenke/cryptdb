@@ -198,15 +198,18 @@ function read_query_result_real(inj)
             local rows = {}
             local query = inj.query:sub(2)
 
-	    print(greentext("ENCRYPTED RESULTS:"))
-
+	    
             -- mysqlproxy doesn't return real lua arrays, so re-package
             local resfields = resultset.fields
 
-	    printline(#resfields)
-	    if (#resfields) then
+	    if (#resfields>0) then 
+	       print(greentext("ENCRYPTED RESULTS:"))
+	       printline(#resfields)
 	       io.write("|")
+	    else
+	       print(greentext("EMPTY RESULT"));
 	    end
+
 	    for i = 1, #resfields do
                 rfi = resfields[i]
                 fields[i] = { type = resfields[i].type,
@@ -214,8 +217,10 @@ function read_query_result_real(inj)
 		io.write(string.format("%-20s|",rfi.name))
             end
 
-	    print()
-	    printline(#resfields)
+	    if (#resfields>0) then
+	       print()
+	       printline(#resfields)
+	    end
 	    
             local resrows = resultset.rows
             if resrows then
@@ -229,7 +234,9 @@ function read_query_result_real(inj)
                 end
             end
 
-	    printline(#resfields)
+	    if (#resfields>0) then
+	        printline(#resfields)
+	    end
 
             -- Handle the backend of the query.
             status, rollbackd, error_msg, dfields, drows =

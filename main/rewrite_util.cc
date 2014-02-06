@@ -679,15 +679,15 @@ terminalEscape(const std::string &s)
 void
 prettyPrintQuery(const std::string &query)
 {
-    std::cout << std::endl << RED_BEGIN
-              << "QUERY: " << COLOR_END << terminalEscape(query) << std::endl;
+    std::cout << std::endl << GREEN_BEGIN
+              << "NEW QUERY: " << COLOR_END << terminalEscape(query) << std::endl;
 }
 
 static void
 prettyPrintQueryResult(const ResType &res)
 {
-    std::cout << std::endl << RED_BEGIN
-              << "RESULTS: " << COLOR_END << std::endl;
+    std::cout << std::endl << GREEN_BEGIN
+              << "ENCRYPTED RESULTS: " << COLOR_END << std::endl;
     printRes(res);
     std::cout << std::endl;
 }
@@ -747,7 +747,7 @@ queryEpilogue(const ProxyState &ps, const QueryRewrite &qr,
         const ResType &dec_res =
             Rewriter::decryptResults(res, qr.rmeta);
         assert(dec_res.success());
-        if (pp) {
+        if (!PRETTY_DEMO && pp) {
             prettyPrintQueryResult(dec_res);
         }
 
