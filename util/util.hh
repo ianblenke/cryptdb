@@ -447,17 +447,17 @@ public:
         if (true == frozen) {
             throw CryptDBError("Object has already been assigned to!");
         } else {
-            this->value = value;
+            this->value = new T(value);
             frozen = true;
             return *this;
         }
     }
 
-    const T get() const {
+    const T &get() const {
         if (false == frozen) {
             throw CryptDBError("First assign to AssignOnce template!");
         }
-        return value;
+        return *value;
     }
 
     bool assigned() const {
@@ -465,7 +465,7 @@ public:
     }
 
 private:
-    T value;
+    T *value;
     bool frozen;
 };
 

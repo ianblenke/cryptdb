@@ -378,6 +378,7 @@
 (defun slow-compare (results-aye results-bee)
   (when (not (= (length results-aye) (length results-bee)))
     (return-from slow-compare nil))
+  ; (break)
   (every #'(lambda (a)
              (= (count a results-aye :test #'equal)
                 (count a results-bee :test #'equal)))

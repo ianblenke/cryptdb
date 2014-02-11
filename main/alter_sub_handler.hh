@@ -7,15 +7,14 @@
 
 #include <sql_lex.h>
 
-class AlterSubHandler : public SQLHandler {
+class AlterSubHandler {
 public:
-    virtual LEX *transformLex(Analysis &a, LEX *lex,
-                              const ProxyState &ps) const;
+    virtual LEX *
+        transformLex(Analysis &a, LEX *lex) const;
     virtual ~AlterSubHandler() {;}
 
 private:
     virtual LEX *rewriteAndUpdate(Analysis &a, LEX *lex,
-                                  const ProxyState &ps,
                                   const Preamble &preamble) const = 0;
 
 protected:

@@ -920,6 +920,10 @@ operator<<(std::ostream &out, LEX &lex)
         out << " UNLOCK TABLES";
         break;
 
+    case SQLCOM_SHOW_COLLATIONS:
+        out << "SHOW COLLATION";
+        break;
+
     case SQLCOM_SET_OPTION:
     case SQLCOM_SHOW_DATABASES:
     case SQLCOM_SHOW_TABLES:
@@ -927,7 +931,6 @@ operator<<(std::ostream &out, LEX &lex)
     case SQLCOM_SHOW_KEYS:
     case SQLCOM_SHOW_VARIABLES:
     case SQLCOM_SHOW_STATUS:
-    case SQLCOM_SHOW_COLLATIONS:
     case SQLCOM_SHOW_STORAGE_ENGINES:
         /* placeholders to make analysis work.. */
         out << ".. type " << lex.sql_command << " query ..";

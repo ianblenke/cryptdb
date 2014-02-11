@@ -5,6 +5,7 @@
 #include <memory>
 
 #include <util/onions.hh>
+#include <parser/sql_utils.hh>
 
 class FieldMeta;
 /**
@@ -168,11 +169,11 @@ class reason {
 public:
     reason(const EncSet &es, const std::string &why,
            const Item &item)
-        : encset(es), why(why), item(item) {}
+        : encset(es), why(why), string_item(printItemToString(item)) {}
 
     const EncSet encset;
     const std::string why;
-    const Item &item;
+    const std::string string_item;
 };
 
 std::ostream&
@@ -194,6 +195,16 @@ public:
     //only keep plans that have parent_olk in es
 //    void restrict(const EncSet & es);
 
+};
+
+class RewritePlanWithChildren : public RewritePlan {
+public:
+    std::vector<std::shared_ptr<RewritePlan> > childr_rp;
+
+    RewritePlanWithChildren(const EncSet &es_out, const reason &r,
+                            const std::vector<std::shared_ptr<RewritePlan> >
+                                &childr_rp)
+        : RewritePlan(es_out, r), childr_rp(childr_rp) {}
 };
 
 //rewrite plan in which we only need to remember one olk

@@ -92,6 +92,9 @@ static bool handle_line(ProxyState& ps, const std::string& q, bool pp=true)
   }
 
   static SchemaCache schema_cache;
+  (void)schema_cache;
+  // FIXME
+  /*
   try {
       const std::string &default_db =
           getDefaultDatabaseForConnection(ps.getConn());
@@ -115,6 +118,8 @@ static bool handle_line(ProxyState& ps, const std::string& q, bool pp=true)
       std::cout << "Unexpected Error: " << e.what() << std::endl;
       return false;
   }
+  */
+  return false;
 }
 
 int

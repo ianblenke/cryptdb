@@ -126,7 +126,9 @@ Connect::execute(const std::string &query, std::unique_ptr<DBResult> *res,
                     }
                 } else if (-1 == status) {          // last result
                     *res = std::unique_ptr<DBResult>(
-                        new DBResult(res_native, errno_success));
+                        new DBResult(res_native, errno_success,
+                                     mysql_affected_rows(conn),
+                                     mysql_insert_id(conn)));
                     break;
                 } else {                            // error
                     thrower() << "error occurred processing multiple"
@@ -195,7 +197,8 @@ DBResult::store(MYSQL *const mysql)
 {
     const bool success = 0 == mysql_errno(mysql);
     DBResult_native *const n = mysql_store_result(mysql);
-    return new DBResult(n, success);
+    return new DBResult(n, success, mysql_affected_rows(mysql),
+                        mysql_insert_id(mysql));
 }
 
 DBResult::~DBResult()
@@ -229,43 +232,47 @@ getItem(char *const content, enum_field_types type, uint len)
 ResType
 DBResult::unpack()
 {
+    // 'n' will be NULL when the mysql statement doesn't return a resultset
+    // > ie INSERT
     if (nullptr == n) {
-        return ResType(this->success);
+        return ResType(this->success, this->affected_rows, this->insert_id);
     }
 
-    const size_t rows = static_cast<size_t>(mysql_num_rows(n));
-    const int cols = mysql_num_fields(n);
+    const size_t row_count = static_cast<size_t>(mysql_num_rows(n));
+    const int col_count    = mysql_num_fields(n);
 
-    ResType res(this->success);
-
+    std::vector<std::string> names;
+    std::vector<enum_field_types> types;
     for (int j = 0;; j++) {
         MYSQL_FIELD *const field = mysql_fetch_field(n);
         if (!field) {
-            assert(cols == j);
+            assert(col_count == j);
             break;
         }
 
-        res.names.push_back(field->name);
-        res.types.push_back(field->type);
+        names.push_back(field->name);
+        types.push_back(field->type);
     }
 
+    std::vector<std::vector<Item *> > rows;
     for (size_t index = 0;; index++) {
-        MYSQL_ROW row = mysql_fetch_row(n);
+        const MYSQL_ROW row = mysql_fetch_row(n);
         if (!row) {
-            assert(rows == index);
+            assert(row_count == index);
             break;
         }
         unsigned long *const lengths = mysql_fetch_lengths(n);
 
-        std::vector<std::shared_ptr<Item> > resrow;
+        std::vector<Item *> resrow;
 
-        for (int j = 0; j < cols; j++) {
-            Item *const item = getItem(row[j], res.types[j], lengths[j]);
-            resrow.push_back(std::shared_ptr<Item>(item));
+        for (int j = 0; j < col_count; j++) {
+            Item *const item = getItem(row[j], types[j], lengths[j]);
+            resrow.push_back(item);
         }
 
-        res.rows.push_back(resrow);
+        rows.push_back(resrow);
     }
 
-    return res;
+    return ResType(this->success, this->affected_rows, this->insert_id,
+                   std::move(names), std::move(types), std::move(rows));
 }

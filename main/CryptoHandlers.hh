@@ -63,7 +63,7 @@ public:
                        const std::string &anonname = "") const = 0;
 
     virtual Item *encrypt(const Item &ptext, uint64_t IV) const = 0;
-    virtual Item *decrypt(Item * const ctext, uint64_t IV) const = 0;
+    virtual Item *decrypt(const Item &ctext, uint64_t IV) const = 0;
 
     // returns the decryptUDF to remove the onion layer
     virtual Item *decryptUDF(Item * const col, Item * const ivcol = NULL)
@@ -100,7 +100,7 @@ public:
 
     //TODO needs multi encrypt and decrypt
     Item *encrypt(const Item &p, uint64_t IV) const;
-    Item * decrypt(Item * const c, uint64_t IV) const;
+    Item * decrypt(const Item &c, uint64_t IV) const;
 
     //expr is the expression (e.g. a field) over which to sum
     Item *sumUDA(Item *const expr) const;
@@ -132,7 +132,7 @@ public:
         const;
 
     Item *encrypt(const Item &ptext, uint64_t IV) const;
-    Item * decrypt(Item * const ctext, uint64_t IV) const
+    Item * decrypt(const Item &ctext, uint64_t IV) const
         __attribute__((noreturn));
 
     //expr is the expression (e.g. a field) over which to sum
@@ -171,7 +171,7 @@ public:
                                          const std::string &anonname = "")
         const;
     Item *encrypt(const Item &ptext, uint64_t IV) const;
-    Item *decrypt(Item * const ctext, uint64_t IV) const;
+    Item *decrypt(const Item &ctext, uint64_t IV) const;
     Item *decryptUDF(Item * const col, Item * const ivcol = NULL)
         const __attribute__((noreturn));
     std::string doSerialize() const;

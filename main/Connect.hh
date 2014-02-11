@@ -19,11 +19,13 @@ extern "C" void *create_embedded_thd(int client_flag);
 
 class DBResult {
  public:
-    DBResult(DBResult_native *const n, bool success)
-        : n(n), success(success) {}
+    DBResult(DBResult_native *const n, bool success,
+             uint64_t affected_rows, uint64_t insert_id)
+        : n(n), success(success), affected_rows(affected_rows),
+          insert_id(insert_id) {}
 
     ~DBResult();
-    DBResult_native *n;
+    DBResult_native *const n;
 
     //returns data from this db result
     ResType unpack();
@@ -34,6 +36,8 @@ class DBResult {
 
  private:
     const bool success;
+    const uint64_t affected_rows;
+    const uint64_t insert_id;
 };
 
 class Connect {

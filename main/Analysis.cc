@@ -27,23 +27,22 @@ EncSet
 EncSet::intersect(const EncSet & es2) const
 {
     OnionLevelFieldMap m;
-    for (auto it2 = es2.osl.begin();
-            it2 != es2.osl.end(); ++it2) {
-        auto it = osl.find(it2->first);
+    for (const auto &it2 : es2.osl) {
+        auto it = osl.find(it2.first);
 
         if (it != osl.end()) {
             FieldMeta * const fm = it->second.second;
-            FieldMeta * const fm2 = it2->second.second;
+            FieldMeta * const fm2 = it2.second.second;
 
             const onion o = it->first;
-            const onion o2 = it2->first;
+            const onion o2 = it2.first;
 
             assert(o == o2);
 
             const SECLEVEL sl =
                 static_cast<SECLEVEL>(
                         min(static_cast<int>(it->second.first),
-                            static_cast<int>(it2->second.first)));
+                            static_cast<int>(it2.second.first)));
 
             /*
              * FIXME: Each clause of this if statement should make sure
@@ -222,7 +221,7 @@ needsSalt(EncSet es)
 std::ostream&
 operator<<(std::ostream &out, const reason &r)
 {
-    out << r.item << " PRODUCES encset " << r.encset << std::endl
+    out << r.string_item << " PRODUCES encset " << r.encset << std::endl
         << " BECAUSE " << r.why << std::endl;
 
     return out;
@@ -462,8 +461,8 @@ ProxyState::safeCreateEmbeddedTHD()
 
 void ProxyState::dumpTHDs()
 {
-    for (auto it = thds.begin(); it != thds.end(); ++it) {
-        it->release();
+    for (auto &it : thds) {
+        it.release();
     }
     thds.clear();
 
@@ -610,436 +609,70 @@ bool DeleteDelta::apply(const std::unique_ptr<Connect> &e_conn,
     return helper(meta, parent_meta);
 }
 
-RewriteOutput::~RewriteOutput()
-{;}
-
-bool RewriteOutput::stalesSchema() const
-{
-    return false;
-}
-
-bool RewriteOutput::multipleResultSets() const
-{
-    return false;
-}
-
-QueryAction
-RewriteOutput::queryAction(const std::unique_ptr<Connect> &conn) const
-{
-    return QueryAction::DECRYPT;
-}
-
 bool
-RewriteOutput::usesEmbeddedDB() const
+writeDeltas(const std::unique_ptr<Connect> &e_conn,
+            const std::vector<std::unique_ptr<Delta> > &deltas,
+            Delta::TableType table_type)
 {
-    return false;
-}
-
-void
-SimpleOutput::beforeQuery(const std::unique_ptr<Connect> &,
-                          const std::unique_ptr<Connect> &)
-{
-    return;
-}
-
-void
-SimpleOutput::getQuery(std::list<std::string> *const queryz,
-                       SchemaInfo const &) const
-{
-    queryz->clear();
-    queryz->push_back(original_query);
-
-    return;
-}
-
-std::pair<bool, std::unique_ptr<DBResult>>
-SimpleOutput::afterQuery(const std::unique_ptr<Connect> &) const
-{
-    return std::make_pair(false, std::unique_ptr<DBResult>(nullptr));
-}
-
-QueryAction
-SimpleOutput::queryAction(const std::unique_ptr<Connect> &conn) const
-{
-    return QueryAction::NO_DECRYPT;
-}
-
-void
-DMLOutput::beforeQuery(const std::unique_ptr<Connect> &,
-                       const std::unique_ptr<Connect> &)
-{
-    return;
-}
-
-void
-DMLOutput::getQuery(std::list<std::string> * const queryz,
-                    SchemaInfo const &) const
-{
-    queryz->clear();
-    queryz->push_back(new_query);
-
-    return;
-}
-
-std::pair<bool, std::unique_ptr<DBResult>>
-DMLOutput::afterQuery(const std::unique_ptr<Connect> &) const
-{
-    return std::make_pair(false, std::unique_ptr<DBResult>(nullptr));
-}
-
-// we can not successfully issue a special update while inside of a transaction
-// as our attempt to retrieve rows from the database will fail to recover
-// data inserted during the current transaction
-// > this failure will occur in the stored procedure
-void
-SpecialUpdate::beforeQuery(const std::unique_ptr<Connect> &conn,
-                           const std::unique_ptr<Connect> &e_conn)
-{
-    // Retrieve rows from database.
-    const std::string select_q =
-        " SELECT * FROM " + this->plain_table +
-        " WHERE " + this->where_clause + ";";
-    std::unique_ptr<SchemaCache> schema_cache(new SchemaCache());
-    // Onion adjustment will never occur in this nested executeQuery(...)
-    // because the WHERE clause will trigger the adjustment in 
-    // UpdateHandler when it tries to rewrite the filters.
-    const EpilogueResult epi_result =
-        executeQuery(this->ps, select_q, this->default_db,
-                     schema_cache.get());
-    TEST_Sync(schema_cache->cleanupStaleness(e_conn),
-              "failed to cleanup schema cache after nested query!");
-    assert(QueryAction::DECRYPT == epi_result.action);
-    const ResType select_res_type = epi_result.res_type;
-    assert(select_res_type.success());
-    if (select_res_type.rows.size() == 0) { // No work to be done.
-        this->do_nothing = true;
-        return;
-    }
-    this->do_nothing = false;
-
-    const auto itemToNiceString =
-        [&e_conn] (const std::shared_ptr<Item> &p_item)
-        {
-            const std::string &s = ItemToString(*p_item.get());
-
-            if (Item::Type::STRING_ITEM != p_item->type()) {
-                return s;
-            }
-
-            // escaping and quoting the string creates a value that can
-            // actually be used in an INSERT statement
-            return "'" + escapeString(e_conn, s) + "'";
-        };
-
-    // We must take these items and convert them into quoted, escaped
-    // strings
-    //  > Item -> std::string -> escaped -> quoted
-    // then we join the results into a single comma seperated values list
-    const auto pItemVectorToNiceValueList =
-        [&itemToNiceString]
-            (const std::vector<std::vector<std::shared_ptr<Item>>> &vec)
-        {
-            std::vector<std::string> esses;
-            for (auto row_it : vec) {
-                std::vector<std::string> nice_values(row_it.size());
-                std::transform(row_it.begin(), row_it.end(),
-                               nice_values.begin(), itemToNiceString);
-                esses.push_back("("+ vector_join(nice_values, ",") + ")");
-            }
-
-            return vector_join(esses, ",");
-        };
-
-    const std::string &values_string =
-        pItemVectorToNiceValueList(select_res_type.rows);
-    // do the query on the embedded database inside of a transaction
-    // so that we can prevent failure artifacts from populating the
-    // embedded database
-    TEST_Sync(e_conn->execute("START TRANSACTION;"),
-              "failed to start transaction");
-
-    // turn on strict mode so we can determine if we have bad values
-    // > ie trying to insert 256 into a TINYINT UNSIGNED column
-    SYNC_IF_FALSE(strictMode(e_conn.get()), e_conn);
-
-    // Push the plaintext rows to the embedded database.
-    const std::string push_q =
-        " INSERT INTO " + this->plain_table +
-        " VALUES " + values_string + ";";
-    SYNC_IF_FALSE(e_conn->execute(push_q), e_conn);
-
-    // Run the original (unmodified) query on the data in the embedded
-    // database.
-    SYNC_IF_FALSE(e_conn->execute(this->original_query), e_conn);
-
-    // strict mode off
-    SYNC_IF_FALSE(e_conn->execute("SET SESSION sql_mode = ''"), e_conn);
-
-    // > Collect the results from the embedded database.
-    // > This code relies on single threaded access to the database
-    //   and on the fact that the database is cleaned up after
-    //   every such operation.
-    std::unique_ptr<DBResult> dbres;
-    const std::string select_results_q =
-        " SELECT * FROM " + this->plain_table + ";";
-    SYNC_IF_FALSE(e_conn->execute(select_results_q, &dbres), e_conn);
-    const ResType interim_res = ResType(dbres->unpack());
-    this->escaped_output_values =
-        pItemVectorToNiceValueList(interim_res.rows);
-
-    // Cleanup the embedded database.
-    const std::string cleanup_q =
-        "DELETE FROM " + this->plain_table + ";";
-    SYNC_IF_FALSE(e_conn->execute(cleanup_q), e_conn);
-
-    SYNC_IF_FALSE(e_conn->execute("COMMIT;"), e_conn);
-
-    return;
-}
-
-void
-SpecialUpdate::getQuery(std::list<std::string> * const queryz,
-                        SchemaInfo const &schema) const
-{
-    assert(queryz);
-
-    queryz->clear();
-
-    if (true == this->do_nothing.get()) {
-        queryz->push_back(mysql_noop());
-        return;
+    for (const auto &it : deltas) {
+        RFIF(it->apply(e_conn, table_type));
     }
 
-    // This query is necessary to propagate a transaction into
-    // INFORMATION_SCHEMA.
-    queryz->push_back("SELECT NULL FROM " + this->crypted_table + ";");
-
-    // DELETE the rows matching the WHERE clause from the database.
-    const std::string delete_q =
-        " DELETE FROM " + this->plain_table +
-        " WHERE " + this->where_clause + ";";
-    const std::string re_delete =
-        rewriteAndGetSingleQuery(ps, delete_q, schema, this->default_db);
-
-    // > Add each row from the embedded database to the data database.
-    const std::string insert_q =
-        " INSERT INTO " + this->plain_table +
-        " VALUES " + this->escaped_output_values.get() + ";";
-    const std::string re_insert =
-        rewriteAndGetSingleQuery(ps, insert_q, schema, this->default_db);
-
-    const std::string hom_addition_transaction =
-        MetaData::Proc::homAdditionTransaction();
-    queryz->push_back(" CALL " + hom_addition_transaction + " ("
-                      " '" + escapeString(ps.getConn(), re_delete) + "', "
-                      " '" + escapeString(ps.getConn(),
-                                          re_insert) + "');");
-
-    return;
-}
-
-std::pair<bool, std::unique_ptr<DBResult>>
-SpecialUpdate::afterQuery(const std::unique_ptr<Connect> &) const
-{
-    return std::make_pair(false, std::unique_ptr<DBResult>(nullptr));
-}
-
-bool
-SpecialUpdate::multipleResultSets() const
-{
     return true;
 }
 
+
 bool
-SpecialUpdate::usesEmbeddedDB() const
+deltaOutputBeforeQuery(const std::unique_ptr<Connect> &e_conn,
+                       const std::string &original_query,
+                       const std::vector<std::unique_ptr<Delta> > &deltas,
+                       CompletionType completion_type,
+                       uint64_t *const embedded_completion_id)
 {
-    return true;
-}
-
-void
-UseAfterQueryResultOutput::beforeQuery(const std::unique_ptr<Connect> &,
-                                       const std::unique_ptr<Connect> &)
-{
-    return;
-}
-
-void
-UseAfterQueryResultOutput::getQuery(std::list<std::string> * const queryz,
-                                    SchemaInfo const &) const
-{
-    queryz->clear();
-    queryz->push_back(mysql_noop());
-
-    return;
-}
-
-static bool
-deleteAllShowDirectiveEntries(const std::unique_ptr<Connect> &e_conn)
-{
-    const std::string &query =
-        "DELETE FROM " + MetaData::Table::showDirective() + ";";
-    return e_conn->execute(query);
-}
-
-static bool
-addShowDirectiveEntry(const std::unique_ptr<Connect> &e_conn,
-                      const std::string &database,
-                      const std::string &table,
-                      const std::string &field,
-                      const std::string &onion,
-                      const std::string &level)
-{
-    const std::string &query =
-        "INSERT INTO " + MetaData::Table::showDirective() +
-        " (_database, _table, _field, _onion, _level) VALUES "
-        " ('" + database + "', '" + table + "',"
-        "  '" + field + "', '" + onion + "', '" + level + "')";
-    return e_conn->execute(query);
-}
-
-static bool
-getAllShowDirectiveEntries(const std::unique_ptr<Connect> &e_conn,
-                           std::unique_ptr<DBResult> *db_res)
-{
-    assert(db_res);
-    const std::string &query =
-        "SELECT * FROM " + MetaData::Table::showDirective() + ";";
-    return e_conn->execute(query, db_res);
-}
-
-// HACK hack HACK hackity hackhack
-std::pair<bool, std::unique_ptr<DBResult>>
-UseAfterQueryResultOutput::afterQuery(const std::unique_ptr<Connect> &e_conn) const
-{
-    TEST_TextMessageError(deleteAllShowDirectiveEntries(e_conn),
-                          "failed to initialize show directives table");
-
-    const auto &databases = schema.getChildren();
-    for (auto db_it = databases.begin(); db_it != databases.end();
-         ++db_it) {
-        const std::string &db_name = db_it->first.getValue();
-        const auto &dm = db_it->second;
-        const auto &tables = dm->getChildren();
-        for (auto table_it = tables.begin(); table_it != tables.end();
-             ++table_it) {
-            const std::string &table_name = table_it->first.getValue();
-            const auto &tm = table_it->second;
-            const auto &fields = tm->getChildren();
-            for (auto field_it = fields.begin(); field_it != fields.end();
-                 ++field_it) {
-                const std::string &field_name =
-                    field_it->first.getValue();
-                const auto &fm = field_it->second;
-                const auto &onions = fm->getChildren();
-                for (auto onion_it = onions.begin();
-                     onion_it != onions.end();
-                     ++onion_it) {
-                    const std::string &onion_name =
-                      TypeText<onion>::toText(onion_it->first.getValue());
-                    const auto &om = onion_it->second;
-
-                    // HACK: this behavior is not usually safe, use
-                    // Analysis to get state information generally
-                    const std::string &level =
-                        TypeText<SECLEVEL>::toText(om->getSecLevel());
-                    const bool b =
-                        addShowDirectiveEntry(e_conn, db_name, table_name,
-                                              field_name, onion_name,
-                                              level);
-                    TEST_TextMessageError(true == b,
-                                          "failed producing directive"
-                                          " results");
-                }
-            }
-        }
-    }
-
-    std::unique_ptr<DBResult> db_res;
-    TEST_TextMessageError(getAllShowDirectiveEntries(e_conn, &db_res),
-                          "failed retrieving directive results");
-    return std::make_pair(true, std::move(db_res));
-}
-
-QueryAction
-UseAfterQueryResultOutput::queryAction(const std::unique_ptr<Connect> &)
-    const
-{
-    return QueryAction::RETURN_AFTER;
-}
-
-DeltaOutput::~DeltaOutput()
-{;}
-
-bool DeltaOutput::stalesSchema() const
-{
-    return true;
-}
-
-void
-DeltaOutput::beforeQuery(const std::unique_ptr<Connect> &conn,
-                         const std::unique_ptr<Connect> &e_conn)
-{
-    TEST_Sync(e_conn->execute("START TRANSACTION;"),
-              "failed to start transaction");
+    RFIF(e_conn->execute("START TRANSACTION;"));
 
     // We must save the current default database because recovery
     // may be happening after a restart in which case such state
     // was lost.
-    const CompletionType &completion_type = this->getCompletionType();
+    // FIXME: NOTE: was previously escaping against remote database
     const std::string &q_completion =
         " INSERT INTO " + MetaData::Table::embeddedQueryCompletion() +
         "   (begin, complete, original_query, default_db, aborted, type)"
         "   VALUES (TRUE,  FALSE,"
-        "    '" + escapeString(conn, this->original_query) + "',"
+        "    '" + escapeString(e_conn, original_query) + "',"
         "    (SELECT DATABASE()),  FALSE,"
         "    '" + TypeText<CompletionType>::toText(completion_type)
             + "');";
-    SYNC_IF_FALSE(e_conn->execute(q_completion), e_conn);
-    this->embedded_completion_id = e_conn->last_insert_id();
+    ROLLBACK_AND_RFIF(e_conn->execute(q_completion), e_conn);
+    *embedded_completion_id = e_conn->last_insert_id();
+    assert(*embedded_completion_id);
 
-    for (auto it = deltas.begin(); it != deltas.end(); it++) {
-        const bool b = (*it)->apply(e_conn, Delta::BLEEDING_TABLE);
-        SYNC_IF_FALSE(b, e_conn);
-    }
+    ROLLBACK_AND_RFIF(writeDeltas(e_conn, deltas, Delta::BLEEDING_TABLE), e_conn);
 
-    SYNC_IF_FALSE(e_conn->execute("COMMIT;"), e_conn);
+    ROLLBACK_AND_RFIF(e_conn->execute("COMMIT;"), e_conn);
 
-    return;
+    return true;
 }
 
-std::pair<bool, std::unique_ptr<DBResult>>
-DeltaOutput::afterQuery(const std::unique_ptr<Connect> &e_conn) const
+bool
+deltaOutputAfterQuery(const std::unique_ptr<Connect> &e_conn,
+                      const std::vector<std::unique_ptr<Delta> > &deltas,
+                      uint64_t embedded_completion_id)
 {
-    TEST_Sync(e_conn->execute("START TRANSACTION;"),
-              "failed to start transaction");
+    RFIF(e_conn->execute("START TRANSACTION;"));
 
     const std::string q_update =
         " UPDATE " + MetaData::Table::embeddedQueryCompletion() +
         "    SET complete = TRUE"
         "  WHERE id=" +
-                 std::to_string(this->embedded_completion_id.get()) + ";";
-    SYNC_IF_FALSE(e_conn->execute(q_update), e_conn);
+                 std::to_string(embedded_completion_id) + ";";
+    ROLLBACK_AND_RFIF(e_conn->execute(q_update), e_conn);
 
-    for (auto it = deltas.begin(); it != deltas.end(); it++) {
-        const bool b = (*it)->apply(e_conn, Delta::REGULAR_TABLE);
-        SYNC_IF_FALSE(b, e_conn);
-    }
+    ROLLBACK_AND_RFIF(writeDeltas(e_conn, deltas, Delta::REGULAR_TABLE), e_conn);
 
-    SYNC_IF_FALSE(e_conn->execute("COMMIT;"), e_conn);
+    ROLLBACK_AND_RFIF(e_conn->execute("COMMIT;"), e_conn);
 
-    return std::make_pair(false, std::unique_ptr<DBResult>(nullptr));
-}
-
-bool
-DeltaOutput::usesEmbeddedDB() const
-{
     return true;
-}
-
-unsigned long
-DeltaOutput::getEmbeddedCompletionID() const
-{
-    return this->embedded_completion_id.get();
 }
 
 static bool
@@ -1072,143 +705,6 @@ setBleedingTableToRegularTable(const std::unique_ptr<Connect> &e_conn)
     const std::string src = MetaData::Table::metaObject();
     const std::string dest = MetaData::Table::bleedingMetaObject();
     return tableCopy(e_conn, src, dest);
-}
-
-void
-DDLOutput::getQuery(std::list<std::string> * const queryz,
-                    SchemaInfo const &) const
-{
-    queryz->clear();
-
-    assert(remote_qz().size() == 1);
-    const std::string &remote_begin =
-        " INSERT INTO " + MetaData::Table::remoteQueryCompletion() +
-        "   (begin, complete, embedded_completion_id, reissue) VALUES"
-        "   (TRUE,  FALSE," +
-             std::to_string(this->getEmbeddedCompletionID()) +
-        "    , FALSE);";
-    const std::string &remote_complete =
-        " UPDATE " + MetaData::Table::remoteQueryCompletion() +
-        "    SET complete = TRUE"
-        "  WHERE embedded_completion_id = " +
-             std::to_string(this->getEmbeddedCompletionID()) + ";";
-
-    queryz->push_back(remote_begin);
-    queryz->push_back(remote_qz().back());
-    queryz->push_back(remote_complete);
-
-    return;
-}
-
-std::pair<bool, std::unique_ptr<DBResult>>
-DDLOutput::afterQuery(const std::unique_ptr<Connect> &e_conn) const
-{
-    // Update embedded database.
-    // > This is a DDL query so do not put in transaction.
-    TEST_Sync(e_conn->execute(this->original_query),
-              "Failed to execute DDL query against embedded database!");
-
-    return DeltaOutput::afterQuery(e_conn);
-}
-
-const std::list<std::string> DDLOutput::remote_qz() const
-{
-    return std::list<std::string>({new_query});
-}
-
-const std::list<std::string> DDLOutput::local_qz() const
-{
-    return std::list<std::string>({original_query});
-}
-
-CompletionType DDLOutput::getCompletionType() const
-{
-    return CompletionType::DDLCompletion;
-}
-
-void
-AdjustOnionOutput::beforeQuery(const std::unique_ptr<Connect> &conn,
-                               const std::unique_ptr<Connect> &e_conn)
-{
-    assert(deltas.size() > 0);
-    return DeltaOutput::beforeQuery(conn, e_conn);
-}
-
-void
-AdjustOnionOutput::getQuery(std::list<std::string> * const queryz,
-                            SchemaInfo const &) const
-{
-    std::list<std::string> r_qz = remote_qz();
-    assert(r_qz.size() == 1 || r_qz.size() == 2);
-
-    if (r_qz.size() == 1) {
-        r_qz.push_back(mysql_noop());
-    }
-
-    // This query is necessary to propagate a transaction into
-    // INFORMATION_SCHEMA.
-    // > This allows consistent behavior even when adjustment is first
-    // query in transaction.
-    const std::string &innodb_table =
-        MetaData::Table::remoteQueryCompletion();
-    queryz->push_back("SELECT NULL FROM " + innodb_table + ";");
-
-    const std::string q_remote =
-        " CALL " + MetaData::Proc::adjustOnion() + " ("
-        "   "  + std::to_string(this->getEmbeddedCompletionID()) + ","
-        "   '" + hackEscape(r_qz.front()) + "', "
-        "   '" + hackEscape(r_qz.back()) + "');";
-
-    queryz->push_back(q_remote);
-    return;
-}
-
-std::pair<bool, std::unique_ptr<DBResult>>
-AdjustOnionOutput::afterQuery(const std::unique_ptr<Connect> &e_conn)
-    const
-{
-    assert(deltas.size() > 0);
-    return DeltaOutput::afterQuery(e_conn);
-}
-
-const std::list<std::string> AdjustOnionOutput::remote_qz() const
-{
-    return std::list<std::string>(adjust_queries);
-}
-
-const std::list<std::string> AdjustOnionOutput::local_qz() const
-{
-    return std::list<std::string>();
-}
-
-QueryAction
-AdjustOnionOutput::queryAction(const std::unique_ptr<Connect> &conn)
-    const
-{
-    const std::string q =
-        " SELECT reissue "
-        "   FROM " + MetaData::Table::remoteQueryCompletion() +
-        "  WHERE embedded_completion_id = " +
-                 std::to_string(this->getEmbeddedCompletionID()) + ";";
-
-    std::unique_ptr<DBResult> db_res;
-    TEST_Text(conn->execute(q, &db_res),
-              "failed to determine if an onion adjustmented query should"
-              " be reissued!");
-    assert(1 == mysql_num_rows(db_res->n));
-
-    const MYSQL_ROW row = mysql_fetch_row(db_res->n);
-    const unsigned long *const l = mysql_fetch_lengths(db_res->n);
-    assert(l != NULL);
-
-    const bool reissue = string_to_bool(std::string(row[0], l[0]));
-
-    return reissue ? QueryAction::AGAIN : QueryAction::ROLLBACK;
-}
-
-CompletionType AdjustOnionOutput::getCompletionType() const
-{
-    return CompletionType::AdjustOnionCompletion;
 }
 
 bool Analysis::addAlias(const std::string &alias,
@@ -1413,4 +909,13 @@ RewritePlanWithAnalysis::RewritePlanWithAnalysis(const EncSet &es_out,
                                             std::unique_ptr<Analysis> a)
     : RewritePlan(es_out, r), a(std::move(a))
 {}
+
+std::string
+lexToQuery(const LEX &lex)
+{
+    std::ostringstream o;
+    o << const_cast<LEX &>(lex);
+    return o.str();
+}
+
 

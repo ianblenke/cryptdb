@@ -84,7 +84,6 @@ typedef struct SharedProxyState {
         return masterKey;
     }
     const std::unique_ptr<Connect> &getConn() const {return conn;}
-    SchemaCache &getSchemaCache() {return cache;}
     static int db_init(const std::string &embed_dir);
 
     friend class ProxyState;
@@ -95,12 +94,12 @@ private:
     const int mysql_dummy;
     const std::unique_ptr<Connect> conn;
     const SECURITY_RATING default_sec_rating;
-    SchemaCache cache;
+    const SchemaCache cache;
 } SharedProxyState;
 
 class ProxyState {
 public:
-    ProxyState(const SharedProxyState &shared)
+    ProxyState(SharedProxyState &shared)
         : shared(shared),
           e_conn(Connect::getEmbedded(shared.embed_dir)) {}
     ~ProxyState();
@@ -111,6 +110,9 @@ public:
     const std::unique_ptr<Connect> &getEConn() const;
     void safeCreateEmbeddedTHD();
     void dumpTHDs();
+    const SchemaCache &getSchemaCache() const {return shared.cache;}
+    std::shared_ptr<const SchemaInfo> getSchemaInfo() const
+        {return shared.cache.getSchema(this->getConn(), this->getEConn());}
 
 private:
     const SharedProxyState &shared;
@@ -202,206 +204,23 @@ public:
 
 class Rewriter;
 
-enum class QueryAction {DECRYPT, NO_DECRYPT, RETURN_AFTER, AGAIN,
-                        ROLLBACK};
-class RewriteOutput {
-public:
-    RewriteOutput(const std::string &original_query)
-        : original_query(original_query) {}
-    virtual ~RewriteOutput() = 0;
-
-    virtual void beforeQuery(const std::unique_ptr<Connect> &conn,
-                             const std::unique_ptr<Connect> &e_conn) = 0;
-    virtual void getQuery(std::list<std::string> *const queryz,
-                          SchemaInfo const &schema) const = 0;
-    virtual std::pair<bool, std::unique_ptr<DBResult>>
-        afterQuery(const std::unique_ptr<Connect> &e_conn)
-        const = 0;
-    // This ASK code is a symptom of returning the rewritten query
-    // to the proxy which then issues the query. A more TELL policy
-    // would likely lead to cleaner execution of queries.
-    virtual bool stalesSchema() const;
-    virtual bool multipleResultSets() const;
-    virtual QueryAction queryAction(const std::unique_ptr<Connect> &conn)
-        const;
-    virtual bool usesEmbeddedDB() const;
-
-protected:
-    const std::string original_query;
-};
-
-class SimpleOutput : public RewriteOutput {
-public:
-    SimpleOutput(const std::string &original_query)
-        : RewriteOutput(original_query) {}
-    ~SimpleOutput() {;}
-
-    void beforeQuery(const std::unique_ptr<Connect> &conn,
-                     const std::unique_ptr<Connect> &e_conn);
-    void getQuery(std::list<std::string> * const queryz,
-                  SchemaInfo const &schema) const;
-    std::pair<bool, std::unique_ptr<DBResult>>
-        afterQuery(const std::unique_ptr<Connect> &e_conn) const;
-    QueryAction queryAction(const std::unique_ptr<Connect> &conn) const;
-};
-
-class DMLOutput : public RewriteOutput {
-public:
-    DMLOutput(const std::string &original_query,
-              const std::string &new_query)
-        : RewriteOutput(original_query), new_query(new_query) {}
-    ~DMLOutput() {;}
-
-    void beforeQuery(const std::unique_ptr<Connect> &conn,
-                     const std::unique_ptr<Connect> &e_conn);
-    void getQuery(std::list<std::string> * const queryz,
-                  SchemaInfo const &schema) const;
-    std::pair<bool, std::unique_ptr<DBResult>>
-        afterQuery(const std::unique_ptr<Connect> &e_conn) const;
-
-private:
-    const std::string new_query;
-};
-
-// Special case of DML query.
-class SpecialUpdate : public RewriteOutput {
-public:
-    SpecialUpdate(const std::string &original_query,
-                  const std::string &plain_table,
-                  const std::string &crypted_table,
-                  const std::string &where_clause,
-                  const std::string &default_db,
-                  const ProxyState &ps)
-    : RewriteOutput(original_query),
-      plain_table(plain_table), crypted_table(crypted_table),
-      where_clause(where_clause), default_db(default_db), ps(ps) {}
-    ~SpecialUpdate() {;}
-
-    void beforeQuery(const std::unique_ptr<Connect> &conn,
-                     const std::unique_ptr<Connect> &e_conn);
-    void getQuery(std::list<std::string> * const queryz,
-                  SchemaInfo const &schema) const;
-    std::pair<bool, std::unique_ptr<DBResult>>
-        afterQuery(const std::unique_ptr<Connect> &e_conn) const;
-    bool multipleResultSets() const;
-    bool usesEmbeddedDB() const;
-
-private:
-    const std::string plain_table;
-    const std::string crypted_table;
-    const std::string where_clause;
-    const std::string default_db;
-    const ProxyState &ps;
-
-    AssignOnce<std::string> escaped_output_values;
-    AssignOnce<bool> do_nothing;
-};
-
-class UseAfterQueryResultOutput : public RewriteOutput {
-public:
-    UseAfterQueryResultOutput(const std::string &original_query,
-                              const SchemaInfo &schema)
-        : RewriteOutput(original_query), schema(schema) {}
-    ~UseAfterQueryResultOutput() {;}
-
-    void beforeQuery(const std::unique_ptr<Connect> &conn,
-                     const std::unique_ptr<Connect> &e_conn);
-    void getQuery(std::list<std::string> * const queryz,
-                  SchemaInfo const &schema) const;
-    std::pair<bool, std::unique_ptr<DBResult>>
-        afterQuery(const std::unique_ptr<Connect> &e_conn) const;
-    QueryAction queryAction(const std::unique_ptr<Connect> &e_conn) const;
-
-private:
-    const SchemaInfo &schema;
-};
-
-
 enum class CompletionType {DDLCompletion, AdjustOnionCompletion};
 
-class DeltaOutput : public RewriteOutput {
-public:
-    DeltaOutput(const std::string &original_query,
-                std::vector<std::unique_ptr<Delta> > &&deltas)
-        : RewriteOutput(original_query), deltas(std::move(deltas)) {}
-    virtual ~DeltaOutput() = 0;
+bool
+writeDeltas(const std::unique_ptr<Connect> &e_conn,
+            const std::vector<std::unique_ptr<Delta> > &deltas,
+            Delta::TableType table_type);
+bool
+deltaOutputBeforeQuery(const std::unique_ptr<Connect> &e_conn,
+                       const std::string &original_query,
+                       const std::vector<std::unique_ptr<Delta> > &deltas,
+                       CompletionType completion_type,
+                       uint64_t *const embedded_completion_id);
 
-    void beforeQuery(const std::unique_ptr<Connect> &conn,
-                     const std::unique_ptr<Connect> &e_conn);
-    virtual void getQuery(std::list<std::string> * const queryz,
-                          SchemaInfo const &schema) const = 0;
-    virtual std::pair<bool, std::unique_ptr<DBResult>>
-        afterQuery(const std::unique_ptr<Connect> &e_conn) const;
-    bool stalesSchema() const;
-    bool usesEmbeddedDB() const;
-
-protected:
-    const std::vector<std::unique_ptr<Delta> > deltas;
-
-    unsigned long getEmbeddedCompletionID() const;
-    virtual CompletionType getCompletionType() const = 0;
-
-private:
-    AssignOnce<unsigned long> embedded_completion_id;
-};
-
-class DDLOutput : public DeltaOutput {
-public:
-    DDLOutput(const std::string &original_query,
-              const std::string &new_query,
-              std::vector<std::unique_ptr<Delta> > &&deltas)
-        : DeltaOutput(original_query, std::move(deltas)),
-          new_query(new_query) {}
-    ~DDLOutput() {;}
-
-    void getQuery(std::list<std::string> * const queryz,
-                  SchemaInfo const &schema) const;
-    std::pair<bool, std::unique_ptr<DBResult>>
-        afterQuery(const std::unique_ptr<Connect> &e_conn) const;
-
-protected:
-    CompletionType getCompletionType() const;
-
-private:
-    const std::string new_query;
-
-    const std::list<std::string> remote_qz() const;
-    const std::list<std::string> local_qz() const;
-};
-
-class AdjustOnionOutput : public DeltaOutput {
-public:
-    AdjustOnionOutput(const std::string &original_query,
-                      std::vector<std::unique_ptr<Delta> > &&deltas,
-                      std::list<std::string> adjust_queries,
-                      std::function<std::string(const std::string &)>
-                        hackEscape)
-        : DeltaOutput(original_query, std::move(deltas)),
-          adjust_queries(adjust_queries), hackEscape(hackEscape) {}
-    ~AdjustOnionOutput() {;}
-    void beforeQuery(const std::unique_ptr<Connect> &conn,
-                     const std::unique_ptr<Connect> &e_conn);
-    void getQuery(std::list<std::string> * const queryz,
-                  SchemaInfo const &schema) const;
-    std::pair<bool, std::unique_ptr<DBResult>>
-        afterQuery(const std::unique_ptr<Connect> &e_conn) const;
-    QueryAction queryAction(const std::unique_ptr<Connect> &conn) const;
-
-protected:
-    CompletionType getCompletionType() const;
-
-private:
-    const std::list<std::string> adjust_queries;
-
-    const std::list<std::string> remote_qz() const;
-    const std::list<std::string> local_qz() const;
-
-    // We don't want to pass a connection parameter to getQuery as it
-    // creates a misleading interface; but string escaping requires a
-    // connection.
-    // > hackEscape is the compromise.
-    const std::function<std::string(const std::string &)> hackEscape;
-};
+bool
+deltaOutputAfterQuery(const std::unique_ptr<Connect> &e_conn,
+                      const std::vector<std::unique_ptr<Delta> > &deltas,
+                      uint64_t embedded_completion_id);
 
 bool setRegularTableToBleedingTable(const std::unique_ptr<Connect> &e_conn);
 bool setBleedingTableToRegularTable(const std::unique_ptr<Connect> &e_conn);
@@ -409,19 +228,22 @@ bool setBleedingTableToRegularTable(const std::unique_ptr<Connect> &e_conn);
 class RewritePlan;
 class Analysis {
     Analysis() = delete;
-    Analysis(const Analysis &a) = delete;
     Analysis(Analysis &&a) = delete;
     Analysis &operator=(const Analysis &a) = delete;
     Analysis &operator=(Analysis &&a) = delete;
 
 public:
-    enum class SpecialQuery {NOT_SPECIAL, SHOW_LEVELS, SPECIAL_UPDATE,
-                             NO_CHANGE_META_DDL};
-
-    Analysis(const std::string &default_db, const SchemaInfo &schema)
-        : pos(0), inject_alias(false),
-          special_query(SpecialQuery::NOT_SPECIAL),
-          db_name(default_db), schema(schema) {}
+    Analysis(const std::string &default_db, const SchemaInfo &schema,
+             const std::unique_ptr<AES_KEY> &master_key,
+             SECURITY_RATING default_sec_rating)
+        : pos(0), inject_alias(false), summation_hack(false),
+          db_name(default_db), schema(schema), master_key(master_key),
+          default_sec_rating(default_sec_rating) {}
+    Analysis(const Analysis &analysis)
+        : pos(0), inject_alias(false), summation_hack(false),
+          db_name(analysis.getDatabaseName()), schema(analysis.getSchema()),
+          master_key(analysis.getMasterKey()),
+          default_sec_rating(analysis.getDefaultSecurityRating()) {}
 
     unsigned int pos; // > a counter indicating how many projection
                       // fields have been analyzed so far
@@ -435,7 +257,7 @@ public:
     ReturnMeta rmeta;
 
     bool inject_alias;
-    SpecialQuery special_query;
+    bool summation_hack;
 
     // These functions are prefered to their lower level counterparts.
     bool addAlias(const std::string &alias, const std::string &db,
@@ -476,11 +298,14 @@ public:
     SECLEVEL getOnionLevel(const FieldMeta &fm, onion o);
     static const std::vector<std::unique_ptr<EncLayer> > &
         getEncLayers(const OnionMeta &om);
-    const SchemaInfo &getSchema() {return schema;}
+    const SchemaInfo &getSchema() const {return schema;}
 
     std::vector<std::unique_ptr<Delta> > deltas;
 
     std::string getDatabaseName() const {return db_name;}
+    const std::unique_ptr<AES_KEY> &getMasterKey() const {return master_key;}
+    SECURITY_RATING getDefaultSecurityRating() const
+        {return default_sec_rating;}
 
     // access to isAlias(...)
     friend class MultiDeleteHandler;
@@ -488,6 +313,8 @@ public:
 private:
     const std::string db_name;
     const SchemaInfo &schema;
+    const std::unique_ptr<AES_KEY> &master_key;
+    const SECURITY_RATING default_sec_rating;
 
     bool isAlias(const std::string &db,
                  const std::string &table) const;
@@ -505,4 +332,7 @@ lowLevelSetCurrentDatabase(const std::unique_ptr<Connect> &c,
 
 std::vector<std::string>
 getAllUDFs();
+
+std::string
+lexToQuery(const LEX &lex);
 

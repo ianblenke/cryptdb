@@ -56,12 +56,14 @@ printRes(const ResType & r);
 // - data structure needed to decrypt results
 class QueryRewrite {
 public:
-    QueryRewrite(bool wasRes, ReturnMeta rmeta, RewriteOutput *output)
-        : rmeta(rmeta), output(std::unique_ptr<RewriteOutput>(output)) {}
+    QueryRewrite(bool wasRes, ReturnMeta rmeta,
+                 AbstractQueryExecutor *const executor)
+        : rmeta(rmeta),
+          executor(std::unique_ptr<AbstractQueryExecutor>(executor)) {}
     QueryRewrite(QueryRewrite &&other_qr) : rmeta(other_qr.rmeta),
-        output(std::move(other_qr.output)) {}
+        executor(std::move(other_qr.executor)) {}
     const ReturnMeta rmeta;
-    std::unique_ptr<RewriteOutput> output;
+    std::unique_ptr<AbstractQueryExecutor> executor;
 };
 
 // Main class processing rewriting
@@ -70,38 +72,27 @@ class Rewriter {
     ~Rewriter();
 
 public:
-
     static QueryRewrite
-        rewrite(const ProxyState &ps, const std::string &q,
-                SchemaInfo const &schema, const std::string &default_db);
+        rewrite(const std::string &q, SchemaInfo const &schema,
+                const std::string &default_db,
+                const ProxyState &ps);
+
     static ResType
         decryptResults(const ResType &dbres, const ReturnMeta &rm);
 
 private:
-    static RewriteOutput *
-        dispatchOnLex(Analysis &a, const ProxyState &ps,
-                      const std::string &query);
-    static RewriteOutput *
-        handleDirective(Analysis &a, const ProxyState &ps,
-                        const std::string &query);
+    static AbstractQueryExecutor *
+        dispatchOnLex(Analysis &a, const std::string &query);
 
     static const bool translator_dummy;
     static const std::unique_ptr<SQLDispatcher> dml_dispatcher;
     static const std::unique_ptr<SQLDispatcher> ddl_dispatcher;
 };
 
-class SchemaCache;
-class EpilogueResult;
-EpilogueResult
-executeQuery(const ProxyState &ps, const std::string &q,
-             const std::string &default_db,
-             SchemaCache *const schema_cache, bool pp=true);
-
 #define UNIMPLEMENTED                                               \
     FAIL_TextMessageError(std::string("Unimplemented: ") +          \
                             std::string(__PRETTY_FUNCTION__))
 
-class reason;
 class OLK;
 
 class CItemType {
@@ -336,4 +327,30 @@ private:
     std::vector<EncLayer *> duped_layers;
 
     static std::vector<EncLayer *> pullCopyLayers(OnionMeta const &om);
+};
+
+class OnionAdjustmentExecutor : public AbstractQueryExecutor {
+    const std::vector<std::unique_ptr<Delta> > deltas;
+    const std::list<std::string> adjust_queries;
+
+    // coroutine state
+    bool first_reissue;
+    AssignOnce<std::shared_ptr<const SchemaInfo> > reissue_schema;
+    AssignOnce<uint64_t> embedded_completion_id;
+    AssignOnce<bool> in_trx;
+    QueryRewrite *reissue_query_rewrite;
+    AssignOnce<NextParams> reissue_nparams;
+
+public:
+    OnionAdjustmentExecutor(std::vector<std::unique_ptr<Delta> > &&deltas,
+                            const std::list<std::string> &adjust_queries)
+        : deltas(std::move(deltas)),
+          adjust_queries(adjust_queries), first_reissue(true) {}
+
+    std::pair<ResultType, AbstractAnything *>
+        nextImpl(const ResType &res, const NextParams &nparams);
+
+private:
+    bool stales() const {return true;}
+    bool usesEmbedded() const {return true;}
 };

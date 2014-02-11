@@ -626,30 +626,29 @@
   ("INSERT INTO trans VALUES (1, 2, 3)")
   ("INSERT INTO trans VALUES (33, 22, 11)")
   ("SELECT * FROM trans")
+
   ("START TRANSACTION")
   ("INSERT INTO trans VALUES (333, 222, 111)")
   ("ROLLBACK")
   ("SELECT * FROM trans")
   ("INSERT INTO trans VALUES (45, 22, 15)")
   ("UPDATE trans SET a = a + 1, b = c + 1")
+
+  ;; special update in transaction
   ("START TRANSACTION")
-  ;; no special update in transaction
-  ("UPDATE trans SET a = a + a, b = b + 12"
-   ()
-   :cryptdb
-   :must-fail)
+  ("UPDATE trans SET a = a + a, b = b + 12")
   ("SELECT * FROM trans")
   ("ROLLBACK")
   ("SELECT * FROM trans")
+
+  ;; special update in transaction
   ("START TRANSACTION")
-  ;; no special update in transaction
-  ("UPDATE trans SET a = c + 1, b = a + 1"
-   ()
-   :cryptdb
-   :must-fail)
+  ("UPDATE trans SET a = c + 1, b = a + 1")
   ("COMMIT")
+  ("SELECT * FROM trans")
   ("ROLLBACK")
   ("SELECT * FROM trans")
+
   ("START TRANSACTION")
   ;; query should fail as it's onion adjustment inside a transaction
   ("UPDATE trans SET a = a + 1, c = 50 WHERE a < 50000"
@@ -659,6 +658,7 @@
   ;; freeze things in case something went wrong
   ("COMMIT")
   ("SELECT * FROM trans")
+
   ("START TRANSACTION")
   ("INSERT INTO trans VALUES (1, 50, 150)")
   ;; query should fail as it's onion adjustment inside a transaction
@@ -773,9 +773,7 @@
   ("SELECT * FROM enums")
   ("SELECT spider + spider FROM bugs")
   ("SELECT spider + spider FROM bugs")
-  ;; ("SELECT SUM(spider) FROM bugs")
-  ;; ("SELECT GREATEST(ant, 5000) FROM more_bugs")
-  ;; ("SELECT GREATEST(12, ant, 5000) FROM more_bugs")
+  ("SELECT SUM(spider) FROM bugs")
   ("CREATE TABLE crawlers (pink DATE)")
   ("INSERT INTO crawlers VALUES ('0'), (0), ('2015-05-04 4:5:6')")
   ("SELECT * FROM crawlers")
@@ -790,9 +788,11 @@
   ("INSERT INTO real_type_bug VALUES (1, 2, 3)")
   ("SELECT * FROM real_type_bug")
   ("UPDATE real_type_bug SET a = a + 1, b = b + 1")
+
+  ("SHOW ENGINES")
+
   ;; FAIL: we don't currently support; but it shouldn't crash the system
   ("CREATE TABLE jjj SELECT * FROM enums")
-  ("SHOW ENGINES")
 
   ("CREATE TABLE floating (x float)")
   ("INSERT INTO floating VALUES (23e+12), (12e+14), ('a'), (12),
@@ -816,10 +816,102 @@
   ("DROP TABLE real_type_bug")
   ("DROP TABLE crawlers"))
 |#
+
+ ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+ ;;;     miscellaneous bugs 2
+ ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+ ("MiscBugs2" t
+  ("CREATE TABLE t (x integer)"
+   (:all-max "t"))
+  ("INSERT INTO t values (1), (10), (100), (1000)")
+  ("SELECT * FROM t")
+
+  ;; with column: constant first
+  ("SELECT SUM(GREATEST(50, x)) FROM t"
+   (:update "t" x oOrder OPE))
+  ;; with column: column first
+  ("SELECT SUM(GREATEST(x, 101)) FROM t")
+  ;; constants: small first
+  ("SELECT SUM(GREATEST(50, 55)) FROM t")
+  ;; constants: big first
+  ("SELECT SUM(GREATEST(55, 40)) FROM t")
+
+  ;; with column: constant first
+  ("SELECT SUM(LEAST(50, x)) FROM t")
+  ;; with column: column first
+  ("SELECT SUM(LEAST(x, 101)) FROM t")
+  ;; constants: small first
+  ("SELECT SUM(LEAST(505, 3000)) FROM t")
+  ;; constants: big first
+  ("SELECT SUM(LEAST(1000, 4)) FROM t")
+
+  ;; with column: constant first
+  ("SELECT GREATEST(50, x) FROM t"
+   (:update "t" x oEq DET))
+  ;; with column: column first
+  ("SELECT GREATEST(x, 101) FROM t")
+  ;; constants: small first
+  ("SELECT GREATEST(50, 55) FROM t")
+  ;; constants: big first
+  ("SELECT GREATEST(55, 40) FROM t")
+
+  ;; with column: constant first
+  ("SELECT LEAST(50, x) FROM t")
+  ;; with column: column first
+  ("SELECT LEAST(x, 101) FROM t")
+  ;; constants: small first
+  ("SELECT LEAST(505, 3000) FROM t")
+  ;; constants: big first
+  ("SELECT LEAST(1000, 4) FROM t")
+
+  ("SELECT * FROM t"
+   :check)
+  ("DROP TABLE t"))
+
+ ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+ ;;;     miscellaneous bugs 3
+ ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+ ("MiscBugs3" t
+  ("CREATE TABLE gutter (x integer, y integer)"
+   (:all-max gutter))
+  ("INSERT INTO gutter VALUES (1, 2), (20, 21), (500, NULL), (NULL, 1)")
+  ("SELECT * FROM gutter")
+  ;; one column
+  ("SELECT 5 + 4 + x from gutter")
+  ("SELECT x + 4 + 5 from gutter")
+  ("SELECT 1 + x + 5 from gutter")
+
+  ;; two (of the same) column
+  ("SELECT 1 + x + x from gutter")
+  ("SELECT x + 2 + x from gutter")
+  ("SELECT x + x + 3 from gutter")
+
+  ;; three column
+  ("SELECT x + x + x from gutter")
+
+#|
+  ;; goto plain
+  ("SELECT x + y from gutter"
+   (:update (gutter (x (oPlain PLAINVAL))
+                    (y (oPlain PLAINVAL)))))
+
+  ("SELECT 1 + x + y FROM gutter")
+  ("SELECT x + 4 + y FROM gutter")
+  ("SELECT x + y + 6 FROM gutter")
+|#
+
+  ("SELECT * FROM gutter"
+   :check)
+  ("DROP TABLE gutter"))
+
  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
  ;;;    quoted schema objects
  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
  ("QuotedSchemaObjects" t
+  ("DROP DATABASE IF EXISTS `over+there`"
+   ()
+   :both
+   :ignore)
   ("CREATE DATABASE IF NOT EXISTS `over+there`")
   ("USE `over+there`")
   ("CREATE TABLE `over+there`.`more+quotes` (`quoted-+as*well` integer)"
@@ -1140,9 +1232,6 @@
   (:set (ubug (x (oEq DET)
                  (oOrder RND)
                  (oAdd HOM)))))
- ("SET @cryptdb='sensitive',
-       @database='cryptdbtest', @table='ubug', @field='x',
-       @oOrder='OPE'")
  ("INSERT INTO ubug VALUES (1), (2)")
  ;; this must happen _before_ onion adjustment
  ("UPDATE ubug SET x = x + 1 WHERE x < 2"
@@ -1205,5 +1294,20 @@
  ("ROLLBACK")
  ("SELECT * FROM ubug_trx"
   :check)
- ("DROP TABLE ubug_trx")))
+ ("DROP TABLE ubug_trx")
+
+ ;; SpecialUpdate has a special code path for an update that will affect
+ ;; zero columns
+ ("CREATE TABLE ubug_none (x integer)"
+  (:all-max :ubug_none))
+ ("INSERT INTO ubug_none VALUES (1), (2)")
+ ("SELECT * FROM ubug_none")
+ ;; take the special path from within an onion adjustment
+ ("UPDATE ubug_none SET x = x + 10 WHERE x < 10"
+  (:update ubug_none x oOrder OPE))
+ ("SELECT * FROM ubug_none")
+ ("UPDATE ubug_none SET x = x + 10")
+ ("SELECT * FROM ubug_none"
+  :check)
+ ("DROP TABLE ubug_none")))
 

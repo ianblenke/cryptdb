@@ -110,6 +110,7 @@ assert_res(const ResType &r, const char *msg)
 static inline bool
 slowMatch(ResType res, ResType expected)
 {
+    /*
     if (res.names != expected.names
         || res.rows.size() != expected.rows.size()) {
 
@@ -138,8 +139,9 @@ slowMatch(ResType res, ResType expected)
             return false;
         }
     }
+    */
 
-    return true;
+    return false;
 }
 
 static inline bool
@@ -167,6 +169,7 @@ sp(const std::string &s)
 inline bool
 testSlowMatch()
 {
+    /*
     const std::vector<std::shared_ptr<Item> > row0 =
         {sp("box"), sp("rocks"), sp("candy")};
     const std::vector<std::shared_ptr<Item> > row1 =
@@ -229,4 +232,7 @@ testSlowMatch()
            true == slowMatch(expected3, res3) &&
            false == slowMatch(res4, expected4) &&
            false == slowMatch(expected4, res4);
+    */
+
+    return false;
 }

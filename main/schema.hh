@@ -222,17 +222,17 @@ public:
 
     std::shared_ptr<const SchemaInfo>
         getSchema(const std::unique_ptr<Connect> &conn,
-                  const std::unique_ptr<Connect> &e_conn);
+                  const std::unique_ptr<Connect> &e_conn) const;
     void updateStaleness(const std::unique_ptr<Connect> &e_conn,
-                         bool staleness);
-    bool initialStaleness(const std::unique_ptr<Connect> &e_conn);
-    bool cleanupStaleness(const std::unique_ptr<Connect> &e_conn);
-    void lowLevelCurrentStale(const std::unique_ptr<Connect> &e_conn);
-    void lowLevelCurrentUnstale(const std::unique_ptr<Connect> &e_conn);
+                         bool staleness) const;
+    bool initialStaleness(const std::unique_ptr<Connect> &e_conn) const;
+    bool cleanupStaleness(const std::unique_ptr<Connect> &e_conn) const;
+    void lowLevelCurrentStale(const std::unique_ptr<Connect> &e_conn) const;
+    void lowLevelCurrentUnstale(const std::unique_ptr<Connect> &e_conn) const;
 
 private:
-    std::shared_ptr<const SchemaInfo> schema;
-    bool no_loads;
+    mutable std::shared_ptr<const SchemaInfo> schema;
+    mutable bool no_loads;
     const unsigned int id;
 };
 

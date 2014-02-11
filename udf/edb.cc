@@ -568,7 +568,7 @@ cryptdb_func_add_set(UDF_INIT *const initid, UDF_ARGS *const args,
 
     AssignOnce<uint64_t> out_len;
     ZZ res;
-    if (NULL == args->args[0]) {
+    if (NULL == args->args[0] || NULL == args->args[1]) {
         out_len = 0;
         *is_null = 1;
         res = 0;

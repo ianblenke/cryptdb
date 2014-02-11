@@ -1,5 +1,8 @@
+#include <ostream>
+
 #include <parser/sql_utils.hh>
 #include <parser/lex_util.hh>
+#include <parser/stringify.hh>
 #include <mysql.h>
 
 
@@ -58,5 +61,13 @@ ItemToString(const Item &i) {
     assert(false == is_null);
 
     return s0;
+}
+
+std::string
+printItemToString(const Item &i)
+{
+    std::ostringstream o;
+    o << i;
+    return o.str();
 }
 

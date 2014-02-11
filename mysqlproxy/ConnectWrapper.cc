@@ -32,9 +32,8 @@ public:
         assert(this->qr);
         return this->qr;
     }
-    void setQueryRewrite(QueryRewrite *const in_qr) {
-        // assert(!this->qr);
-        this->qr = std::unique_ptr<QueryRewrite>(in_qr);
+    void setQueryRewrite(std::unique_ptr<QueryRewrite> &&in_qr) {
+        this->qr = std::move(in_qr);
     }
 
     std::unique_ptr<ProxyState> ps;
@@ -88,7 +87,7 @@ static int counter = 0;
 
 static std::map<std::string, WrapperState*> clients;
 
-static int
+static void
 returnResultSet(lua_State *L, const ResType &res);
 
 static Item_null *
@@ -245,13 +244,15 @@ rewrite(lua_State *const L)
 
     const std::string client = xlua_tolstring(L, 1);
     if (clients.find(client) == clients.end()) {
-        return 0;
+        lua_pushnil(L);
+        xlua_pushlstring(L, "failed to recognize client");     
+        return 2;
     }
     WrapperState *const c_wrapper = clients[client];
     ProxyState *const ps = thread_ps = c_wrapper->ps.get();
     assert(ps);
 
-    const std::string query = xlua_tolstring(L, 2);
+    const std::string &query = xlua_tolstring(L, 2);
     const unsigned long long _thread_id =
         strtoull(xlua_tolstring(L, 3).c_str(), NULL, 10);
 
@@ -261,67 +262,49 @@ rewrite(lua_State *const L)
     t.lap_ms();
     if (EXECUTE_QUERIES) {
         try {
-            SchemaCache &schema_cache = shared_ps->getSchemaCache();
-            std::unique_ptr<QueryRewrite> qr;
-            TEST_TextMessageError(retrieveDefaultDatabase(_thread_id,
-                                                          ps->getConn(),
-                                            &c_wrapper->default_db),
-                            "proxy failed to retrieve default database!");
+            TEST_Text(retrieveDefaultDatabase(_thread_id, ps->getConn(),
+                                              &c_wrapper->default_db),
+                      "proxy failed to retrieve default database!");
             // save a reference so a second thread won't eat objects
             // that DeltaOuput wants later
-            SchemaInfoRef schema_info_ref;
-            queryPreamble(*ps, query, &qr, &new_queries, &schema_cache,
-                          c_wrapper->default_db, &schema_info_ref);
-            c_wrapper->schema_info_refs.push_back(schema_info_ref);
+            const std::shared_ptr<const SchemaInfo> &schema =
+                ps->getSchemaInfo();
+            c_wrapper->schema_info_refs.push_back(schema);
+
+            std::unique_ptr<QueryRewrite> qr =
+                std::unique_ptr<QueryRewrite>(new QueryRewrite(
+                    Rewriter::rewrite(query, *schema.get(),
+                                      c_wrapper->default_db, *ps)));
             assert(qr);
 
-            c_wrapper->setQueryRewrite(qr.release());
-        } catch (const SynchronizationException &e) {
-            lua_pushboolean(L, false);              // status
-            xlua_pushlstring(L, e.to_string());     // error message
-            lua_pushnil(L);                         // new queries
-            return 3;
+            c_wrapper->setQueryRewrite(std::move(qr));
         } catch (const AbstractException &e) {
             lua_pushboolean(L, false);              // status
             xlua_pushlstring(L, e.to_string());     // error message
-            lua_pushnil(L);                         // new queries
-            return 3;
+            return 2;
         } catch (const CryptDBError &e) {
-            LOG(wrapper) << "cannot rewrite " << query << ": " << e.msg;
             lua_pushboolean(L, false);              // status
             xlua_pushlstring(L, e.msg);             // error message
-            lua_pushnil(L);                         // new queries
-            return 3;
+            return 2;
         }
     }
 
     if (LOG_PLAIN_QUERIES) {
-        *(c_wrapper->PLAIN_LOG) << query << "\n";
+        *(c_wrapper->PLAIN_LOG) << query << std::endl;
     }
 
     lua_pushboolean(L, true);                       // status
     lua_pushnil(L);                                 // error message
 
-    // NOTE: Potentially out of int range.
-    assert(new_queries.size() < INT_MAX);
-    lua_createtable(L, static_cast<int>(new_queries.size()), 0);
-    const int top = lua_gettop(L);
-    int index = 1;
-    for (auto it : new_queries) {
-        xlua_pushlstring(L, it);                    // new queries
-        lua_rawseti(L, top, index);
-        index++;
-    }
-
-    return 3;
+    return 2;
 }
 
-inline std::vector<std::shared_ptr<Item> >
+inline std::vector<Item *>
 itemNullVector(unsigned int count)
 {
-    std::vector<std::shared_ptr<Item> > out;
+    std::vector<Item *> out;
     for (unsigned int i = 0; i < count; ++i) {
-        out.push_back(std::shared_ptr<Item>(make_null()));
+        out.push_back(make_null());
     }
 
     return out;
@@ -329,9 +312,16 @@ itemNullVector(unsigned int count)
 
 static ResType
 getResTypeFromLuaTable(lua_State *const L, int fields_index,
-                       int rows_index)
+                       int rows_index, int affected_rows_index,
+                       int insert_id_index, int status_index)
 {
-    ResType out_res(true);
+    const bool status = lua_toboolean(L, status_index);
+    if (false == status) {
+        return ResType(false, 0, 0);
+    }
+
+    std::vector<std::string> names;
+    std::vector<enum_field_types> types;
     /* iterate over the fields argument */
     lua_pushnil(L);
     while (lua_next(L, fields_index)) {
@@ -342,9 +332,9 @@ getResTypeFromLuaTable(lua_State *const L, int fields_index,
         while (lua_next(L, -2)) {
             const std::string k = xlua_tolstring(L, -2);
             if ("name" == k) {
-                out_res.names.push_back(xlua_tolstring(L, -1));
+                names.push_back(xlua_tolstring(L, -1));
             } else if ("type" == k) {
-                out_res.types.push_back(static_cast<enum_field_types>(luaL_checkint(L, -1)));
+                types.push_back(static_cast<enum_field_types>(luaL_checkint(L, -1)));
             } else {
                 LOG(warn) << "unknown key " << k;
             }
@@ -354,9 +344,10 @@ getResTypeFromLuaTable(lua_State *const L, int fields_index,
         lua_pop(L, 1);
     }
 
-    assert(out_res.names.size() == out_res.types.size());
+    assert(names.size() == types.size());
 
     /* iterate over the rows argument */
+    std::vector<std::vector<Item *> > rows;
     lua_pushnil(L);
     while (lua_next(L, rows_index)) {
         if (!lua_istable(L, -1))
@@ -364,36 +355,45 @@ getResTypeFromLuaTable(lua_State *const L, int fields_index,
 
         /* initialize all items to NULL, since Lua skips
            nil array entries */
-        std::vector<std::shared_ptr<Item> > row =
-            itemNullVector(out_res.types.size());
+        std::vector<Item *> row = itemNullVector(types.size());
 
         lua_pushnil(L);
         while (lua_next(L, -2)) {
             const int key = luaL_checkint(L, -2) - 1;
 
             assert(key >= 0
-                   && static_cast<uint>(key) < out_res.types.size());
+                   && static_cast<uint>(key) < types.size());
             const std::string data = xlua_tolstring(L, -1);
-            Item *const value =
-                MySQLFieldTypeToItem(out_res.types[key], data);
-            row[key] = std::shared_ptr<Item>(value);
+            row[key] = MySQLFieldTypeToItem(types[key], data);
 
             lua_pop(L, 1);
         }
         // We can not use this assert because rows that contain many
         // NULLs don't return their columns in a strictly increasing
         // order.
-        // assert((unsigned int)key == out_res.names.size() - 1);
+        // assert((unsigned int)key == names.size() - 1);
 
-        out_res.rows.push_back(row);
+        rows.push_back(row);
         lua_pop(L, 1);
     }
 
-    return out_res;
+    return ResType(status, lua_tointeger(L, affected_rows_index),
+                   lua_tointeger(L, insert_id_index), std::move(names),
+                   std::move(types), std::move(rows));
+}
+
+static void
+nilBuffer(lua_State *const L, size_t count)
+{
+    while (count--) {
+        lua_pushnil(L);
+    }
+
+    return;
 }
 
 static int
-envoi(lua_State *const L)
+next(lua_State *const L)
 {
     ANON_REGION(__func__, &perf_cg);
     scoped_lock l(&big_lock);
@@ -401,7 +401,13 @@ envoi(lua_State *const L)
 
     const std::string client = xlua_tolstring(L, 1);
     if (clients.find(client) == clients.end()) {
-        return 0;
+        xlua_pushlstring(L, "error");
+        xlua_pushlstring(L, "unknown client");
+         lua_pushinteger(L,  100);
+        xlua_pushlstring(L, "12345");
+
+        nilBuffer(L, 1);
+        return 5;
     }
     WrapperState *const c_wrapper = clients[client];
 
@@ -411,64 +417,71 @@ envoi(lua_State *const L)
     assert(ps);
     ps->safeCreateEmbeddedTHD();
 
-    const ResType &res = getResTypeFromLuaTable(L, 2, 3);
+    const ResType &res = getResTypeFromLuaTable(L, 2, 3, 4, 5, 6);
     const std::unique_ptr<QueryRewrite> &qr = c_wrapper->getQueryRewrite();
     try {
-        const EpilogueResult &epi_result =
-            queryEpilogue(*ps, *qr.get(), res, c_wrapper->last_query,
-                          c_wrapper->default_db, false);
-        if (QueryAction::ROLLBACK == epi_result.action) {
-            assert(epi_result.res_type.ok);
-            lua_pushboolean(L, true);           // status
-            lua_pushboolean(L, true);           // rollback
-            lua_pushnil(L);                     // error message
-            lua_pushnil(L);                     // plaintext fields
-            lua_pushnil(L);                     // plaintext rows
+        NextParams nparams(*ps, c_wrapper->default_db, c_wrapper->last_query);
+        const auto &new_results = qr->executor->next(res, nparams);
+        const auto &result_type = new_results.first;
+        switch (result_type) {
+        case AbstractQueryExecutor::ResultType::QUERY_COME_AGAIN: {
+            // more to do before we have the client's results
+
+            xlua_pushlstring(L, "again");
+
+            const auto &output =
+                std::get<1>(new_results)->extract<std::pair<bool, std::string> >();
+
+            const auto &want_interim = output.first;
+            lua_pushboolean(L, want_interim);
+
+            const auto &next_query = output.second;
+            xlua_pushlstring(L, next_query);
+
+            nilBuffer(L, 2);
             return 5;
         }
+        case AbstractQueryExecutor::ResultType::QUERY_USE_RESULTS: {
+            // the results of executing this query should be send directly
+            // back to the client
+            xlua_pushlstring(L, "query-results");
+            const auto &output =
+                std::get<1>(new_results)->extract<std::pair<bool, std::string> >();
 
-        assert(QueryAction::NO_DECRYPT == epi_result.action
-               || QueryAction::DECRYPT == epi_result.action);
-        return returnResultSet(L, epi_result.res_type);
-    } catch (const SynchronizationException &e) {
-        lua_pushboolean(L, false);              // status
-        lua_pushboolean(L, false);              // rollback
-        xlua_pushlstring(L, e.to_string());     // error message
-        lua_pushnil(L);                         // plaintext fields
-        lua_pushnil(L);                         // plaintext rows
-        return 5;
-    } catch (const AbstractException &e) {
-        lua_pushboolean(L, false);              // status
-        lua_pushboolean(L, false);              // rollback
-        xlua_pushlstring(L, e.to_string());     // error message
-        lua_pushnil(L);                         // plaintext fields
-        lua_pushnil(L);                         // plaintext rows
-        return 5;
-    } catch (const CryptDBError &e) {
-        lua_pushboolean(L, false);              // status
-        lua_pushboolean(L, false);              // rollback
-        xlua_pushlstring(L, e.msg);             // error message
-        lua_pushnil(L);                         // plaintext fields
-        lua_pushnil(L);                         // plaintext rows
+            xlua_pushlstring(L, output.second);
+            nilBuffer(L, 3);
+            return 5;
+        }
+        case AbstractQueryExecutor::ResultType::RESULTS: {
+            // ready to return results to the client
+            xlua_pushlstring(L, "results");
+
+            const auto &res = new_results.second->extract<ResType>();
+            returnResultSet(L, res);        // pushes 4 items on stack
+            return 5;
+        }
+        default:
+            assert(false);
+        }
+    } catch (const ErrorPacketException &e) {
+        // lua_pop(L, lua_gettop(L));
+        xlua_pushlstring(L, "error");
+        xlua_pushlstring(L, e.getMessage());
+         lua_pushinteger(L, e.getErrorCode());
+        xlua_pushlstring(L, e.getSQLState());
+
+        nilBuffer(L, 1);
         return 5;
     }
 }
 
-static int
+static void
 returnResultSet(lua_State *const L, const ResType &rd)
 {
-    if (false == rd.ok) {
-        const std::string &generic_error = "something bad happened";
-        lua_pushboolean(L, false);              // status
-        lua_pushboolean(L, false);              // rollback
-        xlua_pushlstring(L, generic_error);     // error message
-        lua_pushnil(L);                         // plaintext fields
-        lua_pushnil(L);                         // plaintext rows
-    }
+    TEST_GenericPacketException(true == rd.ok, "something bad happened");
 
-    lua_pushboolean(L, true);                   // status
-    lua_pushboolean(L, false);                  // rollback
-    lua_pushnil(L);                             // error message
+    lua_pushinteger(L, rd.affected_rows);
+    lua_pushinteger(L, rd.insert_id);
 
     /* return decrypted result set */
     lua_createtable(L, (int)rd.names.size(), 0);
@@ -511,7 +524,7 @@ returnResultSet(lua_State *const L, const ResType &rd)
         lua_rawseti(L, t_rows, i+1);
     }
 
-    return 5;
+    return;
 }
 
 static const struct luaL_reg
@@ -520,7 +533,7 @@ cryptdb_lib[] = {
     F(connect),
     F(disconnect),
     F(rewrite),
-    F(envoi),
+    F(next),
     { 0, 0 },
 };
 

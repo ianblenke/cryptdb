@@ -47,23 +47,9 @@ MetaData::Table::remoteQueryCompletion()
 }
 
 std::string
-MetaData::Proc::currentTransactionID()
+MetaData::Proc::activeTransactionP()
 {
-    return DB::remoteDB() + "." + Internal::getPrefix() +
-           "currentTransactionID";
-}
-
-std::string
-MetaData::Proc::homAdditionTransaction()
-{
-    return DB::remoteDB() + "." + Internal::getPrefix() +
-           "homAdditionTransaction";
-}
-
-std::string
-MetaData::Proc::adjustOnion()
-{
-    return DB::remoteDB() + "." + Internal::getPrefix() + "adjustOnion";
+    return DB::remoteDB() + "." + Internal::getPrefix() + "activeTransactionP";
 }
 
 std::string

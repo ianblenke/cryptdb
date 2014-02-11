@@ -31,8 +31,8 @@ AlterDispatcher::canDo(LEX *const lex) const
     }
 
     long long flags = lex->alter_info.flags;
-    for (auto it = handlers.begin(); it != handlers.end(); it++) {
-        flags -= lex->alter_info.flags & (*it).first;
+    for (const auto &it : handlers) {
+        flags -= lex->alter_info.flags & it.first;
     }
 
     return 0 == flags;
@@ -42,8 +42,8 @@ std::vector<AlterSubHandler *>
 AlterDispatcher::dispatch(LEX *const lex) const
 {
     std::vector<AlterSubHandler *> out;
-    for (auto it = handlers.begin(); it != handlers.end(); it++) {
-        const long long extract = lex->alter_info.flags & (*it).first;
+    for (const auto &it : handlers) {
+        const long long extract = lex->alter_info.flags & it.first;
         if (extract) {
             auto it_handler = handlers.find(extract);
             assert(handlers.end() != it_handler && it_handler->second);

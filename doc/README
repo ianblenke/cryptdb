@@ -14,6 +14,13 @@ Convention : When this document uses syntax like
              Such indicates that the reader is to use the value _without_
              the single-quotes.
 
+             Syntax like
+                less than text greater than
+                + <something>
+                + <else>
+             Indicates that the reader is to remove the angle brackets
+             and replace the text with something contextually appropriate.
+
 #########################################
 #########################################
 ########### Getting started   ###########
@@ -81,14 +88,54 @@ Convention : When this document uses syntax like
 
 #########################################
 #########################################
-######## Onion visualization ############
+############ CryptDB Admin ##############
 #########################################
 #########################################
+    CryptDB supports a a few special queries (called directives) that may
+    prove useful. (ignore the single quote convention per the sql queries)
 
-To view the onion levels of your database, run in the mysql shell:
+        I. Layer Scraping
+            > SET @cryptdb='show';
+            > that query should show you the status of onions for all of your
+              cryptdb tables; note that if you create a database without
+              populating it with tables you will see no results.
+        II. Forced Onion Adjustment
+            > SET @cryptdb='adjust', @database='<db-name>', @table='<table-name>',
+                  @field='<field-name>', @<onion>='<level>';
+            > where <onion> is one of oEq, oOrder or oAdd
+            > issuing this query will pull off layers until the column is at
+              '<level>'
+        III. Sensitivity
+            > SET @cryptdb='sensitive', @database='<db-name>', @table='<table-name>',
+                  @field='<field-name>', @<onion>='<level>';
+            > this query will prevent @<onion> from going below '<level>'
+              + ie, if I issue ... @oOrder='RND' my Order onion will not adjust
+                so I will be unable to do operations that require ordered
+                comparison
 
-> SET @cryptdb='show'
+    CryptDB also has a script that will first determine all of the onion
+    adjustments in your database; then generate another script that can be run
+    against a database with the same schema resulting in identical
+    onion layouts (the generated script will be ./onions.lisp)
 
+        % <start cryptdb proxy>
+        % sbcl
+        % (ql:quickload "clsql")
+        % (load "scripts/layer-dropper.lisp")
+        % (setf *database* "<database-name>")
+        % (main)
+
+    Now when you want to force another database into the same onion layout you
+    can use ./onions.lisp; if you look at the script you will see
+                (LET ((DB "<database-name>")
+                  ...)
+    Change "<database-name>" to reflect the database whose layout you wish to
+    update; then
+        % <start cryptdb proxy>
+        % sbcl
+        % (ql:quickload "clsql")
+        % (load "./onions.lisp")
+        % (adjust-main)
 
 
 #########################################
@@ -96,15 +143,6 @@ To view the onion levels of your database, run in the mysql shell:
 ############ Failing queries ############
 #########################################
 #########################################
-
-
-    Note that CryptDB is not a product, but just a more advanced research
-    prototype. It only has implemented a subset of SQL queries. For example,
-    it supports the regular MySQL client and a variety of queries you can
-    play with from this shell, Wordpress, and other apps. We did not test
-    it with other MySQL clients (e.g., PHP, Java) and these likely issue
-    some uncommon metadata query we did not implement. Feel free to
-    implement what's missing!
 
 
     > Queries can fail for a few reasons.

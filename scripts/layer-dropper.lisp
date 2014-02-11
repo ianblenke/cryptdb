@@ -5,7 +5,7 @@
 
 (proclaim '(optimize (debug 3)))
 
-(defparameter *database* "ezyang+blog")
+(defparameter *database* nil)
 
 (defun verify-fields (fields)
   (and (string= (nth 0 fields) "_database")

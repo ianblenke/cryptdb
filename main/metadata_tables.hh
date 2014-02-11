@@ -20,9 +20,7 @@ namespace MetaData {
     };
 
     namespace Proc {
-        std::string currentTransactionID();
-        std::string homAdditionTransaction();
-        std::string adjustOnion();
+        std::string activeTransactionP();
     };
 
     namespace DB {

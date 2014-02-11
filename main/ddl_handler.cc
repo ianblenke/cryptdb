@@ -1,16 +1,22 @@
+#include <csignal>
+
 #include <main/ddl_handler.hh>
 #include <main/rewrite_util.hh>
 #include <main/rewrite_main.hh>
 #include <main/alter_sub_handler.hh>
 #include <main/dispatcher.hh>
 #include <main/macro_util.hh>
+#include <main/metadata_tables.hh>
 #include <parser/lex_util.hh>
 
+#include <util/yield.hpp>
+
 class CreateTableHandler : public DDLHandler {
-    virtual LEX *rewriteAndUpdate(Analysis &a, LEX *lex,
-                                  const ProxyState &ps,
-                                  const Preamble &pre) const
+    virtual AbstractQueryExecutor *
+        rewriteAndUpdate(Analysis &a, LEX *lex, const Preamble &pre) const
     {
+        assert(a.deltas.size() == 0);
+
         TEST_DatabaseDiscrepancy(pre.dbname, a.getDatabaseName());
         LEX *const new_lex = copyWithTHD(lex);
 
@@ -57,9 +63,9 @@ class CreateTableHandler : public DDLHandler {
                 List_iterator<Create_field>(lex->alter_info.create_list);
             new_lex->alter_info.create_list =
                 accumList<Create_field>(it,
-                    [&a, &ps, &tm, &key_data] (List<Create_field> out_list,
-                                               Create_field *const cf) {
-                        return createAndRewriteField(a, ps, cf, tm.get(),
+                    [&a, &tm, &key_data] (List<Create_field> out_list,
+                                          Create_field *const cf) {
+                        return createAndRewriteField(a, cf, tm.get(),
                                                      true, key_data, out_list);
                 });
 
@@ -101,7 +107,7 @@ class CreateTableHandler : public DDLHandler {
             // with the credit card field every time the server boots)
         }
 
-        return new_lex;
+        return new DDLQueryExecutor(*new_lex, std::move(a.deltas));
     }
 };
 
@@ -118,10 +124,11 @@ class CreateTableHandler : public DDLHandler {
 //      Query OK, 0 rows affected (0.03 sec)
 //      Records: 0  Duplicates: 0  Warnings: 0
 class AlterTableHandler : public DDLHandler {
-    virtual LEX *rewriteAndUpdate(Analysis &a, LEX *lex,
-                                  const ProxyState &ps,
-                                  const Preamble &pre) const
+    virtual AbstractQueryExecutor *
+        rewriteAndUpdate(Analysis &a, LEX *lex, const Preamble &pre) const
     {
+        assert(a.deltas.size() == 0);
+
         TEST_Text(sub_dispatcher->canDo(lex),
                   "your ALTER TABLE query may require at least one"
                   " unsupported feature");
@@ -132,7 +139,7 @@ class AlterTableHandler : public DDLHandler {
         LEX *new_lex = copyWithTHD(lex);
 
         for (auto it : handlers) {
-            new_lex = it->transformLex(a, new_lex, ps);
+            new_lex = it->transformLex(a, new_lex);
         }
 
         // -----------------------------
@@ -143,7 +150,7 @@ class AlterTableHandler : public DDLHandler {
         new_lex->select_lex.table_list =
             rewrite_table_list(new_lex->select_lex.table_list, a, true);
 
-        return new_lex;
+        return new DDLQueryExecutor(*new_lex, std::move(a.deltas));
     }
 
     const std::unique_ptr<AlterDispatcher> sub_dispatcher;
@@ -153,17 +160,18 @@ public:
 };
 
 class DropTableHandler : public DDLHandler {
-    virtual LEX *rewriteAndUpdate(Analysis &a, LEX *lex,
-                                  const ProxyState &ps,
-                                  const Preamble &pre) const
+    virtual AbstractQueryExecutor *
+        rewriteAndUpdate(Analysis &a, LEX *lex, const Preamble &pre) const
     {
-        LEX *const final_lex = rewrite(a, lex, ps);
-        update(a, lex, ps);
+        assert(a.deltas.size() == 0);
 
-        return final_lex;
+        LEX *const final_lex = rewrite(a, lex);
+        update(a, lex);
+
+        return new DDLQueryExecutor(*final_lex, std::move(a.deltas));
     }
     
-    LEX *rewrite(Analysis &a, LEX *lex, const ProxyState &ps) const
+    LEX *rewrite(Analysis &a, LEX *lex) const
     {
         LEX *const new_lex = copyWithTHD(lex);
         new_lex->select_lex.table_list =
@@ -172,7 +180,7 @@ class DropTableHandler : public DDLHandler {
         return new_lex;
     }
 
-    void update(Analysis &a, LEX *lex, const ProxyState &ps) const
+    void update(Analysis &a, LEX *lex) const
     {
         TABLE_LIST *tbl = lex->select_lex.table_list.first;
         for (; tbl; tbl = tbl->next_local) {
@@ -195,10 +203,12 @@ class DropTableHandler : public DDLHandler {
 };
 
 class CreateDBHandler : public DDLHandler {
-    virtual LEX *rewriteAndUpdate(Analysis &a, LEX *const lex,
-                                  const ProxyState &ps,
-                                  const Preamble &pre) const
+    virtual AbstractQueryExecutor *
+        rewriteAndUpdate(Analysis &a, LEX *const lex, const Preamble &pre)
+            const
     {
+        assert(a.deltas.size() == 0);
+
         const std::string &dbname =
             convert_lex_str(lex->name);
         if (false == a.databaseMetaExists(dbname)) {
@@ -213,53 +223,58 @@ class CreateDBHandler : public DDLHandler {
                                 "Database " + dbname + " already exists!");
         }
 
-        return copyWithTHD(lex);
+        return new DDLQueryExecutor(*copyWithTHD(lex), std::move(a.deltas));
     }
 };
 
 class ChangeDBHandler : public DDLHandler {
-    virtual LEX *rewriteAndUpdate(Analysis &a, LEX *const lex,
-                                  const ProxyState &ps,
-                                  const Preamble &pre) const
+    virtual AbstractQueryExecutor *
+        rewriteAndUpdate(Analysis &a, LEX *const lex, const Preamble &pre)
+            const
     {
-        a.special_query = Analysis::SpecialQuery::NO_CHANGE_META_DDL;
-        return copyWithTHD(lex);
+        assert(a.deltas.size() == 0);
+        return new SimpleExecutor();
     }
 };
 
 class DropDBHandler : public DDLHandler {
-    virtual LEX *rewriteAndUpdate(Analysis &a, LEX *const lex,
-                                  const ProxyState &ps,
-                                  const Preamble &pre) const
+    virtual AbstractQueryExecutor *
+        rewriteAndUpdate(Analysis &a, LEX *const lex, const Preamble &pre)
+            const
     {
-        const std::string &dbname =
-            convert_lex_str(lex->name);
+        assert(a.deltas.size() == 0);
+
+        const std::string &dbname = convert_lex_str(lex->name);
         const DatabaseMeta &dm = a.getDatabaseMeta(dbname);
         a.deltas.push_back(std::unique_ptr<Delta>(
                                     new DeleteDelta(dm, a.getSchema())));
 
-        return copyWithTHD(lex);
+        return new DDLQueryExecutor(*copyWithTHD(lex), std::move(a.deltas));
     }
 };
 
 class LockTablesHandler : public DDLHandler {
-    virtual LEX *rewriteAndUpdate(Analysis &a, LEX *const lex,
-                                  const ProxyState &ps,
-                                  const Preamble &pre) const
+    virtual AbstractQueryExecutor *
+        rewriteAndUpdate(Analysis &a, LEX *const lex, const Preamble &pre)
+            const
     {
+        assert(a.deltas.size() == 0);
+
         LEX *const new_lex = copyWithTHD(lex);
         new_lex->select_lex.table_list =
             rewrite_table_list(lex->select_lex.table_list, a);
 
-        return new_lex;
+        return new DDLQueryExecutor(*new_lex, std::move(a.deltas));
     }
 };
 
 class CreateIndexHandler : public DDLHandler {
-    virtual LEX *rewriteAndUpdate(Analysis &a, LEX *const lex,
-                                  const ProxyState &ps,
-                                  const Preamble &pre) const
+    virtual AbstractQueryExecutor *
+        rewriteAndUpdate(Analysis &a, LEX *const lex, const Preamble &pre)
+            const
     {
+        assert(a.deltas.size() == 0);
+
         LEX *const new_lex = copyWithTHD(lex);
 
         // rewrite table
@@ -271,7 +286,7 @@ class CreateIndexHandler : public DDLHandler {
 
         highLevelRewriteKey(tm, *lex, new_lex, a);
 
-        return new_lex;
+        return new DDLQueryExecutor(*new_lex, std::move(a.deltas));
     }
 };
 
@@ -283,9 +298,11 @@ empty_if_null(const char *const p)
     return std::string("");
 }
 
-LEX *DDLHandler::transformLex(Analysis &a, LEX *lex,
-                              const ProxyState &ps) const
+AbstractQueryExecutor *DDLHandler::
+transformLex(Analysis &a, LEX *lex) const
 {
+    assert(a.deltas.size() == 0);
+
     AssignOnce<std::string> db;
     AssignOnce<std::string> table;
     if (lex->select_lex.table_list.first) {
@@ -296,8 +313,12 @@ LEX *DDLHandler::transformLex(Analysis &a, LEX *lex,
         db =  "", table = "";
     }
 
-    return this->rewriteAndUpdate(a, lex, ps, Preamble(db.get(),
-                                                       table.get()));
+    auto executor =
+        this->rewriteAndUpdate(a, lex, Preamble(db.get(), table.get()));
+
+    assert(a.deltas.size() == 0);
+
+    return executor;
 }
 
 // FIXME: Add test to make sure handler added successfully.
@@ -332,3 +353,60 @@ SQLDispatcher *buildDDLDispatcher()
 
     return dispatcher;
 }
+
+std::pair<AbstractQueryExecutor::ResultType, AbstractAnything *>
+DDLQueryExecutor::
+nextImpl(const ResType &res, const NextParams &nparams)
+{
+    reenter(this->corot) {
+        yield {
+            {
+                uint64_t embedded_completion_id;
+                TEST_ErrPkt(
+                    deltaOutputBeforeQuery(nparams.ps.getEConn(),
+                                           nparams.original_query, this->deltas,
+                                           CompletionType::DDLCompletion,
+                                           &embedded_completion_id),
+                    "deltaOutputBeforeQuery failed for DDL");
+                this->embedded_completion_id = embedded_completion_id;
+            }
+
+            return CR_QUERY_AGAIN(
+                " INSERT INTO " + MetaData::Table::remoteQueryCompletion() +
+                "   (begin, complete, embedded_completion_id, reissue) VALUES"
+                "   (TRUE,  FALSE," +
+                    std::to_string(this->embedded_completion_id.get()) +
+                "    , FALSE);");
+
+        }
+        TEST_ErrPkt(res.success(), "failed before issuing the ddl query");
+
+        // execute the rewritten query
+        yield return CR_QUERY_AGAIN(this->new_query);
+        TEST_ErrPkt(res.success(), "DDL query failed");
+        // save the results so we can return them to the client
+        this->ddl_res = res;
+
+        yield {
+            return CR_QUERY_AGAIN(
+                " UPDATE " + MetaData::Table::remoteQueryCompletion() +
+                "    SET complete = TRUE"
+                "  WHERE embedded_completion_id = " +
+                     std::to_string(this->embedded_completion_id.get()) + ";");
+        }
+        TEST_ErrPkt(res.success(), "failed after issuing the ddl query");
+
+        // this is a ddl query so do not put it into a transaction
+        TEST_ErrPkt(nparams.ps.getEConn()->execute(nparams.original_query),
+                  "Failed to execute DDL query against embedded database!");
+
+        TEST_ErrPkt(deltaOutputAfterQuery(nparams.ps.getEConn(), this->deltas,
+                                          this->embedded_completion_id.get()),
+                    "deltaOuputAfterQuery failed for DDL");
+
+        return CR_RESULTS(this->ddl_res.get());
+    }
+
+    assert(false);
+}
+

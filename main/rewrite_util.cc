@@ -216,9 +216,9 @@ get_create_field(const Analysis &a, Create_field * const f,
 
     const auto &enc_layers = a.getEncLayers(om);
     assert(enc_layers.size() > 0);
-    for (auto it = enc_layers.begin(); it != enc_layers.end(); it++) {
+    for (const auto &it : enc_layers) {
         const Create_field * const old_cf = new_cf;
-        new_cf = (*it)->newCreateField(*old_cf, name);
+        new_cf = it->newCreateField(*old_cf, name);
     }
 
     // Restore the default so we don't memleak it.
@@ -411,8 +411,7 @@ isUnique(const std::string &name,
 }
 
 List<Create_field>
-createAndRewriteField(Analysis &a, const ProxyState &ps,
-                      Create_field * const cf,
+createAndRewriteField(Analysis &a, Create_field * const cf,
                       TableMeta *const tm, bool new_table,
                       const std::vector<std::tuple<std::vector<std::string>,
                                         Key::Keytype> >
@@ -424,8 +423,9 @@ createAndRewriteField(Analysis &a, const ProxyState &ps,
 
     const std::string &name = std::string(cf->field_name);
     std::unique_ptr<FieldMeta>
-        fm(new FieldMeta(*cf, ps.getMasterKey().get(), ps.defaultSecurityRating(),
-                         tm->leaseCount(), isUnique(name, key_data)));
+        fm(new FieldMeta(*cf, a.getMasterKey().get(),
+                         a.getDefaultSecurityRating(), tm->leaseCount(),
+                         isUnique(name, key_data)));
 
     // -----------------------------
     //         Rewrite FIELD
@@ -464,10 +464,10 @@ encrypt_item_layers(const Item &i, onion o, const OnionMeta &om,
     const Item *enc = &i;
     Item *new_enc = NULL;
 
-    for (auto it = enc_layers.begin(); it != enc_layers.end(); it++) {
+    for (const auto &it : enc_layers) {
         LOG(encl) << "encrypt layer "
-                  << TypeText<SECLEVEL>::toText((*it)->level()) << "\n";
-        new_enc = (*it)->encrypt(*enc, IV);
+                  << TypeText<SECLEVEL>::toText(it->level()) << "\n";
+        new_enc = it->encrypt(*enc, IV);
         assert(new_enc);
         enc = new_enc;
     }
@@ -475,22 +475,6 @@ encrypt_item_layers(const Item &i, onion o, const OnionMeta &om,
     // @i is const, do we don't want the caller to modify it accidentally.
     assert(new_enc && new_enc != &i);
     return new_enc;
-}
-
-std::string
-rewriteAndGetSingleQuery(const ProxyState &ps, const std::string &q,
-                         SchemaInfo const &schema,
-                         const std::string &default_db)
-{
-    const QueryRewrite qr(Rewriter::rewrite(ps, q, schema, default_db));
-    assert(false == qr.output->stalesSchema());
-    assert(QueryAction::DECRYPT == qr.output->queryAction(ps.getConn()));
-
-    std::list<std::string> out_queryz;
-    qr.output->getQuery(&out_queryz, schema);
-    assert(out_queryz.size() == 1);
-
-    return out_queryz.back();
 }
 
 std::string
@@ -528,12 +512,6 @@ typical_rewrite_insert_type(const Item &i, const FieldMeta &fm,
     if (fm.getHasSalt()) {
         l->push_back(new Item_int(static_cast<ulonglong>(salt)));
     }
-}
-
-std::string
-mysql_noop()
-{
-    return "do 0;";
 }
 
 /*
@@ -590,52 +568,6 @@ retrieveDefaultDatabase(unsigned long long thread_id,
     return true;
 }
 
-void
-queryPreamble(const ProxyState &ps, const std::string &q,
-              std::unique_ptr<QueryRewrite> *const qr,
-              std::list<std::string> *const out_queryz,
-              SchemaCache *const schema_cache,
-              const std::string &default_db,
-              SchemaInfoRef *const schema_info_ref)
-{
-    const std::shared_ptr<const SchemaInfo> schema =
-        schema_cache->getSchema(ps.getConn(), ps.getEConn());
-
-    *qr = std::unique_ptr<QueryRewrite>(
-            new QueryRewrite(Rewriter::rewrite(ps, q, *schema.get(),
-                                               default_db)));
-
-    // We handle before any queries because a failed query
-    // may stale the database during recovery and then
-    // we'd have to handle there as well.
-    schema_cache->updateStaleness(ps.getEConn(),
-                                  (*qr)->output->stalesSchema());
-
-    // ASK bites again...
-    // We want the embedded database to reflect the metadata for the
-    // current remote connection.
-    if ((*qr)->output->usesEmbeddedDB()) {
-        TEST_TextMessageError(lowLevelSetCurrentDatabase(ps.getEConn(),
-                                                         default_db),
-            "failed to set the embedded database to " + default_db + ";"
-            " your client may be in an unrecoverable bad loop"
-            " so consider restarting just the _client_. this can happen"
-            " if you tell your client to connect to a database that exists"
-            " but was not created through cryptdb.");
-    }
-
-    (*qr)->output->beforeQuery(ps.getConn(), ps.getEConn());
-    (*qr)->output->getQuery(out_queryz, *schema.get());
-
-    // give the caller a reference to his SchemaInfo because the objects
-    // may be used in Deltaz
-    if (schema_info_ref) {
-        *schema_info_ref = schema;
-    }
-
-    return;
-}
-
 /*
 static void
 printEC(std::unique_ptr<Connect> e_conn, const std::string & command) {
@@ -646,9 +578,9 @@ printEC(std::unique_ptr<Connect> e_conn, const std::string & command) {
 }
 */
 
+/*
 static void
 printEmbeddedState(const ProxyState &ps) {
-/*
     printEC(ps.e_conn, "show databases;");
     printEC(ps.e_conn, "show tables from pdb;");
     std::cout << "regular" << std::endl << std::endl;
@@ -657,8 +589,8 @@ printEmbeddedState(const ProxyState &ps) {
     printEC(ps.e_conn, "select * from pdb.BleedingMetaObject;");
     printEC(ps.e_conn, "select * from pdb.Query;");
     printEC(ps.e_conn, "select * from pdb.DeltaOutput;");
-*/
 }
+*/
 
 std::string
 terminalEscape(const std::string &s)
@@ -683,6 +615,7 @@ prettyPrintQuery(const std::string &query)
               << "NEW QUERY: " << COLOR_END << terminalEscape(query) << std::endl;
 }
 
+/*
 static void
 prettyPrintQueryResult(const ResType &res)
 {
@@ -692,70 +625,8 @@ prettyPrintQueryResult(const ResType &res)
     std::cout << std::endl;
 }
 
-// returning the QueryAction is useful for sanity checking and for allowing
-// the proxy to determine if a ROLLBACK occurred
-EpilogueResult
-queryEpilogue(const ProxyState &ps, const QueryRewrite &qr,
-              const ResType &res, const std::string &query,
-              const std::string &default_db, bool pp)
-{
-    TEST_Sync(res.success(), "query did not produce good result");
+*/
 
-    std::pair<bool, std::unique_ptr<DBResult>> after_out =
-        qr.output->afterQuery(ps.getEConn());
-    assert(!!after_out.first == !!after_out.second);
-
-    const QueryAction action = qr.output->queryAction(ps.getConn());
-    switch (action) {
-        case QueryAction::AGAIN: {
-            std::unique_ptr<SchemaCache> schema_cache(new SchemaCache());
-            // onion adjustments that come from multideletes which use
-            // table aliases make the current database go to
-            // NULL; rectification
-            TEST_Text(lowLevelSetCurrentDatabase(ps.getConn(),
-                                                 default_db),
-                      "failed to set current db after onion adjustment");
-            const EpilogueResult &epi_res =
-                executeQuery(ps, query, default_db, schema_cache.get(),
-                             pp);
-            TEST_Sync(schema_cache->cleanupStaleness(ps.getEConn()),
-                      "failed to cleanup cache after requery!");
-            return epi_res;
-        }
-        case QueryAction::RETURN_AFTER: {
-            const ResType &after_res(after_out.second->unpack());
-            return EpilogueResult(QueryAction::NO_DECRYPT, after_res);
-        }
-        case QueryAction::DECRYPT:
-        case QueryAction::NO_DECRYPT:
-        case QueryAction::ROLLBACK:
-            break;
-        default:
-            FAIL_TextMessageError("unrecognized QueryAction");
-    }
-
-    if (pp) {
-        printEmbeddedState(ps);
-        prettyPrintQueryResult(res);
-    }
-
-    if (false == res.success()) {
-        return EpilogueResult(QueryAction::NO_DECRYPT, ResType(false));
-    }
-
-    if (QueryAction::DECRYPT == action) {
-        const ResType &dec_res =
-            Rewriter::decryptResults(res, qr.rmeta);
-        assert(dec_res.success());
-        if (!PRETTY_DEMO && pp) {
-            prettyPrintQueryResult(dec_res);
-        }
-
-        return EpilogueResult(action, dec_res);
-    }
-
-    return EpilogueResult(action, res);
-}
 
 SECURITY_RATING
 determineSecurityRating()
@@ -767,3 +638,15 @@ determineSecurityRating()
     
     return SECURITY_RATING::SENSITIVE;
 }
+
+bool
+handleActiveTransactionPResults(const ResType &res)
+{
+    assert(res.success());
+    assert(res.rows.size() == 1);
+
+    const std::string &trx = ItemToString(*res.rows.front().front());
+    assert("1" == trx || "0" == trx);
+    return ("1" == trx);
+}
+

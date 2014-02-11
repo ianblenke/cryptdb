@@ -1055,7 +1055,7 @@ Connection::execute(const Query &query) {
         default:
             assert_s(false, "unrecognized type in Connection");
     }
-    return ResType(false);
+    return ResType(false, 0, 0);
 }
 
 void
@@ -1074,13 +1074,14 @@ Connection::executeConn(const Query &query) {
 
     if (!(*conn)->execute(query.query, &dbres)) {
         executeFail(query);
-        return ResType(false);
+        return ResType(false, 0, 0);
     }
     return dbres->unpack();
 }
 
 ResType
 Connection::executeRewriter(const Query &query) {
+    /*
     //translate the query
     re_it++;
     if (re_it == re_set.end()) {
@@ -1096,6 +1097,8 @@ Connection::executeRewriter(const Query &query) {
 
     return executeQuery(*ps, query.query, default_db,
                         &this->schema_cache).res_type;
+    */
+    return ResType(false, 0, 0);
 }
 
 my_ulonglong
@@ -1133,6 +1136,7 @@ Connection::executeLastEDB() {
 static bool
 CheckQuery(const TestConfig &tc, const Query &query)
 {
+    /*
     LOG(test) << "query: " << query.query;
 
     // FIXME: this code must be reworked, don't duplicate query execution logic
@@ -1233,8 +1237,9 @@ CheckQuery(const TestConfig &tc, const Query &query)
             }
         }
     }
+    */
 
-    return true;
+    return false;
 }
 
 struct Score {
