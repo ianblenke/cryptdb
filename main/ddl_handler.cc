@@ -20,8 +20,16 @@ class CreateTableHandler : public DDLHandler {
         TEST_DatabaseDiscrepancy(pre.dbname, a.getDatabaseName());
         LEX *const new_lex = copyWithTHD(lex);
 
+        TEST_Text(DB_TYPE_INNODB == lex->create_info.db_type->db_type,
+                  "InnoDB is the only supported ENGINE")
+
+        // partitioning information is not currently printed by our LEX
+        // stringifications algorithms which leads to a truncated query
+        TEST_Text(NULL == lex->part_info,
+                  "CryptDB does not support partitioning");
+
         //TODO: support for "create table like"
-        TEST_TextMessageError(
+        TEST_Text(
                 !(lex->create_info.options & HA_LEX_CREATE_TABLE_LIKE),
                 "No support for create table like yet. "
                 "If you see this, please implement me");
@@ -364,47 +372,41 @@ nextImpl(const ResType &res, const NextParams &nparams)
                 uint64_t embedded_completion_id;
                 TEST_ErrPkt(
                     deltaOutputBeforeQuery(nparams.ps.getEConn(),
-                                           nparams.original_query, this->deltas,
-                                           CompletionType::DDLCompletion,
+                                           nparams.original_query,
+                                           this->new_query, this->deltas,
+                                           CompletionType::DDL,
                                            &embedded_completion_id),
                     "deltaOutputBeforeQuery failed for DDL");
                 this->embedded_completion_id = embedded_completion_id;
             }
 
-            return CR_QUERY_AGAIN(
-                " INSERT INTO " + MetaData::Table::remoteQueryCompletion() +
-                "   (begin, complete, embedded_completion_id, reissue) VALUES"
-                "   (TRUE,  FALSE," +
-                    std::to_string(this->embedded_completion_id.get()) +
-                "    , FALSE);");
-
+            // execute the rewritten query
+            return CR_QUERY_AGAIN(this->new_query);
         }
-        TEST_ErrPkt(res.success(), "failed before issuing the ddl query");
-
-        // execute the rewritten query
-        yield return CR_QUERY_AGAIN(this->new_query);
         TEST_ErrPkt(res.success(), "DDL query failed");
         // save the results so we can return them to the client
         this->ddl_res = res;
 
         yield {
             return CR_QUERY_AGAIN(
-                " UPDATE " + MetaData::Table::remoteQueryCompletion() +
-                "    SET complete = TRUE"
-                "  WHERE embedded_completion_id = " +
-                     std::to_string(this->embedded_completion_id.get()) + ";");
+                " INSERT INTO " + MetaData::Table::remoteQueryCompletion() +
+                "   (embedded_completion_id, completion_type) VALUES"
+                "   (" + std::to_string(this->embedded_completion_id.get()) + ","
+                "    '"+TypeText<CompletionType>::toText(CompletionType::Onion)+"'"
+                "   );");
         }
-        TEST_ErrPkt(res.success(), "failed after issuing the ddl query");
+        TEST_ErrPkt(res.success(), "failed issuing ddl completion");
 
-        // this is a ddl query so do not put it into a transaction
+        // execute the original query against the embedded database
+        // > this is a ddl query so do not put it into a transaction
         TEST_ErrPkt(nparams.ps.getEConn()->execute(nparams.original_query),
-                  "Failed to execute DDL query against embedded database!");
+                   "Failed to execute DDL query against embedded database!");
 
         TEST_ErrPkt(deltaOutputAfterQuery(nparams.ps.getEConn(), this->deltas,
                                           this->embedded_completion_id.get()),
-                    "deltaOuputAfterQuery failed for DDL");
+                   "deltaOuputAfterQuery failed for DDL");
 
-        return CR_RESULTS(this->ddl_res.get());
+        yield return CR_RESULTS(this->ddl_res.get());
     }
 
     assert(false);

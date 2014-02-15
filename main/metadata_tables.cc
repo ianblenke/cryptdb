@@ -118,17 +118,20 @@ MetaData::initialize(const std::unique_ptr<Connect> &conn,
         " ENGINE=InnoDB;";
     RETURN_FALSE_IF_FALSE(e_conn->execute(create_bleeding_table));
 
-    const std::string create_embedded_completion =
-        " CREATE TABLE IF NOT EXISTS " + Table::embeddedQueryCompletion() +
-        "   (begin BOOLEAN NOT NULL,"
-        "    complete BOOLEAN NOT NULL,"
-        "    original_query VARCHAR(500) NOT NULL,"
-        "    default_db VARCHAR(500),"      // default database is NULLable
-        "    aborted BOOLEAN NOT NULL,"
-        "    type VARCHAR(100) NOT NULL,"
-        "    id SERIAL PRIMARY KEY)"
-        " ENGINE=InnoDB;";
-    RETURN_FALSE_IF_FALSE(e_conn->execute(create_embedded_completion));
+    {
+        const std::string len(std::to_string(STORED_QUERY_LENGTH));
+        const std::string create_embedded_completion =
+            " CREATE TABLE IF NOT EXISTS " + Table::embeddedQueryCompletion() +
+            "   (complete BOOLEAN NOT NULL,"
+            "    original_query VARCHAR(" + len + ") NOT NULL,"
+            "    rewritten_query VARCHAR(" + len + ") NOT NULL,"
+            "    default_db VARCHAR(500),"      // default database is NULLable
+            "    aborted BOOLEAN NOT NULL,"
+            "    type VARCHAR(100) NOT NULL,"
+            "    id SERIAL PRIMARY KEY)"
+            " ENGINE=InnoDB;";
+        RETURN_FALSE_IF_FALSE(e_conn->execute(create_embedded_completion));
+    }
 
     const std::string create_staleness =
         " CREATE TABLE IF NOT EXISTS " + Table::staleness() +
@@ -156,10 +159,8 @@ MetaData::initialize(const std::unique_ptr<Connect> &conn,
 
     const std::string create_remote_completion =
         " CREATE TABLE IF NOT EXISTS " + Table::remoteQueryCompletion() +
-        "   (begin BOOLEAN NOT NULL,"
-        "    complete BOOLEAN NOT NULL,"
-        "    embedded_completion_id INTEGER NOT NULL,"
-        "    reissue BOOLEAN NOT NULL,"
+        "   (embedded_completion_id INTEGER NOT NULL,"
+        "    completion_type VARCHAR(100) NOT NULL,"
         "    id SERIAL PRIMARY KEY)"
         " ENGINE=InnoDB;";
     RETURN_FALSE_IF_FALSE(conn->execute(create_remote_completion));

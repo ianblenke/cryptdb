@@ -169,3 +169,17 @@ public:
         throw SchemaFailure(__FILE__, __LINE__);    \
     }                                               \
 }
+
+class KillZoneFailure : public AbstractException {
+public:
+    KillZoneFailure(const std::string &file_name, int line_number)
+        : AbstractException(file_name, line_number) {}
+    std::string to_string() const {return "kill zone failure";}
+};
+
+#define TEST_KillZoneFailure(test)                  \
+{                                                   \
+    if (!(test)) {                                  \
+        throw KillZoneFailure(__FILE__, __LINE__);  \
+    }                                               \
+}

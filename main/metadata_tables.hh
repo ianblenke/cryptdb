@@ -5,6 +5,8 @@
 
 #include <main/Connect.hh>
 
+#define STORED_QUERY_LENGTH 10000
+
 namespace MetaData {
     bool initialize(const std::unique_ptr<Connect> &conn,
                     const std::unique_ptr<Connect> &e_conn,

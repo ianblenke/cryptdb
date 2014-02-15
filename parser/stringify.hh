@@ -307,6 +307,11 @@ convert_lex_str(const LEX_STRING &l)
 }
 
 inline std::string
+convert_lex_str(const LEX_CSTRING &l)
+{
+    return std::string(l.str, l.length);
+}
+inline std::string
 nullAccomodationConvertLexStr(const LEX_STRING &l)
 {
     if (NULL == l.str) {

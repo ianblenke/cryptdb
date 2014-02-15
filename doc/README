@@ -92,26 +92,8 @@ Convention : When this document uses syntax like
 #########################################
 #########################################
     CryptDB supports a a few special queries (called directives) that may
-    prove useful. (ignore the single quote convention per the sql queries)
-
-        I. Layer Scraping
-            > SET @cryptdb='show';
-            > that query should show you the status of onions for all of your
-              cryptdb tables; note that if you create a database without
-              populating it with tables you will see no results.
-        II. Forced Onion Adjustment
-            > SET @cryptdb='adjust', @database='<db-name>', @table='<table-name>',
-                  @field='<field-name>', @<onion>='<level>';
-            > where <onion> is one of oEq, oOrder or oAdd
-            > issuing this query will pull off layers until the column is at
-              '<level>'
-        III. Sensitivity
-            > SET @cryptdb='sensitive', @database='<db-name>', @table='<table-name>',
-                  @field='<field-name>', @<onion>='<level>';
-            > this query will prevent @<onion> from going below '<level>'
-              + ie, if I issue ... @oOrder='RND' my Order onion will not adjust
-                so I will be unable to do operations that require ordered
-                comparison
+    prove useful. More information can be found here
+    https://github.com/burrows-labs/cryptdb-wiki/wiki/Directives
 
     CryptDB also has a script that will first determine all of the onion
     adjustments in your database; then generate another script that can be run

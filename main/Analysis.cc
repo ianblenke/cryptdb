@@ -379,6 +379,20 @@ SharedProxyState::SharedProxyState(ConnectionInfo ci,
       default_sec_rating(default_sec_rating),
       cache(std::move(SchemaCache()))
 {
+    // make sure the server was not started in SQL_SAFE_UPDATES mode
+    // > it might not even be possible to start the server in this mode;
+    //   better to be safe
+    {
+        std::unique_ptr<DBResult> dbres;
+        assert(conn->execute("SELECT @@sql_safe_updates", &dbres));
+        assert(1 == mysql_num_rows(dbres->n));
+
+        const MYSQL_ROW row = mysql_fetch_row(dbres->n);
+        const unsigned long *const l = mysql_fetch_lengths(dbres->n);
+        const unsigned long value = std::stoul(std::string(row[0], l[0]));
+        assert(0 == value);
+    }
+
     std::unique_ptr<Connect>
         init_e_conn(Connect::getEmbedded(embed_dir));
     assert(conn && init_e_conn);
@@ -625,10 +639,18 @@ writeDeltas(const std::unique_ptr<Connect> &e_conn,
 bool
 deltaOutputBeforeQuery(const std::unique_ptr<Connect> &e_conn,
                        const std::string &original_query,
+                       const std::string &rewritten_query,
                        const std::vector<std::unique_ptr<Delta> > &deltas,
                        CompletionType completion_type,
                        uint64_t *const embedded_completion_id)
 {
+    const std::string &escaped_original_query =
+        escapeString(e_conn, original_query);
+    const std::string &escaped_rewritten_query =
+        escapeString(e_conn, rewritten_query);
+    RFIF(escaped_original_query.length()  <= STORED_QUERY_LENGTH
+      && escaped_rewritten_query.length() <= STORED_QUERY_LENGTH);
+
     RFIF(e_conn->execute("START TRANSACTION;"));
 
     // We must save the current default database because recovery
@@ -637,12 +659,12 @@ deltaOutputBeforeQuery(const std::unique_ptr<Connect> &e_conn,
     // FIXME: NOTE: was previously escaping against remote database
     const std::string &q_completion =
         " INSERT INTO " + MetaData::Table::embeddedQueryCompletion() +
-        "   (begin, complete, original_query, default_db, aborted, type)"
-        "   VALUES (TRUE,  FALSE,"
-        "    '" + escapeString(e_conn, original_query) + "',"
-        "    (SELECT DATABASE()),  FALSE,"
-        "    '" + TypeText<CompletionType>::toText(completion_type)
-            + "');";
+        "   (complete, original_query, rewritten_query, default_db, aborted, type)"
+        "   VALUES (FALSE, '" + escaped_original_query + "',"
+        "          '" + escaped_rewritten_query + "',"
+        "           (SELECT DATABASE()),  FALSE,"
+        "           '" + TypeText<CompletionType>::toText(completion_type) + "'"
+        "          );";
     ROLLBACK_AND_RFIF(e_conn->execute(q_completion), e_conn);
     *embedded_completion_id = e_conn->last_insert_id();
     assert(*embedded_completion_id);

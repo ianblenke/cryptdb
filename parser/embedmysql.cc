@@ -60,6 +60,38 @@ cloneItemInOrder(ORDER * o) {
 }
 */
 
+/*
+ * For the whys and hows;
+ * look at plugin_thdvar_init(...) in sql/sql_plugin.cc, there we see the THD
+ * table_plugin (the default plugin for queries run on a given THD) is taken
+ * from the global_system_variables.table_plugin which can presumably be
+ * toggled with the 'storage_engine' runtime variable (testing this possiblity
+ * in cryptDB however shows that setting the runtime variable doesn't
+ * propagate the change to the global_system_variables.table_plugin pointer);
+ * this variable is initially set to the MyISAM engine
+ *
+ * since doing "SET storage_engine='InnoDB'" doesn't work; we need to manually
+ * hack the correct default table_plugin into the THD
+ *
+ * continuing, we can see sql/sql_yacc.yy where
+ *   lex->create_info.db_type = ha_default_handlerton(thd);
+ * ha_default_handlerton(...) is in sql/handler.cc and it calls
+ * ha_default_plugin(...). this function returns thd->variables.table_plugin.
+ *
+ * so if we change thd->variables.table_plugin to InnoDB, it will become our
+ * default storage engine
+ */
+static plugin_ref
+getInnoDBPlugin()
+{
+    static const LEX_STRING name = string_to_lex_str("InnoDB");
+    // singleton
+    static plugin_ref innodb_plugin = ha_resolve_by_name(0, &name);
+    assert(innodb_plugin);
+
+    return innodb_plugin;
+}
+
 query_parse::query_parse(const std::string &db, const std::string &q)
 {
     assert(create_embedded_thd(0));
@@ -80,6 +112,10 @@ query_parse::query_parse(const std::string &db, const std::string &q)
         t->set_db(db.data(), db.length());
         mysql_reset_thd_for_next_command(t);
         t->stmt_arena->state = Query_arena::STMT_INITIALIZED;
+
+        // default engine should always be InnoDB
+        t->variables.table_plugin = getInnoDBPlugin();
+        assert(t->variables.table_plugin);
 
         char buf[q.size() + 1];
         memcpy(buf, q.c_str(), q.size());

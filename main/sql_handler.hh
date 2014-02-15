@@ -13,7 +13,7 @@
 
 #define CR_QUERY_RESULTS(query)                                             \
     std::make_pair(AbstractQueryExecutor::ResultType::QUERY_USE_RESULTS,    \
-                   newAnything(std::make_pair(true, std::string(query))))
+                   newAnything(std::string(query)))
 
 #define CR_RESULTS(value)                                                   \
     std::make_pair(AbstractQueryExecutor::ResultType::RESULTS,              \

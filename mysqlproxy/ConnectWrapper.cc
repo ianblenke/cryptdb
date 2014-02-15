@@ -10,6 +10,7 @@
 #include <main/rewrite_main.hh>
 #include <main/rewrite_util.hh>
 #include <main/schema.hh>
+#include <main/Analysis.hh>
 
 #include <parser/sql_utils.hh>
 #include <parser/mysql_type_metadata.hh>
@@ -19,6 +20,8 @@ __thread ProxyState *thread_ps = NULL;
 class WrapperState {
     WrapperState(const WrapperState &other);
     WrapperState &operator=(const WrapperState &rhs);
+
+    KillZone kill_zone;
 
 public:
     std::string last_query;
@@ -34,6 +37,12 @@ public:
     }
     void setQueryRewrite(std::unique_ptr<QueryRewrite> &&in_qr) {
         this->qr = std::move(in_qr);
+    }
+    void selfKill(KillZone::Where where) {
+        kill_zone.die(where);
+    }
+    void setKillZone(const KillZone &kz) {
+        kill_zone = kz;
     }
 
     std::unique_ptr<ProxyState> ps;
@@ -421,12 +430,20 @@ next(lua_State *const L)
     const std::unique_ptr<QueryRewrite> &qr = c_wrapper->getQueryRewrite();
     try {
         NextParams nparams(*ps, c_wrapper->default_db, c_wrapper->last_query);
+
+        c_wrapper->selfKill(KillZone::Where::Before);
         const auto &new_results = qr->executor->next(res, nparams);
+        c_wrapper->selfKill(KillZone::Where::After);
+
         const auto &result_type = new_results.first;
+        if (result_type != AbstractQueryExecutor::ResultType::QUERY_COME_AGAIN) {
+            // set the killzone when we are done with this query
+            // > a given killzone will only apply to the next query translation
+            c_wrapper->setKillZone(qr->kill_zone);
+        }
         switch (result_type) {
         case AbstractQueryExecutor::ResultType::QUERY_COME_AGAIN: {
             // more to do before we have the client's results
-
             xlua_pushlstring(L, "again");
 
             const auto &output =
@@ -445,10 +462,10 @@ next(lua_State *const L)
             // the results of executing this query should be send directly
             // back to the client
             xlua_pushlstring(L, "query-results");
-            const auto &output =
-                std::get<1>(new_results)->extract<std::pair<bool, std::string> >();
+            const auto &new_query =
+                std::get<1>(new_results)->extract<std::string>();
 
-            xlua_pushlstring(L, output.second);
+            xlua_pushlstring(L, new_query);
             nilBuffer(L, 3);
             return 5;
         }

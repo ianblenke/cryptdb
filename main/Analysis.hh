@@ -204,7 +204,7 @@ public:
 
 class Rewriter;
 
-enum class CompletionType {DDLCompletion, AdjustOnionCompletion};
+enum class CompletionType {DDL, Onion};
 
 bool
 writeDeltas(const std::unique_ptr<Connect> &e_conn,
@@ -213,6 +213,7 @@ writeDeltas(const std::unique_ptr<Connect> &e_conn,
 bool
 deltaOutputBeforeQuery(const std::unique_ptr<Connect> &e_conn,
                        const std::string &original_query,
+                       const std::string &rewritten_query,
                        const std::vector<std::unique_ptr<Delta> > &deltas,
                        CompletionType completion_type,
                        uint64_t *const embedded_completion_id);
@@ -224,6 +225,34 @@ deltaOutputAfterQuery(const std::unique_ptr<Connect> &e_conn,
 
 bool setRegularTableToBleedingTable(const std::unique_ptr<Connect> &e_conn);
 bool setBleedingTableToRegularTable(const std::unique_ptr<Connect> &e_conn);
+
+class KillZone {
+public:
+    enum class Where {Before, After};
+
+    KillZone() : active(false) {}
+    ~KillZone() {}
+
+    void activate(uint64_t c, Where where) {
+        TEST_KillZoneFailure(false == active);
+        this->count  = c;
+        this->active = true;
+        this->where  = where;
+    }
+
+    void die(Where where) {
+        if (this->active && this->where == where && !this->count--) {
+            assert(false);
+        }
+    }
+
+    bool isActive() const {return active;}
+
+private:
+    bool active;
+    uint64_t count;
+    Where where;
+};
 
 class RewritePlan;
 class Analysis {
@@ -258,6 +287,7 @@ public:
 
     bool inject_alias;
     bool summation_hack;
+    KillZone kill_zone;
 
     // These functions are prefered to their lower level counterparts.
     bool addAlias(const std::string &alias, const std::string &db,

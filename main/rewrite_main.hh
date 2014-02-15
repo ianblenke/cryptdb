@@ -56,13 +56,14 @@ printRes(const ResType & r);
 // - data structure needed to decrypt results
 class QueryRewrite {
 public:
-    QueryRewrite(bool wasRes, ReturnMeta rmeta,
+    QueryRewrite(bool wasRes, ReturnMeta rmeta, const KillZone &kill_zone,
                  AbstractQueryExecutor *const executor)
-        : rmeta(rmeta),
+        : rmeta(rmeta), kill_zone(kill_zone),
           executor(std::unique_ptr<AbstractQueryExecutor>(executor)) {}
     QueryRewrite(QueryRewrite &&other_qr) : rmeta(other_qr.rmeta),
         executor(std::move(other_qr.executor)) {}
     const ReturnMeta rmeta;
+    const KillZone kill_zone;
     std::unique_ptr<AbstractQueryExecutor> executor;
 };
 

@@ -110,103 +110,75 @@ static bool
 sanityCheck(SchemaInfo &schema)
 {
     for (const auto &it : schema.getChildren()) {
-        const auto &tm = it.second;
-        assert(sanityCheck(*tm.get()));
+        const auto &dm = it.second;
+        assert(sanityCheck(*dm.get()));
     }
     return true;
 }
 
 struct RecoveryDetails {
-    const bool embedded_begin;
     const bool embedded_complete;
-    const bool existed_remote;
-    const bool remote_begin;
     const bool remote_complete;
-    const std::string query;
+    const std::string original_query;
+    const std::string rewritten_query;
     const std::string default_db;
 
-    RecoveryDetails(bool embedded_begin, bool embedded_complete,
-                    bool existed_remote, bool remote_begin,
-                    bool remote_complete, const std::string &query,
+    RecoveryDetails(bool embedded_complete, bool remote_complete,
+                    const std::string &original_query,
+                    const std::string &rewritten_query,
                     const std::string &default_db)
-        : embedded_begin(embedded_begin),
-          embedded_complete(embedded_complete),
-          existed_remote(existed_remote), remote_begin(remote_begin),
-          remote_complete(remote_complete), query(query),
-          default_db(default_db) {}
+        : embedded_complete(embedded_complete),
+          remote_complete(remote_complete), original_query(original_query),
+          rewritten_query(rewritten_query), default_db(default_db) {}
 };
 
-static bool
-false_if_false(bool test, const std::string &new_value)
-{
-    if (false == test) {
-        return test;
-    }
-
-    return string_to_bool(new_value);
-}
 static bool
 collectRecoveryDetails(const std::unique_ptr<Connect> &conn,
                        const std::unique_ptr<Connect> &e_conn,
                        unsigned long unfinished_id,
                        std::unique_ptr<RecoveryDetails> *details)
 {
-    const std::string embedded_completion_table =
-        MetaData::Table::embeddedQueryCompletion();
-    const std::string remote_completion_table =
-        MetaData::Table::remoteQueryCompletion();
-
     // collect completion data
     std::unique_ptr<DBResult> dbres;
-    const std::string embedded_completion_q =
-        " SELECT begin, complete, original_query, default_db FROM " +
-            embedded_completion_table +
+    const std::string &embedded_completion_q =
+        " SELECT complete, original_query, rewritten_query, default_db FROM " +
+            MetaData::Table::embeddedQueryCompletion() +
         "  WHERE id = " + std::to_string(unfinished_id) + ";";
     RETURN_FALSE_IF_FALSE(e_conn->execute(embedded_completion_q, &dbres));
     assert(mysql_num_rows(dbres->n) == 1);
 
     const MYSQL_ROW embedded_row = mysql_fetch_row(dbres->n);
     const unsigned long *const l = mysql_fetch_lengths(dbres->n);
-    const std::string string_embedded_begin(embedded_row[0], l[0]);
-    const std::string string_embedded_complete(embedded_row[1], l[1]);
-    const std::string string_embedded_query(embedded_row[2], l[2]);
-    const std::string string_embedded_default_db(embedded_row[3], l[3]);
+    const std::string string_embedded_complete(  embedded_row[0],   l[0]);
+    const std::string original_query(            embedded_row[1],   l[1]);
+    const std::string rewritten_query(           embedded_row[2],   l[2]);
+    const std::string default_db(                embedded_row[3],   l[3]);
 
-    const std::string remote_completion_q =
-        " SELECT begin, complete FROM " + remote_completion_table +
+    const std::string &remote_completion_q =
+        " SELECT COUNT(*) FROM " + MetaData::Table::remoteQueryCompletion() +
         "  WHERE embedded_completion_id = " +
                  std::to_string(unfinished_id) + ";";
     RETURN_FALSE_IF_FALSE(conn->execute(remote_completion_q, &dbres));
 
-    const unsigned long remote_row_count = mysql_num_rows(dbres->n);
+    assert(1 == mysql_num_rows(dbres->n));
     const MYSQL_ROW remote_row = mysql_fetch_row(dbres->n);
-    assert(!!remote_row == !!remote_row_count);
+    const unsigned long *const l_remote = mysql_fetch_lengths(dbres->n);
 
-    std::string string_remote_begin, string_remote_complete;
-    const bool existed_remote = !!remote_row;
-    if (existed_remote) {
-        const unsigned long *const l = mysql_fetch_lengths(dbres->n);
-        string_remote_begin    = std::string(remote_row[0], l[0]);
-        string_remote_complete = std::string(remote_row[1], l[1]);
-        assert(string_to_bool(string_remote_begin) == true);
+    const long long remote_count =
+        std::stoll(std::string(remote_row[0], l_remote[0]));
+    assert(remote_count <= 1);
+    const bool remote_complete = remote_count == 1;
+
+    const bool embedded_complete = string_to_bool(string_embedded_complete);
+    if (embedded_complete) {
+        assert(remote_complete);
     }
-
-    const bool embedded_begin = string_to_bool(string_embedded_begin);
-    const bool embedded_complete =
-        string_to_bool(string_embedded_complete);
-    const bool remote_begin =
-        false_if_false(existed_remote, string_remote_begin);
-    const bool remote_complete =
-        false_if_false(existed_remote, string_remote_complete);
-
-    assert(true == embedded_begin);
 
     *details =
         std::unique_ptr<RecoveryDetails>(
-            new RecoveryDetails(embedded_begin, embedded_complete,
-                                existed_remote, remote_begin,
-                                remote_complete, string_embedded_query,
-                                string_embedded_default_db));
+            new RecoveryDetails(embedded_complete, remote_complete,
+                                original_query, rewritten_query,
+                                default_db));
 
     return true;
 }
@@ -215,11 +187,8 @@ static bool
 abortQuery(const std::unique_ptr<Connect> &e_conn,
            unsigned long unfinished_id)
 {
-    const std::string embedded_completion_table =
-        MetaData::Table::embeddedQueryCompletion();
-
     const std::string update_aborted =
-        " UPDATE " + embedded_completion_table +
+        " UPDATE " + MetaData::Table::embeddedQueryCompletion() +
         "    SET aborted = TRUE"
         "  WHERE id = " + std::to_string(unfinished_id) + ";";
 
@@ -235,11 +204,8 @@ static bool
 finishQuery(const std::unique_ptr<Connect> &e_conn,
             unsigned long unfinished_id)
 {
-    const std::string embedded_completion_table =
-        MetaData::Table::embeddedQueryCompletion();
-
     const std::string update_completed =
-        " UPDATE " + embedded_completion_table +
+        " UPDATE " + MetaData::Table::embeddedQueryCompletion() +
         "    SET complete = TRUE"
         "  WHERE id = " + std::to_string(unfinished_id) + ";";
 
@@ -251,24 +217,24 @@ finishQuery(const std::unique_ptr<Connect> &e_conn,
     return true;
 }
 
+// we never issue onion adjustment queries from here
 static bool
 fixAdjustOnion(const std::unique_ptr<Connect> &conn,
                const std::unique_ptr<Connect> &e_conn,
                unsigned long unfinished_id)
 {
     std::unique_ptr<RecoveryDetails> details;
-    RETURN_FALSE_IF_FALSE(collectRecoveryDetails(conn, e_conn,
-                                                 unfinished_id,
-                                                 &details));
-    assert(details->remote_begin == details->remote_complete);
+    RETURN_FALSE_IF_FALSE(
+        collectRecoveryDetails(conn, e_conn, unfinished_id, &details));
+    assert(false == details->embedded_complete);
+    assert(""    == details->rewritten_query);
 
     lowLevelSetCurrentDatabase(e_conn, details->default_db);
 
     // failure after initial embedded queries and before remote queries
-    if (false == details->remote_begin) {
-        assert(false == details->embedded_complete
-               && false == details->existed_remote
-               && false == details->remote_complete);
+    if (false == details->remote_complete) {
+        assert(false == details->embedded_complete);
+
         return abortQuery(e_conn, unfinished_id);
     }
 
@@ -323,10 +289,11 @@ static bool
 queryInitiallyFailedErrors(unsigned int err)
 {
     // lifted from mysql-src/includes/errmsg.h
-    unsigned long cr_unknown_error        = 2000,
-                  cr_server_gone_error    = 2006,
-                  cr_server_lost          = 2013,
-                  cr_commands_out_of_sync = 2014;
+    const unsigned long
+        cr_unknown_error        = 2000,
+        cr_server_gone_error    = 2006,
+        cr_server_lost          = 2013,
+        cr_commands_out_of_sync = 2014;
 
     const bool ret =
         cr_unknown_error == err ||
@@ -337,9 +304,9 @@ queryInitiallyFailedErrors(unsigned int err)
     return !ret;
 }
 
-// 'bad_query' is a sanity checking mechanism; if the query is bad
-// against the remote database, it should also be bad against the embedded
-// database.
+// 'bad_query' : a query that is rejected by mysql (malformed, refers to 
+//               non-existent entities, etc)
+// returns false when a 'good' query fails
 static bool
 retryQuery(const std::unique_ptr<Connect> &c, const std::string &query,
            bool *const bad_query)
@@ -347,22 +314,28 @@ retryQuery(const std::unique_ptr<Connect> &c, const std::string &query,
     assert(bad_query);
 
     *bad_query = false;
-
-    if (false == c->execute(query)) {
-        const unsigned int err = c->get_mysql_errno();
-        // if the error is not recoverable, we must determine if
-        // the query failed initially for the same error.
-        if (false == recoverableDeltaError(err)) {
-            *bad_query = queryInitiallyFailedErrors(err);
-            RETURN_FALSE_IF_FALSE(*bad_query);
-
-            // We could abort the query here because we know that
-            // the query is bad and can't be processed by the remote
-            // or embedded server.
-        }
+    if (true == c->execute(query)) {
+        return true;
     }
 
-    return true;
+    // the query failed again
+    const unsigned int err = c->get_mysql_errno();
+    if (true == recoverableDeltaError(err)) {
+        // the query succeeded initially and failed immediately afterwards
+        return true;
+    }
+
+    // the error is not recoverable and we want to determine if the query
+    // is failing because it is bad (malformed or otherwise) or because
+    // we are having hardware issues (lose of connectivity, etc)
+    // > if the query is just _bad_; tell the caller and he can handle
+    // gracefully
+    // > if there are hardware issues; we will need manual intervention
+    if (true == (*bad_query = queryInitiallyFailedErrors(err))) {
+        return true;
+    }
+
+    return false;
 }
 
 static bool
@@ -370,26 +343,13 @@ fixDDL(const std::unique_ptr<Connect> &conn,
        const std::unique_ptr<Connect> &e_conn,
        unsigned long unfinished_id)
 {
-    const std::string remote_completion_table =
-        MetaData::Table::remoteQueryCompletion();
-
     std::unique_ptr<RecoveryDetails> details;
-    RETURN_FALSE_IF_FALSE(collectRecoveryDetails(conn, e_conn,
-                                                 unfinished_id,
-                                                 &details));
-    assert(true == details->embedded_begin
-           && false == details->embedded_complete);
+    RETURN_FALSE_IF_FALSE(
+        collectRecoveryDetails(conn, e_conn, unfinished_id, &details));
+    assert(false == details->embedded_complete);
 
     lowLevelSetCurrentDatabase(e_conn, details->default_db);
-    lowLevelSetCurrentDatabase(conn, details->default_db);
-
-    // failure after initial embedded queries and before remote queries
-    if (false == details->remote_begin) {
-        assert(false == details->embedded_complete
-               && false == details->existed_remote
-               && false == details->remote_complete);
-        return abortQuery(e_conn, unfinished_id);
-    }
+    lowLevelSetCurrentDatabase(conn,   details->default_db);
 
     // --------------------------------------------------
     //  After this point we must run to completion as we
@@ -397,37 +357,41 @@ fixDDL(const std::unique_ptr<Connect> &conn,
     //  > unless we determine that it is a bad query.
     //  -------------------------------------------------
 
-    // ugly sanity checking device
-    AssignOnce<bool> remote_bad_query;
     // failure before remote queries complete
     if (false == details->remote_complete) {
-        bool rbq;
-        // reissue the DDL query against the remote database.
-        RETURN_FALSE_IF_FALSE(retryQuery(conn, details->query,
-                                         &rbq));
-        remote_bad_query = rbq;
+        bool remote_bad_query;
+        // reissue the rewritten DDL query against the remote database.
+        RETURN_FALSE_IF_FALSE(
+            retryQuery(conn, details->rewritten_query, &remote_bad_query));
 
-        const std::string update_remote_complete =
-            "UPDATE " + remote_completion_table +
-            "   SET complete = TRUE"
-            " WHERE embedded_completion_id = " +
-                    std::to_string(unfinished_id) + ";";
-        RETURN_FALSE_IF_FALSE(conn->execute(update_remote_complete));
+        // remote is now fully updated
+        const std::string &insert_remote_complete =
+            " INSERT INTO " + MetaData::Table::remoteQueryCompletion() +
+            "  (embedded_completion_id, completion_type) VALUES"
+            "  (" + std::to_string(unfinished_id) + ","
+            "   '" + TypeText<CompletionType>::toText(CompletionType::DDL) + "'"
+            "  );";
+        RETURN_FALSE_IF_FALSE(conn->execute(insert_remote_complete));
+
+        // if the query is bad there is no reason to try it against the
+        // embedded database
+        if (true == remote_bad_query) {
+            return abortQuery(e_conn, unfinished_id);
+        }
     }
 
     // failure after remote queries completed
     {
         assert(false == details->embedded_complete);
 
-        // reissue the DDL query against the embedded database
+        // reissue the original DDL query against the embedded database
         bool embedded_bad_query;
-        RETURN_FALSE_IF_FALSE(retryQuery(e_conn, details->query,
+        RETURN_FALSE_IF_FALSE(retryQuery(e_conn, details->original_query,
                                          &embedded_bad_query));
-        assert(false == remote_bad_query.assigned()
-               || embedded_bad_query == remote_bad_query.get());
-
+        // if the query is 'bad' against the embedded database this is a
+        // problem because it already succeeded against the remote database
         if (true == embedded_bad_query) {
-            return abortQuery(e_conn, unfinished_id);
+            return false;
         }
 
         return finishQuery(e_conn, unfinished_id);
@@ -443,8 +407,7 @@ deltaSanityCheck(const std::unique_ptr<Connect> &conn,
     std::unique_ptr<DBResult> dbres;
     const std::string unfinished_deltas =
         " SELECT id, type FROM " + embedded_completion +
-        "  WHERE (begin = FALSE OR complete = FALSE)"
-        "    AND aborted != TRUE;";
+        "  WHERE complete = FALSE AND aborted != TRUE;";
     RETURN_FALSE_IF_FALSE(e_conn->execute(unfinished_deltas, &dbres));
     const unsigned long long unfinished_count = mysql_num_rows(dbres->n);
     if (!PRETTY_DEMO) {
@@ -469,9 +432,9 @@ deltaSanityCheck(const std::unique_ptr<Connect> &conn,
         TypeText<CompletionType>::toType(string_unfinished_type);
 
     switch (type) {
-        case CompletionType::AdjustOnionCompletion:
+        case CompletionType::Onion:
             return fixAdjustOnion(conn, e_conn, unfinished_id);
-        case CompletionType::DDLCompletion:
+        case CompletionType::DDL:
             return fixDDL(conn, e_conn, unfinished_id);
         default:
             std::cerr << "unknown completion type" << std::endl;
@@ -687,8 +650,7 @@ buildTypeTextTranslator()
     };
     const std::vector<CompletionType> completion_types
     {
-        CompletionType::DDLCompletion,
-        CompletionType::AdjustOnionCompletion
+        CompletionType::DDL, CompletionType::Onion
     };
     RETURN_FALSE_IF_FALSE(completion_strings.size()
                             == completion_types.size());
@@ -1327,9 +1289,8 @@ Rewriter::dispatchOnLex(Analysis &a, const std::string &query)
 }
 
 QueryRewrite
-Rewriter::rewrite(const std::string &q, SchemaInfo const &schema,
-                  const std::string &default_db,
-                  const ProxyState &ps)
+Rewriter::rewrite(const std::string &q, const SchemaInfo &schema,
+                  const std::string &default_db, const ProxyState &ps)
 {
     LOG(cdb_v) << "q " << q;
     assert(0 == mysql_thread_init());
@@ -1342,10 +1303,11 @@ Rewriter::rewrite(const std::string &q, SchemaInfo const &schema,
     AbstractQueryExecutor *const executor =
         Rewriter::dispatchOnLex(analysis, q);
     if (!executor) {
-        return QueryRewrite(true, analysis.rmeta, new NoOpExecutor());
+        return QueryRewrite(true, analysis.rmeta, analysis.kill_zone,
+                            new NoOpExecutor());
     }
 
-    return QueryRewrite(true, analysis.rmeta, executor);
+    return QueryRewrite(true, analysis.rmeta, analysis.kill_zone, executor);
 }
 
 //TODO: replace stringify with <<
@@ -1370,6 +1332,8 @@ std::string ReturnMeta::stringify() {
 ResType
 Rewriter::decryptResults(const ResType &dbres, const ReturnMeta &rmeta)
 {
+    assert(dbres.success());
+
     const unsigned int rows = dbres.rows.size();
     LOG(cdb_v) << "rows in result " << rows << "\n";
     const unsigned int cols = dbres.names.size();
@@ -1542,8 +1506,9 @@ nextImpl(const ResType &res, const NextParams &nparams)
             {
                 uint64_t embedded_completion_id;
                 deltaOutputBeforeQuery(nparams.ps.getEConn(),
-                                       nparams.original_query, this->deltas,
-                                       CompletionType::AdjustOnionCompletion,
+                                       nparams.original_query, "",
+                                       this->deltas,
+                                       CompletionType::Onion,
                                        &embedded_completion_id);
                 this->embedded_completion_id = embedded_completion_id;
             }
@@ -1562,10 +1527,12 @@ nextImpl(const ResType &res, const NextParams &nparams)
         yield return CR_QUERY_AGAIN("START TRANSACTION");
         TEST_ErrPkt(res.success(), "failed to start transaction");
 
+        // issue first adjustment
         yield return CR_QUERY_AGAIN(this->adjust_queries.front());
         CR_ROLLBACK_AND_FAIL(res,
                         "failed to execute first onion adjustment query!");
 
+        // issue (possible) second adjustment
         yield {
             assert(res.success());
 
@@ -1575,6 +1542,16 @@ nextImpl(const ResType &res, const NextParams &nparams)
         }
         CR_ROLLBACK_AND_FAIL(res,
                         "failed to execute second onion adjustment query!");
+
+        yield {
+            return CR_QUERY_AGAIN(
+                " INSERT INTO " + MetaData::Table::remoteQueryCompletion() +
+                "   (embedded_completion_id, completion_type) VALUES"
+                "   (" + std::to_string(this->embedded_completion_id.get()) + ","
+                "   '"+TypeText<CompletionType>::toText(CompletionType::Onion)+"'"
+                "        );");
+        }
+        TEST_ErrPkt(res.success(), "failed issuing adjustment completion");
 
         yield return CR_QUERY_AGAIN("COMMIT");
         TEST_ErrPkt(res.success(), "failed to commit");
