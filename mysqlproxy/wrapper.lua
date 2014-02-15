@@ -79,16 +79,16 @@ end
 function printline(n)
     -- pretty printing
     if (n) then
-       io.write("+")
+       io.write("*")
     end
     for i = 1, n do
-        io.write("--------------------+")
+        io.write("--------------------*")
     end
     print()
 end
 
 function makePrintable(s)
-    -- replace nonprintable characters with ?
+    -- replace nonprintable characters
     if s == nil then
        return s
     end
@@ -96,10 +96,15 @@ function makePrintable(s)
     for i = 1, #s do
         local c = s:sub(i,i)
         local b = string.byte(c)
-        if (b >= 32) and (b <= 126) then
+        if (b >= 32) and (b <= 126) and (b ~= 92) then
            news = news .. c
         else
-           news = news .. '?'
+	   news = news .. '\\'
+	   if (b < 100) then
+               news = news..'0'.. b
+	   else
+	       news = news .. b
+	   end
         end
     end
 
@@ -108,12 +113,12 @@ function makePrintable(s)
 end
 
 function prettyNewQuery(q)
-    if DEMO then
-        if string.find(q, "remote_db") then
+    --if DEMO then
+        --if string.find(q, "remote_db") then
             -- don't print maintenance queries
-            return
-        end
-    end
+         --   return
+        --end
+    --end
  
     print(greentext("NEW QUERY: ")..makePrintable(q))
 end
@@ -178,13 +183,14 @@ function read_query_result_real(inj)
 
     if true == g_want_interim then
         -- build up interim result for next(...) calls
-        print(greentext("ENCRYPTED RESULTS:"))
+      
 
         -- mysqlproxy doesn't return real lua arrays, so re-package
         local resfields = resultset.fields
 
-        printline(#resfields)
-        if (#resfields) then
+	if (#resfields > 0) then	
+           print(greentext("ENCRYPTED RESULTS:"))
+	   printline(#resfields)
            io.write("|")
         end
         for i = 1, #resfields do
@@ -192,11 +198,13 @@ function read_query_result_real(inj)
             interim_fields[i] =
                 { type = resfields[i].type,
                   name = resfields[i].name }
-            io.write(string.format("%-20s|",rfi.name))
+            io.write(string.format("%-20s|",makePrintable(rfi.name)))
         end
 
-        print()
-        printline(#resfields)
+	if (#resfields > 0) then
+           print()
+           printline(#resfields)
+	end
 
         local resrows = resultset.rows
         if resrows then
@@ -210,7 +218,9 @@ function read_query_result_real(inj)
             end
         end
 
-        printline(#resfields)
+	if (#resfields > 0) then
+	   printline(#resfields)
+	end
     end
 
     return next_handler("results", true, client, interim_fields, interim_rows,

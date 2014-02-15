@@ -221,7 +221,7 @@ needsSalt(EncSet es)
 std::ostream&
 operator<<(std::ostream &out, const reason &r)
 {
-    out << r.string_item << " PRODUCES encset " << r.encset << std::endl
+    out << r.string_item << " PRODUCES encset " << std::endl << r.encset << std::endl
         << " BECAUSE " << r.why << std::endl;
 
     return out;

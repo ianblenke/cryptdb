@@ -744,7 +744,7 @@ removeOnionLayer(const Analysis &a, const TableMeta &tm,
           << "    SET " << fieldanon  << " = " << *decUDF
           << ";";
 
-    std::cerr << GREEN_BEGIN << "\nADJUST: \n" << COLOR_END << terminalEscape(query.str()) << std::endl;
+    //std::cerr << GREEN_BEGIN << "\nADJUST: \n" << COLOR_END << terminalEscape(query.str()) << std::endl;
 
     //execute decryption query
 

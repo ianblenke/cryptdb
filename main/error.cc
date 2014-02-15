@@ -48,12 +48,12 @@ std::string NoAvailableEncSet::to_string() const
         "Current crypto schemes do not support this query" << std::endl
         << AbstractException::to_string()
         // << "ITEM TYPE " + TypeText<>::toText();
-        << "ITEM TYPE: " << std::to_string(type) << std::endl
-        << "OPERATION: " << why << std::endl
-        << "REQUIRED ENCSET: " << req_enc_set << std::endl
-        << "***** CHILDREN REASONS *****" << std::endl;
+        << "\nEXPLANATION: " << std::endl
+        << "OPERATION: " << why 
+        << " REQUIRES ENCSET: " << req_enc_set << std::endl
+        << "BUT CHILDREN CANNOT PROVIDE IT; CHILDREN PROVIDE:" << std::endl;
     for (auto it = childr_rp.begin(); it != childr_rp.end(); it++) {
-        s << "[" << std::to_string(std::distance(childr_rp.begin(), it))
+        s << "[CHILD " << std::to_string(std::distance(childr_rp.begin(), it))
                  << "] "
           << (*it)->getReason() << std::endl;
     }
