@@ -79,10 +79,10 @@ end
 function printline(n)
     -- pretty printing
     if (n) then
-       io.write("*")
+       io.write("+")
     end
     for i = 1, n do
-        io.write("--------------------*")
+        io.write("--------------------+")
     end
     print()
 end
