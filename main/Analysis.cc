@@ -80,9 +80,9 @@ operator<<(std::ostream &out, const EncSet &es)
         out << "empty encset";
     }
     for (auto it : es.osl) {
-        out << "(onion " << it.first
+        out << "(onion " << TypeText<onion>::toText(it.first)
             << ", level " << TypeText<SECLEVEL>::toText(it.second.first)
-            << ", field `" << (it.second.second == NULL ? "*" : it.second.second->getFieldName()) << "`"
+            //<< ", field `" << (it.second.second == NULL ? "*" : it.second.second->getFieldName()) << "`"
             << ") ";
     }
     return out;

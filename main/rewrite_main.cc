@@ -731,7 +731,7 @@ adjustOnion(const Analysis &a, onion o, const TableMeta &tm,
             const FieldMeta &fm, SECLEVEL tolevel)
 {
     TEST_Text(tolevel >= a.getOnionMeta(fm, o).getMinimumSecLevel(),
-              "your query requires to permissive of a security level");
+              "your query requires too permissive of a security level");
 
     std::cout << GREEN_BEGIN << "onion: " << TypeText<onion>::toText(o) << COLOR_END << std::endl;
     // Make a copy of the onion meta for the purpose of making
