@@ -10,7 +10,7 @@
 #include <sql_list.h>
 #include <sql_table.h>
 
-const bool PRETTY_DEMO = true;
+const bool PRETTY_DEMO = false;
 const std::string BOLD_BEGIN = "\033[1m";
 const std::string RED_BEGIN = "\033[1;31m";
 const std::string GREEN_BEGIN = "\033[1;92m";
@@ -143,6 +143,15 @@ determineSecurityRating();
 
 bool
 handleActiveTransactionPResults(const ResType &res);
+
+class MetaTablesLock {
+    static bool owned;
+    static uint64_t owner_id;
+
+public:
+    static NoCopy<uint64_t> acquire();
+    static void release(NoCopy<uint64_t> &id);
+};
 
 template <typename InType, typename InterimType, typename OutType>
 std::function<OutType(InType in)>

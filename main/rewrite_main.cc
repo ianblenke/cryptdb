@@ -1615,6 +1615,10 @@ OnionAdjustmentExecutor::
 nextImpl(const ResType &res, const NextParams &nparams)
 {
     reenter(this->corot) {
+        this->lock_id = MetaTablesLock::acquire();
+        TEST_ErrPkt(this->lock_id.get() != 0,
+                    "failed to acquire metatable lock");
+
         yield {
             assert(this->adjust_queries.size() == 1
                    || this->adjust_queries.size() == 2);
@@ -1694,6 +1698,8 @@ nextImpl(const ResType &res, const NextParams &nparams)
                 "unknown error occured while rewriting onion adjusment query");
         }
 
+        MetaTablesLock::release(this->lock_id);
+
         this->reissue_nparams =
             NextParams(nparams.ps, nparams.default_db, nparams.original_query);
         while (true) {
@@ -1711,4 +1717,11 @@ nextImpl(const ResType &res, const NextParams &nparams)
 
     assert(false);
 }
+
+void
+OnionAdjustmentExecutor::coRoutineEndHook()
+{
+    MetaTablesLock::release(this->lock_id);
+}
+
 

@@ -61,13 +61,15 @@ struct NextParams {
 };
 
 class AbstractQueryExecutor {
+    bool finished;
+
 protected:
     coroutine corot;
 
 public:
     enum class ResultType {RESULTS, QUERY_COME_AGAIN, QUERY_USE_RESULTS};
 
-    AbstractQueryExecutor() {}
+    AbstractQueryExecutor() : finished(false) {}
     virtual ~AbstractQueryExecutor();
     std::pair<ResultType, AbstractAnything *>
         next(const ResType &res, const NextParams &nparams);
@@ -76,6 +78,8 @@ public:
         nextImpl(const ResType &res, const NextParams &nparams) = 0;
     virtual bool stales() const {return false;}
     virtual bool usesEmbedded() const {return false;}
+    // do nothing by default
+    virtual void coRoutineEndHook() {}
 
 private:
     void genericPreamble(const NextParams &nparams);

@@ -31,6 +31,7 @@
 #include <util/errstream.hh>
 #include <util/cleanup.hh>
 #include <util/rob.hh>
+#include <util/util.hh>
 
 extern std::string global_crash_point;
 
@@ -335,6 +336,7 @@ class OnionAdjustmentExecutor : public AbstractQueryExecutor {
     const std::list<std::string> adjust_queries;
 
     // coroutine state
+    NoCopy<uint64_t> lock_id;
     bool first_reissue;
     AssignOnce<std::shared_ptr<const SchemaInfo> > reissue_schema;
     AssignOnce<uint64_t> embedded_completion_id;
@@ -346,7 +348,7 @@ public:
     OnionAdjustmentExecutor(std::vector<std::unique_ptr<Delta> > &&deltas,
                             const std::list<std::string> &adjust_queries)
         : deltas(std::move(deltas)),
-          adjust_queries(adjust_queries), first_reissue(true) {}
+          adjust_queries(adjust_queries), lock_id(0), first_reissue(true) {}
 
     std::pair<ResultType, AbstractAnything *>
         nextImpl(const ResType &res, const NextParams &nparams);
@@ -354,4 +356,5 @@ public:
 private:
     bool stales() const {return true;}
     bool usesEmbedded() const {return true;}
+    void coRoutineEndHook();
 };

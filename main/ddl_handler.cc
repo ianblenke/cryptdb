@@ -367,6 +367,10 @@ DDLQueryExecutor::
 nextImpl(const ResType &res, const NextParams &nparams)
 {
     reenter(this->corot) {
+        this->lock_id = MetaTablesLock::acquire();
+        TEST_ErrPkt(this->lock_id.get() != 0,
+                    "failed to acquire metatable lock");
+
         yield {
             {
                 uint64_t embedded_completion_id;
@@ -410,5 +414,11 @@ nextImpl(const ResType &res, const NextParams &nparams)
     }
 
     assert(false);
+}
+
+void DDLQueryExecutor::
+coRoutineEndHook()
+{
+    MetaTablesLock::release(this->lock_id);
 }
 

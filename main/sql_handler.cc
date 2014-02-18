@@ -9,9 +9,35 @@ std::pair<AbstractQueryExecutor::ResultType, AbstractAnything *>
 AbstractQueryExecutor::
 next(const ResType &res, const NextParams &nparams)
 {
+    assert(false == this->finished);
     genericPreamble(nparams);
 
-    return this->nextImpl(res, nparams);
+    // throwing an exception out of 'next' indicates that you will not
+    // re-enter the function
+    // > this makes handling the lock on onion adjustment/ddl much simpler
+    try {
+        const auto &output = this->nextImpl(res, nparams);
+        switch (output.first) {
+        case AbstractQueryExecutor::ResultType::QUERY_USE_RESULTS:
+        case AbstractQueryExecutor::ResultType::RESULTS:
+            this->finished = true;
+            this->coRoutineEndHook();
+            break;
+        case AbstractQueryExecutor::ResultType::QUERY_COME_AGAIN:
+            break;
+        default:
+            assert(false);
+        }
+
+        return output;
+    } catch (...) {
+        this->finished = true;
+        this->coRoutineEndHook();
+
+        throw;
+    }
+
+    assert(false);
 }
 
 void AbstractQueryExecutor::

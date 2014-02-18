@@ -648,3 +648,36 @@ handleActiveTransactionPResults(const ResType &res)
     return ("1" == trx);
 }
 
+bool MetaTablesLock::owned        = false;
+uint64_t MetaTablesLock::owner_id = 0;
+
+// return 0 if the lock can't be acquired
+NoCopy<uint64_t> MetaTablesLock::
+acquire()
+{
+    if (true == owned) {
+        assert(owner_id > 0);
+        return NoCopy<uint64_t>(0);
+    }
+
+    owned = true;
+    assert(owner_id < UINT64_MAX);
+    return NoCopy<uint64_t>(++owner_id);
+}
+
+void MetaTablesLock::
+release(NoCopy<uint64_t> &id)
+{
+    // special case where we guarentee a no-op
+    if (0 == id.get()) {
+        return;
+    }
+
+    assert(true         == owned);
+    assert(id.get()     == owner_id);
+    assert(id.get() > 0);
+
+    id.update(0);
+    owned = false;
+}
+

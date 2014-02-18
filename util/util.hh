@@ -648,3 +648,25 @@ destructThenFree(void *const p)
 }
 
 bool test64bitZZConversions();
+
+template <typename Type>
+class NoCopy {
+    Type value;
+
+    NoCopy(const NoCopy &nc) = delete;
+    NoCopy &operator=(const NoCopy &nc) = delete;
+
+public:
+    NoCopy(Type value) : value(value) {}
+    NoCopy(NoCopy &&nc) : value(std::move(nc.value)) {}
+    NoCopy &operator=(NoCopy &&nc)
+    {
+        this->value = std::move(nc.value);
+        return *this;
+    }
+    NoCopy() {}
+    Type get() const {return this->value;}
+    void update(Type new_value) {this->value = new_value;}
+};
+
+
