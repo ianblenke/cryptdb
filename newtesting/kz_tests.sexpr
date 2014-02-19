@@ -1,6 +1,8 @@
 ;; ddl transformed remote queries
 ;; 0> rewritten query
 ;; 1> remote query completion
+;; 2> dummy query
+;;    + executed after we send original query to embedded database
 
 ;; onion adjustment
 ;; 0> are we in transaction?
@@ -26,6 +28,10 @@
     (:before 1 ((:exists tee x)
                 :check))
     (:after  1 ((:exists tee x)
+                :check))
+    (:before 2 ((:exists tee x)
+                :check))
+    (:after  2 ((:exists tee x)
                 :check)))
    (("DROP TABLE IF EXISTS tee")))                  ;; teardown
  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -43,6 +49,10 @@
     (:before 1 ((:does-not-exist gorge)
                 :check))
     (:after  1 ((:does-not-exist gorge)
+                :check))
+    (:before 2 ((:does-not-exist gorge)
+                :check))
+    (:after  2 ((:does-not-exist gorge)
                 :check)))
    (("DROP TABLE IF EXISTS gorge"                             ;; teardown
      ()
