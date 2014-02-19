@@ -9,7 +9,10 @@ std::pair<AbstractQueryExecutor::ResultType, AbstractAnything *>
 AbstractQueryExecutor::
 next(const ResType &res, const NextParams &nparams)
 {
-    genericPreamble(nparams);
+    if (true == this->first_time) {
+        genericPreamble(nparams);
+        this->first_time = false;
+    }
 
     return this->nextImpl(res, nparams);
 }
