@@ -748,6 +748,11 @@
   ("CREATE INDEX i ON ddl_test (b, c)")
   ("ALTER TABLE ddl_test DROP INDEX i, ADD INDEX i(b)")
   ("ALTER TABLE ddl_test DROP INDEX i")
+  ("DROP DATABASE IF EXISTS thisisnotarealdatabase")
+  ("DROP DATABASE thiswillcauseanerror"
+   ()
+   :cryptdb
+   :must-fail)
   ("DROP TABLE ddl_test"))
  ;;; the oEq column will encrypt three times and all three of these will pad;
  ;;; the mysql's maximum field size is 2**32 - 1; so the maximum field size

@@ -253,6 +253,12 @@ class DropDBHandler : public DDLHandler {
         assert(a.deltas.size() == 0);
 
         const std::string &dbname = convert_lex_str(lex->name);
+        if (lex->drop_if_exists) {
+            if (false == a.databaseMetaExists(dbname)) {
+                return new NoOpExecutor();
+            }
+        }
+
         const DatabaseMeta &dm = a.getDatabaseMeta(dbname);
         a.deltas.push_back(std::unique_ptr<Delta>(
                                     new DeleteDelta(dm, a.getSchema())));

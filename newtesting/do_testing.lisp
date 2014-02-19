@@ -77,7 +77,7 @@
     :make-default  nil))
 
 (defmethod connection-alive? (c)
-  (query-result-status (issue-query "show databases" c)))
+  (query-result-status (issue-query "select 1 /*ping*/" c)))
 
 (defstruct query-result
   status
