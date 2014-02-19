@@ -962,7 +962,9 @@ class SetHandler : public DMLHandler {
              {"sensitive",
               DIRECTIVE_HANDLER(&SetHandler::handleSensitiveDirective)},
              {"killzone",
-              DIRECTIVE_HANDLER(&SetHandler::handleKillZoneDirective)}};
+              DIRECTIVE_HANDLER(&SetHandler::handleKillZoneDirective)},
+             {"metatables_lock",
+              DIRECTIVE_HANDLER(&SetHandler::metaTablesLockDirective)}};
 
         DirectiveHandler dhandler = nullptr;
         std::map<std::string, std::string> var_pairs;
@@ -1105,17 +1107,17 @@ private:
 
     AbstractQueryExecutor *
     handleKillZoneDirective(std::map<std::string, std::string> &var_pairs,
-                        Analysis &a) const
+                            Analysis &a) const
     {
-        auto count = var_pairs.find(std::string("count"));
-        auto where = var_pairs.find(std::string("where"));
+        const auto &count = var_pairs.find(std::string("count"));
+        const auto &where = var_pairs.find(std::string("where"));
         TEST_Text(var_pairs.end() != count
                && var_pairs.end() != where
                && var_pairs.size() == 2,
                   "the killzone directive takes two parameters, 'count'"
                   " and 'where'");
 
-        KillZone::Where typed_where = typeWhere(where->second);
+        const KillZone::Where typed_where = typeWhere(where->second);
         try {
             const long long c = std::stoll(count->second.c_str());
             if (c < 0) throw;
@@ -1126,6 +1128,39 @@ private:
         } catch (...) {
             FAIL_TextMessageError("'count' parameter must be non-negative"
                                   " integer");
+        }
+
+        return new NoOpExecutor();
+    }
+
+    // FIXME: add a 'code'/'passphrase' abstraction so that someone else
+    // can't release my lock
+    AbstractQueryExecutor *
+    metaTablesLockDirective(std::map<std::string, std::string> &var_pairs,
+                            Analysis &a) const
+    {
+        static NoCopy<uint64_t> lock_id = 0;
+
+        const auto &action = var_pairs.find(std::string("action"));
+        TEST_Text(var_pairs.end()  != action
+               && var_pairs.size() == 1,
+                  "the metatables_lock directive takes one parameter, 'action'"
+                  " which must be 'acquire' or 'release'");
+
+        if (equalsIgnoreCase("acquire", action->second)) {
+            if (0 != lock_id.get()) {
+                assert(0 == MetaTablesLock::acquire().get());
+                FAIL_TextMessageError("you already own the lock!");
+            }
+
+            lock_id = MetaTablesLock::acquire();
+            TEST_Text(lock_id.get() != 0, "failed to acquire the lock");
+        } else if (equalsIgnoreCase("release", action->second)) {
+            TEST_Text(0 != lock_id.get(), "you don't own the lock!");
+            MetaTablesLock::release(lock_id);
+        } else {
+            FAIL_TextMessageError("'action' parameter must be 'acquire' or"
+                                  " 'release'");
         }
 
         return new NoOpExecutor();

@@ -1211,10 +1211,80 @@
    :check)
   ("DROP TABLE sense"))
  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+ ;;  MetaTables Locking Directives
+ ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+ ("MetaTablesLockingDirectives" t
+  ("CREATE TABLE zeezee (x integer)"
+   (:all-max zeezee))
+  ("INSERT INTO zeezee VALUES (1), (2), (3)")
+  ("SELECT * FROM zeezee")
+  ("SELECT * FROM zeezee WHERE x < 3"
+   (:update zeezee x oOrder OPE))
+  ;; try an action other than release/acquire
+  ("SET @cryptdb='metatables_lock', @action='wontwork'"
+   ()
+   :cryptdb
+   :must-fail)
+  ;; release a lock you don't actually have
+  ("SET @cryptdb='metatables_lock', @action='release'"
+   ()
+   :cryptdb
+   :must-fail)
+  ;; acquire the lock
+  ("SET @cryptdb='metatables_lock', @action='acquire'"
+   ()
+   :cryptdb
+   :must-succeed)
+  ;; try a bad action while you have the lock
+  ("SET @cryptdb='metatables_lock', @action='badcombo'"
+   ()
+   :cryptdb
+   :must-fail)
+  ;; should still be able to insert
+  ("INSERT INTO zeezee VALUES (4), (5), (6)")
+  ;; and select if no onion adjustment
+  ("SELECT * FROM zeezee")
+  ;; but onion adjustments should cause failures
+  ("SELECT * FROM zeezee where x = 10"
+   ()
+   :cryptdb
+   :must-fail)
+  ;; previously completed onion adjustments shouldn't be an issue
+  ("SELECT * FROM zeezee WHERE x < 5")
+  ;; DDL queries should also fail
+  ("CREATE TABLE veevee (y integer)"
+   ()
+   :cryptdb
+   :must-fail)
+  ;; acquiring the lock once you already have it is impossible
+  ("SET @cryptdb='metatables_lock', @action='acquire'"
+   ()
+   :cryptdb
+   :must-fail)
+  ("SELECT * FROM zeezee")
+  ;; release it
+  ("SET @cryptdb='metatables_lock', @action='release'"
+   ()
+   :cryptdb
+   :must-succeed)
+  ;; try to release it again and fail
+  ("SET @cryptdb='metatables_lock', @action='release'"
+   ()
+   :cryptdb
+   :must-fail)
+  ;; onion adjustment should now work
+  ("SELECT * FROM zeezee WHERE x = 5"
+   (:update zeezee x oEq DET))
+  ;; as should DDL queries
+  ("CREATE TABLE seawagon (j integer)"
+   (:all-max seawagon))
+  ("SELECT * FROM zeezee"
+   :check)
+  ("DROP TABLE seawagon")
+  ("DROP TABLE zeezee"))
+ ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
  ;;           range
  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
- ;; FIXME: larget 64 bit value being misrepresented as -1, possibly a bug
- ;;        in sql library
  ("Range" t
   ;; we must run the control database in strict mode in order to
   ;; match semantics
