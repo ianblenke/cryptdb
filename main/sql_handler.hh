@@ -62,6 +62,7 @@ struct NextParams {
 
 class AbstractQueryExecutor {
     bool finished;
+    bool first_time;
 
 protected:
     coroutine corot;
@@ -69,7 +70,7 @@ protected:
 public:
     enum class ResultType {RESULTS, QUERY_COME_AGAIN, QUERY_USE_RESULTS};
 
-    AbstractQueryExecutor() : finished(false) {}
+    AbstractQueryExecutor() : finished(false), first_time(true) {}
     virtual ~AbstractQueryExecutor();
     std::pair<ResultType, AbstractAnything *>
         next(const ResType &res, const NextParams &nparams);

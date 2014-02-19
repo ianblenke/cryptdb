@@ -406,6 +406,10 @@ nextImpl(const ResType &res, const NextParams &nparams)
         TEST_ErrPkt(nparams.ps.getEConn()->execute(nparams.original_query),
                    "Failed to execute DDL query against embedded database!");
 
+        // HACK: allows us to kill proxy after we do embedded ddl update
+        // and before completion
+        yield return CR_QUERY_AGAIN("DO 0;");
+
         TEST_ErrPkt(deltaOutputAfterQuery(nparams.ps.getEConn(), this->deltas,
                                           this->embedded_completion_id.get()),
                    "deltaOuputAfterQuery failed for DDL");

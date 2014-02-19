@@ -6,6 +6,7 @@
 #include <util/ctr.hh>
 #include <util/cryptdb_log.hh>
 #include <util/scoped_lock.hh>
+#include <util/util.hh>
 
 #include <main/rewrite_main.hh>
 #include <main/rewrite_util.hh>
@@ -123,6 +124,8 @@ xlua_pushlstring(lua_State *const l, const std::string &s)
 static int
 connect(lua_State *const L)
 {
+    assert(test64bitZZConversions());
+
     ANON_REGION(__func__, &perf_cg);
     scoped_lock l(&big_lock);
     assert(0 == mysql_thread_init());

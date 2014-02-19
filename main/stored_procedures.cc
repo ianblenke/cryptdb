@@ -7,7 +7,7 @@
 std::vector<std::string>
 getStoredProcedures()
 {
-    const std::vector<std::string> &add_procs({
+    const std::vector<std::string> &add_procs{
         " CREATE PROCEDURE " + MetaData::Proc::activeTransactionP() + "()\n"
         " BEGIN\n"
         "   DECLARE eat_result BIGINT;\n"
@@ -26,7 +26,7 @@ getStoredProcedures()
         "          'RUNNING';\n\n"
 
         "   SELECT NOT 0 = trx_count AS ACTIVE_TRX;\n"
-        " END\n"});
+        " END\n"};
 
     return add_procs;
 }
@@ -46,7 +46,7 @@ static bool
 dropStoredProcedures(const std::unique_ptr<Connect> &conn)
 {
     const std::vector<std::string>
-        drop_procs({MetaData::Proc::activeTransactionP()});
+        drop_procs{MetaData::Proc::activeTransactionP()};
 
     for (auto it : drop_procs) {
         RETURN_FALSE_IF_FALSE(conn->execute("DROP PROCEDURE IF EXISTS " + it));

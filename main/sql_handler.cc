@@ -10,7 +10,11 @@ AbstractQueryExecutor::
 next(const ResType &res, const NextParams &nparams)
 {
     assert(false == this->finished);
-    genericPreamble(nparams);
+
+    if (true == this->first_time) {
+        genericPreamble(nparams);
+        this->first_time = false;
+    }
 
     // throwing an exception out of 'next' indicates that you will not
     // re-enter the function

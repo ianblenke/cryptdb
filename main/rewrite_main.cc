@@ -360,7 +360,7 @@ queryInitiallyFailedErrors(unsigned int err)
 }
 
 enum class QueryStatus {UNKNOWN_ERROR, MALFORMED_QUERY, SUCCESS,
-                        RECOVERABLE_ERROR};
+                        RECOVERABLE_ERROR, NONE};
 static QueryStatus
 retryQuery(const std::unique_ptr<Connect> &c, const std::string &query)
 {
@@ -430,18 +430,34 @@ fixDDL(const std::unique_ptr<Connect> &conn,
         }
     } else {
         // query already succeeded initially
-        remote_query_status = QueryStatus::SUCCESS;
+        remote_query_status = QueryStatus::NONE;
     }
 
     switch (remote_query_status.get()) {
     case QueryStatus::SUCCESS:
     case QueryStatus::RECOVERABLE_ERROR:
+    case QueryStatus::NONE:
         break;
     default:
         assert(false);
     }
 
     // failure after remote queries completed
+    // > there are three possible states
+    // 1. SUCCESS: the remote query succeeded just now (for the first time)
+    //    > we should expect SUCCESS against the embedded database as well;
+    //      we know the query hasn't been run against the embedded database
+    //      yet and we know it works against the remote database, so it should
+    //      work here as well
+    // 2. RECOVERABLE_ERROR: the remote query failed or succeeded initially
+    //    > we should expect SUCCESS or RECOVERABLE_ERROR against the embedded
+    //      database; a RECOVERABLE_ERROR should happen if the
+    //      rewritten query failed against the remote database originally
+    //      for the same ("recoverable") reason it just failed for now
+    // 3. NONE: the remote query suceeded initially
+    //    > we should expect SUCCESS or RECOVERABLE_ERROR from the embedded
+    //      query execution; a RECOVERABLE_ERROR will occur if the query
+    //      actually suceeded against the embedded database originally
     {
         assert(false == details->embedded_complete);
 
@@ -449,6 +465,9 @@ fixDDL(const std::unique_ptr<Connect> &conn,
         const QueryStatus embedded_query_status =
             retryQuery(e_conn, details->original_query);
         switch (embedded_query_status) {
+        case QueryStatus::NONE:
+            assert(false);
+
         // possibly a hardware issue
         case QueryStatus::UNKNOWN_ERROR:
         // a broken query should not have made it this far
@@ -460,15 +479,14 @@ fixDDL(const std::unique_ptr<Connect> &conn,
         // an invalid completion
         // --------------------------------------
 
-        // sometimes you can have a valid success after a fail against the
-        // remote database; consider the case where the proxy fails immediately
-        // after a successfull DDL query (before it can do completion marking)
         case QueryStatus::SUCCESS:
             break;
 
         case QueryStatus::RECOVERABLE_ERROR:
-            // if we originally succeeded, we have to succeed now as well
-            if (true == details->remote_complete) {
+            // if we just reran the rewritten query against the remote database
+            // and it succeeded, we should expect it to succeed against the
+            // embedded database as well
+            if (QueryStatus::SUCCESS == remote_query_status.get()) {
                 return false;
             }
             break;
