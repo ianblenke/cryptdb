@@ -101,7 +101,10 @@ class ProxyState {
 public:
     ProxyState(SharedProxyState &shared)
         : shared(shared),
-          e_conn(Connect::getEmbedded(shared.embed_dir)) {}
+          e_conn(Connect::getEmbedded(shared.embed_dir))
+    {
+        assert(e_conn->execute("SET default_storage_engine=InnoDB"));
+    }
     ~ProxyState();
 
     SECURITY_RATING defaultSecurityRating() const;
