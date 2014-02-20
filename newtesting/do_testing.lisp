@@ -26,17 +26,19 @@
 
 (proclaim '(optimize (debug 3)))
 
+(defparameter +edbdir+ (sb-unix::posix-getenv "EDBDIR"))
 (defparameter +default-tests-path+       (concatenate 'string
-                                           (sb-unix::posix-getenv "EDBDIR")
+                                           +edbdir+
                                            "/newtesting/tests.sexpr"))
 (defparameter +default-kz-tests-path+    (concatenate 'string
-                                           (sb-unix::posix-getenv "EDBDIR")
+                                           +edbdir+
                                            "/newtesting/kz_tests.sexpr"))
 (defparameter +default-ip+               "127.0.0.1")
 (defparameter +default-username+         "root")
 (defparameter +default-password+         "letmein")
 (defparameter +default-database+         "cryptdbtest")
 (defparameter +default-control-database+ "cryptdbtest_control")
+(defparameter +default-cryptdb-port+     3307)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -55,9 +57,9 @@
   (setf (connection-state-plain connections) nil))
 
 (defun init-use (connections)
-  (must-succeed-query (format nil "USE ~A" +default-database+)
+  (must-succeed-query (format nil "USE `~A`" +default-database+)
                       (connection-state-cryptdb connections))
-  (must-succeed-query (format nil "USE ~A" +default-control-database+)
+  (must-succeed-query (format nil "USE `~A`" +default-control-database+)
                       (connection-state-plain connections)))
 
 (defmethod revive-connections ((connections connection-state))
@@ -99,7 +101,9 @@
         :rows   nil))))
 
 (defun must-succeed-query (query database)
-  (assert (query-result-status (issue-query query database))))
+  (let ((result (issue-query query database)))
+    (assert (query-result-status result))
+    result))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -201,8 +205,9 @@
     #'(lambda (check)
         (let ((tag (car check)))
           (ecase (car check)
-            (:check (assert (= 1 (length check)))
-                    check)
+            ((:check :dump)
+             (assert (= 1 (length check)))
+             check)
             ((:set :update)
              (cond ((every #'atom check)
                     (ecase (length check)
@@ -417,7 +422,151 @@
             (onions onion-state)
             (type (eql :does-not-exist))
             onion-check)
-    (not (handle-check connections onions :exists onion-check))))
+    (not (handle-check connections onions :exists onion-check)))
+  ;;; the eventual goal is to reload the metatables and 'plain' schema into
+  ;;; the embedded database, and the encrypted data + schema into the remote
+  ;;; database
+  ;;;
+  ;;; the basic constraint when trying to reload is that cryptdb must always
+  ;;; be in a consistent state when it tries to refresh it's stale metadata
+  ;;;
+  ;;; also note that this process would be simpler if we could just point
+  ;;; mysqldump at the embedded database and get the plain schema; but this
+  ;;; requires starting a new mysql server that points at our embedded
+  ;;; directory (quite messy)
+  ;;; > so intead we compromise by using the 'schema' directive
+  ;;; > the process is also likely simpler in a production environment when we
+  ;;;   have the DDL queries used to create the database in some sql file
+  ;;;
+  ;;; also note that it is not good enough to just stick the encrypted data
+  ;;; into the remote database and replay the schema through cryptdb; this breaks
+  ;;; because our anonymous names (columns, tables, etc) are not deterministically
+  ;;; chosen, thus you get a mismatch between the new metadata and the actual
+  ;;; remote schema
+  ;;; > not to mention you would lose all of your onion level data
+  (:method (connections (onions onion-state) (type (eql :dump)) onion-check)
+    (let ((cryptdb (connection-state-cryptdb connections))
+          (plain   (connection-state-plain   connections))
+          (databases (mapcar #'car (onion-state-databases onions)))
+          (meta-dump-path (format nil "~A/logs/meta_dump.file" +edbdir+))
+          (contents-dump-path
+            (format nil "~A/logs/encrypted_contents.sql" +edbdir+))
+          (schema-dump nil))
+      (declare (ignorable plain))
+
+      (when (probe-file meta-dump-path)
+        (delete-file meta-dump-path))
+      (when (probe-file contents-dump-path)
+        (delete-file contents-dump-path))
+
+      ;; ;;;;;;;;;;;;;;;;;;;;;;;;;;;
+      ;;   stage 0 (collect data)
+      ;; ;;;;;;;;;;;;;;;;;;;;;;;;;;;
+      ;;  lock cryptdb
+      (must-succeed-query
+        "SET @cryptdb='metatables_lock', @action='acquire'"
+        cryptdb)
+
+      ;;  use directive to get plain schema
+      (must-succeed-query "SET @cryptdb='schema'" cryptdb)
+      (let ((schema-result (must-succeed-query "SET @cryptdb='schema'"
+                                               cryptdb)))
+        (assert (and (= 1 (length (query-result-fields schema-result)))
+                     (= 1 (length (query-result-rows   schema-result)))))
+        (setf schema-dump (caar (query-result-rows schema-result))))
+
+      ;;  mysqldump the encrypted data + schema
+      (sb-ext:run-program "/usr/bin/mysqldump"
+        `(,(format nil "--user=~A"     +default-username+)
+          ,(format nil "--password=~A" +default-password+)
+          "--add-drop-database"
+          "--databases" ,@databases)
+        :output contents-dump-path)
+
+      ;;  use the hot dump directive for the metatables
+      (must-succeed-query
+        (format nil "SET @cryptdb='hot_metatables', @action='dump',
+                         @name='~A'"
+                    meta-dump-path)
+        cryptdb)
+
+      ;;  unlock cryptdb
+      (must-succeed-query
+        "SET @cryptdb='metatables_lock', @action='release'"
+        cryptdb)
+
+      ;; ;;;;;;;;;;;;;;;;;;;;;;;;;;;
+      ;;    stage 1 (remove data)
+      ;; ;;;;;;;;;;;;;;;;;;;;;;;;;;;
+      ;;  drop databases
+      (mapcar
+        #'(lambda (d)
+            (must-succeed-query (format nil "DROP DATABASE `~A`" d) cryptdb))
+        databases)
+
+      ;;  kill cryptdb
+      (must-succeed-query
+        "SET @cryptdb='killzone', @count='0', @where='before'"
+        cryptdb)
+      (issue-query "SHOW DATABASES" cryptdb)
+
+      ;;  rm cryptdb metadata
+      ;;    > delete folder contents @ EDBDIR/shadow/*
+      ;;    > this has to be done before the proxy restarts
+      (let ((shadow (format nil "~A/shadow/" +edbdir+)))
+        (sb-ext:delete-directory shadow :recursive t)
+        (ensure-directories-exist shadow))
+
+      (assert (not (connection-alive? cryptdb)))
+      (sleep 1)
+      (setf (connection-state-cryptdb connections)
+            (clsql:reconnect :database cryptdb)
+            cryptdb (connection-state-cryptdb connections))
+      (assert (connection-alive? cryptdb))
+
+      ;; ;;;;;;;;;;;;;;;;;;;;;;;;;;;
+      ;;    stage 2 (rebuild data)
+      ;; ;;;;;;;;;;;;;;;;;;;;;;;;;;;
+      ;;  load the schema through CryptDB
+      (sb-ext:run-program "/usr/bin/mysql"
+        `(,(format nil "--user=~A"     +default-username+)
+          ,(format nil "--password=~A" +default-password+)
+          ,(format nil "-P~A" +default-cryptdb-port+)
+          ,(format nil "-h~A" +default-ip+))
+        :input (make-string-input-stream schema-dump))
+
+      ;;  reacquire the lock
+      (must-succeed-query
+        "SET @cryptdb='metatables_lock', @action='acquire'"
+        cryptdb)
+
+      ;;  load the metatables
+      (must-succeed-query
+        (format nil "SET @cryptdb='hot_metatables', @action='load',
+                         @name='~A'"
+                    meta-dump-path)
+        cryptdb)
+
+      ;; load the encrypted data
+      ;; > this must be done before issuing another query to cryptdb else
+      ;;   it will realize that it is in an inconsistent state while reloading
+      ;;   it's stale metadata
+      (sb-ext:run-program "/usr/bin/mysql"
+        `(,(format nil "--user=~A"     +default-username+)
+          ,(format nil "--password=~A" +default-password+))
+        :input contents-dump-path
+        :output *standard-output*
+        :error *standard-output*)
+ 
+      ;;  release the lock
+      (must-succeed-query
+        "SET @cryptdb='metatables_lock', @action='release'"
+        cryptdb)
+
+      ;; re-set the default database
+      (must-succeed-query (format nil "USE `~A`" +default-database+)
+                          cryptdb))))
+
 
 ;;; take the per query onion checks and use them to update our onion state;
 ;;; then compare this new onion state to the state reported by cryptdb for
@@ -547,6 +696,13 @@
 (defparameter *reconnect* nil)
 (defparameter *reconnect-wait-time* 1)
 
+(defun handle-possibly-dead-connection (connections)
+  (setf *killed*
+        (not (connection-alive? (connection-state-cryptdb connections))))
+  (when (and *killed* *reconnect*)
+    (sleep *reconnect-wait-time*)
+    (revive-connections connections)))
+
 (defun handle-query (query-encoding onions connections default)
   (let* ((query (car query-encoding))
          (onion-checks (fixup-onion-checks (cadr query-encoding) default))
@@ -555,11 +711,7 @@
     (assert (eq (null (cadr query-encoding)) (null onion-checks)))
     (multiple-value-bind (cryptdb-results plain-results)
         (execute-test-query connections query execution-target)
-      (setf *killed*
-            (not (connection-alive? (connection-state-cryptdb connections))))
-      (when (and *killed* *reconnect*)
-        (sleep *reconnect-wait-time*)
-        (revive-connections connections))
+      (handle-possibly-dead-connection connections)
       (let ((onion-check-result
              (handle-onion-checks connections onions onion-checks)))
         (and onion-check-result
@@ -635,8 +787,9 @@
 
 (defun run-tests (all-test-groups group-tester)
   (let* ((connections
-           (make-connection-state :cryptdb (db-connect nil 3307)
-                                  :plain   (db-connect nil 3306)))
+           (make-connection-state
+             :cryptdb (db-connect nil +default-cryptdb-port+)
+             :plain   (db-connect nil 3306)))
          (cryptdb (connection-state-cryptdb connections))
          (plain (connection-state-plain connections))
          (results '()))

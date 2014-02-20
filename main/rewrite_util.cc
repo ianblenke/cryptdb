@@ -681,3 +681,9 @@ release(NoCopy<uint64_t> &id)
     owned = false;
 }
 
+bool MetaTablesLock::
+available()
+{
+    return false == owned;
+}
+

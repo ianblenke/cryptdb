@@ -941,6 +941,14 @@ handleUpdateType(SIMPLE_UPDATE_TYPE update_type, const EncSet &es,
 }
 
 class SetHandler : public DMLHandler {
+public:
+    // HACK
+    SetHandler() : lock_id(0) {}
+
+private:
+    // HACK
+    mutable NoCopy<uint64_t> lock_id;
+
     virtual void gather(Analysis &a, LEX *const lex) const
     {
         // no-op
@@ -961,10 +969,14 @@ class SetHandler : public DMLHandler {
              {"adjust", DIRECTIVE_HANDLER(&SetHandler::handleAdjustDirective)},
              {"sensitive",
               DIRECTIVE_HANDLER(&SetHandler::handleSensitiveDirective)},
+             {"schema",
+              DIRECTIVE_HANDLER(&SetHandler::handleSchemaDirective)},
              {"killzone",
               DIRECTIVE_HANDLER(&SetHandler::handleKillZoneDirective)},
              {"metatables_lock",
-              DIRECTIVE_HANDLER(&SetHandler::metaTablesLockDirective)}};
+              DIRECTIVE_HANDLER(&SetHandler::metaTablesLockDirective)},
+             {"hot_metatables",
+              DIRECTIVE_HANDLER(&SetHandler::hotMetaTablesDirective)}};
 
         DirectiveHandler dhandler = nullptr;
         std::map<std::string, std::string> var_pairs;
@@ -1106,6 +1118,16 @@ private:
     }
 
     AbstractQueryExecutor *
+    handleSchemaDirective(std::map<std::string, std::string> &var_pairs,
+                          Analysis &a) const
+    {
+        TEST_Text(0 == var_pairs.size(),
+                 "schema directive takes no parameters");
+
+        return new SchemaDirectiveExecutor();
+    }
+
+    AbstractQueryExecutor *
     handleKillZoneDirective(std::map<std::string, std::string> &var_pairs,
                             Analysis &a) const
     {
@@ -1139,8 +1161,6 @@ private:
     metaTablesLockDirective(std::map<std::string, std::string> &var_pairs,
                             Analysis &a) const
     {
-        static NoCopy<uint64_t> lock_id = 0;
-
         const auto &action = var_pairs.find(std::string("action"));
         TEST_Text(var_pairs.end()  != action
                && var_pairs.size() == 1,
@@ -1148,22 +1168,51 @@ private:
                   " which must be 'acquire' or 'release'");
 
         if (equalsIgnoreCase("acquire", action->second)) {
-            if (0 != lock_id.get()) {
-                assert(0 == MetaTablesLock::acquire().get());
+            if (0 != this->lock_id.get()) {
+                assert(false == MetaTablesLock::available());
                 FAIL_TextMessageError("you already own the lock!");
             }
 
-            lock_id = MetaTablesLock::acquire();
-            TEST_Text(lock_id.get() != 0, "failed to acquire the lock");
+            this->lock_id = MetaTablesLock::acquire();
+            TEST_Text(this->lock_id.get() != 0, "failed to acquire the lock");
         } else if (equalsIgnoreCase("release", action->second)) {
-            TEST_Text(0 != lock_id.get(), "you don't own the lock!");
-            MetaTablesLock::release(lock_id);
+            TEST_Text(0 != this->lock_id.get(), "you don't own the lock!");
+            MetaTablesLock::release(this->lock_id);
+            assert(true == MetaTablesLock::available());
         } else {
             FAIL_TextMessageError("'action' parameter must be 'acquire' or"
                                   " 'release'");
         }
 
         return new NoOpExecutor();
+    }
+
+    AbstractQueryExecutor *
+    hotMetaTablesDirective(std::map<std::string, std::string> &var_pairs,
+                           Analysis &a) const
+    {
+        const auto &action = var_pairs.find(std::string("action"));
+        const auto &name   = var_pairs.find(std::string("name"));
+        TEST_Text(var_pairs.end()  != action
+               && var_pairs.end()  != name
+               && var_pairs.size() == 2,
+                  "hot_metatables directive takes two parameters, 'action'"
+                  " which must be 'dump' or 'load'; and 'name'");
+
+        TEST_Text(name->second.size() >= 1,
+                  "'name' must be at least a single character");
+
+        TEST_Text(0 != this->lock_id.get(),
+                  "you must first acquire the metatables lock before trying"
+                  " to do something hot");
+
+        if (equalsIgnoreCase("dump", action->second)) {
+            return new HotDumpExecutor(name->second);
+        } else if (equalsIgnoreCase("load", action->second)) {
+            return new HotLoadExecutor(name->second);
+        }
+
+        FAIL_TextMessageError("'action' parameter must be 'dump' or 'load'");
     }
 
     KillZone::Where
@@ -1647,7 +1696,61 @@ nextImpl(const ResType &res, const NextParams &nparams)
     assert(false);
 }
 
-#undef SPECIALIZED_SYNC
+std::pair<AbstractQueryExecutor::ResultType, AbstractAnything *>
+SchemaDirectiveExecutor::
+nextImpl(const ResType &res, const NextParams &nparams)
+{
+    reenter(this->corot) {
+        yield {
+            std::string output;
+            const std::shared_ptr<const SchemaInfo> &schema =
+                nparams.ps.getSchemaInfo();
+            for (const auto &db : schema->getChildren()) {
+                output += "DROP DATABASE IF EXISTS "
+                            + quoteText(db.first.getValue()) + ";\n";
+                output += "CREATE DATABASE "
+                            + quoteText(db.first.getValue()) + ";\n";
+                output += "USE " + quoteText(db.first.getValue()) + ";\n";
+
+                // 'actually' USE the database so SHOW CREATE TABLE queries
+                // work
+                TEST_Text(
+                    nparams.ps.getEConn()->execute(
+                        "USE " + quoteText(db.first.getValue()) + ";\n"),
+                    "failed to USE database");
+
+                for (const auto &table : db.second->getChildren()) {
+                    const std::string &table_name = table.first.getValue();
+
+                    std::unique_ptr<DBResult> dbres;
+                    TEST_Text(
+                        nparams.ps.getEConn()->execute(
+                            "SHOW CREATE TABLE " + quoteText(table_name),
+                            &dbres),
+                        "SHOW CREATE TABLE failed");
+
+                    assert(2 == mysql_num_fields(dbres->n));
+                    assert(1 == mysql_num_rows(dbres->n));
+                    const MYSQL_ROW row = mysql_fetch_row(dbres->n);
+                    const unsigned long *const l = mysql_fetch_lengths(dbres->n);
+                    output += std::string(row[1], l[1]) + ";\n";
+                }
+                output += "\n\n";
+            }
+
+            return CR_RESULTS(
+                ResType(true, 0, 0, 
+                        std::vector<std::string>{"queries"},
+                        std::vector<enum_field_types>{},
+                        std::vector<std::vector<Item *> >
+                            {{make_item_string(output)}}));
+            // "SELECT \"" + escapeString(nparams.ps.getEConn(), output) +
+            // "\" AS queries");
+        }
+    }
+
+    assert(false);
+}
 
 std::pair<AbstractQueryExecutor::ResultType, AbstractAnything *>
 ShowTablesExecutor::
@@ -1687,3 +1790,58 @@ nextImpl(const ResType &res, const NextParams &nparams)
 
     assert(false);
 }
+
+std::pair<AbstractQueryExecutor::ResultType, AbstractAnything *>
+HotDumpExecutor::
+nextImpl(const ResType &res, const NextParams &nparams)
+{
+    reenter(this->corot) {
+        assert(false == MetaTablesLock::available());
+
+        TEST_Text(
+            nparams.ps.getEConn()->execute(
+                "SELECT * FROM " + MetaData::Table::metaObject() +
+                " INTO OUTFILE '" + this->file_name + "'"),
+            "SELECT ... INTO OUTFILE failed against embedded database");
+
+        yield return CR_QUERY_RESULTS("DO 0;");
+    }
+
+    assert(false);
+}
+
+std::pair<AbstractQueryExecutor::ResultType, AbstractAnything *>
+HotLoadExecutor::
+nextImpl(const ResType &res, const NextParams &nparams)
+{
+    reenter(this->corot) {
+        assert(false == MetaTablesLock::available());
+
+        TEST_ErrPkt(nparams.ps.getEConn()->execute("START TRANSACTION;"),
+                    "failed to start transaction");
+
+        // delete the current metadata
+        SPECIALIZED_SYNC(nparams.ps.getEConn()->execute(
+            "DELETE FROM " + MetaData::Table::metaObject()));
+
+        SPECIALIZED_SYNC(nparams.ps.getEConn()->execute(
+            "DELETE FROM " + MetaData::Table::bleedingMetaObject()));
+
+        // shovel in the new metadata
+        SPECIALIZED_SYNC(nparams.ps.getEConn()->execute(
+            "LOAD DATA INFILE '" + this->file_name + "' INTO TABLE"
+            " " + MetaData::Table::metaObject()));
+
+        SPECIALIZED_SYNC(nparams.ps.getEConn()->execute(
+            "INSERT INTO " + MetaData::Table::bleedingMetaObject() +
+            " SELECT * FROM " + MetaData::Table::metaObject()));
+
+        SPECIALIZED_SYNC(nparams.ps.getEConn()->execute("COMMIT"));
+
+        yield return CR_QUERY_RESULTS("DO 0;");
+    }
+
+    assert(false);
+}
+
+#undef SPECIALIZED_SYNC

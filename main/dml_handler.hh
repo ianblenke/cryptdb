@@ -94,6 +94,20 @@ private:
     bool usesEmbedded() const {return true;}
 };
 
+class SchemaDirectiveExecutor : public AbstractQueryExecutor {
+    const std::vector<std::unique_ptr<Delta> > deltas;
+
+public:
+    SchemaDirectiveExecutor() {}
+    ~SchemaDirectiveExecutor() {}
+
+    std::pair<ResultType, AbstractAnything *>
+        nextImpl(const ResType &res, const NextParams &nparams);
+
+private:
+    bool usesEmbedded() const {return true;}
+};
+
 class ShowTablesExecutor : public AbstractQueryExecutor {
     const std::vector<std::unique_ptr<Delta> > deltas;
 
@@ -103,6 +117,35 @@ public:
 
     std::pair<ResultType, AbstractAnything *>
         nextImpl(const ResType &res, const NextParams &nparams);
+};
+
+class HotDumpExecutor : public AbstractQueryExecutor {
+    const std::string file_name;
+
+public:
+    HotDumpExecutor(const std::string &file_name) : file_name(file_name) {}
+    ~HotDumpExecutor() {}
+
+    std::pair<ResultType, AbstractAnything *>
+        nextImpl(const ResType &res, const NextParams &nparams);
+
+private:
+    bool usesEmbedded() const {return true;}
+};
+
+class HotLoadExecutor : public AbstractQueryExecutor {
+    const std::string file_name;
+
+public:
+    HotLoadExecutor(const std::string &file_name) : file_name(file_name) {}
+    ~HotLoadExecutor() {}
+
+    std::pair<ResultType, AbstractAnything *>
+        nextImpl(const ResType &res, const NextParams &nparams);
+
+private:
+    bool stales() const {return true;}
+    bool usesEmbedded() const {return true;}
 };
 
 // Abstract base class for query handler.

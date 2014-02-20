@@ -145,8 +145,8 @@ collectTableNames(const std::string &db_name,
 // compares SHOW TABLES on embedded and remote with the SchemaInfo
 static bool
 tablesSanityCheck(SchemaInfo &schema,
-                  const std::unique_ptr<Connect> &e_conn,
-                  const std::unique_ptr<Connect> &conn)
+                  const std::unique_ptr<Connect> &conn,
+                  const std::unique_ptr<Connect> &e_conn)
 {
     for (const auto &dm_it : schema.getChildren()) {
         const auto &db_name = dm_it.first.getValue();
@@ -632,7 +632,7 @@ loadSchemaInfo(const std::unique_ptr<Connect> &conn,
 
     assert(sanityCheck(*schema.get()));
     assert(metaSanityCheck(e_conn));
-    assert(tablesSanityCheck(*schema.get(), e_conn, conn));
+    assert(tablesSanityCheck(*schema.get(), conn, e_conn));
 
     return std::move(schema);
 }

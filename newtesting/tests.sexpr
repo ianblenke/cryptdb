@@ -1467,5 +1467,21 @@
  ("UPDATE ubug_none SET x = x + 10")
  ("SELECT * FROM ubug_none"
   :check)
- ("DROP TABLE ubug_none")))
+ ("DROP TABLE ubug_none"))
+ ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+ ;;       reload database
+ ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+ ("ReloadDatabase" t
+  ("CREATE TABLE reload (x integer, y integer)"
+   (:all-max reload))
+  ("INSERT INTO reload VALUES (1, 1), (2, 3)")
+  ("SELECT * FROM reload WHERE x < 2"
+   (:update reload x oOrder OPE))
+  ("SELECT * FROM reload"
+   :dump)
+  ("SELECT * FROM reload")
+  ("SELECT * FROM reload WHERE x > 2")
+  ("SELECT * FROM reload WHERE y = 3"
+   (:update reload y oEq DET))
+  ("DROP TABLE reload")))
 

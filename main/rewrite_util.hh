@@ -151,6 +151,7 @@ class MetaTablesLock {
 public:
     static NoCopy<uint64_t> acquire();
     static void release(NoCopy<uint64_t> &id);
+    static bool available();
 };
 
 template <typename InType, typename InterimType, typename OutType>
