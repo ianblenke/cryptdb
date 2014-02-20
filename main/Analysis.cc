@@ -465,11 +465,10 @@ embeddedTHDCleanup(THD *thd)
 void
 ProxyState::safeCreateEmbeddedTHD()
 {
-    THD *thd = static_cast<THD *>(create_embedded_thd(0));
+    THD *const thd = static_cast<THD *>(create_embedded_thd(0));
     assert(thd);
-    thds.push_back(std::unique_ptr<THD,
-                                   void (*)(THD *)>(thd,
-                                       &embeddedTHDCleanup));
+    thds.push_back(
+        std::unique_ptr<THD, void (*)(THD *)>(thd, &embeddedTHDCleanup));
     return;
 }
 

@@ -124,8 +124,6 @@ xlua_pushlstring(lua_State *const l, const std::string &s)
 static int
 connect(lua_State *const L)
 {
-    assert(test64bitZZConversions());
-
     ANON_REGION(__func__, &perf_cg);
     scoped_lock l(&big_lock);
     assert(0 == mysql_thread_init());
@@ -137,6 +135,8 @@ connect(lua_State *const L)
     const std::string psswd = xlua_tolstring(L, 5);
     const std::string embed_dir = xlua_tolstring(L, 6);
 
+    thread_ps = NULL;
+
     ConnectionInfo const ci = ConnectionInfo(server, user, psswd, port);
 
     assert(clients.end() == clients.find(client));
@@ -144,6 +144,8 @@ connect(lua_State *const L)
 
     // Is it the first connection?
     if (!shared_ps) {
+        assert(test64bitZZConversions());
+
         std::cerr << "starting proxy\n";
         //cryptdb_logger::setConf(string(getenv("CRYPTDB_LOG")?:""));
 
@@ -213,11 +215,13 @@ connect(lua_State *const L)
             clients[client]->PLAIN_LOG = PLAIN_LOG;
         }
     }
+
     clients[client]->ps =
         std::unique_ptr<ProxyState>(new ProxyState(*shared_ps));
-    // We don't want to use the THD from the previous connection
-    // if such is even possible...
     clients[client]->ps->safeCreateEmbeddedTHD();
+    // embedded database should default to InnoDB
+    assert(clients[client]->ps->getEConn()->execute(
+        "SET default_storage_engine=InnoDB"));
 
     return 0;
 }
@@ -263,6 +267,7 @@ rewrite(lua_State *const L)
     WrapperState *const c_wrapper = clients[client];
     ProxyState *const ps = thread_ps = c_wrapper->ps.get();
     assert(ps);
+    ps->safeCreateEmbeddedTHD();
 
     const std::string &query = xlua_tolstring(L, 2);
     const unsigned long long _thread_id =

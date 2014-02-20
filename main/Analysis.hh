@@ -99,12 +99,11 @@ private:
 
 class ProxyState {
 public:
+    // don't execute queries in this constructor because we may not have
+    // a 'clean' THD yet
     ProxyState(SharedProxyState &shared)
         : shared(shared),
-          e_conn(Connect::getEmbedded(shared.embed_dir))
-    {
-        assert(e_conn->execute("SET default_storage_engine=InnoDB"));
-    }
+          e_conn(Connect::getEmbedded(shared.embed_dir)) {}
     ~ProxyState();
 
     SECURITY_RATING defaultSecurityRating() const;
