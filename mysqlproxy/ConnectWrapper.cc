@@ -220,10 +220,12 @@ connect(lua_State *const L)
         std::unique_ptr<ProxyState>(new ProxyState(*shared_ps));
     clients[client]->ps->safeCreateEmbeddedTHD();
     // embedded database should default to InnoDB
-    assert(clients[client]->ps->getEConn()->execute(
-        "SET default_storage_engine=InnoDB"));
+    const bool b =
+        clients[client]->ps->getEConn()->execute(
+            "SET default_storage_engine=InnoDB");
 
-    return 0;
+    lua_pushboolean(L, b);
+    return 1;
 }
 
 static int

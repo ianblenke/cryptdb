@@ -15,12 +15,19 @@ function read_auth()
 
     -- Use this instead of connect_server(), to get server name
     dprint("Connected " .. proxy.connection.client.src.name)
-    CryptDB.connect(proxy.connection.client.src.name,
-                    proxy.connection.server.dst.address,
-                    proxy.connection.server.dst.port,
-                    os.getenv("CRYPTDB_USER") or "root",
-                    os.getenv("CRYPTDB_PASS") or "letmein",
-            os.getenv("CRYPTDB_SHADOW") or os.getenv("EDBDIR").."/shadow")
+    status =
+        CryptDB.connect(proxy.connection.client.src.name,
+                        proxy.connection.server.dst.address,
+                        proxy.connection.server.dst.port,
+                        os.getenv("CRYPTDB_USER") or "root",
+                        os.getenv("CRYPTDB_PASS") or "letmein",
+                        os.getenv("CRYPTDB_SHADOW")
+                            or os.getenv("EDBDIR").."/shadow")
+    if false == status then
+        proxy.response.type     = proxy.MYSQLD_PACKET_ERR
+        proxy.response.errmsg   = "cryptdb initialization failed"
+        return proxy.PROXY_SEND_RESULT
+    end
     -- EDBClient uses its own connection to the SQL server to set up UDFs
     -- and to manipulate multi-principal state.  (And, in the future, to
     -- store its schema state for single- and multi-principal operation.)
