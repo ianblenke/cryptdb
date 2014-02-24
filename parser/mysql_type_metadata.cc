@@ -69,7 +69,7 @@ MySQLTinyMetaData::isRangeSupported(std::pair<int64_t, uint64_t> inclusiveRange)
     // signed   : -128  127
     // unsigned : 0     255
     const int64_t minimum  = 0;
-    const uint64_t maximum = 255;
+    const uint64_t maximum = UINT8_MAX;
     return inclusiveRange.first >= minimum
         && inclusiveRange.second <= maximum;
 }
@@ -88,7 +88,7 @@ MySQLShortMetaData::isRangeSupported(std::pair<int64_t, uint64_t> inclusiveRange
     // signed   : -32768    32767
     // unsigned : 0         65535
     const int64_t minimum  = 0;
-    const uint64_t maximum = 65535;
+    const uint64_t maximum = UINT16_MAX;
     return inclusiveRange.first >= minimum
         && inclusiveRange.second <= maximum;
 }
@@ -101,13 +101,16 @@ MySQLInt24MetaData::supportsRange(const Create_field &field) const
     return supportsRangeHelper(field, bytes);
 }
 
+// hexadecimal constants are always interpreted as unsigned and are typed
+// according to the rules in (c99) 6.4.4.1
 bool
 MySQLInt24MetaData::isRangeSupported(std::pair<int64_t, uint64_t> inclusiveRange) const
 {
     // signed   : -8388608  8388607
     // unsigned : 0         16777215
     const int64_t minimum  = 0;
-    const uint64_t maximum = 16777215L;
+    const uint64_t maximum = 0xFFFFFF;
+    static_assert(maximum == 16777215, "24 bit unsigned integer sanity check");
     return inclusiveRange.first >= minimum
         && inclusiveRange.second <= maximum;
 }
@@ -126,7 +129,7 @@ MySQLLongMetaData::isRangeSupported(std::pair<int64_t, uint64_t> inclusiveRange)
     // signed   : -2147483648   2147483647
     // unsigned : 0             4294967295
     const int64_t minimum  = 0;
-    const uint64_t maximum = 4294967295L;
+    const uint64_t maximum = UINT32_MAX;
     return inclusiveRange.first >= minimum
         && inclusiveRange.second <= maximum;
 }
@@ -145,7 +148,7 @@ MySQLLongLongMetaData::isRangeSupported(std::pair<int64_t, uint64_t> inclusiveRa
     // signed   : -9223372036854775808      9223372036854775807
     // unsigned : 0                         18446744073709551615
     const int64_t minimum  = 0;
-    const uint64_t maximum = 18446744073709551615ULL;
+    const uint64_t maximum = UINT64_MAX;
     return inclusiveRange.first >= minimum
         && inclusiveRange.second <= maximum;
 }
